@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "INMOBILES",
   "short_name": "INMOBILES",
   "id": "inmobiles-crm",
@@ -12,8 +12,8 @@
   "lang": "es",
   "categories": ["business", "productivity"],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/logoinmobles-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/logoinmobles-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
@@ -23,21 +23,28 @@
       "short_name": "Clientes",
       "description": "Cartera de clientes y acciones rápidas de contacto",
       "url": "clients.html",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/logoinmobles-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Catálogo público",
-      "short_name": "Catálogo",
-      "description": "Inmuebles publicados en venta y renta",
-      "url": "landing.html",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "name": "Inventario General",
+      "short_name": "Inventario",
+      "description": "Propiedades de todos los asesores",
+      "url": "inventory-general.html",
+      "icons": [{ "src": "icons/logoinmobles-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "description": "Mensajería del equipo",
+      "url": "chat.html",
+      "icons": [{ "src": "icons/logoinmobles-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Contacto",
       "short_name": "Contacto",
       "description": "Página pública de contacto",
       "url": "contacto.html",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/logoinmobles-192.png", "sizes": "192x192" }]
     }
   ]
 }

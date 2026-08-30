@@ -26,7 +26,7 @@ window.Pages.home = {
       { icon: '&#128176;', label: 'Ventas del mes', value: c.thisMonthCount ? fmt(c.thisMonthValue) : '$0', sub: c.thisMonthCount ? `${c.thisMonthCount} negocio${c.thisMonthCount === 1 ? '' : 's'} concluido${c.thisMonthCount === 1 ? '' : 's'}` : 'Sin cierres este mes', tone: 'green' },
       { icon: '&#128179;', label: 'Pipeline en curso', value: fmt(c.pipelineValue), sub: `${c.businessesActive || 0} negocio${c.businessesActive === 1 ? '' : 's'} activo${c.businessesActive === 1 ? '' : 's'}`, tone: 'blue' },
       { icon: '&#128101;', label: 'Clientes', value: c.clients || 0, sub: `Cartera registrada`, tone: 'purple' },
-      { icon: '&#127968;', label: 'Propiedades', value: c.properties || 0, sub: 'En cartera', tone: 'amber' },
+      { icon: '&#127968;', label: 'Mis Propiedades', value: c.properties || 0, sub: 'En cartera', tone: 'amber' },
       { icon: '&#128276;', label: 'Avisos sin leer', value: c.notificationsUnread || 0, sub: 'Mantente al día', tone: 'red' },
       { icon: '&#127919;', label: 'Metas activas', value: c.activeGoals || 0, sub: 'Con avance automático', tone: 'teal' },
     ];
@@ -67,7 +67,7 @@ window.Pages.home = {
     const MODULES = [
       { key: 'dashboard', label: 'Dashboard', desc: 'Indicadores y gráficas', href: 'dashboard.html', icon: '&#9638;' },
       { key: 'clients', label: 'Clientes', desc: 'Gestiona tus prospectos', href: 'clients.html', icon: '&#128101;' },
-      { key: 'properties', label: 'Propiedades', desc: 'Cartera de inmuebles', href: 'properties.html', icon: '&#127968;' },
+      { key: 'properties', label: 'Mis Propiedades', desc: 'Cartera de inmuebles', href: 'properties.html', icon: '&#127968;' },
       { key: 'businesses', label: 'Negocios', desc: 'Operaciones y pipeline', href: 'businesses.html', icon: '&#128179;' },
       { key: 'appointments', label: 'Citas', desc: 'Agenda y visitas', href: 'appointments.html', icon: '&#128197;' },
       { key: 'tasks', label: 'Tareas', desc: 'Pendientes del día', href: 'tasks.html', icon: '&#9745;' },

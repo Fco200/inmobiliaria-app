@@ -1585,3 +1585,113 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(100%); opacity: 0; }
 }
+
+/* ── Botones flotantes: Chat + Notificaciones ───────────────────────── */
+.activity-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 96px;
+  z-index: 58;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.activity-fab-btn {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  background: var(--white);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 22px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22), 0 0 0 4px rgba(91, 45, 142, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.activity-fab-btn:hover { transform: scale(1.08); color: var(--primary); }
+.activity-fab-chat { background: var(--grad-primary); border: none; color: #fff; }
+.activity-fab-chat:hover { color: #fff; }
+.activity-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--white);
+  display: none;
+}
+.activity-badge.show { display: block; }
+
+/* ── Responsividad global: tabletas ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .topnav-inner { gap: 8px; padding: 0 12px; }
+  .topnav-brand { margin-right: 8px; }
+}
+
+@media (max-width: 768px) {
+  .page-header h2 { font-size: 19px; }
+  .stat-value { font-size: 22px; }
+  .btn-block-mobile { width: 100%; }
+  #modal-overlay { padding: 24px 12px !important; }
+  .assistant-panel { right: 12px; }
+}
+
+/* ── Responsividad global: celulares ────────────────────────────────── */
+@media (max-width: 600px) {
+  .topnav-brand-name { display: none; }
+  .topnav-user-text { display: none; }
+  .topnav-user { padding: 4px 6px; }
+  .topbar-clock { display: none; }
+  .topnav-nav.open { max-height: calc(100vh - 56px); }
+  .content { padding: 12px 10px; }
+  .card { border-radius: var(--radius); }
+  .page-header { flex-direction: column; align-items: stretch; text-align: left; }
+  .page-header > div:first-child { margin-bottom: 0; }
+
+  /* Módales a pantalla completa */
+  #modal-overlay { padding: 0 !important; align-items: stretch !important; }
+  #modal-overlay > div {
+    max-width: 100vw !important;
+    border-radius: 0 !important;
+    min-height: 100vh;
+  }
+  #modal-overlay [data-body] { padding: 16px !important; }
+  #modal-overlay > div > div:last-child { border-radius: 0 !important; }
+
+  /* Toasts */
+  #toast-holder { top: 12px !important; right: 12px !important; left: 12px !important; }
+  #toast-holder > * { min-width: 0 !important; max-width: 100% !important; }
+
+  /* Botones flotantes ajustados */
+  .activity-fab { right: 14px; bottom: 90px; gap: 8px; }
+  .activity-fab-btn { width: 46px; height: 46px; font-size: 20px; }
+  .assistant-fab { right: 14px; bottom: 14px; width: 52px; height: 52px; font-size: 24px; }
+  .assistant-panel { right: 10px; bottom: 78px; width: calc(100vw - 20px); }
+
+  /* Tablas/cards compactas */
+  .table td { padding: 6px 2px; }
+  .table td:last-child .btn { margin: 2px 4px 0 0; }
+  .grid-2, .grid-3, .grid-4 { gap: 12px; }
+  .process-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .process-tab { white-space: nowrap; }
+  .home-stat { min-width: 130px; }
+  .home-stats { gap: 10px; }
+}
+
+@media (max-width: 360px) {
+  .topnav-logo { height: 26px; }
+  .activity-fab { right: 10px; }
+  .assistant-fab { right: 10px; }
+}

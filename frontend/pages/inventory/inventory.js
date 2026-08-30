@@ -3,7 +3,7 @@
 window.Pages = window.Pages || {};
 
 window.Pages.inventory = {
-  title: 'Inventario',
+  title: 'Mi Inventario',
 
   async render(container) {
     const state = { page: 1, filter: '' };
@@ -333,7 +333,7 @@ window.Pages.inventory = {
       el.className = 'page-header';
       el.innerHTML = `
         <div>
-          <h2>${isBoss ? 'Inventario' : 'Mi inventario'}</h2>
+          <h2>${isBoss ? 'Mi Inventario' : 'Mi inventario'}</h2>
           <p class="text-muted" style="margin:4px 0 0;">
             ${isBoss
               ? 'Administra qué propiedades se publican y a qué asesor se asignan para trabajar.'

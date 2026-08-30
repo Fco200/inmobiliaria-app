@@ -6,8 +6,9 @@ window.AppShell = (() => {
     { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9638;' },
     { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;' },
     { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;' },
-    { key: 'properties', label: 'Propiedades', href: 'properties.html', icon: '&#127968;' },
-    { key: 'inventory', label: 'Inventario', href: 'inventory.html', icon: '&#128230;' },
+    { key: 'properties', label: 'Mis Propiedades', href: 'properties.html', icon: '&#127968;' },
+    { key: 'inventory', label: 'Mi Inventario', href: 'inventory.html', icon: '&#128230;' },
+    { key: 'inventory-general', label: 'Inventario General', href: 'inventory-general.html', icon: '&#128203;' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;' },
     { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;' },
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;' },
@@ -77,37 +78,73 @@ window.AppShell = (() => {
     }
   }
 
+  function updateFabBadge(key, count) {
+    const el = document.querySelector(`.activity-fab [data-badge="${key}"]`);
+    if (!el) return;
+    const value = Number(count) || 0;
+    if (value <= 0) {
+      el.textContent = '';
+      el.classList.remove('show');
+      return;
+    }
+    el.textContent = value > 99 ? '99+' : value;
+    el.classList.add('show');
+  }
+
+  // Botones flotantes de acceso rápido: chat del equipo y avisos (notificaciones),
+  // cada uno con su contador de no leídos. Visible en todas las páginas.
+  function injectActivityFab() {
+    if (window.ApiClient && !window.ApiClient.isAuthenticated()) return;
+    if (document.getElementById('activity-fab')) return;
+    const fab = document.createElement('div');
+    fab.id = 'activity-fab';
+    fab.className = 'activity-fab';
+    fab.innerHTML = `
+      <a class="activity-fab-btn" href="notifications.html" title="Avisos y notificaciones" aria-label="Avisos y notificaciones">&#128276;<span class="activity-badge" data-badge="notifications"></span></a>
+      <a class="activity-fab-btn activity-fab-chat" href="chat.html" title="Chat del equipo" aria-label="Chat del equipo">&#128172;<span class="activity-badge" data-badge="chat"></span></a>
+    `;
+    document.body.appendChild(fab);
+  }
+
   async function refreshNotificationBadge() {
+    injectActivityFab();
     const bell = document.getElementById('btn-notifications');
-    if (!bell) return;
-    const existing = bell.querySelector('.badge-dot');
-    if (existing) existing.remove();
+    if (bell) {
+      const existing = bell.querySelector('.badge-dot');
+      if (existing) existing.remove();
+    }
     if (!window.ApiClient.isAuthenticated()) return;
     try {
       const data = await window.API.notifications.unreadCount();
       const count = Number(data.unread) || 0;
-      if (!count) return;
-      const dot = document.createElement('span');
-      dot.className = 'badge-dot';
-      dot.textContent = count > 99 ? '99+' : count;
-      bell.appendChild(dot);
+      updateFabBadge('notifications', count);
+      if (bell && count) {
+        const dot = document.createElement('span');
+        dot.className = 'badge-dot';
+        dot.textContent = count > 99 ? '99+' : count;
+        bell.appendChild(dot);
+      }
     } catch (error) { /* sin conexión */ }
   }
 
   async function refreshChatBadge() {
+    injectActivityFab();
     const chatLink = document.querySelector('.topnav-link[href="chat.html"]');
-    if (!chatLink) return;
-    const existing = chatLink.querySelector('.badge-dot');
-    if (existing) existing.remove();
+    if (chatLink) {
+      const existing = chatLink.querySelector('.badge-dot');
+      if (existing) existing.remove();
+    }
     if (!window.ApiClient.isAuthenticated()) return;
     try {
       const data = await window.API.chats.unreadCount();
       const count = Number(data.unread) || 0;
-      if (!count) return;
-      const dot = document.createElement('span');
-      dot.className = 'badge-dot';
-      dot.textContent = count > 99 ? '99+' : count;
-      chatLink.appendChild(dot);
+      updateFabBadge('chat', count);
+      if (chatLink && count) {
+        const dot = document.createElement('span');
+        dot.className = 'badge-dot';
+        dot.textContent = count > 99 ? '99+' : count;
+        chatLink.appendChild(dot);
+      }
     } catch (error) { /* sin conexión */ }
   }
 
@@ -316,6 +353,7 @@ window.AppShell = (() => {
     startClock();
     injectAssistant();
     loadRealtime();
+    injectActivityFab();
 
     // Hamburger toggle para mobile
     const hamburger = document.getElementById('topnav-hamburger');

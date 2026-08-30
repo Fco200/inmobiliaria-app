@@ -6,8 +6,8 @@
   <title>Chat · INMOBILES</title>
   <meta name="theme-color" content="#2d1048">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="logoinmobles.png">
+  <link rel="apple-touch-icon" href="logoinmobles.png">
   <link rel="stylesheet" href="css/base.css">
   <style>
     .chat-wrap { display: flex; height: calc(100vh - 80px); gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
@@ -51,9 +51,22 @@
     .announcement-actions { margin-top: 8px; display: flex; gap: 6px; }
     .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 4px; }
     @media (max-width: 768px) {
+      .chat-wrap { height: calc(100vh - 56px); border-radius: 0; border-left: none; border-right: none; }
       .chat-sidebar { width: 100%; }
       .chat-main { display: none; }
-      .chat-main.active { display: flex; position: fixed; inset: 0; top: 0; z-index: 50; }
+      .chat-main.active { display: flex; position: fixed; inset: 0; top: 0; z-index: 60; }
+      .chat-sidebar-head { flex-wrap: wrap; }
+      .chat-item-preview { max-width: 100%; }
+    }
+    @media (max-width: 480px) {
+      .chat-sidebar-head { padding: 10px; }
+      .chat-sidebar-tab { padding: 8px 4px; font-size: 12px; }
+      .chat-messages { padding: 10px; }
+      .msg-bubble { max-width: 90%; font-size: 13px; padding: 8px 12px; }
+      .chat-header { padding: 10px 12px; }
+      .chat-input-bar { padding: 10px; }
+      .chat-empty { padding: 24px; }
+      .chat-title-line { font-size: 15px; }
     }
   </style>
 </head>

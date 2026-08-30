@@ -62,7 +62,9 @@ window.API = {
 
   inventory: {
     list: (params) => ApiClient.get('/inventory', params),
+    general: (params) => ApiClient.get('/inventory/general', params),
     create: (body) => ApiClient.post('/inventory', body),
+    uploadProperty: (body) => ApiClient.post('/inventory/upload', body),
     update: (id, body) => ApiClient.put(`/inventory/${id}`, body),
     remove: (id) => ApiClient.remove(`/inventory/${id}`),
     publish: (id, body) => ApiClient.patch(`/inventory/${id}/publish`, body),

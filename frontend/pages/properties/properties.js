@@ -3,7 +3,7 @@
 window.Pages = window.Pages || {};
 
 window.Pages.properties = {
-  title: 'Propiedades',
+  title: 'Mis Propiedades',
 
   async render(container) {
     const statMini = (label, value) => `
@@ -100,7 +100,7 @@ window.Pages.properties = {
     };
 
     crudPage(container, {
-      title: 'Propiedades',
+title: 'Mis Propiedades',
       newLabel: 'Nueva propiedad',
       service: {
         list: (params) => API.properties.list(params),
@@ -116,7 +116,7 @@ window.Pages.properties = {
         { key: 'price', label: 'Precio', render: (r) => Format.currency(r.price) },
         { key: 'ticketValue', label: 'Valor ticket', render: (r) => (r.ticketValue ? Format.currency(r.ticketValue) : '—') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
-        { key: 'isPublished', label: 'Inventario', render: (r) => (r.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')) },
+        { key: 'isPublished', label: 'Publicación', render: (r) => (r.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')) },
       ],
       fields: [
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },

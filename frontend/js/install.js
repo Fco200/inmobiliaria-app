@@ -108,9 +108,12 @@ window.AppInstall = (() => {
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
       deferredPrompt = event;
       visibleButtons(true);
+      // IMPORTANTE: NO se llama event.preventDefault() a propósito.
+      // Si se llama, Chrome suprime su barra de instalación automática y
+      // muestra el error "Banner not shown: beforeinstallprompt preventDefault() called".
+      // Así el botón propio ([data-install]) y la barra del navegador conviven.
     });
 
     window.addEventListener('appinstalled', () => {

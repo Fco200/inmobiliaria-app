@@ -10,7 +10,10 @@ function crudPage(container, config) {
       <h2>${UI.escapeHtml(config.title)}</h2>
       <button class="btn btn-primary" type="button" data-new>+ ${UI.escapeHtml(config.newLabel)}</button>
     `;
-    el.querySelector('[data-new]').addEventListener('click', () => openForm());
+    el.querySelector('[data-new]').addEventListener('click', () => {
+      if (config.onNew) config.onNew(openForm);
+      else openForm();
+    });
     return el;
   }
 
@@ -173,6 +176,7 @@ ${rowXml}
     table.className = 'table-wrapper card';
     const thead = config.columns.map((c) => `<th>${UI.escapeHtml(c.label)}</th>`).join('');
     let rows = '';
+    const editButtons = [];
     state.records.forEach((record) => {
       const cells = config.columns
         .map((c) => {
@@ -188,7 +192,9 @@ ${rowXml}
       let actions = '';
       if (config.extraActions) actions += config.extraActions(record);
       if (config.onEdit) {
+        const editHandler = typeof config.onEdit === 'function' ? config.onEdit : (rec) => openForm(rec);
         actions += `<button class="btn btn-secondary btn-sm" data-edit="${record._id}" style="margin-left:6px;">Editar</button>`;
+        editButtons.push({ id: record._id, rec: record, handler: editHandler });
       }
       if (config.onRemove) {
         actions += `<button class="btn btn-danger btn-sm" data-remove="${record._id}" style="margin-left:6px;">Eliminar</button>`;
@@ -203,13 +209,14 @@ ${rowXml}
       </table>
     `;
 
-    table.querySelectorAll('[data-edit]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const record = state.records.find((r) => r._id === btn.dataset.edit);
-        openForm(record);
+    for (const eb of editButtons) {
+      table.querySelectorAll(`[data-edit="${eb.id}"]`).forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          eb.handler(eb.rec, openForm);
+        });
       });
-    });
+    }
     table.querySelectorAll('[data-remove]').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -246,9 +253,14 @@ ${rowXml}
     };
   }
 
-  function openForm(record) {
+  function openForm(record, options) {
+    const opts = options || {};
     const isEdit = Boolean(record);
-    const fields = config.fields.map((f) => {
+    const allowedNames = opts.allowedNames || null;
+    const fieldList = allowedNames
+      ? config.fields.filter((f) => allowedNames.includes(f.name))
+      : config.fields;
+    const fields = fieldList.map((f) => {
       const value = record
         ? (typeof f.value === 'function' ? f.value(record) : record[f.name])
         : (typeof f.value === 'function' ? '' : (f.value || ''));
@@ -261,11 +273,12 @@ ${rowXml}
     `;
 
     const modal = UI.openModal({
-      title: isEdit ? `Editar ${config.title.toLowerCase()}` : `Nuevo ${config.title.toLowerCase()}`,
+      title: opts.title || (isEdit ? `Editar ${config.title.toLowerCase()}` : `Nuevo ${config.title.toLowerCase()}`),
       body: `
         <form id="crud-form" novalidate>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
             ${fields.join('')}
+            ${opts.hiddenFields || ''}
           </div>
         </form>
       `,
@@ -274,6 +287,7 @@ ${rowXml}
       onMount(bodyEl) {
         const form = bodyEl.querySelector('#crud-form');
         if (config.onFormMount) config.onFormMount(form, record, bodyEl);
+        if (opts.mount) opts.mount(form, record, bodyEl);
         const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
         if (overlay) {
           const cancelBtn = overlay.querySelector('[data-cancel]');
@@ -283,7 +297,7 @@ ${rowXml}
           e.preventDefault();
           try {
             const values = UI.collectForm(form);
-            const body = config.formData ? config.formData(values, record) : values;
+            const body = config.formData ? config.formData(values, record, form) : values;
             if (isEdit) {
               await config.service.update(record._id, body);
               UI.toast('Cambios guardados', 'success');

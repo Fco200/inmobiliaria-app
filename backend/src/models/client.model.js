@@ -75,6 +75,49 @@ const clientSchema = new mongoose.Schema(
       },
       desiredFeatures: { type: String, trim: true, default: '' },
       observations: { type: String, trim: true, default: '' },
+
+      // ── Financiamiento (créditos usados en México) ─────────────────────
+      // ¿Combina dos créditos? (ej. INFONAVIT + FOVISSSTE es muy común).
+      mergeCredits: { type: Boolean, default: false },
+      // Semáforo del financiamiento del comprador.
+      creditStatus: {
+        type: String,
+        enum: ['sin_aplica', 'solicitado', 'pre_aprobado', 'aprobado', 'en_escrituracion'],
+        default: 'sin_aplica',
+      },
+      // Banco del crédito bancario /hipotecario (BBVA, Banorte, ...).
+      bank: { type: String, trim: true, default: '' },
+      // Enlace salarial: modalidad del financiamiento.
+      salaryConnection: {
+        type: String,
+        enum: ['independiente', 'relacion_laboral', 'rfc_moral', 'otro'],
+        default: 'independiente',
+      },
+      // Enganche que pagará el comprador.
+      downPayment: { type: Number, min: 0, default: 0 },
+      // Subcuenta de vivienda / subsidios (INFONAVIT/FOVISSSTE).
+      subsidy: { type: Number, min: 0, default: 0 },
+      // Recursos propios adicionales (apoyo familiar, etc.).
+      ownResources: { type: Number, min: 0, default: 0 },
+      // Total de financiamiento con el que pagará (se calcula automático:
+      // suma de créditos + subcuenta/subsidio + recursos propios).
+      totalFunding: { type: Number, min: 0, default: 0 },
+      // Créditos aplicables al comprador (se puede combinar más de uno).
+      credits: [{
+        tipo: {
+          type: String,
+          enum: ['infonavit', 'fovissste', 'infonavit_fovissste', 'cofinavit', 'apoyo_infonavit', 'credito_bancario', 'credito_hipotecario', 'contado', 'otro'],
+          default: 'otro',
+        },
+        monto: { type: Number, min: 0, default: 0 },
+        institucion: { type: String, trim: true, default: '' },
+        estatus: {
+          type: String,
+          enum: ['pendiente', 'solicitado', 'pre_aprobado', 'aprobado', 'otorgado'],
+          default: 'pendiente',
+        },
+        observaciones: { type: String, trim: true, default: '' },
+      }],
     },
 
     documentos: [{

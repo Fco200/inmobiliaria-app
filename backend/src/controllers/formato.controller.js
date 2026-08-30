@@ -9,6 +9,24 @@ const { POSICIONES, DEFAULT_LAYOUT } = require('../config/formatoPosiciones');
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
 const UPLOADS_DIR = path.join(__dirname, '../../uploads');
 
+// Normaliza a NFC el nombre de plantilla recibido (URL) o leído del disco.
+// En git/Linux los nombres vienen descompuestos (NFD: "Prestacio\u0301n"); los
+// objetos PLANTILLAS_CONFIG usan forma compuesta (NFC: "Prestación"). Sin esta
+// normalización, las plantillas con acentos serían "no encontradas" en el
+// servidor aunque el archivo exista.
+const norm = (s) => (typeof s === 'string' ? s.normalize('NFC') : s);
+
+// Ubica el archivo real de la plantilla en disco comparando los nombres
+// normalizados a NFC (robusto contra NFD/NFC en distintos sistemas de archivo).
+function findPlantillaFile(id) {
+  const target = norm(id);
+  const files = fs.readdirSync(PLANTILLAS_DIR, { withFileTypes: true });
+  const pdf = files.find(
+    (f) => f.isFile() && f.name.toLowerCase().endsWith('.pdf') && norm(f.name.slice(0, -4)) === target
+  );
+  return pdf ? path.join(PLANTILLAS_DIR, pdf.name) : null;
+}
+
 // Mapeo de campos para cada plantilla
 const PLANTILLAS_CONFIG = {
   'Generales Arrendatario': {
@@ -430,7 +448,7 @@ const listarPlantillas = async (req, res) => {
 
     const files = fs.readdirSync(PLANTILLAS_DIR).filter(f => f.endsWith('.pdf'));
     const plantillas = files.map((file) => {
-      const nombre = file.replace('.pdf', '');
+      const nombre = norm(file.replace('.pdf', ''));
       const config = PLANTILLAS_CONFIG[nombre];
       return {
         id: nombre,
@@ -453,7 +471,7 @@ const listarPlantillas = async (req, res) => {
 const obtenerCamposPlantilla = async (req, res) => {
   try {
     const { id } = req.params;
-    const config = PLANTILLAS_CONFIG[id];
+    const config = PLANTILLAS_CONFIG[norm(id)];
 
     if (!config) {
       return res.status(404).json({ success: false, message: 'Plantilla no encontrada o sin formulario configurado' });
@@ -477,16 +495,16 @@ const obtenerCamposPlantilla = async (req, res) => {
  */
 const generarPDF = async (req, res) => {
   try {
-    const { plantillaId } = req.params;
+    const plantillaId = norm(req.params.plantillaId);
     const config = PLANTILLAS_CONFIG[plantillaId];
 
     if (!config) {
       return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
     }
 
-    const plantillaPath = path.join(PLANTILLAS_DIR, `${plantillaId}.pdf`);
+    const plantillaPath = findPlantillaFile(plantillaId);
 
-    if (!fs.existsSync(plantillaPath)) {
+    if (!plantillaPath || !fs.existsSync(plantillaPath)) {
       return res.status(404).json({ success: false, message: 'Archivo de plantilla no encontrado' });
     }
 
@@ -655,15 +673,15 @@ function drawAutoBox(page, rows, font, fontBold, width, height) {
 const descargarPlantilla = async (req, res) => {
   try {
     const { id } = req.params;
-    const config = PLANTILLAS_CONFIG[id];
+    const config = PLANTILLAS_CONFIG[norm(id)];
 
     if (!config) {
       return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
     }
 
-    const plantillaPath = path.join(PLANTILLAS_DIR, `${id}.pdf`);
+    const plantillaPath = findPlantillaFile(id);
 
-    if (!fs.existsSync(plantillaPath)) {
+    if (!plantillaPath || !fs.existsSync(plantillaPath)) {
       return res.status(404).json({ success: false, message: 'Archivo de plantilla no encontrado' });
     }
 

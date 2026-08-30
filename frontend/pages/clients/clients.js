@@ -20,6 +20,230 @@ function isBossUser() {
   return Boolean(user && user.role && ['admin', 'gerencia'].includes(user.role.code));
 }
 
+// ── Créditos que se usan en México (INFONAVIT, FOVISSSTE, bancos...) ────
+const CREDIT_TYPES = [
+  { value: 'infonavit', label: 'INFONAVIT', icon: '&#127968;', desc: 'Crédito que se paga desde tu subcuenta de vivienda' },
+  { value: 'fovissste', label: 'FOVISSSTE', icon: '&#127962;', desc: 'Crédito hipotecario para servidores públicos' },
+  { value: 'infonavit_fovissste', label: 'Combinado INFONAVIT + FOVISSSTE', icon: '&#129309;', desc: 'Se juntan ambos créditos como uno solo (muy usado en México)' },
+  { value: 'credito_bancario', label: 'Crédito bancario', icon: '&#127974;', desc: 'Hipoteca de banco: BBVA, Banorte, Santander, Citibanamex...' },
+  { value: 'credito_hipotecario', label: 'Crédito hipotecario (hipotecaria / SOFOM)', icon: '&#127977;', desc: 'Instituciones hipotecarias privadas' },
+  { value: 'cofinavit', label: 'Cofinavit (INFONAVIT + banco)', icon: '&#129309;&#127974;', desc: 'INFONAVIT + crédito bancario que se suman' },
+  { value: 'apoyo_infonavit', label: 'Apoyo INFONAVIT (antes "Infonavit Total")', icon: '&#11088;', desc: 'Crédito en pesos de INFONAVIT con tasa fija' },
+  { value: 'contado', label: 'Contado / recursos propios', icon: '&#128176;', desc: 'Pago total en efectivo o con recursos propios' },
+  { value: 'otro', label: 'Otro esquema', icon: '&#128203;' },
+];
+const MX_BANKS = ['BBVA', 'Banorte', 'Santander', 'Citibanamex', 'HSBC', 'Scotiabank', 'Inbursa', 'BanBajío', 'Banregio', 'Banco Azteca', 'Coppel', 'AFIRME', 'Sofom Hipotecaria', 'Otro banco'];
+const CREDIT_ESTATUS = ['pendiente', 'solicitado', 'pre_aprobado', 'aprobado', 'otorgado'];
+const CREDIT_ESTATUS_LABEL = {
+  pendiente: 'Pendiente', solicitado: 'Solicitado', pre_aprobado: 'Pre-aprobado',
+  aprobado: 'Aprobado', otorgado: 'Otorgado',
+};
+const creditInfo = (tipo) => CREDIT_TYPES.find((c) => c.value === tipo) || CREDIT_TYPES[CREDIT_TYPES.length - 1];
+
+// Íconos por tipo de cliente para la tabla y las tarjetas de selección.
+const CLIENT_TYPE_ICON = { vender: '&#127947;', comprar: '&#127968;', rentar: '&#128273;', alquilar: '&#128273;' };
+
+// Nombre del grupo de campos según el tipo (vendedor vs comprador).
+function clientFlow(type) {
+  return String(type || 'comprar') === 'vender' ? 'seller' : 'buyer';
+}
+
+// Grupos de campos para los formularios filtrados por tipo.
+const CLIENT_BASE_FIELDS = ['name', 'phone', 'email', 'contactMedium', 'status', 'funnelStage', 'notes'];
+const CLIENT_SELLER_FIELDS = [
+  'sellerInfo_operationType', 'sellerInfo_property', 'sellerInfo_propertyType', 'sellerInfo_location',
+  'sellerInfo_hasMortgage', 'sellerInfo_mortgageInstitution', 'sellerInfo_debt', 'sellerInfo_requestedPrice',
+  'sellerInfo_observations',
+];
+const CLIENT_BUYER_FIELDS = [
+  'buyerInfo_desiredZone', 'buyerInfo_budget', 'buyerInfo_paymentMethod', 'buyerInfo_propertyType',
+  'buyerInfo_desiredFeatures', 'buyerInfo_observations',
+  'buyerInfo_mergeCredits', 'buyerInfo_creditStatus', 'buyerInfo_salaryConnection', 'buyerInfo_bank',
+  'buyerInfo_downPayment', 'buyerInfo_subsidy', 'buyerInfo_ownResources', 'buyerInfo_totalFunding',
+];
+
+const CLIENT_TYPE_MAP = { comprador: 'comprar', vendedor: 'vender', arrendatario: 'rentar' };
+
+// Modal inicial: ¿qué tipo de cliente es? (Vendedor o Comprador).
+function askClientType(openForm, record) {
+  const isEdit = Boolean(record);
+  const current = isEdit ? String(record.type || 'comprar') : 'comprar';
+  const activeKey = current === 'vender' ? 'vendedor' : (current === 'rentar' || current === 'alquilar' ? 'arrendatario' : 'comprador');
+  const activeCls = (k) => (k === activeKey ? ' is-active' : '');
+  const modal = UI.openModal({
+    title: isEdit ? `Tipo de cliente — ${UI.escapeHtml((record.name || '').split(' ')[0])}` : 'Nuevo cliente',
+    body: `
+      <p class="text-muted" style="margin-top:0;">Cada tipo abre un formulario diferente, con los campos que le tocan al perfil.</p>
+      <div class="client-type-grid">
+        <button class="client-type-card${activeCls('comprador')}" type="button" data-type="comprador">
+          <span class="client-type-icon">&#127968;</span>
+          <span class="client-type-title">Comprador</span>
+          <small>Quiere comprar una propiedad: con crédito (INFONAVIT, FOVISSSTE, banco...), contado o hipoteca.</small>
+        </button>
+        <button class="client-type-card${activeCls('vendedor')}" type="button" data-type="vendedor">
+          <span class="client-type-icon">&#127947;</span>
+          <span class="client-type-title">Vendedor</span>
+          <small>Quiere vender (o rentar) su propiedad: datos del inmueble, hipoteca vigente, deuda y precio pedido.</small>
+        </button>
+        <button class="client-type-card${activeCls('arrendatario')}" type="button" data-type="arrendatario">
+          <span class="client-type-icon">&#128273;</span>
+          <span class="client-type-title">Arrendatario</span>
+          <small>Busca una propiedad para rentar o alquilar.</small>
+        </button>
+      </div>
+    `,
+    size: 620,
+  });
+  modal.bodyEl.querySelectorAll('[data-type]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      UI.closeModal();
+      openTypedForm(openForm, record, btn.dataset.type);
+    });
+  });
+  return modal;
+}
+
+// Abre el formulario solo con los campos de ese tipo + el selector de créditos.
+function openTypedForm(openForm, record, typeKey) {
+  const typeValue = CLIENT_TYPE_MAP[typeKey] || 'comprar';
+  const seller = typeValue === 'vender';
+  const isEdit = Boolean(record);
+  const allowedNames = CLIENT_BASE_FIELDS.concat(seller ? CLIENT_SELLER_FIELDS : CLIENT_BUYER_FIELDS);
+  const hiddenFields = `<input type="hidden" name="type" value="${typeValue}">` +
+    (seller ? '' : '<div id="credit-builder" style="grid-column:1/-1;"></div>');
+
+  openForm(record, {
+    title: `${isEdit ? 'Editar' : 'Nuevo'} cliente — ${seller ? 'Vendedor' : typeValue === 'rentar' ? 'Arrendatario' : 'Comprador'}`,
+    allowedNames,
+    hiddenFields,
+    mount(form, rec, bodyEl) {
+      if (!seller) {
+        const builderEl = bodyEl.querySelector('#credit-builder');
+        if (builderEl) mountCreditBuilder(form, builderEl, rec && (rec.buyerInfo || {}));
+      }
+    },
+  });
+}
+
+// Selector visual de créditos de México + filas configurables + total automático.
+function mountCreditBuilder(form, builderEl, buyerInfo) {
+  const initial = (buyerInfo && Array.isArray(buyerInfo.credits)) ? buyerInfo.credits.slice() : [];
+  const credits = initial.map((c) => ({ ...c }));
+
+  builderEl.innerHTML = `
+    <hr style="margin:4px 0 14px;border:none;border-top:1px solid var(--border);">
+    <h4 style="margin:0 0 4px;">&#127991;&nbsp; Financiamiento del comprador</h4>
+    <p class="text-muted" style="margin:0 0 12px;font-size:12.5px;">
+      Toca el ícono del crédito que aplica al cliente para agregarlo (se pueden combinar varios).
+    </p>
+    <div class="credit-chips"></div>
+    <div class="credit-list"></div>
+    <button type="button" class="btn btn-secondary btn-sm" data-credit-add>+ Agregar crédito</button>
+    <div class="credit-total"></div>
+  `;
+
+  const chipsEl = builderEl.querySelector('.credit-chips');
+  const listEl = builderEl.querySelector('.credit-list');
+  const totalEl = builderEl.querySelector('.credit-total');
+  const addBtn = builderEl.querySelector('[data-credit-add]');
+
+  chipsEl.innerHTML = CREDIT_TYPES.map((c) => `
+    <button type="button" class="credit-chip-btn" data-tipo="${c.value}" title="${UI.escapeHtml(c.desc)}">
+      <span class="credit-chip-icon">${c.icon}</span>
+      <span class="credit-chip-name">${UI.escapeHtml(c.label)}</span>
+    </button>`).join('');
+
+  const readFromDom = () => {
+    const rows = Array.from(listEl.querySelectorAll('.credit-row'));
+    credits.length = 0;
+    rows.forEach((row) => credits.push({
+      tipo: row.querySelector('[data-c-tipo]').value,
+      monto: Number(row.querySelector('[data-c-monto]').value) || 0,
+      institucion: row.querySelector('[data-c-institucion]').value.trim(),
+      estatus: row.querySelector('[data-c-estatus]').value,
+      observaciones: row.querySelector('[data-c-obs]').value.trim(),
+    }));
+  };
+
+  const rowHTML = (c, i) => `
+    <div class="credit-row">
+      <select class="form-control" name="credit_tipo_${i}" data-c-tipo>
+        ${CREDIT_TYPES.map((t) => `<option value="${t.value}" ${t.value === (c.tipo || 'otro') ? 'selected' : ''}>${t.icon} ${UI.escapeHtml(t.label)}</option>`).join('')}
+      </select>
+      <input class="form-control" name="credit_monto_${i}" data-c-monto type="number" min="0" placeholder="Monto aprox. $" value="${c.monto ? Number(c.monto) : ''}">
+      <input class="form-control" name="credit_institucion_${i}" data-c-institucion type="text" placeholder="Institución / banco" list="mx-banks" value="${UI.escapeHtml(c.institucion || '')}">
+      <select class="form-control" name="credit_estatus_${i}" data-c-estatus>
+        ${CREDIT_ESTATUS.map((s) => `<option value="${s}" ${s === (c.estatus || 'pendiente') ? 'selected' : ''}>${CREDIT_ESTATUS_LABEL[s]}</option>`).join('')}
+      </select>
+      <input class="form-control" name="credit_observaciones_${i}" data-c-obs type="text" placeholder="Notas (ej. monto de subcuenta...)" style="min-width:140px;" value="${UI.escapeHtml(c.observaciones || '')}">
+      <button type="button" class="btn btn-danger btn-sm" data-c-del title="Quitar crédito">&#10005;</button>
+    </div>`;
+
+  const render = () => {
+    listEl.innerHTML = credits.map(rowHTML).join('');
+    listEl.querySelectorAll('[data-c-del]').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        readFromDom();
+        credits.splice(i, 1);
+        render();
+      });
+    });
+    listEl.querySelectorAll('[data-c-monto], [data-c-tipo]').forEach((el) => {
+      el.addEventListener('input', updateTotal);
+    });
+    updateTotal();
+  };
+
+  const numOf = (sel) => {
+    const el = form.querySelector(sel);
+    return el ? (Number(el.value) || 0) : 0;
+  };
+
+  function updateTotal() {
+    let creditSum = 0;
+    listEl.querySelectorAll('[data-c-monto]').forEach((el) => { creditSum += Number(el.value) || 0; });
+    const merge = form.querySelector('[name="buyerInfo_mergeCredits"]');
+    const total = creditSum
+      + numOf('[name="buyerInfo_subsidy"]')
+      + numOf('[name="buyerInfo_downPayment"]')
+      + numOf('[name="buyerInfo_ownResources"]');
+    const totalInput = form.querySelector('[name="buyerInfo_totalFunding"]');
+    if (totalInput) totalInput.value = total;
+    totalEl.innerHTML = `
+      <strong>Total de financiamiento del cliente:</strong> ${Format.currency(total)}
+      ${merge && merge.checked ? '<span class="badge badge-warning" style="margin-left:6px;">&#129309; Créditos combinados</span>' : ''}
+    `;
+  }
+
+  chipsEl.querySelectorAll('.credit-chip-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      readFromDom();
+      credits.push({ tipo: btn.dataset.tipo, monto: 0, institucion: '', estatus: 'pendiente', observaciones: '' });
+      render();
+    });
+  });
+  addBtn.addEventListener('click', () => {
+    readFromDom();
+    credits.push({ tipo: 'otro', monto: 0, institucion: '', estatus: 'pendiente', observaciones: '' });
+    render();
+  });
+
+  // El total también se actualiza al cambiar enganche / subcuenta / recursos.
+  ['buyerInfo_subsidy', 'buyerInfo_downPayment', 'buyerInfo_ownResources', 'buyerInfo_mergeCredits'].forEach((n) => {
+    const el = form.querySelector(`[name="${n}"]`);
+    if (el) el.addEventListener('input', updateTotal);
+  });
+
+  if (!form.querySelector('#mx-banks')) {
+    const dl = document.createElement('datalist');
+    dl.id = 'mx-banks';
+    dl.innerHTML = MX_BANKS.map((b) => `<option value="${UI.escapeHtml(b)}">`).join('');
+    form.appendChild(dl);
+  }
+
+  render();
+}
+
 window.Pages.clients = {
   title: 'Clientes',
 
@@ -71,9 +295,25 @@ window.Pages.clients = {
         {
           key: 'type',
           label: 'Tipo',
-          render: (r) => UI.badge(String(r.type || '').replace(/_/g, ' '), 'info'),
+          render: (r) => `${CLIENT_TYPE_ICON[r.type] || ''} ${UI.badge(String(r.type || '').replace(/_/g, ' '), 'info')}`,
         },
         { key: 'email', label: 'Correo', render: (r) => UI.escapeHtml(r.email || '—') },
+        {
+          key: 'credits',
+          label: 'Financiamiento',
+          render: (r) => {
+            const bi = r.buyerInfo || {};
+            const credits = bi.credits || [];
+            if (!credits.length && !bi.bank) return '<span class="text-muted">—</span>';
+            const chips = credits.map((c) => {
+              const info = creditInfo(c.tipo);
+              return `<span class="credit-chip" title="${UI.escapeHtml(info.label)}">${info.icon} ${UI.escapeHtml(info.label)}</span>`;
+            }).join(' ');
+            const total = Number(bi.totalFunding) || 0;
+            const merge = bi.mergeCredits ? ' <span class="badge badge-warning" title="Créditos combinados">&#129309;</span>' : '';
+            return `${chips}${merge}${total ? `<div class="text-muted" style="font-size:11px;">Financiamiento: <strong>${Format.currency(total)}</strong></div>` : ''}`;
+          },
+        },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         {
           key: 'funnelStage',
@@ -113,10 +353,59 @@ window.Pages.clients = {
         { name: 'buyerInfo_propertyType', label: 'Tipo de propiedad buscada', type: 'select', options: [{ value: '', label: '—' }, 'casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'], value: (r) => (r.buyerInfo || {}).propertyType || '' },
         { name: 'buyerInfo_desiredFeatures', label: 'Características deseadas', type: 'textarea', full: true, value: (r) => (r.buyerInfo || {}).desiredFeatures || '' },
         { name: 'buyerInfo_observations', label: 'Observaciones del comprador', type: 'textarea', full: true, value: (r) => (r.buyerInfo || {}).observations || '' },
+
+        // ── Financiamiento del comprador (créditos de México) ────────────
+        { name: 'buyerInfo_mergeCredits', label: 'Combinar créditos (ej. INFONAVIT + FOVISSSTE)', type: 'checkbox', hint: 'Marca esta casilla si el cliente juntará dos créditos para pagar', value: (r) => Boolean((r.buyerInfo || {}).mergeCredits) },
+        { name: 'buyerInfo_creditStatus', label: 'Estatus del financiamiento', type: 'select', options: [{ value: 'sin_aplica', label: 'Aún no aplica' }, 'solicitado', 'pre_aprobado', 'aprobado', 'en_escrituracion'], value: (r) => (r.buyerInfo || {}).creditStatus || 'sin_aplica' },
+        { name: 'buyerInfo_salaryConnection', label: 'Vínculo laboral', type: 'select', options: ['independiente', 'relacion_laboral', 'rfc_moral', 'otro'], value: (r) => (r.buyerInfo || {}).salaryConnection || 'independiente' },
+        { name: 'buyerInfo_bank', label: 'Banco (si aplica)', type: 'text', placeholder: 'BBVA, Banorte, Santander...', hint: 'Se usa cuando el crédito es bancario', value: (r) => (r.buyerInfo || {}).bank || '' },
+        { name: 'buyerInfo_downPayment', label: 'Enganche', type: 'number', value: (r) => (r.buyerInfo || {}).downPayment || 0 },
+        { name: 'buyerInfo_subsidy', label: 'Subcuenta de vivienda / subsidios', type: 'number', hint: 'Dinero a favor en tu subcuenta (INFONAVIT/FOVISSSTE) o subsidio', value: (r) => (r.buyerInfo || {}).subsidy || 0 },
+        { name: 'buyerInfo_ownResources', label: 'Recursos propios adicionales', type: 'number', hint: 'Apoyo familiar u otros recursos en efectivo', value: (r) => (r.buyerInfo || {}).ownResources || 0 },
+        { name: 'buyerInfo_totalFunding', label: 'Total de financiamiento (automático)', type: 'number', hint: 'Se calcula solo: créditos + subcuenta + enganche + recursos', value: (r) => (r.buyerInfo || {}).totalFunding || 0 },
       ],
-      formData(values) {
-        const { sellerInfo_operationType: sOp, sellerInfo_property: sProp, sellerInfo_propertyType: sPT, sellerInfo_location: sLoc, sellerInfo_hasMortgage: sMort, sellerInfo_mortgageInstitution: sMI, sellerInfo_debt: sDebt, sellerInfo_requestedPrice: sRP, sellerInfo_observations: sObs, buyerInfo_desiredZone: bZone, buyerInfo_budget: bBud, buyerInfo_paymentMethod: bPay, buyerInfo_propertyType: bPT, buyerInfo_desiredFeatures: bFeat, buyerInfo_observations: bObs, ...rest } = values;
+      formData(values, record, form) {
+        const { sellerInfo_operationType: sOp, sellerInfo_property: sProp, sellerInfo_propertyType: sPT, sellerInfo_location: sLoc, sellerInfo_hasMortgage: sMort, sellerInfo_mortgageInstitution: sMI, sellerInfo_debt: sDebt, sellerInfo_requestedPrice: sRP, sellerInfo_observations: sObs, buyerInfo_desiredZone: bZone, buyerInfo_budget: bBud, buyerInfo_paymentMethod: bPay, buyerInfo_propertyType: bPT, buyerInfo_desiredFeatures: bFeat, buyerInfo_observations: bObs, buyerInfo_mergeCredits: bMerge, buyerInfo_creditStatus: bCredStatus, buyerInfo_salaryConnection: bSal, buyerInfo_bank: bBank, buyerInfo_downPayment: bDown, buyerInfo_subsidy: bSubsidy, buyerInfo_ownResources: bOwn, buyerInfo_totalFunding: bTotal, ...rest } = values;
         const body = { ...rest };
+
+        // Intervalos vacíos se normalizan a número seguro.
+        const emptyToNum = (v, d) => (v === '' || v === null || v === undefined ? d : Number(v));
+
+        // Créditos del comprador (filas dinámicas del formulario).
+        let credits = [];
+        if (form) {
+          const grouped = new Map();
+          Array.from(form.elements).forEach((el) => {
+            const m = el.name && el.name.match(/^credit_(\w+)_(\d+)$/);
+            if (!m) return;
+            const field = m[1];
+            const idx = Number(m[2]);
+            if (!grouped.has(idx)) grouped.set(idx, {});
+            const row = grouped.get(idx);
+            if (field === 'monto') row.monto = emptyToNum(el.value, 0);
+            else if (field === 'institucion') row.institucion = String(el.value || '').trim();
+            else if (field === 'estatus') row.estatus = String(el.value || '').trim();
+            else if (field === 'observaciones') row.observaciones = String(el.value || '').trim();
+            else if (field === 'tipo') row.tipo = String(el.value || 'otro');
+          });
+          credits = Array.from(grouped.values())
+            .map((r) => ({
+              tipo: r.tipo || 'otro',
+              monto: r.monto || 0,
+              institucion: r.institucion || '',
+              estatus: r.estatus || 'pendiente',
+              observaciones: r.observaciones || '',
+            }))
+            .filter((r) => r.tipo || r.monto || r.institucion || r.estatus || r.observaciones);
+        }
+
+        const merge = Boolean(bMerge);
+        const downPayment = emptyToNum(bDown, 0);
+        const subsidy = emptyToNum(bSubsidy, 0);
+        const ownResources = emptyToNum(bOwn, 0);
+        const creditMonto = credits.reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+        const totalFunding = creditMonto + subsidy + downPayment + ownResources;
+
         body.sellerInfo = {
           operationType: sOp || null,
           property: sProp || '',
@@ -130,12 +419,22 @@ window.Pages.clients = {
         };
         body.buyerInfo = {
           desiredZone: bZone || '',
-          budget: bBud || 0,
+          budget: emptyToNum(bBud, 0),
           paymentMethod: bPay || '',
           propertyType: bPT || null,
           desiredFeatures: bFeat || '',
           observations: bObs || '',
+          mergeCredits: merge,
+          creditStatus: bCredStatus || 'sin_aplica',
+          salaryConnection: bSal || 'independiente',
+          bank: bBank || '',
+          downPayment,
+          subsidy,
+          ownResources,
+          totalFunding,
+          credits,
         };
+        if (!body.type) body.type = 'comprar';
         return body;
       },
       defaultParams: {},
@@ -149,7 +448,8 @@ window.Pages.clients = {
         if (action === 'whatsapp') return registerInteraction(record, 'whatsapp');
         return undefined;
       },
-      onEdit: true,
+      onNew: (openForm) => askClientType(openForm, null),
+      onEdit: (record, openForm) => askClientType(openForm, record),
       onRemove: true,
     });
 

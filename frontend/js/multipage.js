@@ -39,7 +39,14 @@ window.AppShell = (() => {
 
   function currentKey() {
     const name = (window.location.pathname.split('/').pop() || '').replace('.html', '');
-    return NAV.some((n) => n.key === name) ? name : 'dashboard';
+    if (NAV.some((n) => n.key === name)) return name;
+    // Módulos que NO están en el menú lateral (p. ej. el chat, que se abre
+    // desde el botón flotante) deben resolverse igual para que su HTML renderice
+    // su propio script y no el del Dashboard.
+    if (name && window.Pages && typeof window.Pages[name] === 'object' && typeof window.Pages[name].render === 'function') {
+      return name;
+    }
+    return 'dashboard';
   }
 
   function currentPage() {

@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'crm-inmob-v21';
+const CACHE_NAME = 'crm-inmob-v22';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -23,12 +23,16 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname.includes('/uploads/')) return;
 
+  // Las peticiones que NO son GET (POST, PUT, multipart, etc.) nunca se deben
+  // guardar en caché: Cache.put() falla con "Request method POST unsupported".
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         if (response && response.ok) {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
         }
         return response;
       })

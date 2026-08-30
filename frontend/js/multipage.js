@@ -329,9 +329,25 @@ window.AppShell = (() => {
       content.innerHTML = '<div class="loading">Cargando...</div>';
       try { await page.render(content); labelTableColumns(content); }
       catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); }
-    } else {
-      content.innerHTML = '<div class="empty-state"><p>Módulo no disponible.</p></div>';
+      return;
     }
+    // El módulo aún no se registró (el script de la página tardó en cargar o el
+    // service worker sirvió una versión anterior del HTML). Se reintenta un par
+    // de veces antes de mostrar "módulo no disponible".
+    for (const wait of [60, 200, 800]) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      const retryPage = currentPage();
+      if (retryPage && typeof retryPage.render === 'function') {
+        content.innerHTML = '<div class="loading">Cargando...</div>';
+        try { await retryPage.render(content); labelTableColumns(content); return; }
+        catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); return; }
+      }
+    }
+    if (!window.navigator.onLine) {
+      content.innerHTML = '<div class="empty-state"><p>Sin conexión. Conéctate e intenta de nuevo.</p></div>';
+      return;
+    }
+    content.innerHTML = '<div class="empty-state"><p>Módulo no disponible. Haz un actualización forzada (Ctrl+Shift+R) para limpiar la caché.</p></div>';
   }
 
   function installErrorHandlers() {

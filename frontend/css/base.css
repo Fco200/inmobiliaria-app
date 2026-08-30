@@ -1704,6 +1704,32 @@ body.page-chat .assistant-panel {
   display: none !important;
 }
 
+/* Feed de actividad del equipo (sesión de administración) */
+.team-timeline {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.team-timeline li {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.team-tl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 /* ── Galería de fotos de propiedad ──────────────────────────────────── */
 .detail-photos {
   display: grid;

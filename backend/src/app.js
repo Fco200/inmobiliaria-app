@@ -25,7 +25,10 @@ app.use(
       directives: {
         // Permitir llamadas a la API del backend local aunque la página se sirva
         // desde 127.0.0.1 (evita bloqueos de "connect-src" del navegador).
-        'connect-src': ["'self'", 'http://localhost:5000', 'http://127.0.0.1:5000', 'ws://localhost:5000', 'wss://localhost:5000', 'https://accounts.google.com'],
+        // Se agrega el CDN de Socket.IO (source map/script) y el esquema wss:
+        // para que el WebSocket de chat funcione en cualquier dominio de
+        // producción (Render cambia el hostname entre deploys).
+        'connect-src': ["'self'", 'http://localhost:5000', 'http://127.0.0.1:5000', 'ws://localhost:5000', 'wss://localhost:5000', 'https://accounts.google.com', 'https://cdn.socket.io', 'wss:', 'ws:'],
         // SDK de Google Identity Services para el botón "Registrarse con Google"
         // (script + iframe de One Tap).
         'script-src': ["'self'", 'https://accounts.google.com', 'https://cdn.socket.io'],

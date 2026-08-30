@@ -63,11 +63,99 @@ window.Pages.management = {
             <button class="btn btn-secondary btn-block" type="button" data-detail="${u._id}">&#128100;&nbsp; Ver detalle</button>
           </div>`).join('') || '<p class="text-muted">Sin asesores registrados.</p>'}
       </div>
+      <div class="card" id="mgr-activity" style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <h3 style="margin:0;">&#128273;&nbsp; Actividad del equipo <small class="text-muted" style="font-weight:400;">(en vivo)</small></h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select class="form-control" id="mgr-activity-user" style="max-width:220px;">
+              <option value="">Todos los asesores</option>
+              ${users.map((u) => `<option value="${u._id}">${UI.escapeHtml(u.name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-secondary btn-sm" type="button" data-activity-refresh>&#8635;&nbsp; Actualizar</button>
+          </div>
+        </div>
+        <div id="mgr-activity-feed"><div class="loading">Cargando actividad...</div></div>
+      </div>
       <div id="mgr-content"><div class="loading">Cargando reporte...</div></div>
     `;
 
     const contentEl = container.querySelector('#mgr-content');
     const cardsEl = container.querySelector('#mgr-cards');
+    const activityFeedEl = container.querySelector('#mgr-activity-feed');
+    const activityUserEl = container.querySelector('#mgr-activity-user');
+
+    const ACTION_LABELS = {
+      creacion: 'Creó', actualizacion: 'Actualizó', eliminacion: 'Eliminó',
+      cambio_estado: 'Cambió estado', publicar: 'Publicó', despublicar: 'Despublicó',
+      cita: 'Agendó cita', negocio: 'Creó negocio', etapa: 'Movió de etapa',
+      aviso: 'Publicó aviso', documento: 'Subió documento', tarea: 'Creó tarea',
+      gasto: 'Registró gasto', meta: 'Registró meta', fotos: 'Subió fotos',
+    };
+    const ACTION_ICONS = {
+      creacion: '&#10003;', actualizacion: '&#9998;', eliminacion: '&#10005;',
+      cambio_estado: '&#128279;', publicar: '&#128196;', despublicar: '&#128465;',
+      cita: '&#128197;', negocio: '&#128179;', etapa: '&#128200;',
+      aviso: '&#128276;', documento: '&#128196;', tarea: '&#9745;',
+      gasto: '&#128184;', meta: '&#127919;', fotos: '&#128247;',
+    };
+
+    function loadActivityFeed() {
+      if (!activityFeedEl || !activityFeedEl.isConnected) return;
+      const userId = activityUserEl ? activityUserEl.value : '';
+      activityFeedEl.innerHTML = '<div class="loading">Cargando actividad...</div>';
+      API.activity.list(userId ? { user: userId, limit: 40 } : { limit: 40 })
+        .then((res) => {
+          if (!container.isConnected) return;
+          const items = res.data || [];
+          if (!items.length) {
+            activityFeedEl.innerHTML = '<p class="text-muted" style="margin:4px 0;">Sin actividad registrada todavía.</p>';
+            return;
+          }
+          activityFeedEl.innerHTML = `<ul class="timeline team-timeline">
+            ${items.map((a) => {
+              const actor = a.user || {};
+              const actorName = actor.name || 'Usuario';
+              const action = String(a.action || '');
+              const label = ACTION_LABELS[action] || action.replace(/_/g, ' ');
+              const icon = ACTION_ICONS[action] || '&#8226;';
+              const entity = a.entityType || '';
+              const entityBadge = ['Property', 'Inventory', 'Client', 'Business', 'Appointment', 'Task', 'Goal', 'Expense', 'Notification', 'Document', 'Prospecting'].includes(entity)
+                ? `<small class="text-muted" style="margin-left:6px;">(${entity.replace(/([A-Z])/g, ' $1').trim()})</small>` : '';
+              return `<li>
+                <div class="team-tl-head">
+                  ${actor.photo
+                    ? `<img class="advisor-avatar" style="width:28px;height:28px;" src="${window.AppConfig.resolveUrl(actor.photo)}" alt="">`
+                    : `<span class="advisor-avatar advisor-avatar-fallback" style="width:28px;height:28px;font-size:13px;">${UI.escapeHtml(String(actorName).charAt(0).toUpperCase())}</span>`}
+                  <strong style="flex:1;">${UI.escapeHtml(actorName)}</strong>
+                  <span class="text-muted" style="font-size:11px;">${Format.dateTime(a.createdAt)}</span>
+                </div>
+                <div style="font-size:13px;">
+                  <span style="color:var(--primary);">${icon} ${UI.escapeHtml(label)}</span>
+                  ${entityBadge}
+                </div>
+                <div class="text-muted" style="font-size:13px;">${UI.escapeHtml(a.message || '')}</div>
+              </li>`;
+            }).join('')}
+          </ul>`;
+        })
+        .catch((error) => {
+          if (!container.isConnected) return;
+          activityFeedEl.innerHTML = UI.errorAlert(error.message);
+        });
+    }
+
+    if (activityUserEl) activityUserEl.addEventListener('change', loadActivityFeed);
+    const refreshBtn = container.querySelector('[data-activity-refresh]');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadActivityFeed);
+    setTimeout(loadActivityFeed, 0);
+    const activityTimer = setInterval(() => {
+      if (!activityFeedEl || !activityFeedEl.isConnected) {
+        clearInterval(activityTimer);
+        return;
+      }
+      loadActivityFeed();
+    }, 45000);
+    window.addEventListener('pagehide', () => clearInterval(activityTimer), { once: true });
 
     function openAdvisorDetail(userId) {
       const user = users.find((x) => String(x._id) === String(userId));

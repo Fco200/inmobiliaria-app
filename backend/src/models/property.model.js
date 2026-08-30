@@ -72,6 +72,6 @@ propertySchema.index({ zone: 1, city: 1 });
 propertySchema.index({ price: 1 });
 propertySchema.index({ responsibleUser: 1 });
 propertySchema.index({ isPublished: 1 });
-propertySchema.index({ folio: 1 });
+// folio ya define índice único en el esquema (unique: true).
 
 module.exports = mongoose.model('Property', propertySchema);

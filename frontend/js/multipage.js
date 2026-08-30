@@ -246,6 +246,20 @@ window.AppShell = (() => {
   function initReminders() { setInterval(checkReminders, 60 * 1000); }
   function registerServiceWorker() { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); }
 
+  // Carga el módulo global de tiempo real (avisos en alerta modal + badges).
+  // Se inyecta dinámicamente para no tocar cada HTML de la aplicación.
+  function loadRealtime() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    const script = document.createElement('script');
+    script.src = 'js/realtime.js';
+    script.onload = () => {
+      if (!window.Realtime) return;
+      window.Realtime.connect().catch(() => {});
+      window.Realtime.startPolling();
+    };
+    document.head.appendChild(script);
+  }
+
   async function logout() {
     const ok = UI ? await UI.confirm('¿Deseas cerrar sesión?') : true;
     if (!ok) return;
@@ -301,6 +315,7 @@ window.AppShell = (() => {
     injectThemeButton();
     startClock();
     injectAssistant();
+    loadRealtime();
 
     // Hamburger toggle para mobile
     const hamburger = document.getElementById('topnav-hamburger');

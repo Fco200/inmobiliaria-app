@@ -205,9 +205,34 @@ window.LandingPage = (() => {
     }
   }
 
+  function initNav() {
+    const toggle = document.getElementById('nav-toggle');
+    const nav = document.getElementById('landing-nav');
+    if (toggle && nav) {
+      toggle.addEventListener('click', function onToggle() {
+        nav.classList.toggle('open');
+        this.classList.toggle('active');
+      });
+    }
+    // Smooth scroll: al hacer clic en un enlace interno se cierra el menú.
+    document.querySelectorAll('a[href^="#"]').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        const href = a.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (nav) nav.classList.remove('open');
+        if (toggle) toggle.classList.remove('active');
+      });
+    });
+  }
+
   async function init() {
     const year = document.getElementById('footer-year');
     if (year) year.textContent = String(new Date().getFullYear());
+
+    initNav();
 
     // PWA: registra el service worker también en la página pública.
     if ('serviceWorker' in navigator) {

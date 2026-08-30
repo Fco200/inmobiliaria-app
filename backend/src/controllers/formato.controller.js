@@ -2,8 +2,9 @@
 
 const path = require('path');
 const fs = require('fs');
-const { PDFDocument } = require('pdf-lib');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { Document } = require('../models');
+const { POSICIONES, DEFAULT_LAYOUT } = require('../config/formatoPosiciones');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
 const UPLOADS_DIR = path.join(__dirname, '../../uploads');
@@ -465,7 +466,13 @@ const obtenerCamposPlantilla = async (req, res) => {
 };
 
 /**
- * Genera PDF rellenando una plantilla.
+ * Genera PDF sobreponiendo los datos sobre la plantilla original.
+ *
+ * Las plantillas NO tienen campos AcroForm editables, por lo que se imprime
+ * cada página original como fondo y se dibujan los valores encima usando el
+ * mapa de posiciones (backend/src/config/formatoPosiciones.js). Los campos
+ * sin posición definida se dibujan en una caja automática legible para que el
+ * PDF siempre sea útil.
  * POST /api/formatos/generar/:plantillaId
  */
 const generarPDF = async (req, res) => {
@@ -483,46 +490,75 @@ const generarPDF = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Archivo de plantilla no encontrado' });
     }
 
-    const pdfBytes = fs.readFileSync(plantillaPath);
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    const form = pdfDoc.getForm();
-    const fields = form.getFields();
-
-    // Crear mapa de campos PDF a valores
-    const pdfFieldMap = {};
+    // Datos recibidos del formulario (name de cada campo -> valor).
+    const values = req.body || {};
+    // lista de campos con valor, para relleno automático (label + pdfField).
+    const rows = [];
     for (const seccion of config.secciones) {
       for (const campo of seccion.campos) {
-        if (campo.pdfField && req.body[campo.name] !== undefined) {
-          pdfFieldMap[campo.pdfField] = req.body[campo.name];
+        const val = values[campo.name];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          rows.push({ pdfField: campo.pdfField, label: campo.label, value: String(val) });
         }
       }
     }
 
-    // Rellenar campos del PDF
-    for (const field of fields) {
-      const name = field.getName();
-      const value = pdfFieldMap[name];
+    const originalBytes = fs.readFileSync(plantillaPath);
+    const original = await PDFDocument.load(originalBytes);
+    const output = await PDFDocument.create();
+    const helvetica = await output.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await output.embedFont(StandardFonts.HelveticaBold);
+    const posiciones = POSICIONES[plantillaId] || {};
 
-      if (value !== undefined && value !== null && value !== '') {
-        try {
-          if (field.constructor.name === 'PDFTextField') {
-            field.setText(String(value));
-          } else if (field.constructor.name === 'PDFCheckBox') {
-            if (value === 'Si' || value === 'true' || value === '1') {
-              field.check();
-            } else {
-              field.uncheck();
-            }
-          } else if (field.constructor.name === 'PDFDropdown') {
-            field.select(String(value));
-          }
-        } catch (e) {
-          console.warn(`No se pudo llenar campo "${name}":`, e.message);
-        }
+    const positioned = rows.filter((r) => posiciones[r.pdfField]);
+    const automatic = rows.filter((r) => !posiciones[r.pdfField]);
+
+    // 1) Copiar cada página de la plantilla como fondo.
+    const pageCount = original.getPageCount();
+    const copiedPages = await output.copyPages(original, Array.from({ length: pageCount }, (_, i) => i));
+    copiedPages.forEach((copied, idx) => {
+      output.addPage(copied);
+      const w = copied.getWidth();
+      const h = copied.getHeight();
+
+      // 2) Valores con posición exacta definida sobre la plantilla.
+      for (const row of positioned) {
+        const pos = posiciones[row.pdfField];
+        if (pos.page !== undefined && pos.page !== idx) continue;
+        const size = pos.size || 10;
+        const x = (pos.x !== undefined ? pos.x : DEFAULT_LAYOUT.marginX) * w;
+        const yTop = pos.y !== undefined ? pos.y : DEFAULT_LAYOUT.startY;
+        const y = h - yTop * h - size;
+        const align = pos.align || 'left';
+        const width = helvetica.widthOfTextAtSize(row.value, size) + 4;
+        let tx = x;
+        if (align === 'center') tx = x - width / 2;
+        else if (align === 'right') tx = x - width;
+        copied.drawRectangle({
+          x: tx,
+          y: y - 2,
+          width,
+          height: size + 4,
+          color: rgb(1, 1, 1),
+          opacity: DEFAULT_LAYOUT.fillOpacity,
+        });
+        copied.drawText(row.value, {
+          x: tx + 2,
+          y,
+          size,
+          font: helvetica,
+          color: rgb(0.08, 0.05, 0.15),
+        });
       }
-    }
 
-    const modifiedPdfBytes = await pdfDoc.save();
+      // 3) Relleno automático: caja blanca legible con «Etiqueta: valor».
+      //    Se dibuja en la última página para no tapar el contenido inicial.
+      if (idx === pageCount - 1 && automatic.length) {
+        drawAutoBox(copied, automatic, helvetica, helveticaBold, w, h);
+      }
+    });
+
+    const modifiedPdfBytes = await output.save();
     const safeNombre = String(config.nombre || 'formato').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'formato';
     const fileName = `${safeNombre}_${Date.now()}.pdf`;
 
@@ -563,6 +599,54 @@ const generarPDF = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error al generar el PDF', error: error.message });
   }
 };
+
+// Dibuja la caja automática «Etiqueta: valor» sobre la página destino.
+function drawAutoBox(page, rows, font, fontBold, width, height) {
+  const { marginX, startY, rowHeight, fontSize, fillOpacity } = DEFAULT_LAYOUT;
+  const boxWidth = width * (1 - marginX * 2);
+  const boxHeight = rows.length * rowHeight + 18;
+  const x = width * marginX;
+  const yTop = startY * height;
+  const y = height - yTop - boxHeight;
+
+  page.drawRectangle({
+    x,
+    y,
+    width: boxWidth,
+    height: boxHeight,
+    color: rgb(0.98, 0.97, 1),
+    opacity: fillOpacity,
+    borderColor: rgb(0.35, 0.29, 0.5),
+    borderWidth: 1,
+  });
+  page.drawText('DATOS DEL FORMATO', {
+    x: x + 8,
+    y: y + boxHeight - 14,
+    size: 10,
+    font: fontBold,
+    color: rgb(0.32, 0.15, 0.55),
+  });
+
+  rows.forEach((row, i) => {
+    const ry = y + boxHeight - (i + 1) * rowHeight - 20;
+    const label = `${row.label}:`;
+    page.drawText(label, {
+      x: x + 8,
+      y: ry,
+      size: fontSize,
+      font: fontBold,
+      color: rgb(0.15, 0.12, 0.25),
+    });
+    const labelWidth = font.widthOfTextAtSize(label, fontSize);
+    page.drawText(row.value, {
+      x: x + 8 + labelWidth + 6,
+      y: ry,
+      size: fontSize,
+      font,
+      color: rgb(0.08, 0.05, 0.15),
+    });
+  });
+}
 
 /**
  * Descarga el PDF original de una plantilla (en blanco).

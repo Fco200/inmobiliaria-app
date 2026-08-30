@@ -265,24 +265,5 @@
   <script src="js/components/ui.js"></script>
   <script src="js/services/index.js"></script>
   <script src="pages/landing/landing.js"></script>
-  <script>
-    // Mobile nav toggle
-    document.getElementById('nav-toggle')?.addEventListener('click', function() {
-      document.getElementById('landing-nav').classList.toggle('open');
-      this.classList.toggle('active');
-    });
-    // Smooth scroll
-    document.querySelectorAll('a[href^="#"]').forEach(a => {
-      a.addEventListener('click', e => {
-        const href = a.getAttribute('href');
-        if (href === '#') return;
-        e.preventDefault();
-        const t = document.querySelector(href);
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        document.getElementById('landing-nav')?.classList.remove('open');
-        document.getElementById('nav-toggle')?.classList.remove('active');
-      });
-    });
-  </script>
 </body>
 </html>

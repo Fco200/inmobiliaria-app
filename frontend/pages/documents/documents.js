@@ -290,7 +290,7 @@ window.Pages.documents = {
             <p class="text-muted" style="margin:0 0 16px;font-size:13px;">Selecciona una plantilla para llenar sus datos y generar el PDF.</p>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
               ${plantillasConFormulario.map(p => `
-                <div class="card plantilla-card" data-plantilla="${UI.escapeHtml(p.id)}" style="cursor:pointer;padding:16px;transition:transform 0.2s,border-color 0.2s;">
+                <div class="card plantilla-card" style="cursor:pointer;padding:16px;transition:transform 0.2s,border-color 0.2s;">
                   <div style="display:flex;align-items:center;gap:12px;">
                     <span style="font-size:28px;">&#128196;</span>
                     <div style="flex:1;min-width:0;">
@@ -335,13 +335,17 @@ window.Pages.documents = {
 
       // Eventos para plantillas con formulario
       if (bodyEl) {
-        bodyEl.querySelectorAll('[data-plantilla]').forEach(card => {
-          card.addEventListener('click', async () => {
-            const plantillaId = card.dataset.plantilla;
+        bodyEl.querySelectorAll('[data-plantilla]').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const plantillaId = btn.dataset.plantilla;
             UI.closeModal();
             await openFormularioPlantilla(plantillaId);
           });
+        });
 
+        // Hover decorativo sobre la tarjeta (sin duplicar eventos de click)
+        bodyEl.querySelectorAll('.plantilla-card').forEach(card => {
           card.addEventListener('mouseenter', () => {
             card.style.transform = 'translateY(-2px)';
             card.style.borderColor = 'var(--primary)';

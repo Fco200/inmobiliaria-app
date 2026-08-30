@@ -474,6 +474,7 @@ window.Pages.documents = {
 
               UI.toast('PDF generado y descargado exitosamente', 'success');
               UI.closeModal();
+              load();
             } catch (error) {
               UI.toast('Error al generar PDF: ' + error.message, 'error');
             }

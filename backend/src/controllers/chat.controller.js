@@ -1,17 +1,67 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Chat, User } = require('../models');
+const { Chat, User, Role } = require('../models');
 
-// Listar chats del usuario
+// Códigos de rol que participan en el canal grupal general.
+const TEAM_ROLES = ['admin', 'gerencia', 'asesor'];
+
+// Nombre del canal grupal accesible para todo el equipo.
+const GENERAL_NAME = 'general';
+
+/**
+ * Devuelve (creándolo si hace falta) el chat grupal general en el que
+ * participa todo el equipo. Se invoca al arrancar y bajo demanda.
+ */
+async function getOrCreateGeneralChat() {
+  let chat = await Chat.findOne({ type: 'grupal', name: GENERAL_NAME });
+  if (chat) {
+    // Mantener sincronizados los participantes con el equipo actual.
+    const roles = await Role.find({ code: { $in: TEAM_ROLES } });
+    const roleIds = roles.map((r) => r._id);
+    const team = await User.find({
+      role: { $in: roleIds },
+      status: 'activo',
+    }).select('_id');
+    const teamIds = team.map((u) => u._id);
+    const missing = teamIds.filter((id) => !chat.participants.some((p) => p.toString() === id.toString()));
+    if (missing.length) {
+      chat.participants.push(...missing);
+      await chat.save();
+    }
+    return chat;
+  }
+
+  const roles = await Role.find({ code: { $in: TEAM_ROLES } });
+  const roleIds = roles.map((r) => r._id);
+  const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
+  chat = await Chat.create({
+    name: GENERAL_NAME,
+    type: 'grupal',
+    participants: team.map((u) => u._id),
+  });
+  return chat;
+}
+
+// Listar chats del usuario (los grupales cierran sesión de participantes y se
+// devuelven aunque el usuario haya sido agregado después de la creación).
 const listChats = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const chats = await Chat.find({ participants: userId })
+  const chats = await Chat.find({
+    $or: [{ participants: userId }, { type: 'grupal' }],
+  })
     .populate('participants', 'name username role')
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .limit(50);
 
   res.json({ success: true, data: chats });
+});
+
+// Devuelve (creándolo) el canal grupal general para el equipo.
+const general = asyncHandler(async (req, res) => {
+  const chat = await getOrCreateGeneralChat();
+  const populated = await chat.populate('participants', 'name username role');
+  res.json({ success: true, data: populated });
 });
 
 // Obtener chat por ID con mensajes
@@ -58,9 +108,16 @@ const createChat = asyncHandler(async (req, res) => {
   }
 
   if (type === 'grupal') {
-    // Chat grupal con todos los asesores
-    const users = await User.find({ role: { $in: ['admin', 'gerencia', 'asesor'] } });
-    const participantIds = users.map(u => u._id);
+    // Chat grupal con todo el equipo. "Chat General" apunta al canal general.
+    if (name === 'general' || (name || '').toLowerCase().startsWith('general')) {
+      const chat = await getOrCreateGeneralChat();
+      const populated = await chat.populate('participants', 'name username role');
+      return res.status(200).json({ success: true, data: populated });
+    }
+
+    const team = await User.find({ status: 'activo' }).select('_id');
+    const participantIds = team.map(u => u._id);
+    if (!participantIds.includes(userId)) participantIds.push(userId);
 
     const chat = await Chat.create({
       name: name || 'Chat General',
@@ -106,10 +163,16 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   if (io) {
-    io.to(`chat:${chatId}`).emit('new-message', {
-      chatId,
-      message: newMsg,
-    });
+    // Emitir a la sala del chat abierto, a las habitaciones privadas de cada
+    // participante y al canal general (para chats grupales del equipo).
+    io.to(`chat:${chatId}`).emit('new-message', { chatId, message: newMsg });
+    if (chat.type === 'individual') {
+      chat.participants.forEach((p) => {
+        io.to(`user:${p.toString()}`).emit('new-message', { chatId, message: newMsg });
+      });
+    } else {
+      io.to('general').emit('new-message', { chatId, message: newMsg });
+    }
   }
 
   res.status(201).json({ success: true, data: newMsg });
@@ -164,4 +227,6 @@ module.exports = {
   sendMessage,
   markAsRead,
   unreadCount,
+  general,
+  getOrCreateGeneralChat,
 };

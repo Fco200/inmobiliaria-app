@@ -193,6 +193,7 @@ window.API = {
 
   chats: {
     list: (params) => ApiClient.get('/chats', params),
+    general: () => ApiClient.get('/chats/general'),
     get: (id) => ApiClient.get(`/chats/${id}`),
     create: (body) => ApiClient.post('/chats', body),
     sendMessage: (id, body) => ApiClient.post(`/chats/${id}/messages`, body),

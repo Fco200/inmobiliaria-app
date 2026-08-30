@@ -18,17 +18,21 @@ const { userRules, userUpdateRules, userIdParam, roleRules, roleIdParam } = requ
 
 const router = Router();
 
-router.use(protect, authorize('admin'));
-
+// Lectura (directorio de usuarios, necesario para el chat 1 a 1) abierta a
+// cualquier usuario autenticado. La escritura queda restringida a admin.
+router.use(protect);
 router.get('/', listUsers);
-router.post('/', userRules, createUser);
 router.get('/permissions', listPermissions);
 router.get('/roles', listRoles);
+router.get('/:id', userIdParam, getUser);
+
+router.use(authorize('admin'));
+
+router.post('/', userRules, createUser);
 router.post('/roles', roleRules, createRole);
 router.put('/roles/:id', roleIdParam, updateRole);
 router.delete('/roles/:id', roleIdParam, removeRole);
 
-router.get('/:id', userIdParam, getUser);
 router.put('/:id', userIdParam, userUpdateRules, updateUser);
 router.delete('/:id', userIdParam, removeUser);
 

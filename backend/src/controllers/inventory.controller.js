@@ -19,10 +19,29 @@ const list = asyncHandler(async (req, res) => {
       filter.isPublished = req.query.isPublished === 'true';
     }
     if (req.query.assignedAgent) filter.assignedAgent = req.query.assignedAgent;
+    // Filtrar por el asesor responsable de la propiedad (?responsibleUser=id).
+    if (req.query.responsibleUser) {
+      const props = await Property.find(
+        { responsibleUser: req.query.responsibleUser },
+        '_id'
+      ).lean();
+      const ids = props.map((p) => p._id);
+      filter.property = ids.length ? { $in: ids } : { $in: [] };
+    }
   } else {
     // Los asesores trabajan sobre lo publicado + lo que les fue asignado.
     if (req.query.mine === 'true') {
-      filter.assignedAgent = req.user._id;
+      // "Mi inventario": propiedades donde el asesor es responsable de la
+      // propiedad o tiene el inventario asignado.
+      const props = await Property.find(
+        { responsibleUser: req.user._id },
+        '_id'
+      ).lean();
+      const minePropIds = props.map((p) => p._id);
+      filter.$or = [
+        { assignedAgent: req.user._id },
+        { property: minePropIds.length ? { $in: minePropIds } : { $in: [] } },
+      ];
     } else {
       filter.$or = [{ isPublished: true }, { assignedAgent: req.user._id }];
     }

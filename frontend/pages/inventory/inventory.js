@@ -12,6 +12,9 @@ window.Pages.inventory = {
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
     const isBoss = role === 'admin' || role === 'gerencia';
 
+    // Para asesores, la vista inicial es "Mi inventario".
+    state.filter = isBoss ? '' : 'mia';
+
     let me = null;
     let users = [];
     let clients = [];
@@ -358,8 +361,8 @@ window.Pages.inventory = {
       } else {
         el.innerHTML = `
           <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
-            <button class="process-tab active" type="button" data-view="all">Inventario General</button>
-            <button class="process-tab" type="button" data-view="mine">Mis propiedades</button>
+            <button class="process-tab active" type="button" data-view="mine">Mi inventario</button>
+            <button class="process-tab" type="button" data-view="all">Inventario general</button>
           </div>
         `;
         el.querySelectorAll('.process-tab').forEach((tab) => {

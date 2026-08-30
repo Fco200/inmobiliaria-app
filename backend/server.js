@@ -1,7 +1,6 @@
 'use strict';
 
 require('dotenv').config();
-const { GoogleGenAI } = require('@google/genai');
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
@@ -10,35 +9,7 @@ const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
-
-// Inicializar cliente de Gemini si la clave existe
-const ai = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-  : null;
-
-// Endpoint para el asistente de IA con Gemini
-app.post('/api/ai/chat', async (req, res) => {
-  try {
-    if (!ai) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY no configurada en el servidor' });
-    }
-
-    const { prompt } = req.body;
-    if (!prompt) {
-      return res.status(400).json({ error: 'El prompt es requerido' });
-    }
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-
-    res.json({ respuesta: response.text });
-  } catch (error) {
-    console.error('Error al consultar Gemini:', error);
-    res.status(500).json({ error: 'Error interno al procesar con IA' });
-  }
-});
+const { getOrCreateGeneralChat } = require('./src/controllers/chat.controller');
 
 async function start() {
   const connection = await connectDB();
@@ -46,6 +17,8 @@ async function start() {
   if (connection) {
     await seed();
     startJobs();
+    // Asegura el canal grupal general accesible para todo el equipo.
+    try { await getOrCreateGeneralChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal general:', e.message); }
   }
 
   const server = app.listen(port, () => {
@@ -72,6 +45,13 @@ async function start() {
 
   io.on('connection', (socket) => {
     console.log(`[Socket] ${socket.user.name} conectado (${socket.id})`);
+
+    // Cada usuario entra a su habitación privada (para avisos 1 a 1) y al
+    // canal grupal general del equipo.
+    if (socket.user && socket.user._id) {
+      socket.join(`user:${socket.user._id.toString()}`);
+    }
+    socket.join('general');
 
     socket.on('join-chat', (chatId) => {
       socket.join(`chat:${chatId}`);

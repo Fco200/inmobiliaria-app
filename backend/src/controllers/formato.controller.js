@@ -3,8 +3,10 @@
 const path = require('path');
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
+const { Document } = require('../models');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
+const UPLOADS_DIR = path.join(__dirname, '../../uploads');
 
 // Mapeo de campos para cada plantilla
 const PLANTILLAS_CONFIG = {
@@ -521,7 +523,37 @@ const generarPDF = async (req, res) => {
     }
 
     const modifiedPdfBytes = await pdfDoc.save();
-    const fileName = `${config.nombre.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
+    const safeNombre = String(config.nombre || 'formato').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'formato';
+    const fileName = `${safeNombre}_${Date.now()}.pdf`;
+
+    // Guardar el archivo generado en uploads y registrar el formato en la BD
+    // para tener un historial (usuario, plantilla, datos, fecha, ruta).
+    let fileUrl = null;
+    try {
+      if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      const diskPath = path.join(UPLOADS_DIR, fileName);
+      fs.writeFileSync(diskPath, Buffer.from(modifiedPdfBytes));
+      fileUrl = `/uploads/${fileName}`;
+
+      await Document.create({
+        name: config.nombre || plantillaId,
+        type: 'formato',
+        date: new Date(),
+        uploadedBy: req.user ? req.user._id : null,
+        fileName,
+        fileUrl,
+        status: 'pendiente',
+        observations: `Formato generado: ${plantillaId}`,
+        templateFields: [],
+        filledData: req.body || {},
+        filledBy: req.user ? req.user._id : null,
+        filledAt: new Date(),
+      });
+    } catch (saveError) {
+      // La descarga del PDF no debe fallar aunque el guardado falle; solo se
+      // registra la advertencia.
+      console.warn('[Formatos] No se pudo persistir el PDF generado:', saveError.message);
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);

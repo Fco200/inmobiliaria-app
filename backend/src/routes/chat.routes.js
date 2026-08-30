@@ -10,11 +10,13 @@ const {
   sendMessage,
   markAsRead,
   unreadCount,
+  general,
 } = require('../controllers/chat.controller');
 
 router.use(protect);
 
 router.get('/', listChats);
+router.get('/general', general);
 router.get('/unread-count', unreadCount);
 router.post('/', createChat);
 router.get('/:id', getChat);

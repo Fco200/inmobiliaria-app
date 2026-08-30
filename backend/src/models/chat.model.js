@@ -9,6 +9,23 @@ const chatMessageSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Id del emisor (desnormalizado; igual a sender pero disponible sin populate).
+    emisor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    // Nombre del emisor desnormalizado para mostrar sin hacer populate.
+    emisorNombre: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Para chats 1:1 es el id del destinatario (el otro participante); para
+    // chats grupales queda el marcador estándar GRUPO_GENERAL.
+    destinatario: {
+      type: String,
+      default: 'GRUPO_GENERAL',
+    },
     message: {
       type: String,
       required: true,

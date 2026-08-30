@@ -6,13 +6,44 @@ window.Pages.chat = {
   title: 'Chat',
 
   async render(container) {
-    // En la página de chat se ocultan los botones flotantes (FAB) para que no
-    // tapen la barra de escritura/el botón Enviar en celulares.
     document.body.classList.add('page-chat');
 
     // El layout se inyecta ANTES de consultar los elementos para evitar
     // errores "cannot read properties of null". Todas las consultas se
     // acotan al contenedor de esta página (no a document global).
+    const isBossUser = (u) => {
+      const role = u && u.role ? (u.role.code || u.role) : '';
+      return role === 'admin' || role === 'gerencia';
+    };
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
+    const userId = user ? (user._id || user.id) : null;
+    const isAdmin = isBossUser(user);
+
+    if (!userId) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="empty-state">
+            <p>Inicia sesión para usar el chat.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // Comparador robusto de ids: los participantes/readBy pueden venir como
+    // string, ObjectId o null (usuarios eliminados), nunca debe lanzar errores.
+    const sameAsUser = (ref) => {
+      const id = ref && typeof ref === 'object' ? (ref._id || ref.id) : ref;
+      return id != null && String(id) === String(userId);
+    };
+
+    // ApiClient.unwrap devuelve el cuerpo `data` cuando el endpoint NO usa meta
+    // (caso de chats y avisos) y devuelve {data, meta} cuando sí la usa (usuarios).
+    // Este helper normaliza ambos formatos para no romper por "el resultado ya
+    // viene desenrollado".
+    const pickData = (res) => (
+      res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res
+    );
+
     container.innerHTML = `
       <div class="chat-wrap">
         <div class="chat-sidebar" id="chat-sidebar">
@@ -67,26 +98,28 @@ window.Pages.chat = {
     let activeTab = 'chats';
     let socket = null;
 
-    const user = ApiClient.getStoredUser();
-    const isAdmin = user && user.role && ['admin', 'gerencia'].includes(user.role.code || user.role);
-
     if (isAdmin) btnNewAnnouncement.style.display = '';
 
     function attachSocketListeners() {
-      socket.on('connect', () => console.log('[Chat] Socket conectado'));
+      socket.on('connect', () => {
+        console.log('[Chat] Socket conectado');
+        if (currentChat) socket.emit('join-chat', currentChat._id);
+      });
       socket.on('disconnect', () => console.log('[Chat] Socket desconectado'));
 
-      socket.on('new-message', (data) => {
+      const onMessage = (data) => {
         const msg = data && data.message;
         if (currentChat && data && data.chatId === currentChat._id) {
-          if (msg && !currentChat.messages.some((m) => m._id === msg._id)) {
+          if (msg && msg._id && !currentChat.messages.some((m) => m && m._id === msg._id)) {
             currentChat.messages.push(msg);
           }
           renderMessages();
-          API.chats.markRead(data.chatId).catch(() => {});
+          if (window.API && API.chats.markRead) API.chats.markRead(data.chatId).catch(() => {});
         }
         loadChats();
-      });
+      };
+      socket.on('new-message', onMessage);
+      socket.on('receive-message', onMessage);
 
       // Solo se refresca la lista de avisos del tab; la alerta modal central
       // la gestiona el módulo global Realtime (js/realtime.js).
@@ -126,7 +159,8 @@ window.Pages.chat = {
     async function loadChats() {
       try {
         const result = await API.chats.list();
-        chats = result.data || [];
+        const list = pickData(result);
+        chats = Array.isArray(list) ? list : [];
         if (activeTab === 'chats') renderChatList();
       } catch (e) {
         chatList.innerHTML = '<p class="text-muted" style="padding:16px;">Error al cargar chats</p>';
@@ -136,7 +170,8 @@ window.Pages.chat = {
     async function loadAnnouncements() {
       try {
         const result = await API.announcements.list();
-        announcements = result.data || [];
+        const list = pickData(result);
+        announcements = Array.isArray(list) ? list : [];
         if (activeTab === 'announcements') renderAnnouncements();
       } catch (e) {
         chatList.innerHTML = '<p class="text-muted" style="padding:16px;">Error al cargar avisos</p>';
@@ -148,16 +183,15 @@ window.Pages.chat = {
         chatList.innerHTML = '<p class="text-muted" style="padding:16px;">No hay conversaciones aún</p>';
         return;
       }
-      const userId = user && user._id;
       chatList.innerHTML = chats.map(c => {
         const isGeneral = c.type === 'grupal' && (c.name === 'general' || (c.name || '').toLowerCase().startsWith('general'));
         const name = isGeneral
           ? 'Canal general'
           : (c.type === 'grupal'
               ? (c.name || 'Chat de equipo')
-              : ((c.participants || []).find(p => String(p._id || p) !== String(userId)) || {}).name || 'Chat');
+              : ((c.participants || []).filter(Boolean).find(p => !sameAsUser(p && (p._id || p))) || {}).name || 'Chat');
         const msgs = c.messages || [];
-        const unread = msgs.filter(m => !(m.readBy || []).includes(userId)).length;
+        const unread = msgs.filter(m => !(m.readBy || []).some(sameAsUser)).length;
         const preview = c.lastMessage || 'Sin mensajes';
         return `<div class="chat-item${isGeneral ? ' general-item' : ''}" data-id="${c._id}">
           <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -180,15 +214,16 @@ window.Pages.chat = {
         return;
       }
       chatList.innerHTML = announcements.map(a => {
-        const isRead = a.readBy && a.readBy.some(r => (r._id || r) === user?._id);
+        const isRead = (a.readBy || []).some(sameAsUser);
+        const authorName = a.author && typeof a.author === 'object' ? (a.author.name || a.author.username) : (a.author || 'Admin');
         return `<div class="announcement-card ${a.priority || ''}" data-id="${a._id}">
           <div class="announcement-header">
             <span class="announcement-title">${UI.escapeHtml(a.title)}</span>
             <span class="announcement-priority ${a.priority || 'normal'}">${a.priority || 'normal'}</span>
           </div>
-          <div class="announcement-body">${UI.escapeHtml(a.message)}</div>
+          <div class="announcement-body">${UI.escapeHtml(String(a.message || ''))}</div>
           <div class="announcement-meta">
-            <span>${a.author ? UI.escapeHtml(a.author.name) : 'Admin'} · ${Format.dateTime(a.createdAt)}</span>
+            <span>${UI.escapeHtml(String(authorName))} · ${Format.dateTime(a.createdAt)}</span>
             ${!isRead ? '<span class="unread-badge" style="min-width:auto;height:auto;padding:2px 6px;border-radius:8px;">Nuevo</span>' : ''}
           </div>
           ${isAdmin ? `<div class="announcement-actions">
@@ -219,12 +254,13 @@ window.Pages.chat = {
     }
 
     async function markAnnouncementRead(id) {
+      if (!userId) return;
       try {
         await API.announcements.markRead(id);
         const ann = announcements.find(a => a._id === id);
-        if (ann && user) {
+        if (ann) {
           if (!ann.readBy) ann.readBy = [];
-          ann.readBy.push({ _id: user._id });
+          if (!ann.readBy.some(sameAsUser)) ann.readBy.push({ _id: userId });
         }
       } catch (e) { /* ignore */ }
     }
@@ -233,15 +269,18 @@ window.Pages.chat = {
       if (currentChat) leaveChat(currentChat._id);
       try {
         const result = await API.chats.get(chatId);
-        currentChat = result.data;
-        const userId = user && user._id;
+        currentChat = pickData(result);
+        if (!currentChat || !currentChat._id) throw new Error('Chat no disponible');
         const isGeneral = currentChat.type === 'grupal' && (currentChat.name === 'general' || (currentChat.name || '').toLowerCase().startsWith('general'));
         chatTitle.textContent = isGeneral
           ? 'Canal general'
           : (currentChat.type === 'grupal'
               ? (currentChat.name || 'Chat de equipo')
-              : ((currentChat.participants || []).find(p => String(p._id || p) !== String(userId)) || {}).name || 'Chat');
-        chatParticipants.textContent = (currentChat.participants || []).map(p => p.name || 'Usuario').join(', ');
+              : ((currentChat.participants || []).filter(Boolean).find(p => !sameAsUser(p && (p._id || p))) || {}).name || 'Chat');
+        chatParticipants.textContent = (currentChat.participants || []).filter(Boolean).map(p => {
+          const pName = typeof p === 'object' ? (p.name || p.username) : p;
+          return pName || 'Usuario';
+        }).join(', ');
         chatInput.style.display = 'flex';
         btnBack.style.display = 'inline-flex';
         chatMain.classList.add('active');
@@ -259,12 +298,12 @@ window.Pages.chat = {
         chatMessages.innerHTML = '<div class="chat-empty">Sin mensajes</div>';
         return;
       }
-      const userId = user && user._id;
       chatMessages.innerHTML = currentChat.messages.map(m => {
         const s = m.sender || {};
-        const sId = String(s._id || m.sender || '');
-        const isMine = sId ? sId === String(userId) : true;
-        const senderName = s.name || s.username || 'Usuario';
+        const sRaw = s && typeof s === 'object' ? (s._id || s.id || null) : (s || null);
+        const sId = sRaw ? String(sRaw) : '';
+        const isMine = sId ? sameAsUser(sRaw) : true;
+        const senderName = (s && (s.name || s.username)) || m.emisorNombre || 'Usuario';
         return `<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}">
           ${!isMine ? `<div class="msg-sender">${UI.escapeHtml(senderName)}</div>` : ''}
           <div>${UI.escapeHtml(String(m.message || ''))}</div>
@@ -277,8 +316,15 @@ window.Pages.chat = {
     async function sendMessage() {
       const text = msgInput.value.trim();
       if (!text || !currentChat) return;
+      const payload = { chatId: currentChat._id, message: text };
       try {
-        await API.chats.sendMessage(currentChat._id, { message: text });
+        if (socket && socket.connected) {
+          // El servidor hace echo al emisor (está en la sala chat:ID) y también
+          // emite a receive-message/new-message; los deduplicates por _id.
+          socket.emit('send-message', payload);
+        } else if (window.API && API.chats.sendMessage) {
+          await API.chats.sendMessage(currentChat._id, { message: text });
+        }
         msgInput.value = '';
       } catch (e) {
         UI.toast('Error al enviar mensaje', 'error');
@@ -289,7 +335,8 @@ window.Pages.chat = {
     btnGeneral.addEventListener('click', async () => {
       try {
         const result = await API.chats.general();
-        const chat = result.data;
+        const chat = pickData(result);
+        if (!chat || !chat._id) throw new Error('Canal no disponible');
         openChat(chat._id);
       } catch (e) {
         UI.toast('No se pudo abrir el canal general', 'error');
@@ -323,14 +370,15 @@ window.Pages.chat = {
       let users = [];
       try {
         const res = await API.users.list({ limit: 100 });
-        users = (res && res.data) || [];
+        const list = pickData(res);
+        users = Array.isArray(list) ? list : [];
       } catch (e) {
         users = [];
       }
       // Quién puede iniciar un chat 1:1: todos pueden con todos (menos ellos mismos).
       const others = users.filter(u =>
-        u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role) &&
-        String(u._id) !== String(user && user._id)
+        u && u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role) &&
+        String(u._id || u.id) !== String(userId)
       );
       const modal = UI.openModal({
         title: 'Nuevo chat 1:1',
@@ -349,7 +397,8 @@ window.Pages.chat = {
           UI.closeModal();
           try {
             const res = await API.chats.create({ type: 'individual', participantId: btn.dataset.user });
-            const chat = res.data;
+            const chat = pickData(res);
+            if (!chat || !chat._id) throw new Error('No se pudo crear el chat');
             openChat(chat._id);
           } catch (e) {
             UI.toast(e.message || 'No se pudo crear el chat', 'error');
@@ -407,8 +456,9 @@ window.Pages.chat = {
     // Abrir el canal general de forma predeterminada para que el chat se
     // sienta "listo" al entrar (grupal visible para todo el equipo).
     try {
-      const gen = await API.chats.general();
-      if (gen && gen.data) openChat(gen.data._id);
+      const result = await API.chats.general();
+      const gen = pickData(result);
+      if (gen && gen._id) openChat(gen._id);
     } catch (e) {
       /* el canal general se abre bajo demanda */
     }

@@ -23,8 +23,11 @@ window.AppShell = (() => {
   ];
 
   function currentUserRole() {
+    if (!window.ApiClient || !window.ApiClient.getStoredUser) return '';
     const user = window.ApiClient.getStoredUser();
-    return user && user.role ? user.role.code || user.role : '';
+    if (!user || !user.role) return '';
+    const role = user.role;
+    return (typeof role === 'object' && role !== null ? role.code : role) || (typeof role === 'string' ? role : '');
   }
 
   function isBoss() {
@@ -68,9 +71,9 @@ window.AppShell = (() => {
   function updateTopnavUser() {
     const el = document.getElementById('topnav-user');
     if (!el) return;
-    const user = window.ApiClient.getStoredUser();
-    if (user && (user.name || user.username)) {
-      const role = user.role && (user.role.name || user.role);
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || null;
+    if (user && (user.name || user.username) && user._id) {
+      const role = user.role && (user.role.name || user.role.code || user.role);
       const photo = user.photo
         ? `<img class="topnav-avatar" src="${window.AppConfig.resolveUrl(user.photo)}" alt="">`
         : `<span class="topnav-avatar topnav-avatar-fallback">${UI.escapeHtml(String(user.name || user.username || 'U').charAt(0).toUpperCase())}</span>`;
@@ -100,7 +103,7 @@ window.AppShell = (() => {
   // Botones flotantes de acceso rápido: chat del equipo y avisos (notificaciones),
   // cada uno con su contador de no leídos. Visible en todas las páginas.
   function injectActivityFab() {
-    if (window.ApiClient && !window.ApiClient.isAuthenticated()) return;
+    if (!window.ApiClient || !window.ApiClient.isAuthenticated()) return;
     if (document.getElementById('activity-fab')) return;
     const fab = document.createElement('div');
     fab.id = 'activity-fab';
@@ -122,7 +125,10 @@ window.AppShell = (() => {
     if (!window.ApiClient.isAuthenticated()) return;
     try {
       const data = await window.API.notifications.unreadCount();
-      const count = Number(data.unread) || 0;
+      const raw = data && typeof data === 'object'
+        ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
+        : undefined;
+      const count = Number(raw) || 0;
       updateFabBadge('notifications', count);
       if (bell && count) {
         const dot = document.createElement('span');
@@ -143,7 +149,12 @@ window.AppShell = (() => {
     if (!window.ApiClient.isAuthenticated()) return;
     try {
       const data = await window.API.chats.unreadCount();
-      const count = Number(data.unread) || 0;
+      // ApiClient.unwrap desenrolla {data:{unread:N}} → {unread:N}; también se
+      // soporta el caso en que el payload llegue ya como {data:{unread:N}}.
+      const raw = data && typeof data === 'object'
+        ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
+        : undefined;
+      const count = Number(raw) || 0;
       updateFabBadge('chat', count);
       if (chatLink && count) {
         const dot = document.createElement('span');
@@ -280,7 +291,7 @@ window.AppShell = (() => {
       const title = it.kind === 'task' ? `Tarea: ${it.title}` : `Cita: ${it.title}`;
       const body = it.clientName ? `${it.clientName} · ${time}` : time;
       try { new Notification(title, { body }); } catch (e) {}
-      if (window.UI) UI.toast(`${title} — ${body}`, 'info');
+      if (typeof UI !== 'undefined') UI.toast(`${title} — ${body}`, 'info');
       already.push(`${it.kind}:${it.id}`);
     });
     saveNotifiedStore(already);
@@ -407,4 +418,22 @@ window.AppShell = (() => {
   return { init, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
 })();
 
-document.addEventListener('DOMContentLoaded', () => window.AppShell.init());
+// ---- Auto-inicialización del shell ----
+// Cada página protegida incluye multipage.js. Aquí se bootstrapea el shell
+// (nav, realtime, badges, FAB, redirect de auth y renderPage) sin tener que
+// tocar cada HTML. Se protege con una bandera en `window` para que jamás corra
+// dos veces y se condiciona a que haya sesión activa: las páginas públicas
+// (inicio/landing/contacto) no incluyen este archivo y nunca pasan el guard de
+// autenticación, así que aquí nunca se ejecuta la redirección ni el render.
+(function autoInitShell() {
+  if (window.__appShellAutoInit) return;
+  window.__appShellAutoInit = true;
+  if (window.AppShell && window.ApiClient && window.ApiClient.isAuthenticated()) {
+    const run = () => window.AppShell.init();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run);
+    } else {
+      run();
+    }
+  }
+})();

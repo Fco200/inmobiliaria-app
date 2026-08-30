@@ -24,7 +24,7 @@ window.Realtime = (() => {
   function currentUserId() {
     try {
       const user = window.ApiClient && window.ApiClient.getStoredUser();
-      return user && user._id;
+      return (user && (user._id || user.id)) || null;
     } catch (error) {
       return null;
     }
@@ -71,10 +71,13 @@ window.Realtime = (() => {
 
   // Muestra la alerta modal centrada de un aviso del equipo.
   function showAlert(announcement) {
-    if (!announcement || !announcement._id || !window.UI) return;
+    // NOTA: UI y Format son const globales de "clásicos" <script>: NO existen
+    // como window.UI / window.Format. Se referencia el global lexical directo.
+    if (!announcement || !announcement._id || typeof UI === 'undefined') return;
     if (seenIds().includes(announcement._id)) return;
     // Quien publica el aviso ya lo conoce; no se le vuelve a mostrar.
-    const authorId = announcement.author && (announcement.author._id || announcement.author);
+    const author = announcement.author || {};
+    const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
     if (authorId && String(authorId) === String(currentUserId())) return;
 
     markSeen(announcement._id);
@@ -86,8 +89,8 @@ window.Realtime = (() => {
       urgente: { color: '#dc2626', soft: '#fee2e2' },
     };
     const p = palette[announcement.priority] || palette.normal;
-    const author = (announcement.author && (announcement.author.name || announcement.author.username)) || 'Administración';
-    const date = window.Format ? window.Format.dateTime(announcement.createdAt) : '';
+    const authorName = (author && author.name) || (author && author.username) || 'Administración';
+    const date = typeof Format !== 'undefined' ? Format.dateTime(announcement.createdAt) : '';
 
     const overlay = document.createElement('div');
     overlay.id = 'announcement-alert';
@@ -97,12 +100,12 @@ window.Realtime = (() => {
       <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,0.4);overflow:hidden;border-top:6px solid ${p.color};">
         <div style="padding:18px 22px;border-bottom:1px solid #f0edf3;display:flex;justify-content:space-between;align-items:center;gap:10px;">
           <strong style="font-size:15px;color:${p.color};">&#128276; Nuevo aviso del equipo</strong>
-          <span style="background:${p.soft};color:${p.color};font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;text-transform:uppercase;">${window.UI.escapeHtml(announcement.priority || 'normal')}</span>
+          <span style="background:${p.soft};color:${p.color};font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;text-transform:uppercase;">${UI.escapeHtml(announcement.priority || 'normal')}</span>
         </div>
         <div style="padding:24px 22px;">
-          <h3 style="margin:0 0 12px;font-size:19px;line-height:1.3;color:#1f1b2e;">${window.UI.escapeHtml(announcement.title)}</h3>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;">${window.UI.escapeHtml(announcement.message)}</p>
-          <div style="font-size:12px;color:#9088ab;">${window.UI.escapeHtml(author)}${date ? ` · ${date}` : ''}</div>
+          <h3 style="margin:0 0 12px;font-size:19px;line-height:1.3;color:#1f1b2e;">${UI.escapeHtml(announcement.title)}</h3>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(announcement.message)}</p>
+          <div style="font-size:12px;color:#9088ab;">${UI.escapeHtml(authorName)}${date ? ` · ${date}` : ''}</div>
         </div>
         <div style="padding:14px 22px;background:#faf8fd;text-align:right;">
           <button class="btn btn-primary" type="button" data-ok>Entendido</button>
@@ -126,9 +129,11 @@ window.Realtime = (() => {
     socket.on('delete-announcement', () => {
       refreshBadges();
     });
-    socket.on('new-message', () => {
+    const onChatActivity = () => {
       if (window.App && window.App.refreshChatBadge) window.App.refreshChatBadge();
-    });
+    };
+    socket.on('new-message', onChatActivity);
+    socket.on('receive-message', onChatActivity);
   }
 
   function reset() {
@@ -169,7 +174,9 @@ window.Realtime = (() => {
       if (socket && socket.connected) return;
       if (!window.API || !window.API.announcements) return;
       window.API.announcements.list().then((res) => {
-        const list = (res && res.data) || [];
+        // ApiClient.unwrap desenrolla {data:[...]} → arreglo directo.
+        const raw = res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res;
+        const list = Array.isArray(raw) ? raw : [];
         const unseen = list.filter((a) => a && a._id && !seenIds().includes(a._id));
         if (unseen.length) showAlert(unseen[0]);
       }).catch(() => {});

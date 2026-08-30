@@ -108,7 +108,10 @@ window.Pages.notifications = {
     async function loadAnnouncements() {
       try {
         const result = await API.announcements.list();
-        const anns = result.data || [];
+        // ApiClient.unwrap desenrolla {data:[...]} → arreglo directo (avalúo);
+        // se aceptan ambos formatos para no depender de paginación/meta.
+        const raw = result && typeof result === 'object' && result.data !== undefined && result.meta !== undefined ? result.data : result;
+        const anns = Array.isArray(raw) ? raw : [];
         if (!anns.length) {
           annListEl.innerHTML = '<div class="card"><div class="empty-state"><p>No hay avisos publicados.</p></div></div>';
           return;

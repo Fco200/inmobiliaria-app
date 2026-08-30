@@ -9,7 +9,7 @@ const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
-const { getOrCreateGeneralChat } = require('./src/controllers/chat.controller');
+const { getOrCreateGeneralChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
 
 async function start() {
   const connection = await connectDB();
@@ -44,7 +44,7 @@ async function start() {
   });
 
   io.on('connection', (socket) => {
-    console.log(`[Socket] ${socket.user.name} conectado (${socket.id})`);
+    console.log(`[Socket] ${socket.user && socket.user.name ? socket.user.name : 'usuario'} conectado (${socket.id})`);
 
     // Cada usuario entra a su habitación privada (para avisos 1 a 1) y al
     // canal grupal general del equipo.
@@ -61,8 +61,27 @@ async function start() {
       socket.leave(`chat:${chatId}`);
     });
 
+    // Envío de mensajes por socket (reutiliza la misma lógica del REST):
+    // valida al usuario, persiste, emite 'receive-message'/'new-message' a la
+    // sala del chat y a las salas privadas / canal general.
+    socket.on('send-message', async (payload) => {
+      const data = payload || {};
+      const chatId = data.chatId;
+      const text = String(data.message || '').trim();
+      if (!socket.user || !socket.user._id) return;
+      if (!chatId || !text) return;
+      if (text.length > 2000) return;
+
+      const nameUser = (socket.user.name || socket.user.username) || 'Usuario';
+      try {
+        await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text);
+      } catch (err) {
+        socket.emit('message-error', { message: err.message || 'Error al enviar mensaje' });
+      }
+    });
+
     socket.on('disconnect', () => {
-      console.log(`[Socket] ${socket.user.name} desconectado`);
+      console.log(`[Socket] ${socket.user && socket.user.name ? socket.user.name : 'usuario'} desconectado`);
     });
   });
 

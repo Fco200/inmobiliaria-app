@@ -68,18 +68,24 @@ const general = asyncHandler(async (req, res) => {
 const getChat = asyncHandler(async (req, res) => {
   const chat = await Chat.findById(req.params.id)
     .populate('participants', 'name username role')
-    .populate('messages.sender', 'name username');
+    .populate('messages.sender', 'name username role');
 
   if (!chat) {
     return res.status(404).json({ success: false, message: 'Chat no encontrado' });
   }
 
-  // Verificar que el usuario sea participante
-  if (!chat.participants.some(p => p._id.toString() === req.user._id.toString())) {
+  // Verificar que el usuario sea participante (los participantes pueden venir
+  // como null si el usuario referido fue eliminado).
+  if (!chat.participants.some(p => p && p._id && p._id.toString() === req.user._id.toString())) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
   }
 
-  res.json({ success: true, data: chat });
+  // En producción no conviene mandar historiales gigantes: se devuelven solo
+  // los últimos 200 mensajes.
+  const data = chat.toObject();
+  data.messages = (data.messages || []).slice(-200);
+
+  res.json({ success: true, data });
 });
 
 // Crear chat individual o grupal
@@ -132,50 +138,98 @@ const createChat = asyncHandler(async (req, res) => {
   res.status(400).json({ success: false, message: 'Tipo de chat inválido' });
 });
 
-// Enviar mensaje
-const sendMessage = asyncHandler(async (req, res) => {
-  const { message } = req.body;
-  const chatId = req.params.id;
-  const userId = req.user._id;
+// Lógica única de persistencia + broadcast del mensaje. La usan tanto el
+// endpoint REST (POST /chats/:id/messages) como el socket 'send-message',
+// para que las dos vías se comporten igual.
+const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
+  const text = String(message || '').trim();
+  if (!text) throw new Error('El mensaje no puede estar vacío');
+  if (text.length > 2000) throw new Error('El mensaje no puede superar los 2000 caracteres');
+  if (!userId) throw new Error('Usuario no autenticado');
 
   const chat = await Chat.findById(chatId);
-  if (!chat) {
-    return res.status(404).json({ success: false, message: 'Chat no encontrado' });
+  if (!chat) throw new Error('Chat no encontrado');
+
+  if (!chat.participants.some(p => p && p.toString() === String(userId))) {
+    throw new Error('No tienes acceso a este chat');
   }
 
-  if (!chat.participants.some(p => p.toString() === userId.toString())) {
-    return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
+  let destinatario = 'GRUPO_GENERAL';
+  if (chat.type === 'individual') {
+    const other = chat.participants.find(p => p && p.toString() !== String(userId));
+    destinatario = other ? other.toString() : 'GRUPO_GENERAL';
   }
 
   chat.messages.push({
     sender: userId,
-    message,
+    emisor: userId,
+    emisorNombre: (userName || 'Usuario').trim().slice(0, 80),
+    destinatario,
+    message: text,
     readBy: [userId],
   });
 
-  chat.lastMessage = message;
+  chat.lastMessage = text;
   chat.lastMessageAt = new Date();
 
   await chat.save();
 
-  const populated = await chat.populate('messages.sender', 'name username');
+  const populated = await chat.populate('messages.sender', 'name username role');
   const newMsg = populated.messages[populated.messages.length - 1];
 
-  const io = req.app.get('io');
   if (io) {
-    // Emitir a la sala del chat abierto, a las habitaciones privadas de cada
-    // participante y al canal general (para chats grupales del equipo).
-    io.to(`chat:${chatId}`).emit('new-message', { chatId, message: newMsg });
+    // Se emite con DOS nombres de evento para compatibilidad: el chat escucha
+    // tanto 'receive-message' como 'new-message'.
+    const payload = { chatId, message: newMsg };
+    io.to(`chat:${chatId}`).emit('receive-message', payload);
+    io.to(`chat:${chatId}`).emit('new-message', payload);
     if (chat.type === 'individual') {
       chat.participants.forEach((p) => {
-        io.to(`user:${p.toString()}`).emit('new-message', { chatId, message: newMsg });
+        if (p) {
+          const room = `user:${p.toString()}`;
+          io.to(room).emit('receive-message', payload);
+          io.to(room).emit('new-message', payload);
+        }
       });
     } else {
-      io.to('general').emit('new-message', { chatId, message: newMsg });
+      io.to('general').emit('receive-message', payload);
+      io.to('general').emit('new-message', payload);
     }
   }
 
-  res.status(201).json({ success: true, data: newMsg });
+  return newMsg;
+};
+
+// Enviar mensaje (vía REST)
+const sendMessage = asyncHandler(async (req, res) => {
+  if (!req.user || !req.user._id) {
+    return res.status(401).json({ success: false, message: 'No autorizado' });
+  }
+
+  const chatId = req.params.id;
+  const text = String((req.body && req.body.message) || '').trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío' });
+  }
+  if (text.length > 2000) {
+    return res.status(400).json({ success: false, message: 'El mensaje no puede superar los 2000 caracteres' });
+  }
+
+  const io = req.app.get('io');
+  const nameUser = req.user.name || req.user.username || 'Usuario';
+
+  try {
+    const newMsg = await persistAndBroadcast(io, chatId, req.user._id.toString(), nameUser, text);
+    return res.status(201).json({ success: true, data: newMsg });
+  } catch (error) {
+    if (error.message === 'Chat no encontrado') {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    if (error.message === 'No tienes acceso a este chat') {
+      return res.status(403).json({ success: false, message: error.message });
+    }
+    throw error;
+  }
 });
 
 // Marcar mensajes como leídos
@@ -229,4 +283,5 @@ module.exports = {
   unreadCount,
   general,
   getOrCreateGeneralChat,
+  persistAndBroadcast,
 };

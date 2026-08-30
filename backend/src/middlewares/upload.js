@@ -24,6 +24,12 @@ const ALLOWED_EXTS = new Set([
   'webp', 'bmp', 'avif', 'tiff', 'tif', 'heic', 'heif',
 ]);
 
+// Extensiones de imagen (fotos de propiedades, avatares, etc.).
+const IMAGE_EXTS = new Set([
+  'jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif',
+  'webp', 'bmp', 'avif', 'tiff', 'tif', 'heic', 'heif',
+]);
+
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
   cb(null, ALLOWED_EXTS.has(ext));
@@ -64,43 +70,71 @@ function looksLikeText(buf) {
   return true;
 }
 
-/**
- * Middleware que se coloca DESPUÉS de multer: lee los primeros bytes del
- * archivo ya guardado y verifica que coincidan con la extensión declarada.
- * Si no coinciden elimina el archivo y rechaza la petición con 400.
- */
-function verifyUpload(req, res, next) {
-  if (!req.file) return next();
-
-  const ext = path.extname(req.file.originalname || '').slice(1).toLowerCase();
-  let ok = false;
-
+// Verifica el contenido real (magic bytes) de un archivo ya guardado por multer.
+function verifyFile(file) {
+  const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
   try {
-    const fd = fs.openSync(req.file.path, 'r');
+    const fd = fs.openSync(file.path, 'r');
     const buf = Buffer.alloc(16);
     const read = fs.readSync(fd, buf, 0, 16, 0);
     fs.closeSync(fd);
     buf.fill(0, read);
 
     if (ext === 'txt' || ext === 'csv') {
-      ok = looksLikeText(buf.subarray(0, read));
-    } else {
-      const sig = SIGNATURES.find((s) => s.exts.includes(ext));
-      ok = sig ? sig.test(buf) : false;
+      return looksLikeText(buf.subarray(0, read));
     }
+    const sig = SIGNATURES.find((s) => s.exts.includes(ext));
+    return sig ? sig.test(buf) : false;
   } catch (error) {
-    ok = false;
+    return false;
   }
+}
 
-  if (!ok) {
-    fs.unlink(req.file.path, () => {});
-    delete req.file;
-    return res.status(400).json({
-      success: false,
-      message: 'El contenido del archivo no coincide con su extensión o el formato no está permitido.',
-    });
-  }
+function rejectFile(req, res) {
+  if (req.file) fs.unlink(req.file.path, () => {});
+  (req.files || []).forEach((f) => fs.unlink(f.path, () => {}));
+  delete req.file;
+  delete req.files;
+  return res.status(400).json({
+    success: false,
+    message: 'El contenido del archivo no coincide con su extensión o el formato no está permitido.',
+  });
+}
+
+/**
+ * Middleware que se coloca DESPUÉS de multer (un solo archivo en req.file):
+ * lee los primeros bytes del archivo ya guardado y verifica que coincidan con
+ * la extensión declarada. Si no coinciden elimina el archivo y responde 400.
+ */
+function verifyUpload(req, res, next) {
+  if (!req.file) return next();
+  if (verifyFile(req.file)) return next();
+  return rejectFile(req, res);
+}
+
+/**
+ * Igual que verifyUpload pero para peticiones multiparte con VARIOS archivos
+ * (multer.array → req.files). Si cualquiera no coincide, borra todos.
+ */
+function verifyUploads(req, res, next) {
+  const files = req.files || [];
+  if (!files.length) return next();
+  const bad = files.find((f) => !verifyFile(f));
+  if (bad) return rejectFile(req, res);
   return next();
 }
 
-module.exports = { upload, verifyUpload, ALLOWED_EXTS };
+// Convierte errores de multer (archivo demasiado grande, etc.) en respuestas claras.
+function uploadErrorHandler(err, req, res, next) {
+  if (!err) return next();
+  const multer = require('multer');
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: 'El archivo supera el límite de 15 MB' });
+    }
+    return res.status(400).json({ success: false, message: `No se pudo subir el archivo: ${err.code}` });
+  }
+  return next(err);
+}
+
+module.exports = { upload, verifyUpload, verifyUploads, uploadErrorHandler, ALLOWED_EXTS, IMAGE_EXTS };

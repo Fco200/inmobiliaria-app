@@ -58,6 +58,12 @@ window.API = {
     remove: (id) => ApiClient.remove(`/properties/${id}`),
     publish: (id, body) => ApiClient.patch(`/properties/${id}/publish`, body),
     market: (id) => ApiClient.get(`/properties/${id}/market`),
+    // Sube una o varias fotos a una propiedad (multipart, campo "photos").
+    uploadPhotos: (id, files) => {
+      const form = new FormData();
+      Array.from(files || []).forEach((file) => form.append('photos', file));
+      return ApiClient.postMultipart(`/properties/${id}/photos`, form);
+    },
   },
 
   inventory: {

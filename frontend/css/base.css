@@ -1695,3 +1695,54 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .activity-fab { right: 10px; }
   .assistant-fab { right: 10px; }
 }
+
+/* Página de chat: ocultar botones flotantes para no tapar la barra de
+   escritura ni el botón Enviar (especialmente en celulares). */
+body.page-chat .activity-fab,
+body.page-chat .assistant-fab,
+body.page-chat .assistant-panel {
+  display: none !important;
+}
+
+/* ── Galería de fotos de propiedad ──────────────────────────────────── */
+.detail-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-photo {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 4 / 3;
+  background: #f1eef7;
+}
+
+.detail-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+
+.detail-photo-x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  line-height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.92);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.detail-photo-x:hover { background: #b91c1c; }

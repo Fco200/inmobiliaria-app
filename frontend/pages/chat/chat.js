@@ -6,6 +6,10 @@ window.Pages.chat = {
   title: 'Chat',
 
   async render(container) {
+    // En la página de chat se ocultan los botones flotantes (FAB) para que no
+    // tapen la barra de escritura/el botón Enviar en celulares.
+    document.body.classList.add('page-chat');
+
     // El layout se inyecta ANTES de consultar los elementos para evitar
     // errores "cannot read properties of null". Todas las consultas se
     // acotan al contenedor de esta página (no a document global).

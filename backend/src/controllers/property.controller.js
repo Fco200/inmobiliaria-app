@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+const fs = require('fs');
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
@@ -200,6 +202,42 @@ const togglePublish = asyncHandler(async (req, res) => {
   });
 });
 
+// Añade una o varias fotos a una propiedad (multipart: campo "photos").
+// El dueño de la propiedad o administración/gerencia pueden subirlas.
+const uploadPhotos = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
+  if (!assertOwnership(req, property)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
+  }
+
+  const { IMAGE_EXTS } = require('../middlewares/upload');
+  const files = req.files || [];
+  if (!files.length) {
+    return res.status(400).json({ success: false, message: 'No se recibieron fotos' });
+  }
+
+  const bad = files.find((f) => !IMAGE_EXTS.has(path.extname(f.originalname || '').slice(1).toLowerCase()));
+  if (bad) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(400).json({ success: false, message: 'Solo se permiten imágenes' });
+  }
+
+  const urls = files.map((f) => `/uploads/${f.filename}`);
+  property.photos = [...(property.photos || []), ...urls];
+  await property.save();
+
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: req.user._id,
+    action: 'fotos',
+    message: `Se agregaron ${files.length} ${files.length === 1 ? 'foto' : 'fotos'} a la propiedad`,
+  });
+
+  res.json({ success: true, data: { photos: property.photos } });
+});
+
 const market = asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id);
   if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
@@ -232,4 +270,4 @@ const market = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...stats, prices } });
 });
 
-module.exports = { list, get, create, update, remove, togglePublish, market };
+module.exports = { list, get, create, update, remove, togglePublish, market, uploadPhotos, notifyInterestedClients };

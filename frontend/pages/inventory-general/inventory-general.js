@@ -66,7 +66,9 @@ window.Pages['inventory-general'] = {
         const position = current && mk.min != null && mk.max > mk.min
           ? Math.max(2, Math.min(100, ((current - mk.min) / (mk.max - mk.min)) * 100))
           : 50;
-        const photo = (prop.photos || []).find(Boolean);
+        const photos = (prop.photos || []).filter(Boolean);
+        const canEditPhotos = isBoss ||
+          String((prop.responsibleUser && (prop.responsibleUser._id || prop.responsibleUser)) || '') === String((stored && stored._id) || '');
         const characteristics = (prop.characteristics || [])
           .map((c) => `<li><strong>${UI.escapeHtml(c.name)}:</strong> ${UI.escapeHtml(c.value)}</li>`)
           .join('');
@@ -74,7 +76,19 @@ window.Pages['inventory-general'] = {
         modal.bodyEl.innerHTML = `
           <div class="grid grid-2" style="align-items:start;">
             <div>
-              ${photo ? `<img src="${window.AppConfig.resolveUrl(photo)}" alt="" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;">` : ''}
+              ${photos.length
+                ? `<div class="detail-photos">
+                    ${photos.map((p) => `
+                      <div class="detail-photo">
+                        <img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy" data-full="${UI.escapeHtml(p)}">
+                        ${canEditPhotos ? `<button type="button" class="detail-photo-x" data-photo-remove="${UI.escapeHtml(p)}" title="Quitar foto">&times;</button>` : ''}
+                      </div>`).join('')}
+                  </div>`
+                : '<p class="text-muted" style="font-size:13px;">Sin fotos todavía.</p>'}
+              <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-gallery>Ver todas (${photos.length})</button>` : ''}
+                ${canEditPhotos ? `<label class="btn btn-secondary btn-sm" style="cursor:pointer;">+ Añadir fotos<input type="file" accept="image/*" multiple style="display:none" data-photos-input></label>` : ''}
+              </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
@@ -109,6 +123,44 @@ window.Pages['inventory-general'] = {
                 : '<p class="text-muted" style="font-size:13px;">Sin cambios de precio registrados.</p>'}
             </div>
           </div>`;
+
+        modal.bodyEl.querySelectorAll('[data-full]').forEach((img) => {
+          img.addEventListener('click', () => window.open(img.getAttribute('src'), '_blank', 'noopener'));
+        });
+        const galleryBtn = modal.bodyEl.querySelector('[data-gallery]');
+        if (galleryBtn) {
+          galleryBtn.addEventListener('click', () => UI.showImages(photos, `Fotos — ${UI.escapeHtml(propertyLabel(prop))}`));
+        }
+        const photosInput = modal.bodyEl.querySelector('[data-photos-input]');
+        if (photosInput) {
+          photosInput.addEventListener('change', async () => {
+            if (!photosInput.files || !photosInput.files.length) return;
+            try {
+              await API.properties.uploadPhotos(prop._id, photosInput.files);
+              UI.toast('Fotos agregadas', 'success');
+              paint();
+            } catch (photoError) {
+              UI.toast(photoError.message, 'error');
+            }
+          });
+        }
+        modal.bodyEl.querySelectorAll('[data-photo-remove]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const url = btn.getAttribute('data-photo-remove');
+            UI.confirm('¿Quitar esta foto?').then(async (ok) => {
+              if (!ok) return;
+              try {
+                await API.properties.update(prop._id, {
+                  photos: (prop.photos || []).filter((p) => p !== url),
+                });
+                UI.toast('Foto eliminada', 'success');
+                paint();
+              } catch (photoError) {
+                UI.toast(photoError.message, 'error');
+              }
+            });
+          });
+        });
       };
       paint().catch((error) => {
         modal.bodyEl.innerHTML = UI.errorAlert(error.message);
@@ -319,13 +371,15 @@ window.Pages['inventory-general'] = {
                 <option value="renta">Renta</option>
               </select>
             </div>
+            ${isBoss ? `
             <div class="form-group">
               <label>Asesor asignado</label>
               <select class="form-control" data-agent>
                 <option value="">— Sin asignar —</option>
                 ${agentOptions}
               </select>
-            </div>
+            </div>` : ''}
+            ${!isBoss ? '<p class="text-muted" style="font-size:13px;margin:0;">Se asignará a ti automáticamente y quedará <strong>sin publicar</strong> hasta que administración la revise.</p>' : ''}
             <div class="form-group">
               <label>Folio</label>
               <input class="form-control" type="text" placeholder="Se genera automáticamente" disabled>
@@ -359,14 +413,20 @@ window.Pages['inventory-general'] = {
             <label>Descripción</label>
             <textarea class="form-control" data-description rows="3" placeholder="Detalles del inmueble"></textarea>
           </div>
+          <div class="form-group">
+            <label>Fotos (hasta 10, opcional)</label>
+            <input class="form-control" type="file" accept="image/*" multiple data-photos>
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Se subirán después de crear la propiedad.</p>
+          </div>
+          ${isBoss ? `
           <div class="form-group" style="display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="invgen-publish" data-publish>
             <label for="invgen-publish" style="margin:0;">Publicar de inmediato en el catálogo</label>
-          </div>
+          </div>` : ''}
         `,
         footer: `
           <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="button" data-ok>Subir propiedad</button>`,
+          <button class="btn btn-primary" type="button" data-ok>${isBoss ? 'Subir propiedad' : 'Subir mi propiedad'}</button>`,
       });
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
       if (!overlay) return;
@@ -379,10 +439,12 @@ window.Pages['inventory-general'] = {
         btn.disabled = true;
         btn.textContent = 'Subiendo...';
         try {
-          await API.inventory.uploadProperty({
+          const agentEl = overlay.querySelector('[data-agent]');
+          const publishEl = overlay.querySelector('[data-publish]');
+          const created = await API.inventory.uploadProperty({
             type,
             operationType,
-            assignedAgent: overlay.querySelector('[data-agent]').value || null,
+            assignedAgent: agentEl ? agentEl.value || null : null,
             address: overlay.querySelector('[data-address]').value.trim(),
             zone: overlay.querySelector('[data-zone]').value.trim(),
             city: overlay.querySelector('[data-city]').value.trim(),
@@ -390,8 +452,19 @@ window.Pages['inventory-general'] = {
             price: Number(overlay.querySelector('[data-price]').value) || 0,
             ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
             description: overlay.querySelector('[data-description]').value.trim(),
-            isPublished: overlay.querySelector('[data-publish]').checked,
+            isPublished: publishEl ? publishEl.checked : false,
           });
+
+          const photosInput = overlay.querySelector('[data-photos]');
+          const propId = created && created.data && created.data.property ? created.data.property._id : null;
+          if (photosInput && photosInput.files && photosInput.files.length && propId) {
+            try {
+              await API.properties.uploadPhotos(propId, photosInput.files);
+            } catch (photoError) {
+              UI.toast(`Propiedad creada, pero las fotos no se subieron: ${photoError.message}`, 'warning');
+            }
+          }
+
           UI.toast('Propiedad subida al inventario general', 'success');
           UI.closeModal();
           load();
@@ -414,14 +487,14 @@ window.Pages['inventory-general'] = {
           <p class="text-muted" style="margin:4px 0 0;">
             ${isBoss
               ? 'Administra las propiedades de todos los asesores del equipo: sube, publica, asigna y quita del inventario.'
-              : 'Consulta las propiedades de todos los asesores del equipo. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
+              : 'Consulta las propiedades de todos los asesores y sube tus propias captaciones al inventario general. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
           </p>
           ${meta ? `<div class="home-stats" style="margin-top:14px;">
             <div class="home-stat"><span class="home-stat-icon">&#128203;</span><div><strong>${meta.total}</strong><small>Propiedades</small></div></div>
             <div class="home-stat"><span class="home-stat-icon">&#129333;</span><div><strong>${agents.length}</strong><small>Asesores activos</small></div></div>
           </div>` : ''}
         </div>
-        ${isBoss ? '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" type="button" data-upload>+ Subir propiedad</button></div>' : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" type="button" data-upload>+ Subir propiedad</button></div>
       `;
       const upload = el.querySelector('[data-upload]');
       if (upload) upload.addEventListener('click', openUploadModal);

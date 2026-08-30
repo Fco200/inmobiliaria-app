@@ -16,7 +16,6 @@ window.AppShell = (() => {
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;' },
     { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;' },
     { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;' },
-    { key: 'chat', label: 'Chat', href: 'chat.html', icon: '&#128172;' },
     { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;' },
     { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;' },

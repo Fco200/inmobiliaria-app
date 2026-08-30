@@ -126,15 +126,12 @@ async function nextFolio() {
 }
 
 // Sube una propiedad NUEVA al inventario general (crea Property + Inventory)
-// en una sola llamada. Sólo administración y gerencia.
+// en una sola llamada.
+//  - Administración/gerencia: pueden asignar a cualquier asesor, definir el
+//    folio y publicar de inmediato.
+//  - Asesores: suben sus propias captaciones. Pasan a su nombre, se asignan a
+//    ellos mismos y quedan SIN publicar hasta que administración las revise.
 const uploadProperty = asyncHandler(async (req, res) => {
-  if (!isBoss(req.user)) {
-    return res.status(403).json({
-      success: false,
-      message: 'Solo administración y gerencia suben propiedades al inventario general',
-    });
-  }
-
   const { type, operationType } = req.body || {};
   if (!type || !operationType) {
     return res.status(400).json({
@@ -143,8 +140,15 @@ const uploadProperty = asyncHandler(async (req, res) => {
     });
   }
 
-  const isPublished = req.body.isPublished === true;
-  const assignedAgent = req.body.assignedAgent || null;
+  const boss = isBoss(req.user);
+  let isPublished = req.body.isPublished === true;
+  let assignedAgent = req.body.assignedAgent || null;
+
+  if (!boss) {
+    assignedAgent = req.user._id;
+    isPublished = false;
+  }
+
   const folio = await nextFolio();
 
   const property = await Property.create({

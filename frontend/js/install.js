@@ -1,0 +1,143 @@
+'use strict';
+
+window.AppInstall = (() => {
+  let deferredPrompt = null;
+  let installed = false;
+
+  // iPhone/iPad/iPod clásicos + iPadOS 13+ que se hace pasar por Mac con pantalla táctil.
+  const isIOS =
+    (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: minimal-ui)').matches ||
+    window.navigator.standalone === true;
+
+  function visibleButtons(show) {
+    document.querySelectorAll('[data-install]').forEach((btn) => {
+      btn.classList.toggle('visible', show);
+    });
+  }
+
+  function showIosInstructions() {
+    if (typeof UI === 'undefined') return;
+    UI.openModal({
+      title: 'Instalar la aplicación',
+      body: `
+        <ol style="margin:0;padding-left:20px;line-height:2;">
+          <li>Abre esta página en <strong>Safari</strong>.</li>
+          <li>Toca el botón <strong>Compartir</strong>
+            <span style="display:inline-block;padding:1px 8px;border-radius:6px;background:#0a84ff;color:#fff;font-weight:700;">&#8599;</span>
+            de la barra inferior.</li>
+          <li>Desliza y elige <strong>"Añadir a pantalla de inicio"</strong>.</li>
+          <li>Toca <strong>"Añadir"</strong>. El icono quedará junto a tus apps.</li>
+        </ol>
+        <p class="text-muted" style="margin-bottom:0;">La app se abrirá a pantalla completa, como una aplicación nativa.</p>
+      `,
+      footer: '<button class="btn btn-primary" type="button" data-ok>Entendido</button>',
+      size: 460,
+    });
+    const okBtn = document.querySelector('#modal-overlay [data-ok]');
+    if (okBtn) okBtn.addEventListener('click', () => UI.closeModal());
+  }
+
+  function showDesktopInstructions() {
+    if (typeof UI === 'undefined') return;
+    const ua = navigator.userAgent || '';
+    let steps = '';
+    if (/firefox/i.test(ua)) {
+      steps = `
+        <ol style="margin:0;padding-left:20px;line-height:2;">
+          <li>Toca o haz clic en la barra de direcciones.</li>
+          <li>Busca el icono de <strong>instalar</strong> o el icono de página.</li>
+          <li>Elige <strong>"Instalar"</strong> / <strong>"Añadir a pantalla de inicio"</strong>.</li>
+        </ol>`;
+    } else {
+      steps = `
+        <ol style="margin:0;padding-left:20px;line-height:2;">
+          <li>Abre el menú del navegador
+            <span style="display:inline-block;padding:1px 9px;border-radius:6px;background:#334155;color:#fff;font-weight:700;">&#8942;</span>
+            (arriba a la derecha).</li>
+          <li>Busca <strong>"Instalar aplicación"</strong>,<br>
+              <strong>"Añadir a pantalla de inicio"</strong> o<br>
+              <strong>"Crear acceso directo"</strong>.</li>
+          <li>Confirma con <strong>"Instalar"</strong>.<br>
+              <small class="text-muted">En iPhone la opción vive en Compartir &#8599; del Safari.</small></li>
+        </ol>`;
+    }
+    UI.openModal({
+      title: 'Instalar la aplicación',
+      body: `
+        ${steps}
+        <p class="text-muted" style="margin-bottom:0;">
+          ${installed
+            ? 'La aplicación ya está instalada en este dispositivo.'
+            : 'Consejo: usa Google Chrome, Edge o Samsung Internet para la instalación directa con un clic.'}
+        </p>
+      `,
+      footer: '<button class="btn btn-primary" type="button" data-ok>Entendido</button>',
+      size: 460,
+    });
+    const okBtn = document.querySelector('#modal-overlay [data-ok]');
+    if (okBtn) okBtn.addEventListener('click', () => UI.closeModal());
+  }
+
+  function showManualHint() {
+    if (typeof UI === 'undefined') return;
+    if (isIOS || installed) {
+      showIosInstructions();
+      return;
+    }
+    showDesktopInstructions();
+  }
+
+  function init() {
+    // App ya instalada → no mostrar botones.
+    if (isStandalone || installed) return;
+
+    // iOS: no existe beforeinstallprompt; el botón abre las instrucciones.
+    if (isIOS) {
+      visibleButtons(true);
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-install]')) return;
+        event.preventDefault();
+        showIosInstructions();
+      });
+      return;
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      visibleButtons(true);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installed = true;
+      deferredPrompt = null;
+      visibleButtons(false);
+      if (typeof UI !== 'undefined') {
+        UI.toast(isAndroid ? 'Aplicación instalada. Búscala en tus apps.' : 'Aplicación instalada correctamente.', 'success');
+      }
+    });
+
+    document.addEventListener('click', async (event) => {
+      const btn = event.target.closest('[data-install]');
+      if (!btn) return;
+      event.preventDefault();
+
+      if (!deferredPrompt) {
+        showManualHint();
+        return;
+      }
+      deferredPrompt.prompt();
+      try {
+        await deferredPrompt.userChoice;
+      } catch (error) { /* el usuario cerró el diálogo */ }
+      deferredPrompt = null;
+    });
+  }
+
+  return { init };
+})();

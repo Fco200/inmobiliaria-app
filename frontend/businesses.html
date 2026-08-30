@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Negocios · INMOBILES</title>
+  <meta name="theme-color" content="#2d1048">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topnav">
+      <div class="topnav-inner">
+        <a href="home.html" class="topnav-brand">
+          <img src="logoinmobles.png" alt="INMOBILES" class="topnav-logo">
+          <span class="topnav-brand-name">INMOBILES</span>
+        </a>
+        <button class="topnav-hamburger" id="topnav-hamburger" type="button" aria-label="Menú">&#9776;</button>
+        <nav class="topnav-nav" id="topnav-nav"></nav>
+        <div class="topnav-right">
+          <button class="icon-btn" id="btn-notifications" type="button" aria-label="Notificaciones">&#128276;</button>
+          <div class="topnav-user" id="topnav-user">Usuario</div>
+          <button class="link-danger" id="btn-logout" type="button" style="font-size:12px;padding:4px 8px;">Salir</button>
+        </div>
+      </div>
+      <div class="topnav-credit">&copy; INMOBILES · Desarrollado por <strong>FV DIGITAL</strong></div>
+    </header>
+    <main class="main">
+      <section class="content" id="app-content">
+        <div class="loading">Cargando...</div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/crudPage.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/install.js"></script>
+  <script src="js/multipage.js"></script>
+  <script src="pages/businesses/businesses.js"></script>
+</body>
+</html>

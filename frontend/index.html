@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INMOBILES · Iniciar sesión</title>
+  <meta name="theme-color" content="#2d1048">
+  <meta name="description" content="Plataforma corporativa de gestión inmobiliaria">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body class="login-body">
+  <div class="login-bg" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="tech-grid"></div>
+  </div>
+
+  <main class="login-card">
+    <!-- Logo -->
+    <div class="login-logo-wrap">
+      <img src="logoinmobles.png" alt="INMOBILES" class="login-logo-img">
+    </div>
+
+    <!-- Estado -->
+    <div class="login-status-pill">
+      <span class="status-dot"></span>
+      En línea
+    </div>
+
+    <!-- Formulario -->
+    <form id="login-form" class="login-form" novalidate>
+      <div class="form-group">
+        <label for="identifier">Usuario o correo</label>
+        <input class="form-control" id="identifier" name="identifier" type="text"
+               placeholder="admin" autocomplete="username" autofocus required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <div class="password-wrap">
+          <input class="form-control" id="password" name="password" type="password"
+                 placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="password-toggle" id="btn-toggle-password"
+                  aria-label="Mostrar contraseña">&#128065;</button>
+        </div>
+      </div>
+
+      <div class="login-row">
+        <label class="login-check">
+          <input type="checkbox" name="remember" id="remember-me">
+          Recordar
+        </label>
+      </div>
+
+      <div id="login-error" class="alert alert-error hide" role="alert"></div>
+
+      <button class="btn btn-primary btn-block" id="btn-login" type="submit">
+        <span id="login-spinner" class="spinner hide"></span>
+        <span>Entrar</span>
+      </button>
+    </form>
+
+    <div class="login-links">
+      <a href="landing.html">Catálogo público</a>
+      <span>·</span>
+      <button class="link-btn" data-install type="button">Instalar app</button>
+    </div>
+
+    <!-- Marca de agua -->
+    <div class="login-watermark">
+      <span>Desarrollado por <strong>FV DIGITAL</strong></span>
+      <small>Soluciones Digitales y Desarrollo</small>
+    </div>
+  </main>
+
+  <button id="btn-theme-login" type="button" title="Cambiar tema" aria-label="Cambiar tema">&#9788;</button>
+
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/crudPage.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/install.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

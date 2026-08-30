@@ -1,0 +1,235 @@
+'use strict';
+
+const asyncHandler = require('../middlewares/asyncHandler');
+const buildCrud = require('../utils/crud');
+const { isBoss } = require('../utils/scope');
+const { Property, Inventory, Client, Notification } = require('../models');
+const { logActivity } = require('../services/log.service');
+
+const propertyCrud = buildCrud(Property, {
+  populate: ['owner', 'responsibleUser'],
+  searchFields: ['address', 'zone', 'city', 'state', 'description'],
+  ownerField: 'responsibleUser',
+});
+
+const list = propertyCrud.list;
+const get = propertyCrud.get;
+
+function assertOwnership(req, property) {
+  if (isBoss(req)) return true;
+  const ownerId = String((property.responsibleUser && property.responsibleUser._id) || property.responsibleUser || '');
+  return ownerId === String(req.user._id);
+}
+
+const INTENTIONS_BY_OPERATION = {
+  venta: ['vender', 'comprar'],
+  renta: ['rentar', 'alquilar'],
+};
+
+// Avisa a los clientes cuyo embudo/intención y presupuesto coinciden con la propiedad.
+async function notifyInterestedClients(property) {
+  const intentions = INTENTIONS_BY_OPERATION[property.operationType] || [];
+  if (!intentions.length || !property.isPublished) return 0;
+
+  try {
+    const price = Number(property.price) || 0;
+    const clients = await Client.find({
+      status: { $in: ['activo'] },
+      type: { $in: intentions },
+      responsibleUser: { $ne: null },
+    });
+
+    let notified = 0;
+    for (const client of clients) {
+      const budget = client.buyerInfo && client.buyerInfo.budget ? Number(client.buyerInfo.budget) : 0;
+      if (budget > 0 && price > budget * 1.15) continue; // supera el presupuesto (15% de holgura)
+
+      const key = `prop-${property._id}-${client._id}`;
+      const existing = await Notification.findOne({
+        user: client.responsibleUser,
+        type: 'nueva_propiedad',
+        'data.key': key,
+      });
+      if (existing) continue;
+
+      const place = [property.zone, property.city].filter(Boolean).join(', ') || 'sin ubicación';
+      const priceText = price ? `$${price.toLocaleString('es-MX')}` : 'a definir';
+      await Notification.create({
+        user: client.responsibleUser,
+        type: 'nueva_propiedad',
+        title: 'Nueva propiedad para tu cliente',
+        message: `Se publicó una ${property.type} en ${place} por ${priceText}. Coincide con los intereses de ${client.name}.`,
+        data: { key, clientId: client._id, propertyId: property._id, price },
+      });
+      notified += 1;
+    }
+    return notified;
+  } catch (error) {
+    console.error('[Notificaciones] Error al notificar interesados:', error.message);
+    return 0;
+  }
+}
+
+const create = asyncHandler(async (req, res) => {
+  const body = { ...req.body };
+  if (!isBoss(req) || !body.responsibleUser) body.responsibleUser = req.user._id;
+  
+  // Generar folio INMO-###-AÑO
+  const year = new Date().getFullYear();
+  const count = await Property.countDocuments();
+  const nextNum = String(count + 1).padStart(3, '0');
+  body.folio = `INMO-${nextNum}-${year}`;
+  
+  const property = await Property.create(body);
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: req.user._id,
+    action: 'creacion',
+    message: `Se registró la propiedad (${property.type} en ${property.zone || property.city || 'sin ubicación'})`,
+  });
+  await notifyInterestedClients(property);
+  res.status(201).json({ success: true, data: property });
+});
+
+const update = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
+  if (!assertOwnership(req, property)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
+  }
+
+  const previousStatus = property.status;
+  const previousPrice = Number(property.price) || 0;
+
+  Object.assign(property, req.body);
+
+  if (req.body.price !== undefined && Number(req.body.price) !== previousPrice) {
+    property.priceHistory.push({
+      price: Number(req.body.price),
+      date: new Date(),
+      user: req.user._id,
+    });
+  }
+
+  await property.save();
+
+  if (req.body.status && req.body.status !== previousStatus) {
+    await logActivity({
+      entityType: 'Property',
+      entityId: property._id,
+      user: req.user._id,
+      action: 'cambio_estado',
+      message: `La propiedad cambió de "${previousStatus}" a "${req.body.status}"`,
+    });
+  }
+
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: req.user._id,
+    action: 'actualizacion',
+    message: 'Se actualizó la propiedad',
+  });
+
+  res.json({ success: true, data: property });
+});
+
+const remove = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
+  if (!assertOwnership(req, property)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
+  }
+
+  await property.deleteOne();
+
+  await Inventory.deleteMany({ property: property._id });
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: req.user._id,
+    action: 'eliminacion',
+    message: 'Se eliminó la propiedad',
+  });
+
+  res.json({ success: true, message: 'Propiedad eliminada' });
+});
+
+const togglePublish = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) {
+    return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
+  }
+  if (!assertOwnership(req, property)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
+  }
+
+  const isPublished = req.body.isPublished === true;
+  property.isPublished = isPublished;
+  await property.save();
+
+  if (isPublished) {
+    await Inventory.findOneAndUpdate(
+      { property: property._id },
+      { $set: { isPublished: true, publishedAt: new Date(), assignedAgent: req.body.assignedAgent || null } },
+      { upsert: true, new: true }
+    );
+  } else {
+    await Inventory.findOneAndUpdate(
+      { property: property._id },
+      { $set: { isPublished: false, unpublishedAt: new Date() } }
+    );
+  }
+
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: req.user._id,
+    action: isPublished ? 'publicar' : 'despublicar',
+    message: isPublished ? 'Propiedad publicada en inventario' : 'Propiedad despublicada',
+  });
+
+  const notified = isPublished ? await notifyInterestedClients(property) : 0;
+
+  res.json({
+    success: true,
+    message: isPublished ? 'Propiedad publicada' : 'Propiedad despublicada',
+    notifiedClients: notified,
+    data: property,
+  });
+});
+
+const market = asyncHandler(async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
+
+  const filter = {
+    _id: { $ne: property._id },
+    type: property.type,
+    operationType: property.operationType,
+    status: { $ne: 'inactiva' },
+    price: { $gt: 0 },
+  };
+  if (property.city) filter.city = property.city;
+  if (property.zone) filter.zone = property.zone;
+
+  const similar = await Property.find(filter)
+    .select('price city zone status')
+    .sort({ createdAt: -1 })
+    .limit(100);
+
+  const prices = similar.map((p) => Number(p.price) || 0).filter((p) => p > 0);
+  const stats = prices.length
+    ? {
+        count: prices.length,
+        min: Math.min(...prices),
+        max: Math.max(...prices),
+        avg: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
+      }
+    : { count: 0, min: 0, max: 0, avg: 0 };
+
+  res.json({ success: true, data: { ...stats, prices } });
+});
+
+module.exports = { list, get, create, update, remove, togglePublish, market };

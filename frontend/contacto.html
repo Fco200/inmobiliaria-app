@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2d1048" />
+  <meta name="description" content="Contacta a nuestros asesores inmobiliarios por WhatsApp, teléfono o correo. Sin registros, atención directa." />
+  <title id="contacto-title">Contacto — INMOBILES</title>
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+</head>
+<body class="landing-body">
+  <header class="landing-header">
+    <a class="landing-brand" href="landing.html">
+      <span class="landing-brand-mark">&#127960;</span>
+      <span><strong id="brand-name">Inmobiliaria</strong><br /><small>Bienes raíces</small></span>
+    </a>
+    <nav class="landing-nav">
+      <a href="landing.html#catalogo">Catálogo</a>
+      <a href="landing.html#servicios">Servicios</a>
+      <a href="contacto.html">Contacto</a>
+      <a class="btn btn-primary btn-sm" href="index.html">Acceso al equipo</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="landing-hero contact-hero">
+      <h1 id="hero-title">Estamos para ayudarte</h1>
+      <p class="landing-hero-sub">Cuéntanos qué buscas y un asesor te responde el mismo día.</p>
+    </section>
+
+    <section class="landing-section" id="formulario">
+      <div class="contact-layout">
+        <div class="card landing-contact contact-form-card">
+          <h2 style="margin-top:0;">Envíanos un mensaje</h2>
+          <p class="text-muted" id="form-note">
+            Completa el formulario y lo enviamos directo a nuestro WhatsApp.
+          </p>
+
+          <form id="contact-form" novalidate>
+            <div class="form-group">
+              <label for="c-name">Nombre completo *</label>
+              <input class="form-control" id="c-name" name="name" type="text" placeholder="Tu nombre" required />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px;" class="contact-2col">
+              <div class="form-group">
+                <label for="c-phone">Teléfono</label>
+                <input class="form-control" id="c-phone" name="phone" type="tel" placeholder="612 123 4567" />
+              </div>
+              <div class="form-group">
+                <label for="c-email">Correo</label>
+                <input class="form-control" id="c-email" name="email" type="email" placeholder="tucorreo@ejemplo.com" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="c-interest">Me interesa</label>
+              <select class="form-control" id="c-interest" name="interest">
+                <option value="comprar">Comprar un inmueble</option>
+                <option value="rentar">Rentar un inmueble</option>
+                <option value="vender">Vender mi propiedad</option>
+                <option value="avaluo">Un avalúo o asesoría</option>
+                <option value="otro">Otro tema</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="c-message">Mensaje *</label>
+              <textarea class="form-control" id="c-message" name="message" rows="4"
+                placeholder="Ej. Busco casa de 3 recámaras en la zona norte con presupuesto de $3,500,000." required></textarea>
+            </div>
+
+            <div id="contact-feedback" class="alert hide" role="alert" style="margin-bottom:12px;"></div>
+
+            <button class="btn btn-primary btn-block crm-btn-wa contact-submit" id="btn-send-wa" type="submit">
+              &#128172;&nbsp; Enviar por WhatsApp
+            </button>
+            <button class="btn btn-secondary btn-block" id="btn-send-mail" type="button" style="margin-top:8px;">
+              &#9993;&nbsp; Enviar por correo
+            </button>
+            <p class="text-muted" style="font-size:12px;margin-top:10px;">
+              Al enviar se abrirá tu app de WhatsApp o de correo con el mensaje listo. No almacenamos tus datos en este sitio.
+            </p>
+          </form>
+        </div>
+
+        <aside class="contact-info-col">
+          <div class="card landing-feature contact-info-card">
+            <strong>&#128172;&nbsp; WhatsApp</strong>
+            <p class="text-muted"><a id="info-wa-link" href="#" target="_blank" rel="noopener" class="contact-link">Iniciar chat ahora</a></p>
+          </div>
+          <div class="card landing-feature contact-info-card">
+            <strong>&#128222;&nbsp; Teléfono</strong>
+            <p class="text-muted"><a id="info-tel-link" href="#" class="contact-link">Llamar a la oficina</a></p>
+          </div>
+          <div class="card landing-feature contact-info-card">
+            <strong>&#9993;&nbsp; Correo</strong>
+            <p class="text-muted"><a id="info-mail-link" href="#" class="contact-link">Escribir un correo</a></p>
+          </div>
+          <div class="card landing-feature contact-info-card">
+            <strong>&#128337;&nbsp; Horario</strong>
+            <p class="text-muted">Lunes a viernes 9:00–18:00<br />Sábados 9:00–14:00</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <span>&#169; <span id="footer-year"></span> <span id="footer-name">Inmobiliaria Bienes Raíces</span></span>
+    <span><a href="landing.html" class="contact-link">Ver catálogo</a> · <a href="index.html" class="contact-link">Acceso al equipo</a></span>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="pages/contacto/contacto.js"></script>
+</body>
+</html>

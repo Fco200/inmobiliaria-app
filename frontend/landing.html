@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2d1048" />
+  <meta name="description" content="INMOBILES - Profesionales en Negocios Inmobiliarios. Casas, departamentos, locales y terrenos en venta y renta." />
+  <title id="landing-title">INMOBILES — Catálogo de inmuebles</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+</head>
+<body class="landing-body">
+
+  <!-- HEADER -->
+  <header class="landing-header">
+    <a class="landing-brand" href="landing.html">
+      <img src="logoinmobles.png" alt="INMOBILES" class="landing-brand-logo">
+      <span><strong id="landing-brand-name">INMOBILES</strong><br /><small id="landing-brand-tagline">Profesionales en Negocios Inmobiliarios</small></span>
+    </a>
+    <nav class="landing-nav" id="landing-nav">
+      <a href="#inicio">Inicio</a>
+      <a href="#catalogo">Propiedades</a>
+      <a href="#servicios">Servicios</a>
+      <a href="#agente">Tu asesor</a>
+      <a href="#contacto">Contacto</a>
+      <a class="btn btn-primary btn-sm" href="index.html">Acceso equipo</a>
+    </nav>
+    <div class="landing-header-actions">
+      <a href="tel:+521234567890" class="header-phone" id="header-phone">&#128222; <span id="header-phone-text">123 456 7890</span></a>
+      <button class="landing-nav-toggle" id="nav-toggle" aria-label="Menú">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- HERO + BUSCADOR -->
+  <section class="landing-hero" id="inicio">
+    <div class="landing-hero-content">
+      <img src="logoinmobles.png" alt="INMOBILES" class="landing-hero-logo anim-hero">
+      <h1 class="anim-hero anim-delay-1">Tu próximo hogar te espera</h1>
+      <p class="landing-hero-sub anim-hero anim-delay-2">Casas, departamentos, locales y terrenos en venta y renta. Encuentra la propiedad ideal con la asesoría de nuestros expertos.</p>
+      <div class="landing-hero-stats anim-hero anim-delay-3">
+        <div class="stat-item"><strong id="stat-properties">50+</strong><span>Propiedades</span></div>
+        <div class="stat-item"><strong id="stat-clients">200+</strong><span>Clientes felices</span></div>
+        <div class="stat-item"><strong id="stat-experience">10+</strong><span>Años de experiencia</span></div>
+      </div>
+    </div>
+
+    <!-- BUSCADOR -->
+    <form class="landing-search anim-hero anim-delay-4" id="search-form">
+      <div class="search-field">
+        <label for="search-operation">Tipo de oferta</label>
+        <select id="search-operation" aria-label="Tipo de oferta">
+          <option value="">Venta y renta</option>
+          <option value="venta">Venta</option>
+          <option value="renta">Renta</option>
+        </select>
+      </div>
+      <div class="search-field">
+        <label for="search-city">Ciudad</label>
+        <select id="search-city" aria-label="Ciudad">
+          <option value="">Todas las ciudades</option>
+        </select>
+      </div>
+      <div class="search-field">
+        <label for="search-type">Tipo de propiedad</label>
+        <select id="search-type" aria-label="Tipo de propiedad">
+          <option value="">Todos los tipos</option>
+          <option value="casa">Casa</option>
+          <option value="departamento">Departamento</option>
+          <option value="local">Local comercial</option>
+          <option value="bodega">Bodega</option>
+          <option value="oficina">Oficina</option>
+          <option value="terreno">Terreno</option>
+          <option value="rancho">Rancho</option>
+          <option value="playa">Playa</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-search" type="submit">&#128269; Buscar propiedades</button>
+    </form>
+  </section>
+
+  <!-- LISTADO DE PROPIEDADES -->
+  <section class="landing-section" id="catalogo">
+    <div class="landing-section-head">
+      <h2>&#127968; Propiedades disponibles</h2>
+      <span class="text-muted" id="result-count"></span>
+    </div>
+    <div id="properties-grid" class="landing-grid">
+      <div class="loading">Cargando propiedades...</div>
+    </div>
+    <div id="landing-pagination" class="landing-pagination"></div>
+  </section>
+
+  <!-- SERVICIOS -->
+  <section class="landing-section landing-alt" id="servicios">
+    <div class="landing-section-head"><h2>&#11088; Nuestros servicios</h2></div>
+    <div class="landing-grid">
+      <div class="card landing-feature">
+        <div class="feature-icon">&#128195;</div>
+        <h3>Asesoría personalizada</h3>
+        <p class="text-muted">Te acompañamos a encontrar el inmueble ideal según tu presupuesto y necesidades.</p>
+      </div>
+      <div class="card landing-feature">
+        <div class="feature-icon">&#128179;</div>
+        <h3>Financiamiento</h3>
+        <p class="text-muted">Créditos Infonavit, Fovissste, bancarios y planes de pago directo.</p>
+      </div>
+      <div class="card landing-feature">
+        <div class="feature-icon">&#128279;</div>
+        <h3>Trámites y documentos</h3>
+        <p class="text-muted">Gestionamos escrituración, avalúos y regularización de principio a fin.</p>
+      </div>
+      <div class="card landing-feature">
+        <div class="feature-icon">&#128737;</div>
+        <h3>Inversión inmobiliaria</h3>
+        <p class="text-muted">Propiedades en preventa, remates bancarios y inversión en renta.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- AGENTE INMOBILIARIO -->
+  <section class="landing-section" id="agente">
+    <div class="landing-section-head"><h2>&#128100; Tu asesor inmobiliario</h2></div>
+    <div class="agent-card">
+      <div class="agent-avatar">
+        <img src="logoinmobles.png" alt="Asesor INMOBILES" class="agent-photo">
+      </div>
+      <div class="agent-info">
+        <h3 class="agent-name" id="agent-name">INMOBILES Asesoría</h3>
+        <p class="agent-role">Asesor inmobiliario certificado</p>
+        <div class="agent-contact-grid">
+          <a href="tel:+521234567890" class="agent-contact-item" id="agent-phone">
+            <span class="agent-contact-icon">&#128222;</span>
+            <div>
+              <small>Teléfono</small>
+              <strong id="agent-phone-text">123 456 7890</strong>
+            </div>
+          </a>
+          <a href="https://wa.me/521234567890" class="agent-contact-item agent-wa" id="agent-whatsapp" target="_blank" rel="noopener">
+            <span class="agent-contact-icon">&#128172;</span>
+            <div>
+              <small>WhatsApp</small>
+              <strong>Enviar mensaje</strong>
+            </div>
+          </a>
+          <a href="mailto:asesor@inmobiliaria.com" class="agent-contact-item" id="agent-email">
+            <span class="agent-contact-icon">&#128231;</span>
+            <div>
+              <small>Email</small>
+              <strong id="agent-email-text">asesor@inmobiliaria.com</strong>
+            </div>
+          </a>
+          <div class="agent-contact-item">
+            <span class="agent-contact-icon">&#128205;</span>
+            <div>
+              <small>Ubicación</small>
+              <strong id="agent-location-text">México</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIOS -->
+  <section class="landing-section landing-alt" id="testimonios">
+    <div class="landing-section-head"><h2>&#128172; Lo que dicen nuestros clientes</h2></div>
+    <div class="landing-grid testimonials-grid">
+      <div class="card testimonial-card">
+        <div class="testimonial-stars">&#11088;&#11088;&#11088;&#11088;&#11088;</div>
+        <p class="testimonial-text">"Excelente atención y profesionalismo. Me ayudaron a encontrar la casa perfecta para mi familia."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">M</div>
+          <div>
+            <strong>María García</strong>
+            <span>Compra de casa</span>
+          </div>
+        </div>
+      </div>
+      <div class="card testimonial-card">
+        <div class="testimonial-stars">&#11088;&#11088;&#11088;&#11088;&#11088;</div>
+        <p class="testimonial-text">"Muy profesionales en todo el proceso de venta. Recomendados al 100%."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">C</div>
+          <div>
+            <strong>Carlos López</strong>
+            <span>Venta de departamento</span>
+          </div>
+        </div>
+      </div>
+      <div class="card testimonial-card">
+        <div class="testimonial-stars">&#11088;&#11088;&#11088;&#11088;&#11088;</div>
+        <p class="testimonial-text">"Encontré mi local comercial ideal. El equipo conoce muy bien cada zona del mercado."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">A</div>
+          <div>
+            <strong>Ana Martínez</strong>
+            <span>Local comercial</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA CONTACTO -->
+  <section class="landing-section" id="contacto">
+    <div class="card landing-contact">
+      <h2>&#128222; ¿Te interesa algún inmueble?</h2>
+      <p class="text-muted">Escríbenos por WhatsApp, llámanos o agenda una visita sin compromiso.</p>
+      <div class="landing-contact-actions">
+        <a class="btn btn-wa" id="wa-contact" href="https://wa.me/521234567890" target="_blank" rel="noopener">&#128172; WhatsApp</a>
+        <a class="btn btn-primary" href="tel:+521234567890">&#128222; Llamar ahora</a>
+        <a class="btn btn-secondary" href="contacto.html">&#128231; Formulario de contacto</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="landing-footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <img src="logoinmobles.png" alt="INMOBILES" class="footer-logo">
+        <p>Profesionales en Negocios Inmobiliarios. Tu hogar es nuestra prioridad.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Enlaces</h4>
+        <a href="#inicio">Inicio</a>
+        <a href="#catalogo">Propiedades</a>
+        <a href="#servicios">Servicios</a>
+        <a href="#agente">Tu asesor</a>
+        <a href="contacto.html">Contacto</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contacto</h4>
+        <a href="tel:+521234567890" id="footer-phone">&#128222; <span id="footer-phone-text">123 456 7890</span></a>
+        <a href="mailto:info@inmobiliaria.com" id="footer-email">&#128231; info@inmobiliaria.com</a>
+        <a href="https://wa.me/521234567890" target="_blank" rel="noopener" id="footer-wa">&#128172; WhatsApp</a>
+      </div>
+      <div class="footer-col">
+        <h4>Síguenos</h4>
+        <div class="footer-social">
+          <a href="#" target="_blank" rel="noopener" aria-label="Facebook">&#128100; Facebook</a>
+          <a href="#" target="_blank" rel="noopener" aria-label="Instagram">&#128247; Instagram</a>
+          <a href="#" target="_blank" rel="noopener" aria-label="TikTok">&#127909; TikTok</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&#169; <span id="footer-year"></span> <strong id="landing-footer-text">INMOBILES</strong>. Todos los derechos reservados.</span>
+      <div class="footer-legal">
+        <a href="#">Aviso de privacidad</a>
+        <a href="#">Términos y condiciones</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="pages/landing/landing.js"></script>
+  <script>
+    // Mobile nav toggle
+    document.getElementById('nav-toggle')?.addEventListener('click', function() {
+      document.getElementById('landing-nav').classList.toggle('open');
+      this.classList.toggle('active');
+    });
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const href = a.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const t = document.querySelector(href);
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('landing-nav')?.classList.remove('open');
+        document.getElementById('nav-toggle')?.classList.remove('active');
+      });
+    });
+  </script>
+</body>
+</html>

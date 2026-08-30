@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat · INMOBILES</title>
+  <meta name="theme-color" content="#2d1048">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/base.css">
+  <style>
+    .chat-wrap { display: flex; height: calc(100vh - 80px); gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+    .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; }
+    .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; }
+    .chat-sidebar-head .btn { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
+    .chat-sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .chat-sidebar-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.15s; }
+    .chat-sidebar-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
+    .chat-sidebar-list { flex: 1; overflow-y: auto; }
+    .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+    .chat-header { padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .chat-input-bar { padding: 12px 16px; background: var(--white); border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .chat-input-bar input { flex: 1; }
+    .chat-item { padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    .chat-item:hover { background: var(--icon-bg); }
+    .chat-item.active { background: var(--primary-light); border-left: 3px solid var(--primary); }
+    .chat-item-name { font-weight: 600; font-size: 14px; }
+    .chat-item-preview { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+    .chat-item-time { font-size: 11px; color: var(--text-muted); }
+    .msg-bubble { max-width: 70%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; }
+    .msg-sent { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+    .msg-received { align-self: flex-start; background: var(--white); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; opacity: 0.8; }
+    .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
+    .unread-badge { background: var(--danger); color: #fff; border-radius: 50%; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+    .chat-empty { text-align: center; color: var(--text-muted); margin: auto; padding: 40px; }
+    .announcement-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--primary); }
+    .announcement-card.urgente { border-left-color: var(--danger); }
+    .announcement-card.importante { border-left-color: #f59e0b; }
+    .announcement-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .announcement-title { font-weight: 700; font-size: 14px; }
+    .announcement-priority { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+    .announcement-priority.normal { background: var(--primary-light); color: var(--primary); }
+    .announcement-priority.importante { background: #fef3c7; color: #d97706; }
+    .announcement-priority.urgente { background: #fee2e2; color: #dc2626; }
+    .announcement-body { font-size: 13px; color: var(--text); margin-bottom: 6px; }
+    .announcement-meta { font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .announcement-actions { margin-top: 8px; display: flex; gap: 6px; }
+    .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 4px; }
+    @media (max-width: 768px) {
+      .chat-sidebar { width: 100%; }
+      .chat-main { display: none; }
+      .chat-main.active { display: flex; position: fixed; inset: 0; top: 0; z-index: 50; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topnav">
+      <div class="topnav-inner">
+        <a href="home.html" class="topnav-brand">
+          <img src="logoinmobles.png" alt="INMOBILES" class="topnav-logo">
+          <span class="topnav-brand-name">INMOBILES</span>
+        </a>
+        <button class="topnav-hamburger" id="topnav-hamburger" type="button" aria-label="Menú">&#9776;</button>
+        <nav class="topnav-nav" id="topnav-nav"></nav>
+        <div class="topnav-right">
+          <button class="icon-btn" id="btn-notifications" type="button" aria-label="Notificaciones">&#128276;</button>
+          <div class="topnav-user" id="topnav-user">Usuario</div>
+          <button class="link-danger" id="btn-logout" type="button" style="font-size:12px;padding:4px 8px;">Salir</button>
+        </div>
+      </div>
+      <div class="topnav-credit">&copy; INMOBILES · Desarrollado por <strong>FV DIGITAL</strong></div>
+    </header>
+
+    <main class="main">
+      <section class="content" id="app-content" style="padding:16px;">
+        <div class="loading">Cargando chat...</div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/crudPage.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/install.js"></script>
+  <script src="js/multipage.js"></script>
+  <script>
+  'use strict';
+  window.Pages = window.Pages || {};
+  window.Pages.chat = {
+    title: 'Chat',
+    async render(container) {
+      container.innerHTML = `
+        <div class="chat-wrap">
+          <div class="chat-sidebar" id="chat-sidebar">
+            <div class="chat-sidebar-head">
+              <button class="btn btn-primary" id="btn-new-chat">+ Chat</button>
+              <button class="btn btn-secondary" id="btn-new-announcement" style="display:none;">+ Aviso</button>
+            </div>
+            <div class="chat-sidebar-tabs">
+              <button class="chat-sidebar-tab active" data-tab="chats">Chats</button>
+              <button class="chat-sidebar-tab" data-tab="announcements">Avisos</button>
+            </div>
+            <div class="chat-sidebar-list" id="chat-list">
+              <div class="loading">Cargando chats...</div>
+            </div>
+          </div>
+          <div class="chat-main" id="chat-main">
+            <div class="chat-header" id="chat-header">
+              <button class="icon-btn" id="btn-back-chat" type="button" style="display:none;">&#8592;</button>
+              <div>
+                <div id="chat-title" style="font-weight:600;">Selecciona un chat</div>
+                <div id="chat-participants" style="font-size:12px;color:var(--text-muted);"></div>
+              </div>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-empty">Selecciona una conversación para comenzar</div>
+            </div>
+            <div class="chat-input-bar" id="chat-input" style="display:none;">
+              <input class="form-control" id="msg-input" placeholder="Escribe un mensaje..." autocomplete="off">
+              <button class="btn btn-primary" id="btn-send">Enviar</button>
+            </div>
+          </div>
+        </div>
+      `;
+      const chatList = document.getElementById('chat-list');
+      const chatMessages = document.getElementById('chat-messages');
+      const chatInput = document.getElementById('chat-input');
+      const msgInput = document.getElementById('msg-input');
+      const chatTitle = document.getElementById('chat-title');
+      const chatParticipants = document.getElementById('chat-participants');
+      const btnBack = document.getElementById('btn-back-chat');
+      const btnNewAnnouncement = document.getElementById('btn-new-announcement');
+      let currentChat = null;
+      let chats = [];
+      let announcements = [];
+      let activeTab = 'chats';
+      let socket = null;
+
+      const user = ApiClient.getStoredUser();
+      const isAdmin = user && user.role && ['admin', 'gerencia'].includes(user.role.code || user.role);
+
+      if (isAdmin) btnNewAnnouncement.style.display = '';
+
+      function initSocket() {
+        const token = localStorage.getItem('crm_token');
+        if (!token || socket) return;
+        socket = io(window.AppConfig ? window.AppConfig.BASE_URL : window.location.origin, {
+          auth: { token },
+        });
+        socket.on('connect', () => console.log('[Chat] Socket conectado'));
+        socket.on('disconnect', () => console.log('[Chat] Socket desconectado'));
+
+        socket.on('new-message', (data) => {
+          if (currentChat && currentChat._id === data.chatId) {
+            currentChat.messages.push(data.message);
+            renderMessages();
+            API.chats.markRead(data.chatId);
+          }
+          loadChats();
+        });
+
+        socket.on('new-announcement', (ann) => {
+          announcements.unshift(ann);
+          if (activeTab === 'announcements') renderAnnouncements();
+          UI.toast('Nuevo aviso: ' + ann.title, 'info');
+        });
+
+        socket.on('delete-announcement', (data) => {
+          announcements = announcements.filter(a => a._id !== data.id);
+          if (activeTab === 'announcements') renderAnnouncements();
+        });
+      }
+
+      function joinChat(chatId) {
+        if (socket) socket.emit('join-chat', chatId);
+      }
+      function leaveChat(chatId) {
+        if (socket) socket.emit('leave-chat', chatId);
+      }
+
+      async function loadChats() {
+        try {
+          const result = await API.chats.list();
+          chats = result.data || [];
+          if (activeTab === 'chats') renderChatList();
+        } catch (e) {
+          chatList.innerHTML = '<p class="text-muted" style="padding:16px;">Error al cargar chats</p>';
+        }
+      }
+
+      async function loadAnnouncements() {
+        try {
+          const result = await API.announcements.list();
+          announcements = result.data || [];
+          if (activeTab === 'announcements') renderAnnouncements();
+        } catch (e) {
+          chatList.innerHTML = '<p class="text-muted" style="padding:16px;">Error al cargar avisos</p>';
+        }
+      }
+
+      function renderChatList() {
+        if (!chats.length) {
+          chatList.innerHTML = '<p class="text-muted" style="padding:16px;">No hay conversaciones aún</p>';
+          return;
+        }
+        chatList.innerHTML = chats.map(c => {
+          const userId = user?._id;
+          const name = c.type === 'grupal' ? (c.name || 'Chat General') : (c.participants.find(p => p._id !== userId)?.name || 'Chat');
+          const unread = c.messages ? c.messages.filter(m => !m.readBy.includes(userId)).length : 0;
+          return `<div class="chat-item" data-id="${c._id}">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="chat-item-name">${UI.escapeHtml(name)}</span>
+              ${unread ? `<span class="unread-badge">${unread}</span>` : ''}
+            </div>
+            <div class="chat-item-preview">${UI.escapeHtml(c.lastMessage || 'Sin mensajes')}</div>
+            ${c.lastMessageAt ? `<div class="chat-item-time">${Format.dateTime(c.lastMessageAt)}</div>` : ''}
+          </div>`;
+        }).join('');
+
+        chatList.querySelectorAll('.chat-item').forEach(el => {
+          el.addEventListener('click', () => openChat(el.dataset.id));
+        });
+      }
+
+      function renderAnnouncements() {
+        if (!announcements.length) {
+          chatList.innerHTML = '<p class="text-muted" style="padding:16px;">No hay avisos</p>';
+          return;
+        }
+        chatList.innerHTML = announcements.map(a => {
+          const isRead = a.readBy && a.readBy.some(r => (r._id || r) === user?._id);
+          return `<div class="announcement-card ${a.priority || ''}" data-id="${a._id}">
+            <div class="announcement-header">
+              <span class="announcement-title">${UI.escapeHtml(a.title)}</span>
+              <span class="announcement-priority ${a.priority || 'normal'}">${a.priority || 'normal'}</span>
+            </div>
+            <div class="announcement-body">${UI.escapeHtml(a.message)}</div>
+            <div class="announcement-meta">
+              <span>${a.author ? UI.escapeHtml(a.author.name) : 'Admin'} · ${Format.dateTime(a.createdAt)}</span>
+              ${!isRead ? '<span class="unread-badge" style="min-width:auto;height:auto;padding:2px 6px;border-radius:8px;">Nuevo</span>' : ''}
+            </div>
+            ${isAdmin ? `<div class="announcement-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window._deleteAnnouncement('${a._id}')" style="font-size:11px;padding:3px 8px;">Eliminar</button>
+            </div>` : ''}
+          </div>`;
+        }).join('');
+
+        chatList.querySelectorAll('.announcement-card').forEach(el => {
+          el.addEventListener('click', () => markAnnouncementRead(el.dataset.id));
+        });
+      }
+
+      window._deleteAnnouncement = async function(id) {
+        if (!confirm('¿Eliminar este aviso?')) return;
+        try {
+          await API.announcements.remove(id);
+          announcements = announcements.filter(a => a._id !== id);
+          renderAnnouncements();
+          UI.toast('Aviso eliminado', 'success');
+        } catch (e) {
+          UI.toast('Error al eliminar', 'error');
+        }
+      };
+
+      async function markAnnouncementRead(id) {
+        try {
+          await API.announcements.markRead(id);
+          const ann = announcements.find(a => a._id === id);
+          if (ann && user) {
+            if (!ann.readBy) ann.readBy = [];
+            ann.readBy.push({ _id: user._id });
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      async function openChat(chatId) {
+        if (currentChat) leaveChat(currentChat._id);
+        try {
+          const result = await API.chats.get(chatId);
+          currentChat = result.data;
+          const userId = user?._id;
+          chatTitle.textContent = currentChat.type === 'grupal' ? (currentChat.name || 'Chat General') : (currentChat.participants.find(p => p._id !== userId)?.name || 'Chat');
+          chatParticipants.textContent = currentChat.participants.map(p => p.name).join(', ');
+          chatInput.style.display = 'flex';
+          btnBack.style.display = 'inline-flex';
+          document.getElementById('chat-main').classList.add('active');
+          renderMessages();
+          joinChat(chatId);
+          await API.chats.markRead(chatId);
+          loadChats();
+        } catch (e) {
+          UI.toast('Error al abrir chat', 'error');
+        }
+      }
+
+      function renderMessages() {
+        if (!currentChat || !currentChat.messages) {
+          chatMessages.innerHTML = '<div class="chat-empty">Sin mensajes</div>';
+          return;
+        }
+        const userId = user?._id;
+        chatMessages.innerHTML = currentChat.messages.map(m => {
+          const isMine = (m.sender._id || m.sender) === userId;
+          const senderName = m.sender.name || m.sender.username || 'Usuario';
+          return `<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}">
+            ${!isMine ? `<div class="msg-sender">${UI.escapeHtml(senderName)}</div>` : ''}
+            <div>${UI.escapeHtml(m.message)}</div>
+            <div class="msg-time">${Format.time(m.createdAt)}</div>
+          </div>`;
+        }).join('');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      async function sendMessage() {
+        const text = msgInput.value.trim();
+        if (!text || !currentChat) return;
+        try {
+          await API.chats.sendMessage(currentChat._id, { message: text });
+          msgInput.value = '';
+        } catch (e) {
+          UI.toast('Error al enviar mensaje', 'error');
+        }
+      }
+
+      document.getElementById('btn-send').addEventListener('click', sendMessage);
+      msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+      btnBack.addEventListener('click', () => {
+        if (currentChat) leaveChat(currentChat._id);
+        document.getElementById('chat-main').classList.remove('active');
+        currentChat = null;
+      });
+
+      document.querySelectorAll('.chat-sidebar-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.chat-sidebar-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          activeTab = tab.dataset.tab;
+          if (activeTab === 'chats') {
+            renderChatList();
+          } else {
+            loadAnnouncements();
+          }
+        });
+      });
+
+      document.getElementById('btn-new-chat').addEventListener('click', async () => {
+        const users = await API.users.list({ limit: 100 }).catch(() => ({ data: [] }));
+        const asesores = users.data.filter(u => u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role));
+        const modal = UI.openModal({
+          title: 'Nuevo chat',
+          body: `
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <button class="btn btn-primary btn-block" id="btn-chat-grupal">Chat grupal (todos los asesores)</button>
+              <hr>
+              <p class="text-muted">O selecciona un asesor:</p>
+              ${asesores.map(u => `<button class="btn btn-secondary btn-block chat-user-btn" data-user="${u._id}">${UI.escapeHtml(u.name)}</button>`).join('')}
+            </div>
+          `,
+          size: 400,
+        });
+        document.getElementById('btn-chat-grupal').addEventListener('click', async () => {
+          await API.chats.create({ type: 'grupal', name: 'Chat General' });
+          UI.closeModal();
+          loadChats();
+          UI.toast('Chat grupal creado', 'success');
+        });
+        modal.bodyEl.querySelectorAll('.chat-user-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            await API.chats.create({ type: 'individual', participantId: btn.dataset.user });
+            UI.closeModal();
+            loadChats();
+            UI.toast('Chat creado', 'success');
+          });
+        });
+      });
+
+      btnNewAnnouncement.addEventListener('click', () => {
+        UI.openModal({
+          title: 'Crear aviso',
+          body: `
+            <form id="announcement-form" style="display:flex;flex-direction:column;gap:12px;">
+              <div>
+                <label class="form-label">Título</label>
+                <input class="form-control" id="ann-title" placeholder="Título del aviso" required maxlength="200">
+              </div>
+              <div>
+                <label class="form-label">Mensaje</label>
+                <textarea class="form-control" id="ann-message" rows="4" placeholder="Escribe el aviso..." required maxlength="2000"></textarea>
+              </div>
+              <div>
+                <label class="form-label">Prioridad</label>
+                <select class="form-control" id="ann-priority">
+                  <option value="normal">Normal</option>
+                  <option value="importante">Importante</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-block" type="submit">Publicar aviso</button>
+            </form>
+          `,
+          size: 450,
+        });
+        document.getElementById('announcement-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const title = document.getElementById('ann-title').value.trim();
+          const message = document.getElementById('ann-message').value.trim();
+          const priority = document.getElementById('ann-priority').value;
+          if (!title || !message) return;
+          try {
+            await API.announcements.create({ title, message, priority });
+            UI.closeModal();
+            loadAnnouncements();
+            UI.toast('Aviso publicado', 'success');
+          } catch (err) {
+            UI.toast(err.message || 'Error al publicar', 'error');
+          }
+        });
+      });
+
+      initSocket();
+      loadChats();
+    }
+  };
+  </script>
+</body>
+</html>

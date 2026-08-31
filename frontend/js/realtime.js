@@ -15,6 +15,7 @@ window.Realtime = (() => {
   let pollTimer = null;
 
   const ALERT_KEY = 'crm_alerted';
+  const NOTIF_ALERT_KEY = 'crm_notif_alerted';
 
   function baseUrl() {
     if (window.AppConfig && window.AppConfig.BASE_URL) return window.AppConfig.BASE_URL;
@@ -120,6 +121,65 @@ window.Realtime = (() => {
     document.body.appendChild(overlay);
   }
 
+  function seenNotifIds() {
+    try {
+      return JSON.parse(localStorage.getItem(NOTIF_ALERT_KEY) || '[]');
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function markNotifSeen(id) {
+    const list = seenNotifIds();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem(NOTIF_ALERT_KEY, JSON.stringify(list.slice(-80)));
+    }
+  }
+
+  // Alertas modales de las notificaciones individuales del usuario (recordatorios,
+  // tareas vencidas, nuevos prospectos, etc.). Se muestran una sola vez por id.
+  function showNotification(item) {
+    if (!item || !item._id || typeof UI === 'undefined') return;
+    if (seenNotifIds().includes(item._id)) return;
+
+    markNotifSeen(item._id);
+    if (window.API && window.API.notifications && window.API.notifications.markRead) {
+      window.API.notifications.markRead(item._id).catch(() => {});
+    }
+
+    const color = '#2d7d6c';
+    const soft = '#e4f5f1';
+    const date = typeof Format !== 'undefined' ? Format.dateTime(item.createdAt) : '';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'notification-alert';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:2100;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(16,30,25,0.55);backdrop-filter:blur(2px);';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:480px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,0.4);overflow:hidden;border-top:6px solid ${color};">
+        <div style="padding:16px 20px;border-bottom:1px solid #f0edf3;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <strong style="font-size:15px;color:${color};">&#128276; Aviso / notificación nueva</strong>
+        </div>
+        <div style="padding:22px 20px;">
+          <h3 style="margin:0 0 12px;font-size:18px;line-height:1.3;color:#1f1b2e;">${UI.escapeHtml(item.title || 'Notificación')}</h3>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(item.message || '')}</p>
+          <div style="font-size:12px;color:#9088ab;">${date || ''}</div>
+        </div>
+        <div style="padding:14px 20px;background:#faf8fd;display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn btn-sm" type="button" data-close>Ahora no</button>
+          <button class="btn btn-primary" type="button" data-ok>Entendido</button>
+        </div>
+      </div>`;
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.closest('[data-ok]') || e.target.closest('[data-close]')) {
+        overlay.remove();
+      }
+    });
+    document.body.appendChild(overlay);
+  }
+
   function wire() {
     if (!socket) return;
     socket.on('new-announcement', (announcement) => {
@@ -127,6 +187,10 @@ window.Realtime = (() => {
       refreshBadges();
     });
     socket.on('delete-announcement', () => {
+      refreshBadges();
+    });
+    socket.on('new-notification', (item) => {
+      showNotification(item);
       refreshBadges();
     });
     const onChatActivity = () => {
@@ -167,10 +231,11 @@ window.Realtime = (() => {
     return socket;
   }
 
-  // Respaldo: si no hay socket conectado, cada 30s revisa avisos no vistos.
+  // Respaldo: si no hay socket conectado, cada 30s revisa avisos y
+  // notificaciones no vistas.
   function startPolling() {
     if (pollTimer) return;
-    const check = () => {
+    const checkAnnouncements = () => {
       if (socket && socket.connected) return;
       if (!window.API || !window.API.announcements) return;
       window.API.announcements.list().then((res) => {
@@ -181,8 +246,24 @@ window.Realtime = (() => {
         if (unseen.length) showAlert(unseen[0]);
       }).catch(() => {});
     };
-    check();
-    pollTimer = setInterval(check, 30000);
+    const checkNotifications = () => {
+      if (socket && socket.connected) return;
+      if (!window.API || !window.API.notifications) return;
+      window.API.notifications.list({ unread: true }).then((res) => {
+        let items = res;
+        if (res && typeof res === 'object' && Array.isArray(res.data)) items = res.data;
+        if (Array.isArray(items)) {
+          const unseen = items.filter((n) => n && n._id && !seenNotifIds().includes(n._id));
+          if (unseen.length) showNotification(unseen[0]);
+        }
+      }).catch(() => {});
+    };
+    checkAnnouncements();
+    checkNotifications();
+    pollTimer = setInterval(() => {
+      checkAnnouncements();
+      checkNotifications();
+    }, 30000);
   }
 
   return { connect, getSocket, startPolling };

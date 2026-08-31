@@ -11,6 +11,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
 const { getOrCreateGeneralChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
+const { setIo } = require('./src/services/notification.service');
 
 async function start() {
   const connection = await connectDB();
@@ -87,6 +88,7 @@ async function start() {
   });
 
   app.set('io', io);
+  setIo(io);
 
   const shutdown = (signal) => {
     console.log(`\n${signal} recibido, cerrando servidor...`);

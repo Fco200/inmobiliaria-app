@@ -12,10 +12,31 @@ const {
   User,
 } = require('../models');
 
+let ioRef = null;
+
+// Permite inyectar la instancia de Socket.IO desde el arranque (server.js) para
+// poder emitir los avisos nuevos en tiempo real a cada usuario.
+function setIo(io) {
+  ioRef = io;
+}
+
 async function ensure({ type, key, title, message, userId, data }) {
   const existing = await Notification.findOne({ user: userId, type, 'data.key': key });
-  if (existing) return;
-  await Notification.create({ user: userId, type, title, message, data: { key, ...data } });
+  if (existing) return existing;
+  const doc = await Notification.create({ user: userId, type, title, message, data: { key, ...data } });
+  try {
+    if (ioRef) ioRef.to(`user:${String(userId)}`).emit('new-notification', {
+      _id: doc._id,
+      type: doc.type,
+      title: doc.title,
+      message: doc.message,
+      read: !!doc.read,
+      createdAt: doc.createdAt,
+    });
+  } catch (e) {
+    console.error('[Notificacion] Error emitiendo aviso en tiempo real:', e.message);
+  }
+  return doc;
 }
 
 const DATE_OPTS = { hour: '2-digit', minute: '2-digit' };
@@ -226,4 +247,4 @@ async function generateForAllUsers() {
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers };
+module.exports = { generateForUser, generateForAllUsers, setIo };

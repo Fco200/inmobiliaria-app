@@ -752,6 +752,155 @@ window.SoportePanel = (() => {
     });
   }
 
+  // ── Pestaña Chat Interno ──────────────────────────────────────────────────
+  let chatListCache = [];
+  let activeChatId = null;
+  let chatReloadTimer = null;
+  let soporteUserId = null;
+
+  function chatParticipantName(chat) {
+    if (!chat || !chat.type) return 'Chat';
+    if (chat.name) return chat.name;
+    const me = String(soporteUserId || '');
+    const other = (chat.participants || []).find((p) => p && p._id && String(p._id) !== me);
+    return (other && (other.name || other.username)) || 'Chat';
+  }
+
+  function renderChatList() {
+    const root = document.getElementById('sp-chat-root');
+    const list = chatListCache;
+    root.innerHTML = `
+      <div class="sp-chat">
+        <div class="sp-chat-list">
+          <div class="sp-loading" style="display:none" id="sp-chat-loading"><span class="spinner"></span> Cargando chats…</div>
+          <div id="sp-chat-items">
+            ${list.length ? list.map((chat) => `
+              <button class="sp-chat-item ${chat._id === activeChatId ? 'active' : ''}" data-chat="${chat._id}">
+                <div class="name">${escapeHtml(chatParticipantName(chat))}</div>
+                <div class="meta">${chat.type === 'grupal' ? 'Grupal' : 'Directo'}${chat.lastMessageAt ? ' · ' + fmtDate(chat.lastMessageAt) : ''}</div>
+                <div class="last">${escapeHtml(chat.lastMessage || 'Sin mensajes')}</div>
+              </button>
+            `).join('') : '<div class="sp-empty">No hay chats disponibles.</div>'}
+          </div>
+        </div>
+        <div class="sp-chat-win">
+          <div class="sp-chat-win-head">
+            <strong id="sp-chat-win-title">Selecciona un chat</strong>
+            <button class="btn btn-ghost" id="sp-chat-refresh" type="button">&#8635; Actualizar</button>
+          </div>
+          <div class="sp-chat-msgs" id="sp-chat-msgs">
+            <div class="sp-empty">Elige una conversación para ver y responder los mensajes.</div>
+          </div>
+          <div class="sp-chat-input">
+            <textarea id="sp-chat-text" placeholder="Escribe un mensaje…" disabled></textarea>
+            <button class="btn btn-gold" id="sp-chat-send" type="button" disabled>Enviar</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    root.querySelectorAll('[data-chat]').forEach((btn) => {
+      btn.addEventListener('click', () => openChat(btn.dataset.chat));
+    });
+    document.getElementById('sp-chat-refresh').addEventListener('click', loadChatList);
+
+    const sendBtn = document.getElementById('sp-chat-send');
+    const textEl = document.getElementById('sp-chat-text');
+    const doSend = async () => {
+      const text = textEl.value.trim();
+      if (!text || !activeChatId) return;
+      sendBtn.disabled = true;
+      try {
+        await window.API.soporte.enviarMensajeChat(activeChatId, { message: text });
+        textEl.value = '';
+        textEl.focus();
+        renderChatDetail(await window.API.soporte.verChat(activeChatId));
+        loadChatList(true);
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        sendBtn.disabled = false;
+      }
+    };
+    sendBtn.addEventListener('click', doSend);
+    textEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+    });
+  }
+
+  async function renderChatDetail(chat) {
+    const titleEl = document.getElementById('sp-chat-win-title');
+    const msgsEl = document.getElementById('sp-chat-msgs');
+    const textEl = document.getElementById('sp-chat-text');
+    const sendBtn = document.getElementById('sp-chat-send');
+    if (!titleEl) return;
+
+    titleEl.textContent = chatParticipantName(chat);
+    const me = String(soporteUserId || '');
+    const msgs = (chat.messages || []).map((m) => {
+      const sender = m.sender || {};
+      const mine = String(m.emisor || (sender._id || '')) === me || String(sender._id || '') === me;
+      const sentBy = sender && (sender.name || sender.username) || 'Usuario';
+      return `
+        <div class="sp-msg ${mine ? 'mine' : 'theirs'}">
+          <div class="head">${mine ? 'Tú' : escapeHtml(sentBy)}<span class="t">${fmtDate(m.createdAt)}</span></div>
+          <div>${escapeHtml(m.message || m.text || '')}</div>
+        </div>`;
+    }).join('');
+
+    msgsEl.innerHTML = msgs ? msgs : '<div class="sp-empty">Sin mensajes todavía.</div>';
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    textEl.disabled = !chat;
+    sendBtn.disabled = !chat;
+    if (chat) {
+      window.API.soporte.marcarLeidoChat(chat._id).catch(() => {});
+    }
+  }
+
+  async function openChat(chatId) {
+    activeChatId = chatId;
+    renderChatList();
+    const msgsEl = document.getElementById('sp-chat-msgs');
+    if (msgsEl) msgsEl.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando conversación…</div>';
+    try {
+      const chat = await window.API.soporte.verChat(chatId);
+      renderChatDetail(chat);
+      loadChatList(true);
+    } catch (error) {
+      const el = document.getElementById('sp-chat-msgs');
+      if (el) el.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function loadChatList(silent) {
+    if (!silent) {
+      const loading = document.getElementById('sp-chat-loading');
+      if (loading) loading.style.display = 'flex';
+    }
+    try {
+      chatListCache = await window.API.soporte.chats();
+      // Si un chat está abierto, refrescar detalles en segundo plano.
+      if (activeChatId) {
+        const chat = await window.API.soporte.verChat(activeChatId).catch(() => null);
+        if (chat && document.getElementById('sp-chat-win-title')) renderChatDetail(chat);
+      }
+      renderChatList();
+    } catch (error) {
+      /* mantener estado actual */
+    } finally {
+      const loading = document.getElementById('sp-chat-loading');
+      if (loading) loading.style.display = 'none';
+    }
+  }
+
+  function initChat() {
+    const me = getSavedUser() || {};
+    soporteUserId = me.id || null;
+    loadChatList();
+    chatReloadTimer = setInterval(() => loadChatList(true), 15000);
+  }
+
   // ── Inicio / autenticación ────────────────────────────────────────────────
   async function refreshSession() {
     try {
@@ -795,6 +944,7 @@ window.SoportePanel = (() => {
     initPlantillas();
     initSesiones();
     initAnuncios();
+    initChat();
 
     renderResumen();
     renderUsuarios();

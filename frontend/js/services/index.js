@@ -301,6 +301,13 @@ window.API = {
         return r.blob();
       });
     },
+
+    // Chat interno: el soporte ve y responde los mensajes del equipo.
+    chats: () => soporteJson('/soporte/chat'),
+    chatGeneral: () => soporteJson('/soporte/chat/general'),
+    verChat: (id) => soporteJson(`/soporte/chat/${id}`),
+    enviarMensajeChat: (id, body) => soporteJson(`/soporte/chat/${id}/messages`, { method: 'POST', body }),
+    marcarLeidoChat: (id) => soporteJson(`/soporte/chat/${id}/leido`, { method: 'POST' }),
   },
 };
 

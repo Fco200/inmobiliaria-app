@@ -107,6 +107,15 @@ window.Pages.ayuda = {
           </div>
 
           <div class="card ayuda-action-card anim-fade-in-up anim-delay-2">
+            <div class="ayuda-action-icon">&#128218;</div>
+            <div>
+              <strong>Manual de usuario</strong>
+              <p>Manual completo por módulos para aprovechar toda la plataforma.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button" data-manual>&#128214;&nbsp; Abrir manual</button>
+          </div>
+
+          <div class="card ayuda-action-card anim-fade-in-up anim-delay-3">
             <div class="ayuda-action-icon">&#128100;</div>
             <div>
               <strong>Mi perfil</strong>
@@ -115,7 +124,7 @@ window.Pages.ayuda = {
             <a class="btn btn-secondary btn-sm" href="profile.html">Ir a perfil</a>
           </div>
 
-          <div class="card ayuda-action-card anim-fade-in-up anim-delay-3">
+          <div class="card ayuda-action-card anim-fade-in-up anim-delay-4">
             <div class="ayuda-action-icon">&#128274;</div>
             <div>
               <strong>Cambiar contraseña</strong>
@@ -124,7 +133,7 @@ window.Pages.ayuda = {
             <button class="btn btn-secondary btn-sm" type="button" data-password>&#9998;&nbsp; Cambiar</button>
           </div>
 
-          <div class="card ayuda-action-card anim-fade-in-up anim-delay-4">
+          <div class="card ayuda-action-card anim-fade-in-up anim-delay-5">
             <div class="ayuda-action-icon">&#128203;</div>
             <div>
               <strong>Asistente IA</strong>

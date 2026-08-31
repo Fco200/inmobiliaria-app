@@ -29,6 +29,11 @@ const {
   eliminarPlantilla,
   descargarPlantillaSoporte,
   plantillaUpload,
+  listarChatsSoporte,
+  generalSoporte,
+  verChatSoporte,
+  enviarMensajeSoporte,
+  marcarLeidoSoporte,
 } = require('../controllers/soporte.controller');
 
 const router = Router();
@@ -85,5 +90,12 @@ router.get('/plantillas', requireSoporte, listarPlantillas);
 router.post('/plantillas', requireSoporte, plantillaUpload.single('plantilla'), subirPlantilla);
 router.delete('/plantillas/:archivo', requireSoporte, eliminarPlantilla);
 router.get('/plantillas/:archivo/descargar', requireSoporte, descargarPlantillaSoporte);
+
+// Chat interno (soporte ve y responde los mensajes del equipo)
+router.get('/chat', requireSoporte, listarChatsSoporte);
+router.get('/chat/general', requireSoporte, generalSoporte);
+router.get('/chat/:id', requireSoporte, verChatSoporte);
+router.post('/chat/:id/messages', requireSoporte, enviarMensajeSoporte);
+router.post('/chat/:id/leido', requireSoporte, marcarLeidoSoporte);
 
 module.exports = router;

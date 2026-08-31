@@ -27,6 +27,7 @@ const {
   Session,
   Chat,
 } = require('../models');
+const { persistAndBroadcast, getOrCreateGeneralChat } = require('./chat.controller');
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
 const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
@@ -659,6 +660,84 @@ const descargarPlantillaSoporte = asyncHandler(async (req, res) => {
   res.sendFile(filePath);
 });
 
+// ── Chat interno (soporte ve y responde los mensajes del equipo) ────────────
+// El soporte es SUPERADMIN y puede ver TODOS los chats (grupales y 1 a 1) para
+// atender los mensajes que los asesores le envían, sin estar necesariamente en
+// la lista de participantes original del canal.
+const CANAL_GENERAL_SOPORTE = 'general';
+
+const listarChatsSoporte = asyncHandler(async (req, res) => {
+  const chats = await Chat.find()
+    .populate('participants', 'name username role photo')
+    .populate({ path: 'messages.sender', select: 'name username role photo' })
+    .sort({ lastMessageAt: -1, updatedAt: -1 })
+    .limit(50);
+  res.json({ success: true, data: chats });
+});
+
+const generalSoporte = asyncHandler(async (req, res) => {
+  const chat = await getOrCreateGeneralChat();
+  const populated = await chat.populate('participants', 'name username role');
+  res.json({ success: true, data: populated });
+});
+
+const verChatSoporte = asyncHandler(async (req, res) => {
+  const chat = await Chat.findById(req.params.id)
+    .populate('participants', 'name username role photo')
+    .populate('messages.sender', 'name username role photo');
+  if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
+  const data = chat.toObject();
+  data.messages = (data.messages || []).slice(-300);
+  res.json({ success: true, data });
+});
+
+const enviarMensajeSoporte = asyncHandler(async (req, res) => {
+  const text = String((req.body && req.body.message) || '').trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío' });
+  }
+  if (text.length > 2000) {
+    return res.status(400).json({ success: false, message: 'El mensaje no puede superar los 2000 caracteres' });
+  }
+
+  const chat = await Chat.findById(req.params.id);
+  if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
+
+  // El soporte se agrega como participante si aún no lo estaba para poder
+  // responder en cualquier canal.
+  if (!chat.participants.some((p) => p && p.toString() === String(req.user._id))) {
+    chat.participants.push(req.user._id);
+    await chat.save();
+  }
+
+  const support = await User.findById(req.user._id).select('name username');
+  const displayName = (support && support.name) || (support && support.username) || 'Soporte Técnico';
+  const io = req.app.get('io');
+  const newMsg = await persistAndBroadcast(io, chat._id.toString(), req.user._id.toString(), displayName, text);
+
+  await logActivity({
+    entityType: 'Chat',
+    entityId: chat._id,
+    user: req.user._id,
+    action: 'soporte_chat',
+    message: `Soporte respondió en el chat ${chat.name || chat.type}`,
+  });
+
+  res.status(201).json({ success: true, data: newMsg });
+});
+
+const marcarLeidoSoporte = asyncHandler(async (req, res) => {
+  const chat = await Chat.findById(req.params.id);
+  if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
+  chat.messages.forEach((msg) => {
+    if (!msg.readBy.some((p) => p && p.toString() === String(req.user._id))) {
+      msg.readBy.push(req.user._id);
+    }
+  });
+  await chat.save();
+  res.json({ success: true, message: 'Mensajes marcados como leídos' });
+});
+
 // Cerrar la sesión de soporte y volver al login normal.
 const soporteLogout = asyncHandler(async (req, res) => {
   if (req.token) await revokeSessionByToken(req.token);
@@ -700,4 +779,9 @@ module.exports = {
   descargarPlantillaSoporte,
   plantillaUpload,
   PLANTILLAS_DIR,
+  listarChatsSoporte,
+  generalSoporte,
+  verChatSoporte,
+  enviarMensajeSoporte,
+  marcarLeidoSoporte,
 };

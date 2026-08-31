@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'crm-inmob-v24';
+const CACHE_NAME = 'crm-inmob-v25';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

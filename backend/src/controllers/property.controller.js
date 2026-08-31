@@ -12,6 +12,8 @@ const propertyCrud = buildCrud(Property, {
   populate: ['owner', 'responsibleUser'],
   searchFields: ['address', 'zone', 'city', 'state', 'description'],
   ownerField: 'responsibleUser',
+  extraFilters: { operationType: 'operationType', type: 'type' },
+  priceField: 'price',
 });
 
 const list = propertyCrud.list;

@@ -1,7 +1,8 @@
 'use strict';
 
 function crudPage(container, config) {
-  const state = { page: 1, q: '', status: '', records: [], meta: null };
+  const state = { page: 1, q: '', status: '', records: [], meta: null, filters: {} };
+  let filterTimer = null;
 
   function renderHeader() {
     const el = document.createElement('div');
@@ -32,9 +33,31 @@ function crudPage(container, config) {
         </select>
       `;
     }
+    // Filtros adicionales configurables: { key, label, placeholder, options[] | type }.
+    // Cada control escribe en state.filters y recarga la página al cambiar.
+    const filterControls = config.filters && config.filters.length
+      ? config.filters.map((f) => {
+        if (f.options) {
+          const opts = f.options
+            .map((o) => `<option value="${UI.escapeHtml(typeof o === 'object' ? o.value : o)}">${UI.escapeHtml(typeof o === 'object' ? o.label : o)}</option>`)
+            .join('');
+          return `
+            <select class="form-control" data-filter="${UI.escapeHtml(f.key)}" style="max-width:${f.width || 220}px;">
+              <option value="">${UI.escapeHtml(f.placeholder || `Todos los ${String(f.label).toLowerCase()}`)}</option>
+              ${opts}
+            </select>
+          `;
+        }
+        return `
+          <input class="form-control" data-filter="${UI.escapeHtml(f.key)}" type="${f.type || 'text'}" placeholder="${UI.escapeHtml(f.placeholder || f.label)}" style="max-width:${f.width || 200}px;">
+        `;
+      }).join('')
+      : '';
+
     el.innerHTML = `
       <input class="form-control" data-search placeholder="Buscar..." style="max-width:280px;">
       ${statusSelect}
+      ${filterControls}
       <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
       <button class="btn btn-secondary btn-sm" type="button" data-export-pdf title="Exportar a PDF (imprime o guarda como PDF)">&#128424;&nbsp; PDF</button>
     `;
@@ -42,6 +65,17 @@ function crudPage(container, config) {
       state.q = e.target.value;
       state.page = 1;
       load();
+    });
+    el.querySelectorAll('[data-filter]').forEach((ctl) => {
+      const key = ctl.dataset.filter;
+      ctl.value = state.filters[key] || '';
+      const isSelect = ctl.tagName === 'SELECT';
+      ctl.addEventListener(isSelect ? 'change' : 'input', () => {
+        state.filters[key] = ctl.value;
+        clearTimeout(filterTimer);
+        // El select aplica al instante; los inputs numéricos debouncean (300 ms).
+        filterTimer = setTimeout(() => { state.page = 1; load(); }, isSelect ? 0 : 300);
+      });
     });
     const statusEl = el.querySelector('[data-status]');
     if (statusEl) {
@@ -60,6 +94,9 @@ function crudPage(container, config) {
     const params = { page: 1, limit: 100 };
     if (state.q) params.q = state.q;
     if (state.status) params.status = state.status;
+    Object.entries(state.filters).forEach(([key, value]) => {
+      if (value !== '') params[key] = value;
+    });
     if (config.defaultParams) Object.assign(params, config.defaultParams);
     return params;
   }
@@ -329,6 +366,9 @@ ${rowXml}
       const params = { page: state.page, limit: 15 };
       if (state.q) params.q = state.q;
       if (state.status) params.status = state.status;
+      Object.entries(state.filters).forEach(([key, value]) => {
+        if (value !== '') params[key] = value;
+      });
       if (config.defaultParams) Object.assign(params, config.defaultParams);
 
       const result = await config.service.list(params);

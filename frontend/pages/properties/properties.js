@@ -63,6 +63,135 @@ window.Pages.properties = {
       }
     }
 
+    // Número de WhatsApp configurado en Ajustes (catálogo) para contacto directo.
+    let whatsappNumber = '';
+    try {
+      const pub = await API.settings.public();
+      whatsappNumber = (pub && pub.whatsappNumber) || '';
+    } catch (error) { whatsappNumber = ''; }
+
+    // Enlace wa.me con mensaje predefinido (mismo formato que la landing).
+    const waLink = (text) => whatsappNumber
+      ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(text)}`
+      : '';
+
+    // Imagen por defecto (SVG) cuando una propiedad no tiene fotografías.
+    const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">' +
+      '<rect width="900" height="500" fill="#efeafb"/>' +
+      '<path d="M450 150 250 320h60v110h280V320h60Z" fill="#cbb8ee"/>' +
+      '<rect x="410" y="320" width="80" height="110" fill="#5B2D8E"/>' +
+      '</svg>'
+    );
+
+    const detailRow = (label, value) =>
+      `<tr><td data-label="${UI.escapeHtml(label)}">${UI.escapeHtml(label)}</td><td>${value}</td></tr>`;
+
+    // Detalle completo de la propiedad: carrusel de fotos, ficha técnica,
+    // historial, precio/mercado y acceso a edición + WhatsApp.
+    async function openDetail(record) {
+      let current = 0;
+      const photos = (record.photos || []).filter(Boolean);
+      const slides = photos.length ? photos : [PLACEHOLDER_IMG];
+      const name = `${record.type || 'Propiedad'} — ${record.zone || ''} ${record.city || ''}`.replace(/\s+/g, ' ').trim() || 'Propiedad';
+
+      const slide = (src) => `<div data-slide style="display:none;text-align:center;">
+        <img src="${window.AppConfig.resolveUrl(src)}" alt="" style="width:100%;max-height:380px;object-fit:contain;border-radius:8px;background:#fff;">
+      </div>`;
+      const thumb = (src, i) => `<img data-thumb="${i}" src="${window.AppConfig.resolveUrl(src)}" alt="" style="width:64px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i === 0 ? 'var(--primary)' : 'var(--border)'};">`;
+
+      const modal = UI.openModal({
+        title: name,
+        body: `
+          <div style="text-align:center;margin-bottom:6px;">
+            <div style="font-size:26px;font-weight:800;color:var(--primary);">${Format.currency(record.price)}</div>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:4px;">
+              ${UI.badge(UI.escapeHtml(record.type || '—'), 'info')}
+              ${UI.statusBadge(record.status)}
+              ${UI.badge(UI.escapeHtml((record.operationType || '').toUpperCase()), 'primary')}
+              ${record.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')}
+            </div>
+          </div>
+          <div style="position:relative;margin:10px 0;">
+            <div data-slides style="overflow:hidden;border-radius:10px;">${slides.map(slide).join('')}</div>
+            ${slides.length > 1 ? `
+              <button type="button" data-prev class="btn btn-secondary btn-sm" style="position:absolute;left:8px;top:45%;transform:translateY(-50%);">&#8249;</button>
+              <button type="button" data-next class="btn btn-secondary btn-sm" style="position:absolute;right:8px;top:45%;transform:translateY(-50%);">&#8250;</button>
+            ` : ''}
+            <div data-counter class="text-muted" style="text-align:center;font-size:12px;margin-top:6px;">1 / ${slides.length}</div>
+          </div>
+          ${slides.length > 1 ? `<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;" data-thumbs>${slides.map(thumb).join('')}</div>` : ''}
+          <div class="table-wrapper card" style="padding:0;">
+            <table class="table">
+              <tbody>
+                ${detailRow('Tipo', UI.escapeHtml(record.type || '—'))}
+                ${detailRow('Operación', UI.escapeHtml((record.operationType || '').toUpperCase()))}
+                ${detailRow('Dirección', UI.escapeHtml(record.address || '—'))}
+                ${detailRow('Zona / Colonia', UI.escapeHtml(record.zone || '—'))}
+                ${detailRow('Ciudad', UI.escapeHtml(record.city || '—'))}
+                ${detailRow('Estado', UI.escapeHtml(record.state || '—'))}
+                ${detailRow('Precio', Format.currency(record.price))}
+                ${detailRow('Valor ticket', record.ticketValue ? Format.currency(record.ticketValue) : '—')}
+                ${detailRow('Asesor', record.responsibleUser ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser) : '—')}
+                ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.name || record.owner) : '—')}
+              </tbody>
+            </table>
+          </div>
+          ${record.description ? `<div class="card" style="margin-top:12px;"><h4 style="margin:0 0 6px;">Descripción</h4><p style="margin:0;">${UI.escapeHtml(record.description)}</p></div>` : ''}
+        `,
+        footer: `
+          ${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : ''}
+          ${photos.length > 1 ? `<button class="btn btn-secondary" type="button" data-gallery>Fotografías</button>` : ''}
+          <button class="btn btn-secondary" type="button" data-history>Historial</button>
+          ${openPropertyForm ? `<button class="btn btn-primary" type="button" data-edit-detail>Editar</button>` : ''}
+          <button class="btn btn-secondary" type="button" data-market>Precio y mercado</button>
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+        `,
+        size: 860,
+      });
+
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
+      if (!overlay) return;
+
+      const slidesBox = overlay.querySelector('[data-slides]');
+      const counterEl = overlay.querySelector('[data-counter]');
+      const thumbsBox = overlay.querySelector('[data-thumbs]');
+      function renderSlide(i) {
+        current = (i + slides.length) % slides.length;
+        if (slidesBox) {
+          slidesBox.querySelectorAll('[data-slide]').forEach((el, idx) => {
+            el.style.display = idx === current ? 'block' : 'none';
+          });
+        }
+        if (counterEl) counterEl.textContent = `${current + 1} / ${slides.length}`;
+        if (thumbsBox) {
+          thumbsBox.querySelectorAll('[data-thumb]').forEach((el) => {
+            el.style.borderColor = Number(el.dataset.thumb) === current ? 'var(--primary)' : 'var(--border)';
+          });
+        }
+      }
+      const prevBtn = overlay.querySelector('[data-prev]');
+      if (prevBtn) prevBtn.addEventListener('click', () => renderSlide(current - 1));
+      const nextBtn = overlay.querySelector('[data-next]');
+      if (nextBtn) nextBtn.addEventListener('click', () => renderSlide(current + 1));
+      overlay.querySelectorAll('[data-thumb]').forEach((el) => {
+        el.addEventListener('click', () => renderSlide(Number(el.dataset.thumb)));
+      });
+      renderSlide(0);
+
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      const galleryBtn = overlay.querySelector('[data-gallery]');
+      if (galleryBtn) galleryBtn.addEventListener('click', () => UI.showImages(photos, name));
+      const historyBtn = overlay.querySelector('[data-history]');
+      if (historyBtn) historyBtn.addEventListener('click', () => UI.showActivityHistory('Property', record._id, `Centro de actividad — ${record.zone || record.address || 'Propiedad'}`));
+      const marketBtn = overlay.querySelector('[data-market]');
+      if (marketBtn) marketBtn.addEventListener('click', () => openPriceMarketModal(record));
+      const editBtn = overlay.querySelector('[data-edit-detail]');
+      if (editBtn) editBtn.addEventListener('click', () => { UI.closeModal(); openPropertyForm(record); });
+    }
+
     let users = [];
     let owners = [];
     try {
@@ -99,6 +228,10 @@ window.Pages.properties = {
       body.photos = [...(body.photos || []), ...urls];
     };
 
+    // Referencia al formulario de edición que usa crudPage; openDetail lo
+    // reactiva y le pasa el registro (sin perder los botones del detalle).
+    let openPropertyForm = null;
+
     crudPage(container, {
 title: 'Mis Propiedades',
       newLabel: 'Nueva propiedad',
@@ -109,6 +242,12 @@ title: 'Mis Propiedades',
         remove: (id) => API.properties.remove(id),
       },
       statusOptions: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'],
+      filters: [
+        { key: 'operationType', label: 'Operación', placeholder: 'Todas las operaciones', options: ['venta', 'renta'] },
+        { key: 'type', label: 'Tipo', placeholder: 'Todos los tipos', options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
+        { key: 'minPrice', label: 'Precio mínimo', type: 'number', placeholder: 'Precio mín.', width: 130 },
+        { key: 'maxPrice', label: 'Precio máximo', type: 'number', placeholder: 'Precio máx.', width: 130 },
+      ],
       columns: [
         { key: 'type', label: 'Tipo', render: (r) => UI.badge(typeLabel(r.type), 'info') },
         { key: 'operationType', label: 'Operación', render: (r) => UI.escapeHtml((r.operationType || '').toUpperCase()) },
@@ -141,16 +280,24 @@ title: 'Mis Propiedades',
         return body;
       },
       extraActions(record) {
-        let out = '';
+        const waHref = waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
+        let out = `<button class="btn btn-secondary btn-sm" data-extra data-detail data-record="${record._id}" style="margin-left:6px;" title="Ver detalle completo">Detalle</button>`;
         if (record.photos && record.photos.length) {
           out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
         }
         const pub = record.isPublished
           ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
           : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
-        return out + pub + `<button class="btn btn-secondary btn-sm" data-extra data-property-history data-record="${record._id}" style="margin-left:6px;">Historial</button><button class="btn btn-secondary btn-sm" data-extra data-price-market data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>`;
+        return out + pub +
+          `<button class="btn btn-secondary btn-sm" data-extra data-property-history data-record="${record._id}" style="margin-left:6px;">Historial</button>` +
+          `<button class="btn btn-secondary btn-sm" data-extra data-price-market data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>` +
+          (waHref ? `<a class="btn btn-sm crm-btn-wa" style="margin-left:6px;" target="_blank" rel="noopener" href="${waHref}" title="Enviar WhatsApp">&#128172;&nbsp; WhatsApp</a>` : '');
       },
       onExtraAction(record, btn, ctx) {
+        if (btn.dataset.detail) {
+          openDetail(record);
+          return;
+        }
         if (btn.dataset.showPhotos) {
           UI.showImages(record.photos, `${UI.escapeHtml(record.type || 'Propiedad')} — ${UI.escapeHtml(record.zone || '')} ${UI.escapeHtml(record.city || '')}`);
           return;
@@ -171,7 +318,11 @@ title: 'Mis Propiedades',
           })
           .catch((error) => ctx.toast(error.message, 'error'));
       },
-      onEdit: true,
+      onEdit: (record, openForm) => {
+        // Captura el formulario de crudPage para reabrirlo desde el detalle.
+        openPropertyForm = openForm;
+        return openForm(record);
+      },
       onRemove: true,
     });
   },

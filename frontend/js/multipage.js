@@ -314,6 +314,94 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
+  // Carga el módulo de onboarding (guía rápida de bienvenida). Se inyecta al
+  // vuelo; cuando el script está listo, se llama inmediatamente a maybeShow()
+  // para no perder la oportunidad si init() terminó antes de la carga.
+  function loadOnboarding() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    const script = document.createElement('script');
+    script.src = 'js/onboarding.js';
+    script.onload = () => {
+      if (window.Onboarding) window.Onboarding.maybeShow();
+    };
+    document.head.appendChild(script);
+  }
+
+  function alertBannerStore() {
+    try { return JSON.parse(localStorage.getItem('crm_alerted') || '[]'); } catch (error) { return []; }
+  }
+
+  function saveAlertBannerStore(list) {
+    try { localStorage.setItem('crm_alerted', JSON.stringify(list.slice(-80))); } catch (error) {}
+  }
+
+  // Banner sticky de avisos del equipo. Complementa la alerta modal de
+  // realtime.js (que no se toca): cuelga un aviso al tope del contenido si el
+  // usuario aún no lo ha visto y no es su propia publicación.
+  async function maybeShowAnnouncementBanner() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    if (document.getElementById('announcement-banner')) return;
+    const me = window.ApiClient.getStoredUser() || {};
+    const myId = me && (me._id || me.id);
+    let list = [];
+    try {
+      const res = await window.API.announcements.list();
+      const raw = res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res;
+      list = Array.isArray(raw) ? raw : [];
+    } catch (error) {
+      return;
+    }
+    if (!list.length) return;
+    const alerted = alertBannerStore();
+    const unseen = list.filter((a) => {
+      if (!a || !a._id || alerted.includes(a._id)) return false;
+      const author = a.author || {};
+      const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
+      return !(myId && authorId && String(authorId) === String(myId));
+    });
+    if (!unseen.length) return;
+    // Prioridad: el primero 'importante'/'urgente'; si no hay, el primer 'normal'.
+    const chosen = unseen.find((a) => a.priority === 'importante' || a.priority === 'urgente') || unseen[0];
+    const palette = {
+      urgente: { color: '#dc2626', soft: '#fee2e2' },
+      importante: { color: '#d97706', soft: '#fef3c7' },
+      normal: { color: '#7e22ce', soft: '#f3e8ff' },
+    };
+    const p = palette[chosen.priority] || palette.normal;
+    const banner = document.createElement('div');
+    banner.id = 'announcement-banner';
+    banner.style.cssText =
+      'display:flex;align-items:center;gap:10px;padding:10px 16px;margin:0 0 16px;border-radius:var(--radius);' +
+      `border-left:4px solid ${p.color};background:${p.soft};font-size:13px;position:sticky;top:56px;z-index:20;`;
+    banner.innerHTML = `
+      <span style="font-size:16px;">&#128276;</span>
+      <strong style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${UI.escapeHtml(chosen.title || 'Aviso del equipo')}</strong>
+      <a class="btn btn-secondary btn-sm" href="notifications.html">Ver</a>
+      <button class="icon-btn" type="button" data-close-banner title="Cerrar aviso" aria-label="Cerrar aviso">&times;</button>
+    `;
+    banner.querySelector('[data-close-banner]').addEventListener('click', () => {
+      const next = alertBannerStore();
+      if (!next.includes(chosen._id)) {
+        next.push(chosen._id);
+        saveAlertBannerStore(next);
+      }
+      banner.remove();
+    });
+    const content = document.getElementById('app-content');
+    if (content) content.insertBefore(banner, content.firstChild);
+  }
+
+  // Reabre la guía rápida de bienvenida cuando el usuario la pide desde
+  // ajustes. Onboarding se carga de forma asíncrona (loadOnboarding), por lo
+  // que si el script aún no llegó se fuerza su carga antes de mostrarlo.
+  function reopenOnboarding() {
+    if (window.Onboarding) {
+      window.Onboarding.show();
+      return;
+    }
+    loadOnboarding();
+  }
+
   async function logout() {
     const ok = UI ? await UI.confirm('¿Deseas cerrar sesión?') : true;
     if (!ok) return;
@@ -345,7 +433,7 @@ window.AppShell = (() => {
     }
     if (page && typeof page.render === 'function') {
       content.innerHTML = '<div class="loading">Cargando...</div>';
-      try { await page.render(content); labelTableColumns(content); }
+      try { await page.render(content); labelTableColumns(content); maybeShowAnnouncementBanner(); }
       catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); }
       return;
     }
@@ -357,7 +445,7 @@ window.AppShell = (() => {
       const retryPage = currentPage();
       if (retryPage && typeof retryPage.render === 'function') {
         content.innerHTML = '<div class="loading">Cargando...</div>';
-        try { await retryPage.render(content); labelTableColumns(content); return; }
+        try { await retryPage.render(content); labelTableColumns(content); maybeShowAnnouncementBanner(); return; }
         catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); return; }
       }
     }
@@ -377,7 +465,7 @@ window.AppShell = (() => {
     installErrorHandlers();
     applyTheme();
 
-    if (!window.ApiClient.isAuthenticated()) { window.location.replace('index.html'); return; }
+    if (!window.ApiClient.requireAuth()) return;
 
     registerServiceWorker();
     renderNav();
@@ -386,6 +474,7 @@ window.AppShell = (() => {
     startClock();
     injectAssistant();
     loadRealtime();
+    loadOnboarding();
     injectActivityFab();
 
     // Hamburger toggle para mobile
@@ -411,9 +500,14 @@ window.AppShell = (() => {
     initReminders();
 
     renderPage();
+
+    // Tras el primer render se da una oportunidad al onboarding (si aplica) y
+    // al banner de avisos con un pequeño retardo para no pisar la animación.
+    window.Onboarding && window.Onboarding.maybeShow();
+    setTimeout(() => { maybeShowAnnouncementBanner(); }, 400);
   }
 
-  window.App = { refreshNotificationBadge, refreshChatBadge, remindersEnabled, setRemindersEnabled, startClock };
+  window.App = { refreshNotificationBadge, refreshChatBadge, remindersEnabled, setRemindersEnabled, startClock, reopenOnboarding };
 
   return { init, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
 })();

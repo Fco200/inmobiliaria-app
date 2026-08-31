@@ -60,6 +60,63 @@ window.Pages.documents = {
           ${boss ? '<button class="btn btn-secondary" type="button" data-new>+ Subir formato</button>' : ''}
         </div>
       </div>
+      <div style="margin-bottom:20px;">
+        <h4 style="margin:0 0 12px;color:var(--text-muted);font-size:15px;">Formatos rápidos</h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px;">
+          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:26px;">&#128172;</span>
+              <div style="flex:1;min-width:0;">
+                <strong style="display:block;font-size:14px;">Hoja de Visita</strong>
+                <small class="text-muted">Registro de visitas con firma</small>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:12px;margin-top:auto;padding-top:12px;">
+              <button class="btn btn-secondary btn-sm" type="button" data-rapido="visita" data-action="open" style="flex:1;">Abrir</button>
+              <button class="btn btn-primary btn-sm" type="button" data-rapido="visita" data-action="fill" style="flex:1;">Descargar PDF</button>
+            </div>
+          </div>
+          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:26px;">&#128203;</span>
+              <div style="flex:1;min-width:0;">
+                <strong style="display:block;font-size:14px;">Carta de Intención de Compra</strong>
+                <small class="text-muted">Propuesta de compra del inmueble</small>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
+              <button class="btn btn-secondary btn-sm" type="button" data-rapido="oferta" data-action="open" style="flex:1;">Abrir</button>
+              <button class="btn btn-primary btn-sm" type="button" data-rapido="oferta" data-action="fill" style="flex:1;">Llenar</button>
+            </div>
+          </div>
+          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:26px;">&#128179;</span>
+              <div style="flex:1;min-width:0;">
+                <strong style="display:block;font-size:14px;">Contrato de Apartado</strong>
+                <small class="text-muted">Reservar la propiedad</small>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
+              <button class="btn btn-secondary btn-sm" type="button" data-rapido="apartado" data-action="open" style="flex:1;">Abrir</button>
+              <button class="btn btn-primary btn-sm" type="button" data-rapido="apartado" data-action="fill" style="flex:1;">Llenar</button>
+            </div>
+          </div>
+          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:26px;">&#127968;</span>
+              <div style="flex:1;min-width:0;">
+                <strong style="display:block;font-size:14px;">Ficha de Captación</strong>
+                <small class="text-muted">Solicitud para captar inmuebles</small>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
+              <button class="btn btn-secondary btn-sm" type="button" data-rapido="captacion" data-action="open" style="flex:1;">Abrir</button>
+              <button class="btn btn-primary btn-sm" type="button" data-rapido="captacion" data-action="fill" style="flex:1;">Llenar</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <input class="form-control" id="doc-search" placeholder="Buscar formato..." style="max-width:240px;">
         <select class="form-control" id="doc-status" style="max-width:180px;">
@@ -273,18 +330,282 @@ window.Pages.documents = {
       openFormatosBtn.addEventListener('click', () => openPlantillasSelector());
     }
 
+    // ============ FORMATOS RÁPIDOS ============
+
+    const QUICK_KEYWORDS = {
+      oferta: ['oferta'],
+      apartado: ['apartado', 'renta'],
+      captacion: ['captación', 'captacion'],
+    };
+    const VISITA_MOTIVOS = [
+      'Solicitar información',
+      'Realizar cotización',
+      'Entrega de llaves',
+      'Firmar documentos',
+      'Visita a la propiedad',
+      'Otro',
+    ];
+
+    // Normaliza textos para comparar sin acentos ni mayúsculas.
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const haystackOf = (p) => norm(`${p.nombre} ${p.id}`);
+    const findMatches = (keywords) => plantillas.filter((p) => keywords.some((k) => haystackOf(p).includes(norm(k))));
+
+    // Bloque de firma digital reutilizable (pajea el componente signature.js).
+    function signatureSectionHTML() {
+      return `
+        <div class="formato-section" style="margin-bottom:8px;">
+          <h4 style="margin:0 0 12px;color:var(--primary);">&#9997;&#65039; Firma</h4>
+          <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#fff;">
+            <canvas data-signature-pad height="150" style="width:100%;height:150px;display:block;touch-action:none;cursor:crosshair;"></canvas>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:6px;">
+            <button class="btn btn-secondary btn-sm" type="button" data-signature-clear>Limpiar firma</button>
+            <small class="text-muted">Firma con el dedo o el ratón</small>
+          </div>
+          <input type="hidden" name="firma" value="">
+        </div>
+      `;
+    }
+
+    function attachSignature(root) {
+      if (!root || typeof window.SignaturePad === 'undefined') return null;
+      const canvas = root.querySelector('canvas[data-signature-pad]');
+      if (!canvas) return null;
+      const pad = window.SignaturePad.create({ canvas });
+      if (!pad) return null;
+      const clearBtn = root.querySelector('[data-signature-clear]');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          pad.clear();
+          const hidden = root.querySelector('[name="firma"]');
+          if (hidden) hidden.value = '';
+        });
+      }
+      return pad;
+    }
+
+    function validarHojaVisita(values, pad) {
+      const problemas = [];
+      if (!values.cliente) problemas.push('nombre del visitante');
+      if (!values.fecha_visita) problemas.push('fecha de la visita');
+      if (values.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.correo)) problemas.push('correo electrónico');
+      if (values.telefono && !/^\+?[\d\s().-]{7,}$/.test(values.telefono)) problemas.push('teléfono');
+      if (!pad || pad.isEmpty()) problemas.push('firma');
+      return problemas;
+    }
+
+    // Abre una ventana imprimible (Ctrl+P / Guardar como PDF) con la cabecera
+    // de INMOBILES, las secciones de datos y la firma.
+    function openPrintPreview(titulo, secciones, values, firma) {
+      const firmaData = firma || (values && values.firma) || '';
+      const w = window.open('', '_blank');
+      if (!w) {
+        UI.toast('Permite las ventanas emergentes para abrir la vista previa.', 'error');
+        return;
+      }
+      const cells = (secciones || []).map((sec) => `
+        <h3>${UI.escapeHtml(sec.titulo)}</h3>
+        <table>
+          ${(sec.campos || []).map((c) => `
+            <tr><td>${UI.escapeHtml(c.label)}</td><td>${c.value == null || c.value === '' ? '—' : UI.escapeHtml(String(c.value))}</td></tr>
+          `).join('')}
+        </table>
+      `).join('');
+      const hoy = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+      w.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${UI.escapeHtml(titulo)} · INMOBILES</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; color: #1f2937; background: #fff; margin: 0; }
+  .no-print { background: #f3f4f6; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+  .no-print button { background: #2d1048; color: #fff; border: 0; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-bottom: 3px solid #2d1048; }
+  .header .brand { font-size: 20px; font-weight: 800; color: #2d1048; letter-spacing: 1px; }
+  .header .brand small { display: block; font-size: 11px; font-weight: 400; color: #6b7280; }
+  .content { padding: 24px; }
+  h1 { margin: 0; font-size: 18px; color: #2d1048; }
+  h3 { margin: 20px 0 8px; font-size: 13px; color: #2d1048; text-transform: uppercase; letter-spacing: .5px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; font-size: 13px; vertical-align: top; }
+  td:first-child { width: 34%; color: #4b5563; font-weight: 600; }
+  .firma-block { margin-top: 28px; }
+  .firma-block img { max-width: 260px; max-height: 120px; border: 1px solid #ddd; border-radius: 6px; background: #fff; padding: 8px; }
+  .firma-line { margin-top: 30px; border-top: 1px solid #1f2937; padding-top: 6px; font-size: 12px; color: #4b5563; max-width: 260px; }
+  .foot { margin-top: 36px; padding-top: 10px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 11px; }
+  @page { margin: 18mm; }
+  @media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body>
+  <div class="no-print">
+    <span>Vista previa de impresión: usa <strong>Ctrl+P</strong> (Guardar como PDF) o el botón Imprimir.</span>
+    <button type="button" onclick="window.print()">Imprimir</button>
+  </div>
+  <div class="header">
+    <div class="brand">&#127968; INMOBILES<small>Gestión inmobiliaria profesional</small></div>
+    <div style="text-align:right;">
+      <h1>${UI.escapeHtml(titulo)}</h1>
+      <div style="font-size:12px;color:#6b7280;">${hoy}</div>
+    </div>
+  </div>
+  <div class="content">
+    ${cells}
+    ${firmaData ? `
+      <div class="firma-block">
+        <h3>Firma</h3>
+        <img src="${firmaData}" alt="Firma">
+        <div class="firma-line">Firma</div>
+      </div>` : ''}
+    <div class="foot">Documento generado con INMOBILES el ${hoy}.</div>
+  </div>
+</body>
+</html>`);
+      w.document.close();
+      w.focus();
+    }
+
+    // Hoja de Visita: formulario + firma + vista previa imprimible.
+    function openHojaDeVisita() {
+      const modal = UI.openModal({
+        title: 'Hoja de Visita',
+        body: `
+          <form id="hoja-visita-form" novalidate>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
+              ${UI.field('cliente', 'Nombre del visitante', { required: true })}
+              ${UI.field('telefono', 'Teléfono', { type: 'tel' })}
+              ${UI.field('correo', 'Correo electrónico', { type: 'email' })}
+              ${UI.field('fecha_visita', 'Fecha de la visita', { type: 'date', required: true })}
+              ${UI.field('para_visita', 'Motivo de la visita', { type: 'select', options: VISITA_MOTIVOS })}
+              ${UI.field('propiedad', 'Propiedad', { type: 'select', options: [{ value: '', label: '— Sin especificar —' }, ...propertyOptions] })}
+              ${UI.field('observaciones', 'Observaciones', { type: 'textarea', full: true })}
+            </div>
+            ${signatureSectionHTML()}
+          </form>
+        `,
+        footer: `
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-right:auto;cursor:pointer;">
+            <input type="checkbox" data-registrar> Registrar copia en el sistema
+          </label>
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="submit" form="hoja-visita-form">&#128196; Previsualizar / PDF</button>
+        `,
+        size: 780,
+      });
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
+      if (overlay) {
+        const cancelBtn = overlay.querySelector('[data-cancel]');
+        if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      }
+      const pad = attachSignature(bodyEl);
+      const form = bodyEl ? bodyEl.querySelector('#hoja-visita-form') : null;
+      if (!form) return;
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const values = UI.collectForm(e.target);
+        const problemas = validarHojaVisita(values, pad);
+        if (problemas.length) {
+          UI.toast('Faltan datos: ' + problemas.join(', '), 'warning');
+          return;
+        }
+        if (pad && !pad.isEmpty()) values.firma = pad.save();
+
+        const registrar = overlay ? overlay.querySelector('[data-registrar]') : null;
+        if (registrar && registrar.checked) {
+          try {
+            await API.documents.create({
+              name: `Hoja de Visita — ${values.cliente}`,
+              type: 'formato',
+              status: 'pendiente',
+              observations: `Registrada desde formato rápido el ${new Date().toLocaleDateString('es-MX')}`,
+            });
+            UI.toast('Copia registrada en el sistema', 'success');
+          } catch (error) { /* registro best-effort */ }
+        }
+
+        const propiedadLabel = values.propiedad
+          ? ((propertyOptions.find((o) => o.value === values.propiedad) || {}).label || values.propiedad)
+          : '';
+        const secciones = [
+          {
+            titulo: 'Datos de la visita',
+            campos: [
+              { label: 'Visitante', value: values.cliente },
+              { label: 'Teléfono', value: values.telefono },
+              { label: 'Correo electrónico', value: values.correo },
+              { label: 'Fecha de la visita', value: values.fecha_visita },
+              { label: 'Motivo', value: values.para_visita },
+              { label: 'Propiedad', value: propiedadLabel },
+              { label: 'Observaciones', value: values.observaciones },
+            ],
+          },
+        ];
+        openPrintPreview('Hoja de Visita', secciones, values, values.firma);
+        UI.closeModal();
+        load();
+      });
+    }
+
+    // Tarjetas de acceso rápido: Hoja de Visita abre su formulario;
+    // el resto busca la plantilla por keyword y la abre si hay una única
+    // coincidencia (botón "Llenar") o muestra el selector filtrado.
+    container.querySelectorAll('[data-rapido]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const rapido = btn.dataset.rapido;
+        const action = btn.dataset.action;
+        if (rapido === 'visita') {
+          openHojaDeVisita();
+          return;
+        }
+        const keywords = QUICK_KEYWORDS[rapido] || [rapido];
+        const matches = findMatches(keywords);
+        if (!matches.length) {
+          UI.toast('No hay plantilla configurada para este formato rápido.', 'warning');
+          openPlantillasSelector();
+          return;
+        }
+        if (action === 'fill' && matches.length === 1) {
+          openFormularioPlantilla(matches[0].id);
+          return;
+        }
+        openPlantillasSelector(keywords[0]);
+      });
+    });
+
     load();
 
     // ============ FUNCIONES PARA PLANTILLAS PDF ============
 
-    // Selector de plantillas PDF
-    function openPlantillasSelector() {
-      const plantillasConFormulario = plantillas.filter(p => p.tieneFormulario);
-      const plantillasSinFormulario = plantillas.filter(p => !p.tieneFormulario);
+    // Selector de plantillas PDF. Con `keyword` opcional filtra la vista a las
+    // plantillas que coinciden (los formatos rápidos lo usan para preseleccionar).
+    function openPlantillasSelector(keyword) {
+      let plantillasConFormulario = plantillas.filter(p => p.tieneFormulario);
+      let plantillasSinFormulario = plantillas.filter(p => !p.tieneFormulario);
+
+      let kwNote = '';
+      if (keyword) {
+        const kw = norm(keyword);
+        plantillasConFormulario = plantillasConFormulario.filter(p => haystackOf(p).includes(kw));
+        plantillasSinFormulario = plantillasSinFormulario.filter(p => haystackOf(p).includes(kw));
+        if (!plantillasConFormulario.length && !plantillasSinFormulario.length) {
+          UI.toast('No se encontró plantilla para "' + keyword + '".', 'warning');
+          return;
+        }
+        kwNote = `
+          <p class="text-muted" style="font-size:13px;margin:0 0 16px;">
+            &#128269; Plantillas para "<strong>${UI.escapeHtml(keyword)}</strong>":
+            ${plantillasConFormulario.length + plantillasSinFormulario.length} coincidencia(s).
+          </p>`;
+      }
 
       const modal = UI.openModal({
         title: 'Generar Formato PDF',
         body: `
+          ${kwNote}
           <div style="margin-bottom:20px;">
             <h4 style="margin:0 0 12px;color:var(--primary);">&#128196; Plantillas con formulario</h4>
             <p class="text-muted" style="margin:0 0 16px;font-size:13px;">Selecciona una plantilla para llenar sus datos y generar el PDF.</p>
@@ -422,6 +743,11 @@ window.Pages.documents = {
           formHTML += `</div></div>`;
         }
 
+        // Firma digital al final de cualquier plantilla con formulario.
+        if (window.SignaturePad) {
+          formHTML += signatureSectionHTML();
+        }
+
         formHTML += `</form>`;
 
         const modal = UI.openModal({
@@ -442,6 +768,7 @@ window.Pages.documents = {
         }
 
         const form = bodyEl ? bodyEl.querySelector(`#${formId}`) : null;
+        const pad = attachSignature(bodyEl);
         if (form) {
           form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -461,6 +788,9 @@ window.Pages.documents = {
               UI.toast(`Campos requeridos: ${requiredFields.join(', ')}`, 'warning');
               return;
             }
+
+            // Adjuntar la firma digital (si se dibujó) al lote de valores.
+            if (pad && !pad.isEmpty()) values.firma = pad.save();
 
             try {
               UI.toast('Generando PDF...', 'info');

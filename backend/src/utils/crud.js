@@ -20,6 +20,8 @@ function ownerIdOf(doc, ownerField) {
  *  - ownerField: campo propietario simple (responsibleUser, user, uploadedBy…).
  *  - ownerMatch: fn(userId) => condición Mongo cuando la propiedad es compuesta.
  *  - beforeCreate/beforeUpdate: hooks existentes.
+ *  - extraFilters: { paramDeQuery => nombreDelCampo } filtros exactos adicionales.
+ *  - priceField: campo numérico para aplicar ?minPrice= y ?maxPrice= ($gte/$lte).
  */
 function buildCrud(model, {
   populate = [],
@@ -28,6 +30,8 @@ function buildCrud(model, {
   beforeUpdate,
   ownerField = null,
   ownerMatch = null,
+  extraFilters = null,
+  priceField = null,
 } = {}) {
   function assertOwnership(req, doc) {
     if (isBoss(req)) return true;
@@ -59,6 +63,23 @@ function buildCrud(model, {
       }
 
       if (req.query.status) filter.status = req.query.status;
+
+      // Filtros exactos adicionales configurables (?param => campo).
+      if (extraFilters) {
+        for (const [queryParam, field] of Object.entries(extraFilters)) {
+          if (req.query[queryParam] !== undefined) filter[field] = req.query[queryParam];
+        }
+      }
+
+      // Rango de precio (?minPrice / ?maxPrice) sobre el campo numérico.
+      if (priceField) {
+        const priceFilter = {};
+        const min = parseFloat(req.query.minPrice);
+        const max = parseFloat(req.query.maxPrice);
+        if (Number.isFinite(min)) priceFilter.$gte = min;
+        if (Number.isFinite(max)) priceFilter.$lte = max;
+        if (Object.keys(priceFilter).length) filter[priceField] = priceFilter;
+      }
 
       // Filtro por usuario:
       //  - jefe   → opcional vía ?user=

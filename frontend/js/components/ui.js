@@ -34,10 +34,12 @@ const UI = (() => {
     const overlay = document.createElement('div');
     overlay.id = 'modal-overlay';
     overlay.style.cssText =
-      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;';
+      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;' +
+      '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);animation:modalFadeIn 0.25s ease-out;';
     const dialog = document.createElement('div');
     dialog.style.cssText =
-      `background:var(--white);border-radius:10px;width:100%;max-width:${size || 640}px;box-shadow:0 10px 40px rgba(0,0,0,0.25);`;
+      `background:var(--white);border-radius:10px;width:100%;max-width:${size || 640}px;box-shadow:0 10px 40px rgba(0,0,0,0.25);` +
+      'animation:modalScaleIn 0.3s cubic-bezier(0.16,1,0.3,1);';
     dialog.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
         <h3 style="margin:0;font-size:16px;">${title}</h3>

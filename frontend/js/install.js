@@ -83,10 +83,39 @@ window.AppInstall = (() => {
     if (okBtn) okBtn.addEventListener('click', () => UI.closeModal());
   }
 
+  function showAndroidInstructions() {
+    if (typeof UI === 'undefined') return;
+    UI.openModal({
+      title: 'Instalar la aplicación',
+      body: `
+        <ol style="margin:0;padding-left:20px;line-height:2;">
+          <li>Abre esta página en <strong>Google Chrome</strong> o <strong>Samsung Internet</strong>.</li>
+          <li>Toca el menú
+            <span style="display:inline-block;padding:1px 9px;border-radius:6px;background:#334155;color:#fff;font-weight:700;">&#8942;</span></li>
+          <li>Busca <strong>"Instalar aplicación"</strong> o <strong>"Agregar a pantalla de inicio"</strong>.</li>
+          <li>Confirma: se instalará como una app de pantalla completa.</li>
+        </ol>
+        <p class="text-muted" style="margin-bottom:0;">
+          ${installed
+            ? 'La aplicación ya está instalada en este dispositivo.'
+            : 'Si usas Samsung Internet, puedes pulsar el icono del menú y elegir "Agregar página a pantalla de inicio".'}
+        </p>
+      `,
+      footer: '<button class="btn btn-primary" type="button" data-ok>Entendido</button>',
+      size: 460,
+    });
+    const okBtn = document.querySelector('#modal-overlay [data-ok]');
+    if (okBtn) okBtn.addEventListener('click', () => UI.closeModal());
+  }
+
   function showManualHint() {
     if (typeof UI === 'undefined') return;
     if (isIOS || installed) {
       showIosInstructions();
+      return;
+    }
+    if (isAndroid) {
+      showAndroidInstructions();
       return;
     }
     showDesktopInstructions();

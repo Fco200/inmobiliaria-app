@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config();
+const https = require('https');
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
@@ -103,5 +104,17 @@ async function start() {
     console.error('Promesa rechazada sin capturar:', reason);
   });
 }
+
+
+// Cambia por tu URL pública de Render
+const APP_URL = 'https://inmobiliaria-app-lvn7.onrender.com';
+
+setInterval(() => {
+  https.get(APP_URL, (res) => {
+    console.log(`[Auto-Ping] Servidor activo. Status: ${res.statusCode}`);
+  }).on('error', (err) => {
+    console.error('[Auto-Ping Error]:', err.message);
+  });
+}, 10 * 60 * 1000); // Se ejecuta cada 10 minutos
 
 start();

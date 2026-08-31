@@ -62,11 +62,27 @@ window.ApiClient = (() => {
     localStorage.removeItem(LOGIN_AT_KEY);
   }
 
+  // Redirige a la pantalla de inicio de sesión si no hay sesión local válida.
+  // Devuelve true si hay sesión (para que el llamador continúe) y false si
+  // redirigió (el llamador debe detenerse).
+  function requireAuth(loginUrl) {
+    const url = loginUrl || 'index.html';
+    if (!isAuthenticated()) {
+      clearToken();
+      window.location.replace(url);
+      return false;
+    }
+    return true;
+  }
+
   function handleUnauthorized() {
+    // El servidor rechazó el token (401): se limpia localmente y se reutiliza
+    // requireAuth para volver al login sin tocar el comportamiento original
+    // (no redirigir si ya se está en la pantalla de inicio de sesión).
     clearToken();
     try {
       if (!window.location.pathname.endsWith('index.html') && window.location.pathname !== '/') {
-        window.location.replace('index.html');
+        requireAuth('index.html');
       }
     } catch (error) {
       window.location.href = 'index.html';
@@ -194,5 +210,6 @@ window.ApiClient = (() => {
     setLogin,
     isAuthenticated,
     isExpired,
+    requireAuth,
   };
 })();

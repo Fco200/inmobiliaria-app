@@ -8,6 +8,8 @@ window.API = {
     logout: () => ApiClient.post('/auth/logout'),
     checkRegisterKey: (body) => ApiClient.post('/auth/check-register-key', body),
     google: (body) => ApiClient.post('/auth/google', body),
+    completeOnboarding: () => ApiClient.patch('/auth/onboarding-complete'),
+    changePassword: (body) => ApiClient.post('/auth/change-password', body),
   },
 
   sessions: {
@@ -24,6 +26,7 @@ window.API = {
     setGoogleClientId: (body) => ApiClient.put('/settings/google-client-id', body),
     setWhatsappNumber: (body) => ApiClient.put('/settings/whatsapp-number', body),
     landing: (body) => ApiClient.put('/settings/landing', body),
+    support: (body) => ApiClient.put('/settings/support', body),
   },
 
   users: {

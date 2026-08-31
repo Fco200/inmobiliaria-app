@@ -20,6 +20,7 @@ window.AppShell = (() => {
     { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;' },
     { key: 'settings', label: 'Config', href: 'settings.html', icon: '&#9881;' },
+    { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;' },
   ];
 
   function currentUserRole() {
@@ -193,6 +194,40 @@ window.AppShell = (() => {
     right.insertBefore(btn, right.querySelector('#btn-notifications'));
   }
 
+  // Botón (?) de guía rápida en el encabezado, visible para todos. Reabre la
+  // guía de bienvenida on-demand sin importar si el usuario ya la completó.
+  function injectGuideButton() {
+    const right = document.querySelector('.topnav-right');
+    if (!right || right.querySelector('#btn-guide')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-guide';
+    btn.className = 'icon-btn guide-toggle';
+    btn.title = 'Guía rápida';
+    btn.setAttribute('aria-label', 'Guía rápida');
+    btn.innerHTML = '&#63;';
+    btn.addEventListener('click', () => {
+      if (window.Onboarding) {
+        window.Onboarding.show();
+      } else {
+        loadOnboarding(true);
+      }
+    });
+    right.insertBefore(btn, right.querySelector('#btn-theme'));
+  }
+
+  // Añade el logotipo de FV DIGITAL junto al de INMOBLES para mostrar la
+  // colaboración de marcas de forma permanente en el encabezado.
+  function injectBrandCollab() {
+    const brand = document.querySelector('.topnav-brand');
+    if (!brand || brand.querySelector('.topnav-brand-dev')) return;
+    const dev = document.createElement('img');
+    dev.className = 'topnav-brand-dev';
+    dev.src = 'fv_digital_logo.png.webp';
+    dev.alt = 'FV DIGITAL';
+    dev.title = 'Desarrollado por FV DIGITAL';
+    brand.appendChild(dev);
+  }
+
   function startClock() {
     const right = document.querySelector('.topnav-right');
     if (!right || right.querySelector('#topbar-clock')) return;
@@ -317,12 +352,48 @@ window.AppShell = (() => {
   // Carga el módulo de onboarding (guía rápida de bienvenida). Se inyecta al
   // vuelo; cuando el script está listo, se llama inmediatamente a maybeShow()
   // para no perder la oportunidad si init() terminó antes de la carga.
-  function loadOnboarding() {
+  function loadOnboarding(forceShow) {
     if (!window.ApiClient.isAuthenticated()) return;
     const script = document.createElement('script');
     script.src = 'js/onboarding.js';
     script.onload = () => {
-      if (window.Onboarding) window.Onboarding.maybeShow();
+      if (!window.Onboarding) return;
+      if (forceShow) window.Onboarding.show();
+      else window.Onboarding.maybeShow();
+    };
+    document.head.appendChild(script);
+  }
+
+  // Carga el módulo de bienvenida (mensaje motivacional con animaciones).
+  // Para usuarios nuevos preceden a la guía; para los demás se muestra una vez
+  // por día por navegador.
+  function loadWelcome() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    if (document.getElementById('welcome-loaded')) return;
+    const marker = document.createElement('span');
+    marker.id = 'welcome-loaded';
+    marker.style.display = 'none';
+    document.body.appendChild(marker);
+    const script = document.createElement('script');
+    script.src = 'js/welcome.js';
+    script.onload = () => {
+      if (!window.Welcome) return;
+      const user = window.ApiClient.getStoredUser() || {};
+      const isNew = !user.hasCompletedOnboarding;
+      // Para nuevos, el welcome se muestra primero y al cerrarse dispara la guía.
+      // La bandera "visto hoy" evita repetirlo al navegar entre páginas.
+      if (isNew) {
+        if (!localStorage.getItem('crm_welcome_seen')) {
+          window.Welcome.open({
+            onClose: () => {
+              if (window.Onboarding) window.Onboarding.maybeShow();
+              else loadOnboarding();
+            },
+          });
+        }
+      } else {
+        window.Welcome.maybeShow();
+      }
     };
     document.head.appendChild(script);
   }
@@ -396,14 +467,15 @@ window.AppShell = (() => {
   }
 
   // Reabre la guía rápida de bienvenida cuando el usuario la pide desde
-  // ajustes. Onboarding se carga de forma asíncrona (loadOnboarding), por lo
-  // que si el script aún no llegó se fuerza su carga antes de mostrarlo.
+  // ajustes o el botón (?). Onboarding se carga de forma asíncrona
+  // (loadOnboarding), por lo que si el script aún no llegó se fuerza su carga
+  // antes de mostrarlo.
   function reopenOnboarding() {
     if (window.Onboarding) {
       window.Onboarding.show();
       return;
     }
-    loadOnboarding();
+    loadOnboarding(true);
   }
 
   async function logout() {
@@ -474,10 +546,13 @@ window.AppShell = (() => {
     registerServiceWorker();
     renderNav();
     updateTopnavUser();
+    injectBrandCollab();
     injectThemeButton();
+    injectGuideButton();
     startClock();
     injectAssistant();
     loadRealtime();
+    loadWelcome();
     loadOnboarding();
     injectActivityFab();
 
@@ -505,9 +580,10 @@ window.AppShell = (() => {
 
     renderPage();
 
-    // Tras el primer render se da una oportunidad al onboarding (si aplica) y
-    // al banner de avisos con un pequeño retardo para no pisar la animación.
-    window.Onboarding && window.Onboarding.maybeShow();
+    // Tras el primer render se da la oportunidad al banner de avisos con un
+    // pequeño retardo para no pisar ninguna animación de entrada. (La guía de
+    // bienvenida y el mensaje motivacional se disparan desde loadWelcome /
+    // loadOnboarding según corresponda).
     setTimeout(() => { maybeShowAnnouncementBanner(); }, 400);
   }
 

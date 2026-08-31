@@ -10,6 +10,8 @@ const {
   register,
   checkRegisterKey,
   registerGoogle,
+  completeOnboarding,
+  changePassword,
 } = require('../controllers/auth.controller');
 const { protect } = require('../middlewares/auth');
 const { loginRules, registerRules, updateMeRules } = require('../validators/auth.validators');
@@ -37,5 +39,7 @@ router.post('/google', authLimiter, registerGoogle);
 router.get('/me', protect, me);
 router.put('/me', protect, updateMeRules, updateMe);
 router.post('/logout', protect, logout);
+router.patch('/onboarding-complete', protect, completeOnboarding);
+router.post('/change-password', protect, changePassword);
 
 module.exports = router;

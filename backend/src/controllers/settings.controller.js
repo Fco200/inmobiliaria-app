@@ -10,6 +10,14 @@ const GOOGLE_SETTING = 'GOOGLE_CLIENT_ID';
 const WHATSAPP_SETTING = 'whatsapp.number';
 const COUNTRY_CODE_SETTING = 'whatsapp.countryCode';
 const AGENCY_NAME_SETTING = 'business.agencyName';
+const SUPPORT_WHATSAPP_SETTING = 'support.whatsapp';
+const SUPPORT_NAME_SETTING = 'support.name';
+const SUPPORT_TITLE_SETTING = 'support.title';
+const SUPPORT_PHOTO_SETTING = 'support.photo';
+const SUPPORT_EMAIL_SETTING = 'support.email';
+const SUPPORT_FACEBOOK_SETTING = 'support.facebook';
+const SUPPORT_INSTAGRAM_SETTING = 'support.instagram';
+const SUPPORT_INTRO_SETTING = 'support.intro';
 
 const LANDING_SETTINGS = {
   heroTitle: { key: 'landing.heroTitle', group: 'landing', description: 'Título del encabezado del catálogo público.' },
@@ -95,6 +103,17 @@ const getPublicSettings = asyncHandler(async (req, res) => {
   const whatsapp = await Setting.findOne({ key: WHATSAPP_SETTING });
   const agencyName = await readSetting(AGENCY_NAME_SETTING);
 
+  const support = {
+    whatsapp: (await readSetting(SUPPORT_WHATSAPP_SETTING)) || (whatsapp && whatsapp.value) || '',
+    name: (await readSetting(SUPPORT_NAME_SETTING)) || 'Soporte',
+    title: (await readSetting(SUPPORT_TITLE_SETTING)) || 'Atención a clientes y equipo',
+    photo: (await readSetting(SUPPORT_PHOTO_SETTING)) || '',
+    email: (await readSetting(SUPPORT_EMAIL_SETTING)) || '',
+    facebook: (await readSetting(SUPPORT_FACEBOOK_SETTING)) || '',
+    instagram: (await readSetting(SUPPORT_INSTAGRAM_SETTING)) || '',
+    intro: (await readSetting(SUPPORT_INTRO_SETTING)) || '¿Necesitas ayuda? Escríbenos y con gusto te atendemos.',
+  };
+
   const landing = {};
   for (const name of Object.keys(LANDING_SETTINGS)) {
     const raw = await readSetting(LANDING_SETTINGS[name].key);
@@ -115,6 +134,7 @@ const getPublicSettings = asyncHandler(async (req, res) => {
       // Configuración del catálogo público (editable desde Configuración).
       agencyName: agencyName || '',
       landing,
+      support,
     },
   });
 });
@@ -212,6 +232,41 @@ const setGoogleClientId = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Google Client ID guardado.' });
 });
 
+const setSupport = asyncHandler(async (req, res) => {
+  const body = req.body || {};
+
+  const fields = [
+    { key: SUPPORT_WHATSAPP_SETTING, prop: 'whatsapp', group: 'soporte', desc: 'WhatsApp de soporte' },
+    { key: SUPPORT_NAME_SETTING, prop: 'name', group: 'soporte', desc: 'Nombre del soporte' },
+    { key: SUPPORT_TITLE_SETTING, prop: 'title', group: 'soporte', desc: 'Título/cargo del soporte' },
+    { key: SUPPORT_PHOTO_SETTING, prop: 'photo', group: 'soporte', desc: 'Foto del soporte' },
+    { key: SUPPORT_EMAIL_SETTING, prop: 'email', group: 'soporte', desc: 'Correo de soporte' },
+    { key: SUPPORT_FACEBOOK_SETTING, prop: 'facebook', group: 'soporte', desc: 'Facebook de soporte' },
+    { key: SUPPORT_INSTAGRAM_SETTING, prop: 'instagram', group: 'soporte', desc: 'Instagram de soporte' },
+    { key: SUPPORT_INTRO_SETTING, prop: 'intro', group: 'soporte', desc: 'Mensaje de introducción del soporte' },
+  ];
+
+  for (const f of fields) {
+    if (body[f.prop] === undefined) continue;
+    let value = body[f.prop];
+    if (value === null) value = '';
+    await writeSetting(f.key, String(value).trim(), f.group, f.desc, req.user._id);
+  }
+
+  await logAudit({
+    user: req.user._id,
+    action: 'update_setting',
+    entity: 'Setting',
+    entityId: 'support',
+    field: 'config',
+    previousValue: '[configuración anterior]',
+    newValue: '[nueva configuración]',
+    ip: req.ip,
+  });
+
+  res.json({ success: true, message: 'Configuración de soporte guardada.' });
+});
+
 module.exports = {
   getRoleKeyStatus,
   setRoleKey,
@@ -219,4 +274,5 @@ module.exports = {
   setGoogleClientId,
   setWhatsappNumber,
   setLanding,
+  setSupport,
 };

@@ -16,5 +16,6 @@ router.put('/role-key', settingsController.setRoleKey);
 router.put('/google-client-id', settingsController.setGoogleClientId);
 router.put('/whatsapp-number', settingsController.setWhatsappNumber);
 router.put('/landing', settingsController.setLanding);
+router.put('/support', settingsController.setSupport);
 
 module.exports = router;

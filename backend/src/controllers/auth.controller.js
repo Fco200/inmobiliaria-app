@@ -52,6 +52,7 @@ function buildUserResponse(user) {
     status: user.status,
     joinedAt: user.joinedAt,
     lastLoginAt: user.lastLoginAt,
+    hasCompletedOnboarding: user.hasCompletedOnboarding || false,
   };
 }
 
@@ -344,4 +345,41 @@ const registerGoogle = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle };
+const completeOnboarding = asyncHandler(async (req, res) => {
+  req.user.hasCompletedOnboarding = true;
+  await req.user.save({ validateBeforeSave: false });
+  res.json({ success: true, message: 'Onboarding completado' });
+});
+
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: 'La contraseña actual y la nueva contraseña son obligatorias.' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ success: false, message: 'La nueva contraseña debe tener al menos 8 caracteres.' });
+  }
+  if (!/[A-Z]/.test(newPassword)) {
+    return res.status(400).json({ success: false, message: 'La nueva contraseña debe incluir al menos una mayúscula.' });
+  }
+  if (!/[a-z]/.test(newPassword)) {
+    return res.status(400).json({ success: false, message: 'La nueva contraseña debe incluir al menos una minúscula.' });
+  }
+  if (!/\d/.test(newPassword)) {
+    return res.status(400).json({ success: false, message: 'La nueva contraseña debe incluir al menos un número.' });
+  }
+
+  const user = await User.findById(req.user._id).select('+password');
+  if (!(await user.comparePassword(currentPassword))) {
+    return res.status(401).json({ success: false, message: 'La contraseña actual es incorrecta.' });
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  res.json({ success: true, message: 'Contraseña actualizada correctamente' });
+});
+
+module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword };

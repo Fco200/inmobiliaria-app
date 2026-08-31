@@ -1,11 +1,12 @@
 // Onboarding: guía rápida de bienvenida en 5 pasos.
-// Se muestra una única vez por sesión y puede omitirse permanentemente
-// (checkbox "No volver a mostrar"). Se reabre desde ajustes con
-// App.reopenOnboarding().
+// Se muestra automáticamente a los USUARIOS NUEVOS en su primera sesión
+// (cuando el backend reporta hasCompletedOnboarding=false) y puede reabrirse
+// desde el botón '?' del encabezado o desde Ayuda en cualquier momento.
+// Al terminar, se marca en el backend para no volver a mostrarse sola.
 window.Onboarding = (() => {
   'use strict';
 
-  const LS_KEY = 'crm_welcome_dismissed';
+  const LS_SESSION_KEY = 'crm_onboarding_session';
 
   const STEPS = [
     {
@@ -29,23 +30,31 @@ window.Onboarding = (() => {
       text: 'Usa los formatos rápidos (p. ej. la Hoja de Visita) y genera documentos oficiales con tu firma digital.',
     },
     {
-      icon: '&#128640;',
+      icon: '&#128737;',
+      title: 'Ayuda y soporte',
+      text: 'En el módulo de Ayuda encuentras soporte por WhatsApp, la guía y el cambio de contraseña.',
+    },
+    {
+      icon: '&#127881;',
       title: 'Estás listo',
-      text: 'Haz clic en Finalizar para empezar a operar. Desde Ajustes puedes ver esta guía cuando quieras.',
+      text: 'Haz clic en Finalizar para empezar a operar. Desde Ayuda o el botón (?) puedes ver esta guía cuando quieras.',
     },
   ];
 
   let active = false;
   let presented = false;
 
-  function isDismissed() {
-    let raw = null;
-    try { raw = localStorage.getItem(LS_KEY); } catch (error) {}
-    return raw === '1';
+  function isNewUser() {
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
+    return !user.hasCompletedOnboarding;
   }
 
-  function dismissForever() {
-    try { localStorage.setItem(LS_KEY, '1'); } catch (error) {}
+  function isShownThisSession() {
+    try { return localStorage.getItem(LS_SESSION_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function markShownThisSession() {
+    try { localStorage.setItem(LS_SESSION_KEY, '1'); } catch (e) {}
   }
 
   function renderStep(step, refs) {
@@ -63,16 +72,15 @@ window.Onboarding = (() => {
     refs.btnNext.textContent = step === STEPS.length - 1 ? 'Finalizar' : 'Siguiente';
   }
 
-  function openGuide() {
+  function openGuide(opts) {
     if (active) return;
     active = true;
 
+    const isFirst = !!(opts && opts.firstLogin) || isNewUser();
+
     const footer = `
       <button class="btn btn-secondary" type="button" data-prev>Anterior</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-right:auto;cursor:pointer;">
-        <input type="checkbox" data-dontshow> No volver a mostrar
-      </label>
-      <button class="btn btn-secondary" type="button" data-skip>Saltar</button>
+      <button class="btn btn-secondary" type="button" data-skip>${isFirst ? 'Saltar por ahora' : 'Cerrar'}</button>
       <button class="btn btn-primary" type="button" data-next>Siguiente</button>
     `;
 
@@ -96,12 +104,27 @@ window.Onboarding = (() => {
     };
     let step = 0;
 
-    const close = () => { UI.closeModal(); active = false; };
+    const finish = async () => {
+      markShownThisSession();
+      if (isNewUser() && window.ApiClient && window.API && window.API.auth && window.API.auth.completeOnboarding) {
+        try {
+          await window.API.auth.completeOnboarding();
+          const stored = window.ApiClient.getStoredUser();
+          if (stored) {
+            stored.hasCompletedOnboarding = true;
+            try { localStorage.setItem('crm_user', JSON.stringify(stored)); } catch (e) {}
+          }
+        } catch (e) { /* sin conexión: se reintenta la próxima vez */ }
+      }
+    };
+
+    const close = async () => {
+      await finish();
+      UI.closeModal();
+      active = false;
+    };
 
     overlay.querySelector('[data-skip]').addEventListener('click', close);
-    overlay.querySelector('[data-dontshow]').addEventListener('change', (e) => {
-      if (e.target.checked) dismissForever();
-    });
     refs.btnPrev.addEventListener('click', () => {
       if (step > 0) { step -= 1; renderStep(step, refs); }
     });
@@ -113,16 +136,31 @@ window.Onboarding = (() => {
     renderStep(step, refs);
   }
 
+  // Muestra automáticamente solo a usuarios nuevos que aún no culminan la guía.
   function maybeShow() {
     if (presented) return;
     presented = true;
-    if (isDismissed()) return;
-    openGuide();
+    if (!isNewUser()) return;
+    if (isShownThisSession()) return;
+    // No abrir la guía encima del mensaje de bienvenida si aún está visible.
+    if (document.getElementById('welcome-overlay')) {
+      // Se reintenta cuando el overlay de bienvenida se cierre.
+      const observer = new MutationObserver(() => {
+        if (!document.getElementById('welcome-overlay')) {
+          observer.disconnect();
+          presented = false;
+          maybeShow();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: false });
+      return;
+    }
+    markShownThisSession();
+    openGuide({ firstLogin: true });
   }
 
-  // Forzado desde ajustes: ignora la bandera de sesión pero no el "no volver".
+  // Forzado desde el botón (?) o Ayuda: siempre abierto, sin condición de nuevo usuario.
   function show() {
-    if (isDismissed()) return;
     presented = true;
     openGuide();
   }

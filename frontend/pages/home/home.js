@@ -83,6 +83,7 @@ window.Pages.home = {
       { key: 'management', label: 'Reportes gerencia', desc: 'Panorama ejecutivo', href: 'management.html', icon: '&#128200;' },
       { key: 'settings', label: 'Configuración', desc: 'Opciones del sistema', href: 'settings.html', icon: '&#9881;' },
       { key: 'profile', label: 'Mi perfil', desc: 'Datos de tu cuenta', href: 'profile.html', icon: '&#128100;' },
+      { key: 'ayuda', label: 'Ayuda y soporte', desc: 'Soporte, guía y contraseña', href: 'ayuda.html', icon: '&#128172;' },
     ];
 
     const kpiCards = KPIS.map(

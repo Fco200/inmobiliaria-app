@@ -41,6 +41,7 @@ window.Pages.settings = {
         <button class="btn btn-secondary" data-tab="alerts" type="button">&#128276;&nbsp; Avisos</button>
         <button class="btn btn-secondary" data-tab="sessions" type="button">&#128275;&nbsp; Sesiones</button>
         <button class="btn btn-secondary" data-tab="catalog" type="button">&#127760;&nbsp; Catálogo público</button>
+        <button class="btn btn-secondary" data-tab="support" type="button">&#128172;&nbsp; Soporte</button>
         <button class="btn btn-secondary" data-tab="activity" type="button">&#128221;&nbsp; Actividad del sistema</button>
       </div>
       <div id="tab-content"></div>
@@ -60,6 +61,7 @@ window.Pages.settings = {
         else if (btn.dataset.tab === 'alerts') renderAlerts();
         else if (btn.dataset.tab === 'sessions') renderSessions();
         else if (btn.dataset.tab === 'catalog') renderCatalog();
+        else if (btn.dataset.tab === 'support') renderSupport();
         else renderActivity();
       });
     });
@@ -445,6 +447,60 @@ window.Pages.settings = {
             } catch (error) {
               googleStatus.textContent = '';
               UI.toast(error.message, 'error');
+            }
+          });
+        })
+        .catch((error) => {
+          tabContent.innerHTML = UI.errorAlert(error.message);
+        });
+    }
+
+    function renderSupport() {
+      tabContent.innerHTML = '<div class="loading">Cargando configuración de soporte...</div>';
+      API.settings.public()
+        .then((settings) => {
+          const s = settings.support || {};
+          tabContent.innerHTML = `
+            <div class="card">
+              <h3 style="margin-top:0;">&#128172;&nbsp; Configuración de soporte</h3>
+              <p class="text-muted" style="font-size:13px;">
+                Estos datos se muestran en el módulo <strong>Ayuda</strong> para todos los usuarios del sistema.
+                Incluye tu WhatsApp, tu foto y tus redes para que el equipo sepa a quién acudir.
+              </p>
+              <form id="support-form">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
+                  ${UI.field('name', 'Nombre del soporte', { type: 'text', value: s.name || '', placeholder: 'Ej. Juan Pérez', hint: 'Quién atiende el soporte' })}
+                  ${UI.field('title', 'Cargo / Título', { type: 'text', value: s.title || '', placeholder: 'Ej. Gerente general' })}
+                  ${UI.field('whatsapp', 'WhatsApp (con código de país)', { type: 'text', value: s.whatsapp || '', placeholder: 'Ej. 5216625374491', hint: 'Solo dígitos' })}
+                  ${UI.field('email', 'Correo de soporte', { type: 'email', value: s.email || '', placeholder: 'soporte@inmobles.com' })}
+                  ${UI.field('facebook', 'Facebook', { type: 'text', value: s.facebook || '', placeholder: 'https://facebook.com/...' })}
+                  ${UI.field('instagram', 'Instagram', { type: 'text', value: s.instagram || '', placeholder: 'https://instagram.com/...' })}
+                  ${UI.field('photo', 'URL de la foto', { type: 'text', value: s.photo || '', hint: 'Pega una URL pública de tu foto' })}
+                  ${UI.field('intro', 'Mensaje de introducción', { type: 'text', value: s.intro || '', full: true, placeholder: '¿Necesitas ayuda? Escríbenos...' })}
+                </div>
+                <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+                  <button class="btn btn-primary" type="submit">Guardar cambios</button>
+                  <a class="btn btn-secondary" href="ayuda.html">Ver página de ayuda</a>
+                </div>
+              </form>
+            </div>
+          `;
+
+          const form = tabContent.querySelector('#support-form');
+          if (form) form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const values = UI.collectForm(form);
+            const btn = form.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.classList.add('loading');
+            try {
+              await API.settings.support(values);
+              UI.toast('Configuración de soporte guardada', 'success');
+              renderSupport();
+            } catch (error) {
+              UI.toast(error.message, 'error');
+              btn.disabled = false;
+              btn.classList.remove('loading');
             }
           });
         })

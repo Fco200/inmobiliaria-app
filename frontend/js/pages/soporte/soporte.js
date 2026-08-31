@@ -546,6 +546,37 @@ window.SoportePanel = (() => {
     }
   }
 
+  async function renderSolicitudesPassword() {
+    const box = document.getElementById('solicitudes-password-container');
+    if (!box) return;
+    box.innerHTML = '<div class="sp-empty">Cargando solicitudes…</div>';
+    try {
+      const solicitudes = await window.API.soporte.solicitudesPassword();
+      if (!solicitudes.length) {
+        box.innerHTML = '<div class="sp-empty">No hay solicitudes de restablecimiento.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <div class="sp-table-wrap">
+          <table class="mega-table">
+            <thead><tr><th>Asesor</th><th>Usuario / Correo</th><th>Fecha</th><th>Estado</th></tr></thead>
+            <tbody>
+              ${solicitudes.map((s) => `
+                <tr>
+                  <td><strong>${escapeHtml((s.data && s.data.nombre) || '—')}</strong></td>
+                  <td>${escapeHtml((s.data && s.data.usuario) || '—')}</td>
+                  <td>${fmtDate(s.createdAt)}</td>
+                  <td>${s.read ? '<span class="prio prio-normal">Atendida</span>' : '<span class="prio prio-importante">Pendiente</span>'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
   function initAnuncios() {
     const form = document.getElementById('anuncio-form');
     if (form) form.addEventListener('submit', async (e) => {
@@ -568,6 +599,7 @@ window.SoportePanel = (() => {
       }
     });
     renderAnuncios();
+    renderSolicitudesPassword();
   }
 
   // ── Pestaña Roles y Permisos ──────────────────────────────────────────────
@@ -874,6 +906,10 @@ window.SoportePanel = (() => {
   }
 
   async function loadChatList(silent) {
+    const textEl = document.getElementById('sp-chat-text');
+    // No interrumpir al usuario mientras escribe en un refresco silencioso.
+    if (silent && textEl && document.activeElement === textEl) return;
+
     if (!silent) {
       const loading = document.getElementById('sp-chat-loading');
       if (loading) loading.style.display = 'flex';

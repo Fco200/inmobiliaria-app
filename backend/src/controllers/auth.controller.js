@@ -17,6 +17,7 @@ const {
   createSession,
   revokeSessionByToken,
 } = require('../services/session.service');
+const { ensure } = require('../services/notification.service');
 
 const signToken = (userId, expiresIn = jwtExpiresIn) =>
   jwt.sign({ id: userId }, jwtSecret, { expiresIn });
@@ -382,4 +383,74 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Contraseña actualizada correctamente' });
 });
 
-module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword };
+// Solicitud pública de restablecimiento de contraseña. No autentica al usuario:
+// avisa por notificación al administrador y al soporte técnico (superadmin)
+// para que ayuden a restablecer la contraseña del asesor. Se responde de forma
+// genérica para no revelar qué cuentas existen realmente.
+const forgotPassword = asyncHandler(async (req, res) => {
+  const identifier = String((req.body && req.body.identifier) || '').trim();
+  if (!identifier) {
+    return res.status(400).json({ success: false, message: 'Ingresa tu usuario o correo.' });
+  }
+
+  const lower = identifier.toLowerCase();
+  const user = await User.findOne({
+    $or: [{ email: lower }, { username: lower }],
+  }).populate('role');
+
+  // Destinatarios: administradores y soporte técnico (superadmin).
+  const [adminRole, supportRole] = await Promise.all([
+    Role.findOne({ code: 'admin' }),
+    Role.findOne({ code: 'superadmin' }),
+  ]);
+  const roleIds = [adminRole && adminRole._id, supportRole && supportRole._id].filter(Boolean);
+  const recipients = roleIds.length
+    ? await User.find({ role: { $in: roleIds }, status: 'activo' }).populate('role')
+    : [];
+
+  const requesterText = user
+    ? `${user.name || ''} (${user.email || identifier})`.trim()
+    : identifier;
+  const title = 'Solicitud de restablecimiento de contraseña';
+  const message =
+    `${requesterText} olvidó su contraseña y solicita que se la restablezcan.` +
+    ' Por favor, genera una nueva contraseña para esta cuenta.';
+
+  for (const recipient of recipients) {
+    try {
+      await ensure({
+        type: 'olvido_contraseña',
+        key: `forgot-${user ? user._id : 'anon'}-${Date.now()}`,
+        title,
+        message,
+        userId: recipient._id,
+        data: {
+          usuario: user ? user.email : identifier,
+          nombre: user ? user.name : '',
+          solicitadoPor: user ? user._id : null,
+        },
+      });
+    } catch (err) {
+      console.error(`[ForgotPassword] Error notificando a ${recipient._id}:`, err.message);
+    }
+  }
+
+  try {
+    await logActivity({
+      entityType: 'User',
+      entityId: user ? user._id : null,
+      user: user ? user._id : null,
+      action: 'forgot_password',
+      message: `Solicitud de restablecimiento de contraseña para ${requesterText}`,
+    });
+  } catch (err) { /* no bloquea la respuesta */ }
+
+  res.json({
+    success: true,
+    message:
+      'Si el usuario existe, ya se avisó al administrador y al soporte para restablecer tu contraseña.',
+    data: { notified: recipients.length > 0 },
+  });
+});
+
+module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword, forgotPassword };

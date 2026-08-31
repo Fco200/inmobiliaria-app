@@ -24,6 +24,7 @@ const {
   Expense,
   Document,
   Announcement,
+  Notification,
   Session,
   Chat,
 } = require('../models');
@@ -440,6 +441,15 @@ const listarAnuncios = asyncHandler(async (req, res) => {
   res.json({ success: true, data: anuncios });
 });
 
+// Solicitudes de "olvidé mi contraseña" recibidas por el soporte (superadmin).
+const listarSolicitudesPassword = asyncHandler(async (req, res) => {
+  const solicitudes = await Notification.find({ user: req.user._id, type: 'olvido_contraseña' })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  res.json({ success: true, data: solicitudes });
+});
+
 const crearAnuncio = asyncHandler(async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim().slice(0, 200);
   const message = String((req.body && req.body.message) || '').trim().slice(0, 2000);
@@ -770,6 +780,7 @@ module.exports = {
   listarAnuncios,
   crearAnuncio,
   eliminarAnuncio,
+  listarSolicitudesPassword,
   listarRolesPermisos,
   listarLogs,
   generarRespaldo,

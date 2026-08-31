@@ -21,6 +21,7 @@ const {
   listarAnuncios,
   crearAnuncio,
   eliminarAnuncio,
+  listarSolicitudesPassword,
   listarRolesPermisos,
   listarLogs,
   generarRespaldo,
@@ -66,6 +67,7 @@ router.delete('/sesiones/usuario/:id', requireSoporte, revocarSesionesUsuarioSop
 router.get('/anuncios', requireSoporte, listarAnuncios);
 router.post('/anuncios', requireSoporte, crearAnuncio);
 router.delete('/anuncios/:id', requireSoporte, eliminarAnuncio);
+router.get('/anuncios/solicitudes-password', requireSoporte, listarSolicitudesPassword);
 
 // Roles y permisos
 router.get('/roles-permisos', requireSoporte, listarRolesPermisos);

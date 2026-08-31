@@ -12,6 +12,7 @@ const {
   registerGoogle,
   completeOnboarding,
   changePassword,
+  forgotPassword,
 } = require('../controllers/auth.controller');
 const { protect } = require('../middlewares/auth');
 const { loginRules, registerRules, updateMeRules } = require('../validators/auth.validators');
@@ -36,6 +37,7 @@ router.post('/login', authLimiter, loginRules, login);
 router.post('/register', authLimiter, registerRules, register);
 router.post('/check-register-key', authLimiter, checkRegisterKey);
 router.post('/google', authLimiter, registerGoogle);
+router.post('/forgot-password', authLimiter, forgotPassword);
 router.get('/me', protect, me);
 router.put('/me', protect, updateMeRules, updateMe);
 router.post('/logout', protect, logout);

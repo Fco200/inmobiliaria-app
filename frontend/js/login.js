@@ -327,6 +327,104 @@ window.LoginPage = (() => {
     }
   }
 
+  // ---- Restablecer contraseña (¿Olvidaste tu contraseña?) ----
+
+  function forgotPasswordFlow() {
+    const btn = document.getElementById('btn-forgot-password');
+    if (!btn) return;
+
+    const SUPPORT_EMAIL = 'FranciscoAguayo2005@gmail.com';
+
+    btn.addEventListener('click', () => {
+      const currentIdentifier = (document.getElementById('identifier') || {}).value || '';
+      const modal = UI.openModal({
+        title: '&#128274;&nbsp; Restablecer contraseña',
+        size: 480,
+        body: `
+          <p style="margin:0 0 14px;" class="text-muted">Ingresa tu usuario o correo de la cuenta. Avisaremos al administrador y al soporte técnico para que te ayuden a restablecerla.</p>
+          <div class="form-group">
+            <label for="fp-identifier">Usuario o correo</label>
+            <input class="form-control" id="fp-identifier" type="text" value="${UI.escapeHtml(currentIdentifier)}" placeholder="usuario o correo@ejemplo.com" autofocus>
+          </div>
+          <div id="fp-error" class="alert alert-error hide" role="alert"></div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>&#10148;&nbsp; Enviar solicitud</button>
+        `,
+      });
+
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+
+      const input = bodyEl.querySelector('#fp-identifier');
+      const errBox = bodyEl.querySelector('#fp-error');
+      const okBtn = overlay.querySelector('[data-ok]');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      if (okBtn) {
+        okBtn.addEventListener('click', async () => {
+          const identifier = (input.value || '').trim();
+          if (!identifier) {
+            errBox.textContent = 'Ingresa tu usuario o correo.';
+            errBox.classList.remove('hide');
+            return;
+          }
+          errBox.classList.add('hide');
+          okBtn.disabled = true;
+          try {
+            await window.API.auth.forgotPassword({ identifier });
+            UI.closeModal();
+            showResetInstructions(identifier);
+          } catch (error) {
+            okBtn.disabled = false;
+            errBox.textContent = error.message || 'No se pudo enviar la solicitud. Intenta de nuevo.';
+            errBox.classList.remove('hide');
+          }
+        });
+      }
+      if (input) {
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && okBtn) okBtn.click();
+        });
+      }
+    });
+
+    // El primer paso ya notificó a administrador y soporte. Al cerrar esa ventana,
+    // se pide al asesor enviar un correo al soporte para restablecer la contraseña,
+    // con botón funcional que abre su correo con un mensaje preestablecido.
+    function showResetInstructions(identifier) {
+      const subject = 'Solicitud de restablecimiento de contraseña - INMOBLES';
+      const body =
+        'Hola, soy asesor de INMOBLES y olvidé mi contraseña.\n\n' +
+        `Mi usuario o correo es: ${identifier}\n\n` +
+        'Solicito que me ayuden a restablecerla. ¡Gracias!';
+      const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+      const modal = UI.openModal({
+        title: '&#9993;&nbsp; Restablecer contraseña',
+        size: 520,
+        body: `
+          <p style="margin:0 0 10px;">Ya avisamos al <strong>administrador</strong> y al <strong>soporte técnico</strong> sobre tu solicitud.</p>
+          <p style="margin:0 0 14px;" class="text-muted">Para que puedan restablecer tu contraseña, envía ahora un correo al soporte con tus datos. Al hacer clic en el botón se abrirá tu correo con el mensaje ya redactado.</p>
+          <div style="background:#faf8fd;border:1px solid #f0edf3;border-radius:12px;padding:12px 14px;font-size:13px;color:#3d3560;word-break:break-all;">${UI.escapeHtml(mailto)}</div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
+          <a class="btn btn-primary" href="${mailto}" target="_blank" rel="noopener" data-mail>&#128231;&nbsp; Abrir correo al soporte</a>
+        `,
+      });
+
+      const overlay = modal.bodyEl.closest('#modal-overlay');
+      if (overlay) {
+        const closeBtn = overlay.querySelector('[data-cancel]');
+        if (closeBtn) closeBtn.addEventListener('click', () => UI.closeModal());
+      }
+    }
+  }
+
   function setup() {
     registerServiceWorker();
 
@@ -340,6 +438,8 @@ window.LoginPage = (() => {
 
     const form = document.getElementById('login-form');
     if (form) form.addEventListener('submit', submit);
+
+    forgotPasswordFlow();
 
     const toggle = document.getElementById('btn-toggle-password');
     const password = document.getElementById('password');

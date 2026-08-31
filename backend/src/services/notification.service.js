@@ -247,4 +247,4 @@ async function generateForAllUsers() {
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers, setIo };
+module.exports = { generateForUser, generateForAllUsers, setIo, ensure };

@@ -31,6 +31,7 @@ const notificationSchema = new mongoose.Schema(
         'propiedad_apartada',
         'nueva_propiedad',
         'nuevo_mensaje_chat',
+        'olvido_contraseña',
         'sistema',
       ],
       default: 'sistema',

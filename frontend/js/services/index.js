@@ -10,6 +10,7 @@ window.API = {
     google: (body) => ApiClient.post('/auth/google', body),
     completeOnboarding: () => ApiClient.patch('/auth/onboarding-complete'),
     changePassword: (body) => ApiClient.post('/auth/change-password', body),
+    forgotPassword: (body) => ApiClient.post('/auth/forgot-password', body),
   },
 
   sessions: {
@@ -255,6 +256,7 @@ window.API = {
     anuncios: () => soporteJson('/soporte/anuncios'),
     crearAnuncio: (body) => soporteJson('/soporte/anuncios', { method: 'POST', body }),
     eliminarAnuncio: (id) => soporteJson(`/soporte/anuncios/${id}`, { method: 'DELETE' }),
+    solicitudesPassword: () => soporteJson('/soporte/anuncios/solicitudes-password'),
 
     rolesPermisos: () => soporteJson('/soporte/roles-permisos'),
 

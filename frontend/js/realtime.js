@@ -81,8 +81,9 @@ window.Realtime = (() => {
     const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
     if (authorId && String(authorId) === String(currentUserId())) return;
 
+    // Motivo: la notificación/aviso NO se marca como leída aquí. El usuario la
+    // verá como clicable y, al abrir el detalle, se marcará como leída vía API.
     markSeen(announcement._id);
-    markReadServer(announcement._id);
 
     const palette = {
       normal: { color: '#5B2D8E', soft: '#f3e8ff' },
@@ -103,22 +104,68 @@ window.Realtime = (() => {
           <strong style="font-size:15px;color:${p.color};">&#128276; Nuevo aviso del equipo</strong>
           <span style="background:${p.soft};color:${p.color};font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;text-transform:uppercase;">${UI.escapeHtml(announcement.priority || 'normal')}</span>
         </div>
-        <div style="padding:24px 22px;">
+        <div style="padding:22px 22px 6px;cursor:pointer;" data-detail>
           <h3 style="margin:0 0 12px;font-size:19px;line-height:1.3;color:#1f1b2e;">${UI.escapeHtml(announcement.title)}</h3>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(announcement.message)}</p>
-          <div style="font-size:12px;color:#9088ab;">${UI.escapeHtml(authorName)}${date ? ` · ${date}` : ''}</div>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${UI.escapeHtml(announcement.message)}</p>
         </div>
-        <div style="padding:14px 22px;background:#faf8fd;text-align:right;">
-          <button class="btn btn-primary" type="button" data-ok>Entendido</button>
+        <div style="padding:6px 22px 0;font-size:12px;color:#9088ab;">${UI.escapeHtml(authorName)}${date ? ` · ${date}` : ''}</div>
+        <div style="padding:14px 22px;background:#faf8fd;display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn btn-sm" type="button" data-cerrar>Cerrar</button>
+          <button class="btn btn-primary" type="button" data-detail>Ver detalle</button>
         </div>
       </div>`;
 
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay || e.target.closest('[data-ok]')) {
+      if (e.target === overlay || e.target.closest('[data-cerrar]')) {
         overlay.remove();
+      } else if (e.target.closest('[data-detail]')) {
+        overlay.remove();
+        openAnnouncementDetail(announcement);
       }
     });
     document.body.appendChild(overlay);
+  }
+
+  // Abre el detalle del aviso en un modal y marca como leído al confirmarlo.
+  function openAnnouncementDetail(announcement) {
+    if (typeof UI === 'undefined') return;
+    const palette = {
+      normal: { color: '#5B2D8E', soft: '#f3e8ff' },
+      importante: { color: '#d97706', soft: '#fef3c7' },
+      urgente: { color: '#dc2626', soft: '#fee2e2' },
+    };
+    const p = palette[announcement.priority] || palette.normal;
+    const authorName = (announcement.author && (announcement.author.name || announcement.author.username)) || 'Administración';
+    const date = typeof Format !== 'undefined' ? Format.dateTime(announcement.createdAt) : '';
+
+    const modal = UI.openModal({
+      title: 'Aviso',
+      size: 520,
+      body: `
+        <div style="padding:18px 20px;border-left:6px solid ${p.color};background:${p.soft};border-radius:10px;margin-bottom:14px;">
+          <span style="display:inline-block;background:${p.color};color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;text-transform:uppercase;">${UI.escapeHtml(announcement.priority || 'normal')}</span>
+        </div>
+        <h3 style="margin:0 0 14px;font-size:20px;line-height:1.35;color:#1f1b2e;">${UI.escapeHtml(announcement.title)}</h3>
+        <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(announcement.message)}</p>
+        <div style="font-size:13px;color:#9088ab;border-top:1px solid #f0edf3;padding-top:12px;">
+          <div><strong>Autor:</strong> ${UI.escapeHtml(authorName)}</div>
+          ${date ? `<div style="margin-top:4px;"><strong>Fecha:</strong> ${date}</div>` : ''}
+        </div>
+      `,
+      footer: `
+        <button class="btn btn-primary" type="button" data-confirm>&#10004;&nbsp; Marcar como leída</button>
+      `,
+    });
+
+    const overlay = modal.bodyEl.closest('#modal-overlay');
+    const confirmBtn = overlay.querySelector('[data-confirm]');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async () => {
+        markReadServer(announcement._id);
+        UI.closeModal();
+        if (window.App && window.App.refreshNotificationBadge) window.App.refreshNotificationBadge();
+      });
+    }
   }
 
   function seenNotifIds() {
@@ -144,9 +191,6 @@ window.Realtime = (() => {
     if (seenNotifIds().includes(item._id)) return;
 
     markNotifSeen(item._id);
-    if (window.API && window.API.notifications && window.API.notifications.markRead) {
-      window.API.notifications.markRead(item._id).catch(() => {});
-    }
 
     const color = '#2d7d6c';
     const soft = '#e4f5f1';
@@ -159,25 +203,66 @@ window.Realtime = (() => {
     overlay.innerHTML = `
       <div style="background:#fff;border-radius:14px;max-width:480px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,0.4);overflow:hidden;border-top:6px solid ${color};">
         <div style="padding:16px 20px;border-bottom:1px solid #f0edf3;display:flex;justify-content:space-between;align-items:center;gap:10px;">
-          <strong style="font-size:15px;color:${color};">&#128276; Aviso / notificación nueva</strong>
+          <strong style="font-size:15px;color:${color};">&#128276; Notificación nueva</strong>
         </div>
-        <div style="padding:22px 20px;">
+        <div style="padding:20px 20px 6px;cursor:pointer;" data-detail>
           <h3 style="margin:0 0 12px;font-size:18px;line-height:1.3;color:#1f1b2e;">${UI.escapeHtml(item.title || 'Notificación')}</h3>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(item.message || '')}</p>
-          <div style="font-size:12px;color:#9088ab;">${date || ''}</div>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#3d3560;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${UI.escapeHtml(item.message || '')}</p>
         </div>
+        <div style="padding:6px 20px 0;font-size:12px;color:#9088ab;">${date || ''}</div>
         <div style="padding:14px 20px;background:#faf8fd;display:flex;justify-content:flex-end;gap:10px;">
-          <button class="btn btn-sm" type="button" data-close>Ahora no</button>
-          <button class="btn btn-primary" type="button" data-ok>Entendido</button>
+          <button class="btn btn-sm" type="button" data-cerrar>Cerrar</button>
+          <button class="btn btn-primary" type="button" data-detail>Ver detalle</button>
         </div>
       </div>`;
 
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay || e.target.closest('[data-ok]') || e.target.closest('[data-close]')) {
+      if (e.target === overlay || e.target.closest('[data-cerrar]')) {
         overlay.remove();
+      } else if (e.target.closest('[data-detail]')) {
+        overlay.remove();
+        openNotificationDetail(item);
       }
     });
     document.body.appendChild(overlay);
+  }
+
+  // Abre el detalle de la notificación en un modal y marca como leída al confirmar.
+  function openNotificationDetail(item) {
+    if (typeof UI === 'undefined') return;
+    const color = '#2d7d6c';
+    const soft = '#e4f5f1';
+    const date = typeof Format !== 'undefined' ? Format.dateTime(item.createdAt) : '';
+
+    const modal = UI.openModal({
+      title: 'Notificación',
+      size: 500,
+      body: `
+        <div style="padding:16px 18px;border-left:6px solid ${color};background:${soft};border-radius:10px;margin-bottom:14px;">
+          <span style="font-size:12px;color:${color};font-weight:700;text-transform:uppercase;">${UI.escapeHtml(item.type || 'aviso')}</span>
+        </div>
+        <h3 style="margin:0 0 14px;font-size:19px;line-height:1.35;color:#1f1b2e;">${UI.escapeHtml(item.title || 'Notificación')}</h3>
+        <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#3d3560;white-space:pre-wrap;">${UI.escapeHtml(item.message || '')}</p>
+        <div style="font-size:13px;color:#9088ab;border-top:1px solid #f0edf3;padding-top:12px;">
+          ${date ? `<div><strong>Fecha:</strong> ${date}</div>` : ''}
+        </div>
+      `,
+      footer: `
+        <button class="btn btn-primary" type="button" data-confirm>&#10004;&nbsp; Marcar como leída</button>
+      `,
+    });
+
+    const overlay = modal.bodyEl.closest('#modal-overlay');
+    const confirmBtn = overlay.querySelector('[data-confirm]');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async () => {
+        if (window.API && window.API.notifications && window.API.notifications.markRead) {
+          window.API.notifications.markRead(item._id).catch(() => {});
+        }
+        UI.closeModal();
+        if (window.App && window.App.refreshNotificationBadge) window.App.refreshNotificationBadge();
+      });
+    }
   }
 
   function wire() {

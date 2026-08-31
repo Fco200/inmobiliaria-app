@@ -951,9 +951,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   gap: 8px;
   margin-top: 16px;
   font-size: 12px;
-}
-
-.login-links a {
+}.login-links a {
   color: var(--primary);
   text-decoration: none;
 }
@@ -1018,6 +1016,139 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* Login actions (compat) */
 .login-actions { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
 .login-footer { font-size: 11px; text-align: center; color: #a9c3dd; margin-top: 16px; }
+
+/* ---- Soporte Técnico: badge y modal de acceso ---- */
+.login-netline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.login-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+.soporte-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px dashed var(--primary);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--primary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  opacity: 0.9;
+}
+.soporte-badge:hover {
+  background: var(--primary);
+  color: #fff;
+  border-style: solid;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(91, 45, 142, 0.35);
+}
+
+/* Modal de soporte */
+.soporte-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.soporte-modal[hidden] { display: none; }
+.soporte-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.soporte-modal.open .soporte-modal-backdrop { opacity: 1; }
+.soporte-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--white);
+  border-radius: 16px;
+  padding: 26px 24px 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.soporte-modal.open .soporte-modal-card { opacity: 1; transform: translateY(0) scale(1); }
+.soporte-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.soporte-modal-close:hover { color: var(--text); }
+.soporte-modal-head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.soporte-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  font-size: 26px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7B3FA0, #5B2D8E);
+  color: #fff;
+  margin-bottom: 10px;
+}
+.soporte-modal-head h3 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  color: var(--text);
+}
+.soporte-modal-head p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.soporte-form .form-group { margin-bottom: 14px; }
+.soporte-form label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* Alerta de error animada para credenciales de soporte */
+@keyframes alertErrorShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+.anim-alert-error {
+  animation: alertErrorShake 0.5s ease;
+  border-left: 3px solid #dc2626;
+}
 
 /* ---- Animaciones de entrada ---- */
 @keyframes fadeInUp { 0%{opacity:0;transform:translateY(16px)} 100%{opacity:1;transform:translateY(0)} }

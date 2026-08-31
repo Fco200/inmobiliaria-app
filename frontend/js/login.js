@@ -239,6 +239,94 @@ window.LoginPage = (() => {
     }
   }
 
+  // ---- Soporte Técnico (modal) ----
+
+  function soporteLoginFlow() {
+    const modal = document.getElementById('soporte-modal');
+    const identifier = document.getElementById('soporte-identifier');
+    const password = document.getElementById('soporte-password');
+    const errBox = document.getElementById('soporte-error');
+    const btn = document.getElementById('btn-soporte-login');
+    const spinner = document.getElementById('soporte-spinner');
+
+    function showError(message) {
+      if (!errBox) return;
+      errBox.textContent = message;
+      errBox.classList.remove('hide');
+      errBox.classList.add('anim-alert-error');
+    }
+
+    function clearError() {
+      if (!errBox) return;
+      errBox.classList.add('hide');
+      errBox.textContent = '';
+    }
+
+    function setLoading(loading) {
+      if (!btn) return;
+      btn.disabled = loading;
+      if (spinner) spinner.classList.toggle('hide', !loading);
+    }
+
+    async function submitLogin(event) {
+      event.preventDefault();
+      const idVal = (identifier.value || '').trim();
+      const passVal = password.value;
+      if (!idVal || !passVal) {
+        showError('Ingresa tu usuario y contraseña de soporte.');
+        return;
+      }
+      clearError();
+      setLoading(true);
+      try {
+        const result = await window.API.soporte.login({ identifier: idVal, password: passVal });
+        localStorage.setItem('soporte_token', result.token);
+        localStorage.setItem('soporte_user', JSON.stringify(result.data.user));
+        window.location.replace('soporte.html');
+      } catch (error) {
+        showError(error.message || 'Credenciales de soporte incorrectas.');
+        setLoading(false);
+      }
+    }
+
+    function open() {
+      if (!modal) return;
+      clearError();
+      modal.hidden = false;
+      modal.classList.add('open');
+      setTimeout(() => { if (identifier) identifier.focus(); }, 120);
+    }
+
+    function close() {
+      if (!modal) return;
+      modal.classList.remove('open');
+      setTimeout(() => { modal.hidden = true; }, 200);
+    }
+
+    const openBtn = document.getElementById('btn-soporte');
+    if (openBtn) openBtn.addEventListener('click', open);
+
+    modal.querySelectorAll('[data-soporte-close]').forEach((el) => {
+      el.addEventListener('click', close);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.hidden) close();
+    });
+
+    const soporteForm = document.getElementById('soporte-form');
+    if (soporteForm) soporteForm.addEventListener('submit', submitLogin);
+
+    const sToggle = document.getElementById('btn-toggle-soporte-password');
+    if (sToggle && password) {
+      sToggle.addEventListener('click', () => {
+        const show = password.type === 'password';
+        password.type = show ? 'text' : 'password';
+        sToggle.innerHTML = show ? '&#128064;' : '&#128065;';
+        sToggle.classList.toggle('active', show);
+      });
+    }
+  }
+
   function setup() {
     registerServiceWorker();
 
@@ -278,6 +366,7 @@ window.LoginPage = (() => {
   function init() {
     initTheme();
     setup();
+    soporteLoginFlow();
   }
 
   return { init };

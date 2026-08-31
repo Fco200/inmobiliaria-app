@@ -1,7 +1,7 @@
 'use strict';
 
 // Roles que ven TODA la información de la empresa.
-const BOSS_ROLES = ['admin', 'gerencia'];
+const BOSS_ROLES = ['admin', 'gerencia', 'superadmin'];
 
 function isBoss(req) {
   return Boolean(req && req.user && req.user.role && BOSS_ROLES.includes(req.user.role.code));

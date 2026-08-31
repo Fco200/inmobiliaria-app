@@ -4,6 +4,7 @@ const User = require('./user.model');
 const Role = require('./role.model');
 const Permission = require('./permission.model');
 const Setting = require('./setting.model');
+const Config = require('./config.model');
 const Client = require('./client.model');
 const Property = require('./property.model');
 const Inventory = require('./inventory.model');
@@ -29,6 +30,7 @@ module.exports = {
   Role,
   Permission,
   Setting,
+  Config,
   Client,
   Property,
   Inventory,

@@ -33,6 +33,8 @@ const env = {
   adminPassword: process.env.ADMIN_PASSWORD || 'CambiaEsto2026!',
   loginMaxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS, 10) || 5,
   loginLockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES, 10) || 15,
+  supportEmail: process.env.SUPPORT_EMAIL || 'soporte@inmobiliaria.com',
+  supportPassword: process.env.SUPPORT_PASSWORD || 'Soporte2026!',
   isProduction,
 };
 

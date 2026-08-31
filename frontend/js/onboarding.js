@@ -8,6 +8,15 @@ window.Onboarding = (() => {
 
   const LS_SESSION_KEY = 'crm_onboarding_session';
 
+  // La bandera de "mostrado en esta sesión" es POR USUARIO: no se bloquea la
+  // guía de un usuario nuevo por el historial dejado por otro usuario en el
+  // mismo navegador/dispositivo.
+  function sessionKey() {
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
+    const id = user._id || user.id || user.username || 'anon';
+    return `${LS_SESSION_KEY}_${id}`;
+  }
+
   const STEPS = [
     {
       icon: '&#128640;',
@@ -50,11 +59,11 @@ window.Onboarding = (() => {
   }
 
   function isShownThisSession() {
-    try { return localStorage.getItem(LS_SESSION_KEY) === '1'; } catch (e) { return false; }
+    try { return localStorage.getItem(sessionKey()) === '1'; } catch (e) { return false; }
   }
 
   function markShownThisSession() {
-    try { localStorage.setItem(LS_SESSION_KEY, '1'); } catch (e) {}
+    try { localStorage.setItem(sessionKey(), '1'); } catch (e) {}
   }
 
   function renderStep(step, refs) {

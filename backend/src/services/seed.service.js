@@ -1,7 +1,7 @@
 'use strict';
 
-const { Role, Permission, User, Setting } = require('../models');
-const { adminEmail, adminPassword } = require('../config/env');
+const { Role, Permission, User, Setting, Config } = require('../models');
+const { adminEmail, adminPassword, supportEmail, supportPassword } = require('../config/env');
 
 const PERMISSIONS = [
   { code: 'dashboard_view', name: 'Ver dashboard', module: 'dashboard' },
@@ -79,6 +79,13 @@ async function seed() {
           )
           .map((p) => p._id),
       },
+      {
+        name: 'SuperAdmin (Soporte Técnico)',
+        code: 'superadmin',
+        description: 'Soporte técnico con acceso total al sistema',
+        isSystem: true,
+        permissions: permissions.map((p) => p._id),
+      },
     ];
 
     const roles = await Role.insertMany(roleDefs);
@@ -97,6 +104,37 @@ async function seed() {
       console.log(`Administrador inicial creado: ${adminEmail}`);
     }
   }
+
+  // Asegurar rol SUPERADMIN y usuario de soporte técnico TAMBIÉN en sistemas
+  // ya existentes (actualización), no solo en la primera siembra.
+  let superadminRole = await Role.findOne({ code: 'superadmin' });
+  if (!superadminRole) {
+    superadminRole = await Role.create({
+      name: 'SuperAdmin (Soporte Técnico)',
+      code: 'superadmin',
+      description: 'Soporte técnico con acceso total al sistema',
+      isSystem: true,
+      permissions: permissions.map((p) => p._id),
+    });
+    console.log('Rol SuperAdmin (Soporte Técnico) creado');
+  }
+
+  // Usuario de soporte técnico: se crea solo si no existe. El admin/asesores
+  // no deben poder eliminarlo ni degradarlo.
+  const existingSupport = await User.findOne({ email: supportEmail });
+  if (!existingSupport && superadminRole) {
+    await User.create({
+      name: 'Soporte Técnico',
+      username: 'soporte',
+      email: supportEmail,
+      password: supportPassword,
+      role: superadminRole._id,
+      position: 'Soporte Técnico FV DIGITAL',
+      status: 'activo',
+    });
+    console.log(`Usuario de soporte técnico creado: ${supportEmail}`);
+  }
+
 
   if ((await Setting.countDocuments()) === 0) {
     await Setting.insertMany([
@@ -162,6 +200,42 @@ async function seed() {
       },
     ]);
     console.log('Ajustes por defecto sembrados');
+  }
+
+  if ((await Config.countDocuments()) === 0) {
+    await Config.insertMany([
+      {
+        key: 'empresa.nombre',
+        value: 'INMOBILIARIA',
+        group: 'empresa',
+        description: 'Nombre de la inmobiliaria.',
+      },
+      {
+        key: 'empresa.telefonos',
+        value: '',
+        group: 'empresa',
+        description: 'Teléfonos de contacto separados por comas.',
+      },
+      {
+        key: 'empresa.logo',
+        value: '',
+        group: 'empresa',
+        description: 'URL del logo de la inmobiliaria.',
+      },
+      {
+        key: 'comisiones.base',
+        value: '5',
+        group: 'comisiones',
+        description: 'Porcentaje base de comisiones.',
+      },
+      {
+        key: 'mantenimiento.on',
+        value: 'false',
+        group: 'mantenimiento',
+        description: 'Estado de mantenimiento ON/OFF para todo el sistema.',
+      },
+    ]);
+    console.log('Configuración global por defecto sembrada');
   }
 
   return { permissions, permissionCodes };

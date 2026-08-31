@@ -381,9 +381,11 @@ window.AppShell = (() => {
       const user = window.ApiClient.getStoredUser() || {};
       const isNew = !user.hasCompletedOnboarding;
       // Para nuevos, el welcome se muestra primero y al cerrarse dispara la guía.
-      // La bandera "visto hoy" evita repetirlo al navegar entre páginas.
+      // La bandera "visto hoy" es POR USUARIO y evita repetirlo al navegar entre
+      // páginas, pero no bloquea a un usuario nuevo en su primer ingreso.
       if (isNew) {
-        if (!localStorage.getItem('crm_welcome_seen')) {
+        const uid = user._id || user.id || user.username || 'anon';
+        if (!localStorage.getItem(`crm_welcome_seen_${uid}`)) {
           window.Welcome.open({
             onClose: () => {
               if (window.Onboarding) window.Onboarding.maybeShow();

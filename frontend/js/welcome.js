@@ -3,6 +3,15 @@
 window.Welcome = (() => {
   const LS_SEEN_KEY = 'crm_welcome_seen';
 
+  // La bandera de "visto" es POR USUARIO (no por navegador): así el mensaje se
+  // muestra a cada persona en su primera sesión, incluso si otro usuario usó
+  // el mismo navegador/dispositivo antes.
+  function userKey() {
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
+    const id = user._id || user.id || user.username || 'anon';
+    return `${LS_SEEN_KEY}_${id}`;
+  }
+
   const PHRASES = [
     {
       icon: '&#127919;',
@@ -41,12 +50,12 @@ window.Welcome = (() => {
   let active = false;
 
   function markSeen(force) {
-    try { localStorage.setItem(LS_SEEN_KEY, force ? String(Date.now()) : '1'); } catch (e) {}
+    try { localStorage.setItem(userKey(), force ? String(Date.now()) : '1'); } catch (e) {}
   }
 
   function isFirstTimeToday() {
     try {
-      const last = localStorage.getItem(LS_SEEN_KEY);
+      const last = localStorage.getItem(userKey());
       if (!last) return true;
       const today = new Date().toDateString();
       const lastDate = new Date(Number(last) || Date.now()).toDateString();

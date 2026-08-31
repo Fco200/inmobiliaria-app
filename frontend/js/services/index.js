@@ -218,4 +218,104 @@ window.API = {
     markRead: (id) => ApiClient.patch(`/announcements/${id}/read`),
     remove: (id) => ApiClient.remove(`/announcements/${id}`),
   },
+
+  soporte: {
+    // El panel de soporte usa su PROPIA sesión (soporte_token), independiente
+    // de la sesión normal del CRM (crm_token). Todas las llamadas se hacen
+    // con fetch directo + el token de soporte.
+    login: (body) =>
+      fetch(`${window.AppConfig.API_URL}/soporte/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'Error de soporte');
+        return data;
+      }),
+    logout: () => soporteJson('/soporte/auth/logout', { method: 'POST' }),
+    me: () => soporteJson('/soporte/auth/me'),
+
+    usuarios: (params) => soporteJson(`/soporte/usuarios${qs(params)}`),
+    roles: () => soporteJson('/soporte/roles'),
+    actualizarUsuario: (id, body) => soporteJson(`/soporte/usuarios/${id}`, { method: 'PUT', body }),
+    restablecerPassword: (id, body) => soporteJson(`/soporte/usuarios/${id}/restablecer-password`, { method: 'POST', body }),
+
+    config: () => soporteJson('/soporte/config'),
+    guardarConfig: (body) => soporteJson('/soporte/config', { method: 'PUT', body }),
+
+    logs: (params) => soporteJson(`/soporte/logs${qs(params)}`),
+    logsErrores: (params) => soporteJson(`/soporte/logs/errors${qs(params)}`),
+
+    respaldo: () => {
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/respaldo`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then(async (r) => {
+        if (r.status === 401) { localStorage.removeItem('soporte_token'); window.location.replace('index.html'); throw new Error('Sesión de soporte expirada.'); }
+        if (!r.ok) throw new Error('Error al generar el respaldo');
+        const blob = await r.blob();
+        return {
+          blob,
+          filename: (r.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/)?.[1] || 'respaldo.json',
+        };
+      });
+    },
+
+    plantillas: () => soporteJson('/soporte/plantillas'),
+    subirPlantilla: (file) => {
+      const form = new FormData();
+      form.append('plantilla', file);
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'Error al subir');
+        return data;
+      });
+    },
+    eliminarPlantilla: (archivo) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'DELETE' }),
+    descargarPlantilla: (archivo) => {
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas/${encodeURIComponent(archivo)}/descargar`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then((r) => {
+        if (!r.ok) throw new Error('Error al descargar');
+        return r.blob();
+      });
+    },
+  },
 };
+
+function qs(params) {
+  const q = Object.entries(params || {})
+    .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  return q ? `?${q}` : '';
+}
+
+function soporteJson(path, options = {}) {
+  const token = localStorage.getItem('soporte_token');
+  const config = {
+    method: options.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  };
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (options.body !== undefined) config.body = JSON.stringify(options.body);
+  return fetch(`${window.AppConfig.API_URL}${path}`, config).then(async (r) => {
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* ignore */ }
+    if (r.status === 401) {
+      localStorage.removeItem('soporte_token');
+      localStorage.removeItem('soporte_user');
+      window.location.replace('index.html');
+      throw new Error('Tu sesión de soporte expiró. Inicia sesión nuevamente.');
+    }
+    if (!r.ok) throw new Error((data && data.message) || `Error ${r.status}`);
+    return data && data.data !== undefined ? data.data : data;
+  });
+}

@@ -4,8 +4,10 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { Session, User } = require('../models');
 const { hashToken } = require('../services/session.service');
 
+const BOSS_ROLES = ['admin', 'gerencia', 'superadmin'];
+
 const list = asyncHandler(async (req, res) => {
-  const isBoss = ['admin', 'gerencia'].includes(req.user.role.code);
+  const isBoss = BOSS_ROLES.includes(req.user.role.code);
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
 
@@ -39,7 +41,7 @@ const revoke = asyncHandler(async (req, res) => {
   const session = await Session.findById(req.params.id);
   if (!session) return res.status(404).json({ success: false, message: 'Sesión no encontrada' });
 
-  const isBoss = ['admin', 'gerencia'].includes(req.user.role.code);
+  const isBoss = BOSS_ROLES.includes(req.user.role.code);
   if (!isBoss && session.user.toString() !== req.user._id.toString()) {
     return res.status(403).json({
       success: false,

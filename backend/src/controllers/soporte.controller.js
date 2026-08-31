@@ -9,6 +9,7 @@ const {
   User,
   Role,
   Config,
+  Setting,
   ActivityLog,
   Client,
   Property,
@@ -248,6 +249,55 @@ const guardarConfig = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Configuración guardada', data: config });
 });
 
+// ── Datos del soporte técnico (se muestran en la página de Ayuda) ───────────
+// Estas claves viven en la colección Setting con prefijo `support.*`. Su edición
+// es exclusiva del panel de soporte (SUPERADMIN); el administrador del CRM ya no
+// puede modificar estos datos.
+const SUPPORT_KEYS = [
+  { key: 'support.name', prop: 'name' },
+  { key: 'support.title', prop: 'title' },
+  { key: 'support.whatsapp', prop: 'whatsapp' },
+  { key: 'support.email', prop: 'email' },
+  { key: 'support.facebook', prop: 'facebook' },
+  { key: 'support.instagram', prop: 'instagram' },
+  { key: 'support.photo', prop: 'photo' },
+  { key: 'support.intro', prop: 'intro' },
+];
+
+const listarSoporteConfig = asyncHandler(async (req, res) => {
+  const out = {};
+  for (const { key, prop } of SUPPORT_KEYS) {
+    const setting = await Setting.findOne({ key });
+    out[prop] = setting ? setting.value : '';
+  }
+  res.json({ success: true, data: out });
+});
+
+const guardarSoporteConfig = asyncHandler(async (req, res) => {
+  const body = req.body || {};
+
+  for (const { key, prop } of SUPPORT_KEYS) {
+    if (body[prop] === undefined) continue;
+    let value = body[prop];
+    if (value === null) value = '';
+    await Setting.findOneAndUpdate(
+      { key },
+      { value: String(value).trim(), group: 'soporte', description: `Dato de soporte técnico (${prop})`, updatedBy: req.user._id },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  await logActivity({
+    entityType: 'Setting',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'actualizar_soporte_config',
+    message: 'Soporte actualizó los datos de soporte técnico',
+  });
+
+  res.json({ success: true, message: 'Datos de soporte actualizados' });
+});
+
 // ── Visor de logs y errores ─────────────────────────────────────────────────
 const listarLogs = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
@@ -405,6 +455,8 @@ module.exports = {
   listarRoles,
   listarConfig,
   guardarConfig,
+  listarSoporteConfig,
+  guardarSoporteConfig,
   listarLogs,
   generarRespaldo,
   listarPlantillas,

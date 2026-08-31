@@ -12,6 +12,8 @@ const {
   listarRoles,
   listarConfig,
   guardarConfig,
+  listarSoporteConfig,
+  guardarSoporteConfig,
   listarLogs,
   generarRespaldo,
   listarPlantillas,
@@ -42,6 +44,10 @@ router.post('/usuarios/:id/restablecer-password', requireSoporte, restablecerPas
 // Configuración global
 router.get('/config', requireSoporte, listarConfig);
 router.put('/config', requireSoporte, guardarConfig);
+
+// Datos del soporte técnico (edición exclusiva de SUPERADMIN)
+router.get('/soporte-config', requireSoporte, listarSoporteConfig);
+router.put('/soporte-config', requireSoporte, guardarSoporteConfig);
 
 // Logs
 router.get('/logs', requireSoporte, listarLogs);

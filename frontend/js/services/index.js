@@ -26,7 +26,6 @@ window.API = {
     setGoogleClientId: (body) => ApiClient.put('/settings/google-client-id', body),
     setWhatsappNumber: (body) => ApiClient.put('/settings/whatsapp-number', body),
     landing: (body) => ApiClient.put('/settings/landing', body),
-    support: (body) => ApiClient.put('/settings/support', body),
   },
 
   users: {
@@ -243,6 +242,9 @@ window.API = {
 
     config: () => soporteJson('/soporte/config'),
     guardarConfig: (body) => soporteJson('/soporte/config', { method: 'PUT', body }),
+
+    soporteConfig: () => soporteJson('/soporte/soporte-config'),
+    guardarSoporteConfig: (body) => soporteJson('/soporte/soporte-config', { method: 'PUT', body }),
 
     logs: (params) => soporteJson(`/soporte/logs${qs(params)}`),
     logsErrores: (params) => soporteJson(`/soporte/logs/errors${qs(params)}`),

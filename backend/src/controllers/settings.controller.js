@@ -233,38 +233,10 @@ const setGoogleClientId = asyncHandler(async (req, res) => {
 });
 
 const setSupport = asyncHandler(async (req, res) => {
-  const body = req.body || {};
-
-  const fields = [
-    { key: SUPPORT_WHATSAPP_SETTING, prop: 'whatsapp', group: 'soporte', desc: 'WhatsApp de soporte' },
-    { key: SUPPORT_NAME_SETTING, prop: 'name', group: 'soporte', desc: 'Nombre del soporte' },
-    { key: SUPPORT_TITLE_SETTING, prop: 'title', group: 'soporte', desc: 'Título/cargo del soporte' },
-    { key: SUPPORT_PHOTO_SETTING, prop: 'photo', group: 'soporte', desc: 'Foto del soporte' },
-    { key: SUPPORT_EMAIL_SETTING, prop: 'email', group: 'soporte', desc: 'Correo de soporte' },
-    { key: SUPPORT_FACEBOOK_SETTING, prop: 'facebook', group: 'soporte', desc: 'Facebook de soporte' },
-    { key: SUPPORT_INSTAGRAM_SETTING, prop: 'instagram', group: 'soporte', desc: 'Instagram de soporte' },
-    { key: SUPPORT_INTRO_SETTING, prop: 'intro', group: 'soporte', desc: 'Mensaje de introducción del soporte' },
-  ];
-
-  for (const f of fields) {
-    if (body[f.prop] === undefined) continue;
-    let value = body[f.prop];
-    if (value === null) value = '';
-    await writeSetting(f.key, String(value).trim(), f.group, f.desc, req.user._id);
-  }
-
-  await logAudit({
-    user: req.user._id,
-    action: 'update_setting',
-    entity: 'Setting',
-    entityId: 'support',
-    field: 'config',
-    previousValue: '[configuración anterior]',
-    newValue: '[nueva configuración]',
-    ip: req.ip,
+  res.status(403).json({
+    success: false,
+    message: 'Los datos de soporte técnico solo pueden modificarse desde el panel de soporte.',
   });
-
-  res.json({ success: true, message: 'Configuración de soporte guardada.' });
 });
 
 module.exports = {

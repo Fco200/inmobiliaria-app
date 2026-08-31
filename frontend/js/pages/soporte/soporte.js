@@ -196,11 +196,15 @@ window.SoportePanel = (() => {
     const box = document.getElementById('config-container');
     box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando configuración…</div>';
     try {
-      const configs = await window.API.soporte.config();
+      const [configs, sopConfig] = await Promise.all([
+        window.API.soporte.config(),
+        window.API.soporte.soporteConfig(),
+      ]);
       const byKey = {};
       configs.forEach((c) => { byKey[c.key] = c; });
 
       const def = (key, fallback) => byKey[key] ? byKey[key].value : fallback;
+      const sp = (k) => escapeHtml(sopConfig[k] || '');
 
       box.innerHTML = `
         <div class="sp-card">
@@ -237,6 +241,55 @@ window.SoportePanel = (() => {
             <div class="alert" id="config-alert"></div>
           </form>
         </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:16px;">Datos de Soporte Técnico</h3>
+          <p style="margin:0 0 16px;color:var(--text-muted);font-size:13px;">
+            Estos datos se muestran en el módulo <b>Ayuda</b> para todos los usuarios del sistema.
+            Solo el panel de soporte puede modificarlos (el administrador del CRM ya no tiene acceso a ellos).
+          </p>
+          <form id="config-soporte-form">
+            <div class="form-grid">
+              <div class="fgroup">
+                <label>Nombre del soporte</label>
+                <input name="name" value="${sp('name')}" placeholder="Ej. Juan Pérez">
+              </div>
+              <div class="fgroup">
+                <label>Cargo / Título</label>
+                <input name="title" value="${sp('title')}" placeholder="Ej. Gerente general">
+              </div>
+              <div class="fgroup">
+                <label>WhatsApp (con código de país)</label>
+                <input name="whatsapp" value="${sp('whatsapp')}" placeholder="Ej. 5216625374491">
+              </div>
+              <div class="fgroup">
+                <label>Correo de soporte</label>
+                <input name="email" type="email" value="${sp('email')}" placeholder="soporte@inmobles.com">
+              </div>
+              <div class="fgroup">
+                <label>Facebook</label>
+                <input name="facebook" value="${sp('facebook')}" placeholder="https://facebook.com/...">
+              </div>
+              <div class="fgroup">
+                <label>Instagram</label>
+                <input name="instagram" value="${sp('instagram')}" placeholder="https://instagram.com/...">
+              </div>
+              <div class="fgroup">
+                <label>URL de la foto</label>
+                <input name="photo" value="${sp('photo')}" placeholder="https://.../foto.png">
+              </div>
+              <div class="fgroup fgroup-full">
+                <label>Mensaje de introducción</label>
+                <input name="intro" value="${sp('intro')}" placeholder="¿Necesitas ayuda? Escríbenos...">
+              </div>
+            </div>
+            <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-gold" type="submit">Guardar datos de soporte</button>
+              <a class="btn btn-ghost" href="ayuda.html" target="_blank" rel="noopener">Ver página de ayuda</a>
+            </div>
+            <div class="alert" id="soporte-config-alert"></div>
+          </form>
+        </div>
       `;
 
       document.getElementById('config-empresa-form').addEventListener('submit', async (e) => {
@@ -257,6 +310,26 @@ window.SoportePanel = (() => {
             await window.API.soporte.guardarConfig({ key, value: input ? input.value : '' });
           }
           showAlert(alertBox, 'Ajustes guardados correctamente.', 'success');
+          setTimeout(() => hideAlert(alertBox), 3000);
+        } catch (error) {
+          showAlert(alertBox, error.message, 'error');
+        }
+      });
+
+      document.getElementById('config-soporte-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const alertBox = document.getElementById('soporte-config-alert');
+        hideAlert(alertBox);
+        const campos = ['name', 'title', 'whatsapp', 'email', 'facebook', 'instagram', 'photo', 'intro'];
+        const payload = {};
+        campos.forEach((name) => {
+          const input = form.querySelector(`[name="${name}"]`);
+          payload[name] = input ? input.value : '';
+        });
+        try {
+          await window.API.soporte.guardarSoporteConfig(payload);
+          showAlert(alertBox, 'Datos de soporte guardados correctamente.', 'success');
           setTimeout(() => hideAlert(alertBox), 3000);
         } catch (error) {
           showAlert(alertBox, error.message, 'error');

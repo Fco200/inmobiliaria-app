@@ -246,6 +246,18 @@ window.API = {
     soporteConfig: () => soporteJson('/soporte/soporte-config'),
     guardarSoporteConfig: (body) => soporteJson('/soporte/soporte-config', { method: 'PUT', body }),
 
+    resumen: () => soporteJson('/soporte/resumen'),
+
+    sesiones: (params) => soporteJson(`/soporte/sesiones${qs(params)}`),
+    revocarSesion: (id) => soporteJson(`/soporte/sesiones/${id}`, { method: 'DELETE' }),
+    revocarSesionesUsuario: (id) => soporteJson(`/soporte/sesiones/usuario/${id}`, { method: 'DELETE' }),
+
+    anuncios: () => soporteJson('/soporte/anuncios'),
+    crearAnuncio: (body) => soporteJson('/soporte/anuncios', { method: 'POST', body }),
+    eliminarAnuncio: (id) => soporteJson(`/soporte/anuncios/${id}`, { method: 'DELETE' }),
+
+    rolesPermisos: () => soporteJson('/soporte/roles-permisos'),
+
     logs: (params) => soporteJson(`/soporte/logs${qs(params)}`),
     logsErrores: (params) => soporteJson(`/soporte/logs/errors${qs(params)}`),
 

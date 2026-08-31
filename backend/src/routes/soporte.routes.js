@@ -14,6 +14,14 @@ const {
   guardarConfig,
   listarSoporteConfig,
   guardarSoporteConfig,
+  resumenSistema,
+  listarSesionesSoporte,
+  revocarSesionSoporte,
+  revocarSesionesUsuarioSoporte,
+  listarAnuncios,
+  crearAnuncio,
+  eliminarAnuncio,
+  listarRolesPermisos,
   listarLogs,
   generarRespaldo,
   listarPlantillas,
@@ -40,6 +48,22 @@ router.get('/usuarios', requireSoporte, listarUsuarios);
 router.get('/roles', requireSoporte, listarRoles);
 router.put('/usuarios/:id', requireSoporte, actualizarUsuario);
 router.post('/usuarios/:id/restablecer-password', requireSoporte, restablecerPassword);
+
+// Resumen / estado del sistema
+router.get('/resumen', requireSoporte, resumenSistema);
+
+// Sesiones (todo el equipo)
+router.get('/sesiones', requireSoporte, listarSesionesSoporte);
+router.delete('/sesiones/:id', requireSoporte, revocarSesionSoporte);
+router.delete('/sesiones/usuario/:id', requireSoporte, revocarSesionesUsuarioSoporte);
+
+// Avisos / anuncios del equipo
+router.get('/anuncios', requireSoporte, listarAnuncios);
+router.post('/anuncios', requireSoporte, crearAnuncio);
+router.delete('/anuncios/:id', requireSoporte, eliminarAnuncio);
+
+// Roles y permisos
+router.get('/roles-permisos', requireSoporte, listarRolesPermisos);
 
 // Configuración global
 router.get('/config', requireSoporte, listarConfig);

@@ -2,23 +2,34 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const mongoose = require('mongoose');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('../middlewares/asyncHandler');
 const {
   User,
   Role,
+  Permission,
   Config,
   Setting,
   ActivityLog,
   Client,
   Property,
+  Inventory,
   Business,
+  Appointment,
+  Task,
+  Goal,
+  Expense,
+  Document,
+  Announcement,
   Session,
+  Chat,
 } = require('../models');
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
-const { createSession, revokeSessionByToken } = require('../services/session.service');
+const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
@@ -298,6 +309,198 @@ const guardarSoporteConfig = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Datos de soporte actualizados' });
 });
 
+// ── Resumen / estado del sistema ────────────────────────────────────────────
+const resumenSistema = asyncHandler(async (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const states = ['desconectado', 'conectado', 'conectando', 'desconectando'];
+
+  const models = {
+    usuarios: User,
+    roles: Role,
+    permisos: Permission,
+    clientes: Client,
+    propiedades: Property,
+    inventario: Inventory,
+    negocios: Business,
+    citas: Appointment,
+    tareas: Task,
+    metas: Goal,
+    gastos: Expense,
+    documentos: Document,
+    avisos: Announcement,
+    sesiones: Session,
+    chats: Chat,
+    actividad: ActivityLog,
+  };
+
+  const counts = {};
+  await Promise.all(
+    Object.entries(models).map(async ([name, Model]) => {
+      try { counts[name] = await Model.countDocuments(); } catch (e) { counts[name] = 0; }
+    })
+  );
+
+  const roleStats = await User.aggregate([
+    { $match: {} },
+    {
+      $group: {
+        _id: { $ifNull: ['$role', null] },
+        total: { $sum: 1 },
+        activos: { $sum: { $cond: [{ $eq: ['$status', 'activo'] }, 1, 0] } },
+      },
+    },
+  ]);
+
+  const roleCodes = {};
+  const roleDocs = await Role.find().select('code name');
+  const roleMap = {};
+  roleDocs.forEach((r) => { roleMap[String(r._id)] = { code: r.code, name: r.name }; });
+
+  const usersByRole = {};
+  roleStats.forEach((row) => {
+    const key = row._id ? String(row._id) : 'sin-rol';
+    const meta = roleMap[key] || { code: 'sin-rol', name: 'Sin rol' };
+    usersByRole[meta.code] = { name: meta.name, total: row.total, activos: row.activos };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      fechas: {
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      },
+      servidor: {
+        hostname: os.hostname(),
+        plataforma: `${os.type()} ${os.release()}`,
+        arquitectura: os.arch(),
+        memoriaTotal: os.totalmem(),
+        memoriaLibre: os.freemem(),
+        cpus: os.cpus().length,
+      },
+      baseDatos: {
+        estado: states[dbState] || 'desconocido',
+        nombre: mongoose.connection.name || 'n/d',
+      },
+      conteos: counts,
+      usuariosPorRol: usersByRole,
+      sesionesActivas: counts.sesiones,
+    },
+  });
+});
+
+// ── Gestión de sesiones (todo el equipo) ────────────────────────────────────
+const listarSesionesSoporte = asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+  const sessions = await Session.find()
+    .sort({ lastSeenAt: -1 })
+    .limit(limit)
+    .populate('user', 'name username email photo role');
+
+  const currentHash = hashToken(req.token);
+  const data = sessions.map((s) => ({
+    ...s.toJSON(),
+    isCurrent: s.tokenHash === currentHash,
+  }));
+
+  res.json({ success: true, data });
+});
+
+const revocarSesionSoporte = asyncHandler(async (req, res) => {
+  const session = await Session.findById(req.params.id);
+  if (!session) return res.status(404).json({ success: false, message: 'Sesión no encontrada' });
+
+  const currentHash = hashToken(req.token);
+  const isCurrent = session.tokenHash === currentHash;
+  await Session.deleteOne({ _id: session._id });
+
+  res.json({
+    success: true,
+    message: isCurrent ? 'Se cerró esta sesión' : 'Sesión cerrada',
+    data: { selfRevoked: isCurrent },
+  });
+});
+
+const revocarSesionesUsuarioSoporte = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+  const currentHash = hashToken(req.token);
+  const result = await Session.deleteMany({ user: user._id, tokenHash: { $ne: currentHash } });
+  res.json({ success: true, message: 'Sesiones cerradas', data: { cerradas: result.deletedCount || 0 } });
+});
+
+// ── Gestión de avisos / anuncios del equipo ─────────────────────────────────
+const listarAnuncios = asyncHandler(async (req, res) => {
+  const anuncios = await Announcement.find()
+    .populate('author', 'name username email')
+    .sort({ createdAt: -1 })
+    .limit(100);
+  res.json({ success: true, data: anuncios });
+});
+
+const crearAnuncio = asyncHandler(async (req, res) => {
+  const title = String((req.body && req.body.title) || '').trim().slice(0, 200);
+  const message = String((req.body && req.body.message) || '').trim().slice(0, 2000);
+  const priority = (req.body && req.body.priority) || 'normal';
+
+  if (!title) return res.status(400).json({ success: false, message: 'El título es obligatorio' });
+  if (!message) return res.status(400).json({ success: false, message: 'El mensaje es obligatorio' });
+  if (!['normal', 'importante', 'urgente'].includes(priority)) {
+    return res.status(400).json({ success: false, message: 'Prioridad inválida' });
+  }
+
+  const anuncio = await Announcement.create({
+    title,
+    message,
+    priority,
+    author: req.user._id,
+    readBy: [req.user._id],
+  });
+  const populated = await anuncio.populate('author', 'name username email');
+
+  const io = req.app.get('io');
+  if (io) io.emit('new-announcement', populated);
+
+  await logActivity({
+    entityType: 'Announcement',
+    entityId: anuncio._id,
+    user: req.user._id,
+    action: 'crear_aviso',
+    message: `Soporte publicó aviso: ${title}`,
+  });
+
+  res.status(201).json({ success: true, data: populated });
+});
+
+const eliminarAnuncio = asyncHandler(async (req, res) => {
+  const anuncio = await Announcement.findByIdAndDelete(req.params.id);
+  if (!anuncio) return res.status(404).json({ success: false, message: 'Aviso no encontrado' });
+
+  const io = req.app.get('io');
+  if (io) io.emit('delete-announcement', { id: req.params.id });
+
+  await logActivity({
+    entityType: 'Announcement',
+    entityId: req.params.id,
+    user: req.user._id,
+    action: 'eliminar_aviso',
+    message: `Soporte eliminó aviso: ${anuncio.title}`,
+  });
+
+  res.json({ success: true, message: 'Aviso eliminado' });
+});
+
+// ── Roles y permisos ────────────────────────────────────────────────────────
+const listarRolesPermisos = asyncHandler(async (req, res) => {
+  const [roles, permisos] = await Promise.all([
+    Role.find().populate('permissions', 'code name module').sort({ code: 1 }),
+    Permission.find().sort({ module: 1, code: 1 }),
+  ]);
+
+  res.json({ success: true, data: { roles, permisos } });
+});
+
 // ── Visor de logs y errores ─────────────────────────────────────────────────
 const listarLogs = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
@@ -322,15 +525,39 @@ const listarLogs = asyncHandler(async (req, res) => {
 
 // ── Respaldos / Backups ─────────────────────────────────────────────────────
 const generarRespaldo = asyncHandler(async (req, res) => {
-  const collections = {
-    clientes: await Client.find().lean(),
-    propiedades: await Property.find().lean(),
-    negocios: await Business.find().lean(),
+  const collections = {};
+  const entidades = {
+    usuarios: User,
+    roles: Role,
+    permisos: Permission,
+    clientes: Client,
+    propiedades: Property,
+    inventario: Inventory,
+    negocios: Business,
+    citas: Appointment,
+    tareas: Task,
+    metas: Goal,
+    gastos: Expense,
+    documentos: Document,
+    avisos: Announcement,
+    chats: Chat,
+    actividad: ActivityLog,
+    configuracion: Config,
+    ajustes: Setting,
   };
+
+  await Promise.all(
+    Object.entries(entidades).map(async ([name, Model]) => {
+      try { collections[name] = await Model.find().lean(); } catch (e) { collections[name] = []; }
+    })
+  );
 
   const backup = {
     generadoEl: new Date().toISOString(),
     sistema: 'INMOBILIARIA CRM',
+    conteos: Object.fromEntries(
+      Object.entries(collections).map(([k, v]) => [k, v.length])
+    ),
     datos: collections,
   };
 
@@ -457,6 +684,14 @@ module.exports = {
   guardarConfig,
   listarSoporteConfig,
   guardarSoporteConfig,
+  resumenSistema,
+  listarSesionesSoporte,
+  revocarSesionSoporte,
+  revocarSesionesUsuarioSoporte,
+  listarAnuncios,
+  crearAnuncio,
+  eliminarAnuncio,
+  listarRolesPermisos,
   listarLogs,
   generarRespaldo,
   listarPlantillas,

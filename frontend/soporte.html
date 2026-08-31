@@ -162,6 +162,26 @@
 
     .sp-empty { text-align: center; color: var(--text-muted); padding: 30px; font-size: 13px; }
 
+    .prio { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .prio-normal { background: rgba(168,159,143,0.15); color: var(--text-muted); }
+    .prio-importante { background: rgba(224,169,58,0.15); color: var(--warning); }
+    .prio-urgente { background: rgba(224,83,61,0.15); color: var(--danger); }
+
+    .estado-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .estado-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .estado-ok { background: rgba(109,189,106,0.15); color: var(--success); }
+    .estado-warn { background: rgba(224,169,58,0.15); color: var(--warning); }
+    .estado-bad { background: rgba(224,83,61,0.15); color: var(--danger); }
+
+    .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .kv { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .kv b { display: block; font-size: 18px; color: var(--text); }
+    .kv span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+    .mega-table th, .mega-table td { white-space: normal; }
+    .role-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(212,175,55,0.15); color: var(--gold); }
+    textarea { resize: vertical; }
+
     .sp-loading {
       display: flex; align-items: center; gap: 10px; color: var(--text-muted); padding: 20px; font-size: 13px;
     }
@@ -196,19 +216,75 @@
 
   <div class="sp-body">
     <nav class="sp-side" id="sp-side">
-      <button class="sp-tab active" data-tab="usuarios"><span class="ico">&#128101;</span> Usuarios</button>
+      <button class="sp-tab active" data-tab="resumen"><span class="ico">&#128200;</span> Resumen</button>
+      <button class="sp-tab" data-tab="usuarios"><span class="ico">&#128101;</span> Usuarios</button>
+      <button class="sp-tab" data-tab="sesiones"><span class="ico">&#128275;&#65039;</span> Sesiones</button>
+      <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
       <button class="sp-tab" data-tab="config"><span class="ico">&#9881;&#65039;</span> Ajustes Globales</button>
+      <button class="sp-tab" data-tab="roles"><span class="ico">&#129518;</span> Roles y Permisos</button>
       <button class="sp-tab" data-tab="logs"><span class="ico">&#128220;</span> Logs y Errores</button>
       <button class="sp-tab" data-tab="respaldo"><span class="ico">&#128190;</span> Respaldos</button>
       <button class="sp-tab" data-tab="plantillas"><span class="ico">&#128196;</span> Plantillas PDF</button>
     </nav>
 
     <main class="sp-main" id="sp-main">
+      <!-- ═══ Resumen ═══ -->
+      <section class="sp-pane active" id="pane-resumen">
+        <h1 class="sp-pane-title">Resumen del Sistema</h1>
+        <p class="sp-pane-sub">Estado del servidor, base de datos y estadísticas generales de la plataforma.</p>
+        <div id="resumen-container"></div>
+      </section>
+
       <!-- ═══ Usuarios ═══ -->
-      <section class="sp-pane active" id="pane-usuarios">
+      <section class="sp-pane" id="pane-usuarios">
         <h1 class="sp-pane-title">Control de Usuarios</h1>
         <p class="sp-pane-sub">Lista, roles, activación y restablecimiento de contraseñas sin tocar la base de datos.</p>
         <div id="usuarios-container"></div>
+      </section>
+
+      <!-- ═══ Sesiones ═══ -->
+      <section class="sp-pane" id="pane-sesiones">
+        <h1 class="sp-pane-title">Sesiones del Equipo</h1>
+        <p class="sp-pane-sub">Dispositivos y sesiones activas de todos los usuarios. Cierra cualquier sesión sospechosa.</p>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <span style="flex:1"></span>
+          <button class="btn btn-gold btn-sm" id="btn-sesiones-refresh" type="button">&#8635; Actualizar</button>
+        </div>
+        <div id="sesiones-container"></div>
+      </section>
+
+      <!-- ═══ Avisos ═══ -->
+      <section class="sp-pane" id="pane-anuncios">
+        <h1 class="sp-pane-title">Avisos del Equipo</h1>
+        <p class="sp-pane-sub">Publica anuncios que se mostrarán como banners a todos los usuarios de la plataforma.</p>
+        <div class="sp-card">
+          <h3 style="margin-bottom:12px;">Nuevo aviso</h3>
+          <form id="anuncio-form">
+            <div class="form-grid">
+              <div class="fgroup fgroup-full">
+                <label>Título</label>
+                <input name="title" placeholder="Ej. Mantenimiento programado" required>
+              </div>
+              <div class="fgroup fgroup-full">
+                <label>Mensaje</label>
+                <textarea name="message" rows="3" placeholder="Describe el aviso..." required></textarea>
+              </div>
+              <div class="fgroup">
+                <label>Prioridad</label>
+                <select name="priority">
+                  <option value="normal">Normal</option>
+                  <option value="importante">Importante</option>
+                  <option value="urgente">Urgente</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+              <button class="btn btn-gold" type="submit">Publicar aviso</button>
+              <span class="alert" id="anuncio-alert"></span>
+            </div>
+          </form>
+        </div>
+        <div id="anuncios-container"></div>
       </section>
 
       <!-- ═══ Config ═══ -->
@@ -216,6 +292,13 @@
         <h1 class="sp-pane-title">Variables y Ajustes Globales</h1>
         <p class="sp-pane-sub">Parámetros dinámicos de la inmobiliaria guardados en la colección <b>Config</b>.</p>
         <div id="config-container"></div>
+      </section>
+
+      <!-- ═══ Roles y Permisos ═══ -->
+      <section class="sp-pane" id="pane-roles">
+        <h1 class="sp-pane-title">Roles y Permisos</h1>
+        <p class="sp-pane-sub">Consulta la definición de roles y los permisos asignados a cada uno.</p>
+        <div id="roles-container"></div>
       </section>
 
       <!-- ═══ Logs ═══ -->
@@ -234,10 +317,10 @@
       <!-- ═══ Respaldo ═══ -->
       <section class="sp-pane" id="pane-respaldo">
         <h1 class="sp-pane-title">Respaldos / Backups</h1>
-        <p class="sp-pane-sub">Descarga un respaldo en formato JSON con las colecciones principales.</p>
+        <p class="sp-pane-sub">Descarga un respaldo completo en formato JSON con todas las colecciones del sistema.</p>
         <div class="sp-card">
           <h3 style="margin-bottom:8px;">Generar respaldo completo</h3>
-          <p style="color:var(--text-muted);font-size:12px;margin:0 0 16px;">Incluye clientes, propiedades y negocios (transacciones). Se descarga como archivo JSON.</p>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 16px;">Incluye todas las colecciones (usuarios, clientes, propiedades, negocios, tareas, documentos, sesiones, actividad, configuración, etc.) junto con un conteo por módulo. Se descarga como archivo JSON.</p>
           <button class="btn btn-gold" id="btn-respaldo" type="button">&#128190; Descargar respaldo JSON</button>
         </div>
       </section>

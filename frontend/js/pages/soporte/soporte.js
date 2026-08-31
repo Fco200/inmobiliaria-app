@@ -340,6 +340,272 @@ window.SoportePanel = (() => {
     }
   }
 
+  // ── Pestaña Resumen ───────────────────────────────────────────────────────
+  function fmtBytes(bytes) {
+    if (!bytes && bytes !== 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let n = bytes;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
+    return `${n.toFixed(1)} ${units[i]}`;
+  }
+
+  function fmtUptime(seconds) {
+    const s = Math.floor(seconds || 0);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${d}d ${h}h ${m}m`;
+  }
+
+  async function renderResumen() {
+    const box = document.getElementById('resumen-container');
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando resumen…</div>';
+    try {
+      const r = await window.API.soporte.resumen();
+      const dbOk = r.baseDatos && r.baseDatos.estado === 'conectado';
+      const conteos = r.conteos || {};
+
+      const counts = [
+        ['Usuarios', conteos.usuarios], ['Clientes', conteos.clientes], ['Propiedades', conteos.propiedades],
+        ['Inventario', conteos.inventario], ['Negocios', conteos.negocios], ['Citas', conteos.citas],
+        ['Tareas', conteos.tareas], ['Metas', conteos.metas], ['Gastos', conteos.gastos],
+        ['Documentos', conteos.documentos], ['Sesiones activas', conteos.sesiones], ['Avisos', conteos.avisos],
+      ];
+
+      const roleRows = Object.entries(r.usuariosPorRol || {}).map(([code, v]) => `
+        <div class="kv">
+          <b>${v.total}</b>
+          <span>${escapeHtml(v.name || code)} (${v.activos} activos)</span>
+        </div>
+      `).join('');
+
+      box.innerHTML = `
+        <div class="stat-cards">
+          <div class="stat-card"><b style="color:${dbOk ? 'var(--success)' : 'var(--danger)'}">${dbOk ? 'En línea' : 'Caído'}</b><span>Base de datos</span></div>
+          <div class="stat-card"><b>${conteos.usuarios || 0}</b><span>Usuarios</span></div>
+          <div class="stat-card"><b>${r.sesionesActivas || 0}</b><span>Sesiones activas</span></div>
+          <div class="stat-card"><b>${fmtUptime(r.fechas && r.fechas.uptime)}</b><span>Uptime</span></div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:14px;">Estado del servidor</h3>
+          <div class="kv-grid">
+            <div class="kv"><b>${escapeHtml(r.servidor.hostname || '—')}</b><span>Hostname</span></div>
+            <div class="kv"><b>${escapeHtml(r.baseDatos.nombre || '—')}</b><span>Base de datos</span></div>
+            <div class="kv"><b class="${dbOk ? '' : 'estado-bad'}">${escapeHtml(r.baseDatos.estado || '—')}</b><span>Estado conexión</span></div>
+            <div class="kv"><b>${escapeHtml(r.servidor.plataforma || '—')}</b><span>Plataforma</span></div>
+            <div class="kv"><b>${escapeHtml(r.servidor.arquitectura || '—')}</b><span>Arquitectura</span></div>
+            <div class="kv"><b>${r.servidor.cpus || 0}</b><span>CPUs</span></div>
+            <div class="kv"><b>${fmtBytes(r.servidor.memoriaTotal)}</b><span>Memoria total</span></div>
+            <div class="kv"><b>${fmtBytes(r.servidor.memoriaLibre)}</b><span>Memoria libre</span></div>
+          </div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:14px;">Registros por módulo</h3>
+          <div class="kv-grid">
+            ${counts.map(([label, n]) => `<div class="kv"><b>${n || 0}</b><span>${label}</span></div>`).join('')}
+          </div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:14px;">Usuarios por rol</h3>
+          <div class="kv-grid">${roleRows || '<div class="sp-empty">Sin datos</div>'}</div>
+        </div>
+      `;
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  // ── Pestaña Sesiones ──────────────────────────────────────────────────────
+  function deviceLabel(ua) {
+    if (!ua) return 'Dispositivo desconocido';
+    let browser = 'Navegador';
+    if (/Edg\//.test(ua)) browser = 'Edge';
+    else if (/OPR\//.test(ua)) browser = 'Opera';
+    else if (/Chrome\//.test(ua)) browser = 'Chrome';
+    else if (/Firefox\//.test(ua)) browser = 'Firefox';
+    else if (/Safari\//.test(ua)) browser = 'Safari';
+    let os = 'desconocido';
+    if (/Windows/.test(ua)) os = 'Windows';
+    else if (/Android/.test(ua)) os = 'Android';
+    else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+    else if (/Mac OS X/.test(ua)) os = 'macOS';
+    else if (/Linux/.test(ua)) os = 'Linux';
+    return `${browser} · ${os}`;
+  }
+
+  async function renderSesiones() {
+    const box = document.getElementById('sesiones-container');
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando sesiones…</div>';
+    try {
+      const sesiones = await window.API.soporte.sesiones({ limit: 300 });
+      if (!sesiones.length) {
+        box.innerHTML = '<div class="sp-empty">No hay sesiones activas.</div>';
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="sp-card sp-table-wrap">
+          <table class="mega-table">
+            <thead><tr>
+              <th>Usuario</th><th>Dispositivo</th><th>Duración</th><th>IP</th><th>Última actividad</th><th>Expira</th><th>Estado</th><th></th>
+            </tr></thead>
+            <tbody>
+              ${sesiones.map((s) => {
+                const u = s.user || {};
+                const isCurrent = s.isCurrent;
+                return `
+                  <tr>
+                    <td>
+                      <strong>${escapeHtml(u.name || 'Usuario')}</strong>
+                      ${isCurrent ? ' <span class="badge badge-role">actual</span>' : ''}
+                      <br><small class="text-muted">${escapeHtml(u.email || '')}</small>
+                    </td>
+                    <td>${escapeHtml(deviceLabel(s.device))}</td>
+                    <td>${s.remember ? '<span class="badge badge-on">Recordada</span>' : '<span class="badge badge-off">Temporal</span>'}</td>
+                    <td>${escapeHtml(s.ip || '—')}</td>
+                    <td>${fmtDate(s.lastSeenAt)}</td>
+                    <td>${fmtDate(s.expiresAt)}</td>
+                    <td>${isCurrent ? '<span class="badge badge-role">Este panel</span>' : '<span class="badge badge-on">Activa</span>'}</td>
+                    <td><button class="btn btn-danger btn-sm" data-rs="${s._id}" ${isCurrent ? 'disabled' : ''}>Cerrar</button></td>
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      box.querySelectorAll('[data-rs]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('¿Cerrar esta sesión? El dispositivo perderá el acceso.')) return;
+          try {
+            await window.API.soporte.revocarSesion(btn.dataset.rs);
+            renderSesiones();
+          } catch (error) { alert(error.message); }
+        });
+      });
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function initSesiones() {
+    const btn = document.getElementById('btn-sesiones-refresh');
+    if (btn) btn.addEventListener('click', renderSesiones);
+    renderSesiones();
+  }
+
+  // ── Pestaña Avisos ────────────────────────────────────────────────────────
+  function prioBadge(p) {
+    const cls = p === 'urgente' ? 'prio-urgente' : p === 'importante' ? 'prio-importante' : 'prio-normal';
+    return `<span class="prio ${cls}">${escapeHtml(p)}</span>`;
+  }
+
+  async function renderAnuncios() {
+    const box = document.getElementById('anuncios-container');
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando avisos…</div>';
+    try {
+      const anuncios = await window.API.soporte.anuncios();
+      if (!anuncios.length) {
+        box.innerHTML = '<div class="sp-empty">No hay avisos publicados.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <div class="sp-card sp-table-wrap">
+          <table class="mega-table">
+            <thead><tr><th>Título</th><th>Mensaje</th><th>Prioridad</th><th>Autor</th><th>Fecha</th><th>Lecturas</th><th></th></tr></thead>
+            <tbody>
+              ${anuncios.map((a) => `
+                <tr>
+                  <td><strong>${escapeHtml(a.title)}</strong></td>
+                  <td>${escapeHtml(a.message || '')}</td>
+                  <td>${prioBadge(a.priority)}</td>
+                  <td>${escapeHtml((a.author && (a.author.name || a.author.email)) || '—')}</td>
+                  <td>${fmtDate(a.createdAt)}</td>
+                  <td>${Array.isArray(a.readBy) ? a.readBy.length : 0}</td>
+                  <td><button class="btn btn-danger btn-sm" data-aviso="${a._id}">Eliminar</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      box.querySelectorAll('[data-aviso]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('¿Eliminar este aviso?')) return;
+          try {
+            await window.API.soporte.eliminarAnuncio(btn.dataset.aviso);
+            renderAnuncios();
+          } catch (error) { alert(error.message); }
+        });
+      });
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function initAnuncios() {
+    const form = document.getElementById('anuncio-form');
+    if (form) form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const alertBox = document.getElementById('anuncio-alert');
+      hideAlert(alertBox);
+      try {
+        await window.API.soporte.crearAnuncio({
+          title: data.get('title'),
+          message: data.get('message'),
+          priority: data.get('priority'),
+        });
+        form.reset();
+        showAlert(alertBox, 'Aviso publicado correctamente.', 'success');
+        setTimeout(() => hideAlert(alertBox), 3000);
+        renderAnuncios();
+      } catch (error) {
+        showAlert(alertBox, error.message, 'error');
+      }
+    });
+    renderAnuncios();
+  }
+
+  // ── Pestaña Roles y Permisos ──────────────────────────────────────────────
+  async function renderRolesPermisos() {
+    const box = document.getElementById('roles-container');
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando roles…</div>';
+    try {
+      const { roles, permisos } = await window.API.soporte.rolesPermisos();
+
+      box.innerHTML = `
+        <div class="sp-card sp-table-wrap">
+          <table class="mega-table">
+            <thead><tr><th>Rol</th><th>Código</th><th>Descripción</th><th>Permisos</th><th>Estado</th></tr></thead>
+            <tbody>
+              ${roles.map((r) => `
+                <tr>
+                  <td><strong>${escapeHtml(r.name)}</strong></td>
+                  <td><span class="role-chip">${escapeHtml(r.code)}</span></td>
+                  <td>${escapeHtml(r.description || '—')}</td>
+                  <td>${(r.permissions || []).length}</td>
+                  <td>${r.isSystem ? '<span class="badge badge-role">Sistema</span>' : (r.status === 'activo' ? '<span class="badge badge-on">Activo</span>' : '<span class="badge badge-off">Inactivo</span>')}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:14px;">Catálogo de permisos (${permisos.length})</h3>
+          <div class="kv-grid">
+            ${permisos.map((p) => `<div class="kv"><b style="font-size:13px;">${escapeHtml(p.name)}</b><span>${escapeHtml(p.module)} · ${escapeHtml(p.code)}</span></div>`).join('')}
+          </div>
+        </div>
+      `;
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
   // ── Pestaña Logs ──────────────────────────────────────────────────────────
   function renderLogs(rows, showUser = false) {
     const box = document.getElementById('logs-container');
@@ -527,9 +793,13 @@ window.SoportePanel = (() => {
     initLogs();
     initRespaldo();
     initPlantillas();
+    initSesiones();
+    initAnuncios();
 
+    renderResumen();
     renderUsuarios();
     renderConfig();
+    renderRolesPermisos();
     loadLogs('todos');
     loadPlantillas();
   }

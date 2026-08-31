@@ -370,9 +370,13 @@ window.AppShell = (() => {
     const p = palette[chosen.priority] || palette.normal;
     const banner = document.createElement('div');
     banner.id = 'announcement-banner';
+    // El banner es sticky bajo la cabecera: si el topnav gana altura por la
+    // safe area de iOS (notch/Dynamic Island), el tope debe seguirlo. La
+    // función env() solo dispara en navegadores con safe area (iPhone/iPad);
+    // en el resto equivale a 0 y queda exactamente en 56px como antes.
     banner.style.cssText =
       'display:flex;align-items:center;gap:10px;padding:10px 16px;margin:0 0 16px;border-radius:var(--radius);' +
-      `border-left:4px solid ${p.color};background:${p.soft};font-size:13px;position:sticky;top:56px;z-index:20;`;
+      `border-left:4px solid ${p.color};background:${p.soft};font-size:13px;position:sticky;top:calc(56px + env(safe-area-inset-top));z-index:20;`;
     banner.innerHTML = `
       <span style="font-size:16px;">&#128276;</span>
       <strong style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${UI.escapeHtml(chosen.title || 'Aviso del equipo')}</strong>

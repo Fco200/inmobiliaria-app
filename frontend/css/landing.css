@@ -826,3 +826,18 @@
     gap: 0 !important;
   }
 }
+
+/* ---- Safe area iOS: header sticky y footer no quedan bajo notch / home
+   indicator. Se definen aquí (no en base.css) porque landing.css se carga
+   después y su shorthand `padding` ganaría en cascada. env() vale 0 en
+   navegadores sin notch, así que el look de escritorio no cambia. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .landing-header { padding-top: calc(14px + env(safe-area-inset-top)); }
+  .landing-footer { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+@media (max-width: 600px) {
+  @supports (padding-top: env(safe-area-inset-top)) {
+    .landing-header { padding-top: calc(12px + env(safe-area-inset-top)); }
+  }
+}

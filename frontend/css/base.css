@@ -1910,3 +1910,70 @@ body.page-chat .assistant-panel {
   white-space: nowrap;
   margin-right: 4px;
 }
+
+/* ---- Safe area iOS (notch / Dynamic Island / indicador inferior) ----
+   Con `viewport-fit=cover` + `apple-mobile-web-app-status-bar-style=
+   black-translucent` el contenido se mete bajo el notch y la barra de
+   estado, así que hay que reservar las safe areas con `env()`.
+   En navegadores sin notch `env()` vale 0 y el look de escritorio no
+   cambia. Estas reglas van al final para ganar en cascada. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  /* Cabecera del shell: baja logo, hamburguesa y accesos bajo el notch. */
+  .topnav { padding-top: env(safe-area-inset-top); }
+
+  /* Botones y paneles anclados abajo: suben sobre el indicador inferior. */
+  .assistant-fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .assistant-panel { bottom: calc(90px + env(safe-area-inset-bottom)); }
+  .activity-fab { bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  /* Login: el botón de tema no queda bajo el notch y la tarjeta no se
+     topa con el indicador inferior. */
+  #btn-theme-login { top: calc(14px + env(safe-area-inset-top)); }
+  .login-body {
+    padding-top: calc(20px + env(safe-area-inset-top));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 900px) {
+  @supports (padding-top: env(safe-area-inset-top)) {
+    /* Menú colapsado: cae justo debajo del topnav ya expandido. */
+    .topnav-nav { top: calc(56px + env(safe-area-inset-top)); }
+  }
+}
+
+@media (max-width: 768px) {
+  @supports (padding-top: env(safe-area-inset-top)) {
+    /* Modales: el borde superior del diálogo queda fuera del notch. */
+    #modal-overlay { padding-top: calc(24px + env(safe-area-inset-top)) !important; }
+  }
+}
+
+@media (max-width: 600px) {
+  @supports (padding-top: env(safe-area-inset-top)) {
+    /* Menú desplegable con altura útil bajo el notch. */
+    .topnav-nav.open { max-height: calc(100vh - 56px - env(safe-area-inset-top)); }
+
+    /* Modales a pantalla completa: reservan notch arriba e indicador abajo. */
+    #modal-overlay {
+      padding-top: env(safe-area-inset-top) !important;
+      padding-bottom: env(safe-area-inset-bottom) !important;
+    }
+    #toast-holder { top: calc(12px + env(safe-area-inset-top)) !important; }
+
+    /* Botones flotantes y panel del asistente en móvil. */
+    .assistant-fab { bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .assistant-panel { bottom: calc(78px + env(safe-area-inset-bottom)); }
+    .activity-fab { bottom: calc(90px + env(safe-area-inset-bottom)); }
+  }
+}
+
+@media (max-width: 480px) {
+  @supports (padding-top: env(safe-area-inset-top)) {
+    .login-body {
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    .assistant-panel { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  }
+}

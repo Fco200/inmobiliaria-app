@@ -12,8 +12,12 @@ const UI = (() => {
     if (!holder) {
       holder = document.createElement('div');
       holder.id = 'toast-holder';
+      // Los toasts se anclan arriba a la derecha; en iOS la safe area del
+      // notch/barra de estado debe sumarse para que no queden tapados.
+      // env() vale 0 fuera de dispositivos con notch, así que no afecta al
+      // resto de navegadores (equivalente a `top:16px` de antes).
       holder.style.cssText =
-        'position:fixed;top:16px;right:16px;z-index:1000;display:flex;flex-direction:column;gap:8px;';
+        'position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:1000;display:flex;flex-direction:column;gap:8px;';
       document.body.appendChild(holder);
     }
     const el = document.createElement('div');

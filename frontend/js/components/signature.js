@@ -106,9 +106,32 @@ window.SignaturePad = (() => {
       if (!hasInk && !drawing) setup();
     });
 
+    // Redimensiona la firma a un ancho máximo antes de codificarla en PNG.
+    // La firma viaja en el cuerpo del POST (/formatos/generar) y se persiste en
+    // la BD, así que conviene que el dataURL sea ligero aun en pantallas de
+    // altísima densidad (devicePixelRatio alto). Mantiene la legibilidad.
+    function exportDataURL() {
+      const MAX_W = 400;
+      let source = canvas;
+      if (canvas.width > MAX_W) {
+        const scale = MAX_W / canvas.width;
+        const tw = Math.max(1, Math.round(canvas.width * scale));
+        const th = Math.max(1, Math.round(canvas.height * scale));
+        const out = document.createElement('canvas');
+        out.width = tw;
+        out.height = th;
+        const octx = out.getContext('2d');
+        octx.fillStyle = '#ffffff';
+        octx.fillRect(0, 0, tw, th);
+        octx.drawImage(canvas, 0, 0, tw, th);
+        source = out;
+      }
+      return source.toDataURL('image/png');
+    }
+
     return {
       clear,
-      save: () => canvas.toDataURL('image/png'),
+      save: exportDataURL,
       isEmpty: () => !hasInk,
       canvas,
     };

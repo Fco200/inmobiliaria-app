@@ -692,7 +692,9 @@ window.Pages.documents = {
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
-              URL.revokeObjectURL(url);
+              // Revocar al liberarlo de inmediato puede cancelar la descarga;
+              // se difiere para que el navegador la tome.
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
               UI.toast('PDF descargado', 'success');
             } catch (error) {
               UI.toast('Error al descargar: ' + error.message, 'error');
@@ -804,7 +806,10 @@ window.Pages.documents = {
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
-              URL.revokeObjectURL(url);
+              // Liberar el objeto al liberarlo de inmediato cancela la descarga
+              // en varios navegadores (queda en pantalla sin PDF ni error), así
+              // que se difiere la revocación hasta que el navegador la tome.
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
 
               UI.toast('PDF generado y descargado exitosamente', 'success');
               UI.closeModal();

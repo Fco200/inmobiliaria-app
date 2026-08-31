@@ -10,7 +10,7 @@ window.Onboarding = (() => {
   const STEPS = [
     {
       icon: '&#128640;',
-      title: 'Bienvenido a INMOBILES',
+      title: 'Bienvenido a INMOBLES',
       text: 'Tu CRM inmobiliario: administra propiedades, clientes, negocios, citas y más desde un solo lugar.',
     },
     {
@@ -77,7 +77,7 @@ window.Onboarding = (() => {
     `;
 
     const modal = UI.openModal({
-      title: 'Guía rápida de INMOBILES',
+      title: 'Guía rápida de INMOBLES',
       body: '<div class="loading">Cargando...</div>',
       footer,
       size: 560,

@@ -577,7 +577,7 @@ window.Pages.clients = {
       ];
       if (digits) lines.push(`TEL;TYPE=CELL:+52${digits}`);
       if (email) lines.push(`EMAIL;TYPE=INTERNET:${email}`);
-      lines.push(`ORG:INMOBILES`);
+      lines.push(`ORG:INMOBLES`);
       lines.push(`NOTE:Cliente CRM · Estado: ${record.status || '—'} · Etapa: ${String(record.funnelStage || '—').replace(/_/g, ' ')}`);
       lines.push('END:VCARD');
 

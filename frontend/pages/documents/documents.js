@@ -396,7 +396,7 @@ window.Pages.documents = {
     }
 
     // Abre una ventana imprimible (Ctrl+P / Guardar como PDF) con la cabecera
-    // de INMOBILES, las secciones de datos y la firma.
+    // de INMOBLES, las secciones de datos y la firma.
     function openPrintPreview(titulo, secciones, values, firma) {
       const firmaData = firma || (values && values.firma) || '';
       const w = window.open('', '_blank');
@@ -417,7 +417,7 @@ window.Pages.documents = {
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>${UI.escapeHtml(titulo)} · INMOBILES</title>
+<title>${UI.escapeHtml(titulo)} · INMOBLES</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; color: #1f2937; background: #fff; margin: 0; }
@@ -443,10 +443,10 @@ window.Pages.documents = {
 <body>
   <div class="no-print">
     <span>Vista previa de impresión: usa <strong>Ctrl+P</strong> (Guardar como PDF) o el botón Imprimir.</span>
-    <button type="button" onclick="window.print()">Imprimir</button>
+    <button type="button" id="btn-imprimir">Imprimir</button>
   </div>
   <div class="header">
-    <div class="brand">&#127968; INMOBILES<small>Gestión inmobiliaria profesional</small></div>
+    <div class="brand">&#127968; INMOBLES<small>Gestión inmobiliaria profesional</small></div>
     <div style="text-align:right;">
       <h1>${UI.escapeHtml(titulo)}</h1>
       <div style="font-size:12px;color:#6b7280;">${hoy}</div>
@@ -460,12 +460,15 @@ window.Pages.documents = {
         <img src="${firmaData}" alt="Firma">
         <div class="firma-line">Firma</div>
       </div>` : ''}
-    <div class="foot">Documento generado con INMOBILES el ${hoy}.</div>
+    <div class="foot">Documento generado con INMOBLES el ${hoy}.</div>
   </div>
 </body>
 </html>`);
       w.document.close();
       w.focus();
+      // Sin handlers inline (el CSP del sitio los bloquea); se conecta con el DOM.
+      const btnPrint = w.document.getElementById('btn-imprimir');
+      if (btnPrint) btnPrint.addEventListener('click', () => w.print());
     }
 
     // Hoja de Visita: formulario + firma + vista previa imprimible.
@@ -717,7 +720,7 @@ window.Pages.documents = {
         }
 
         // Construir formulario dinámico
-        const formId = `form-${plantillaId}`;
+        const formId = 'form-' + String(plantillaId).replace(/[^a-zA-Z0-9_-]/g, '_');
         let formHTML = `<form id="${formId}" novalidate>`;
 
         for (const seccion of plantilla.secciones) {
@@ -769,7 +772,7 @@ window.Pages.documents = {
           if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
         }
 
-        const form = bodyEl ? bodyEl.querySelector(`#${formId}`) : null;
+        const form = bodyEl ? bodyEl.querySelector(`[id="${formId}"]`) : null;
         const pad = attachSignature(bodyEl);
         if (form) {
           form.addEventListener('submit', async (e) => {

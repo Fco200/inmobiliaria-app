@@ -121,6 +121,17 @@ window.LoginPage = (() => {
     if (banner) banner.classList.add('hide');
     if (overlay) overlay.classList.remove('hide');
 
+    // Respaldo tipográfico dorado si el logo (webp) no carga.
+    const lmg = document.getElementById('lm-logo-img');
+    const lmt = document.getElementById('lm-logo-text');
+    if (lmg && lmt && !lmg._wired) {
+      lmg._wired = true;
+      lmg.addEventListener('error', () => {
+        lmg.style.display = 'none';
+        lmt.style.display = 'inline-flex';
+      });
+    }
+
     const retryBtn = document.getElementById('btn-lm-retry');
     if (retryBtn && !retryBtn._wired) {
       retryBtn._wired = true;

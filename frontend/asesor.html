@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2d1048" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="INMOBLES" />
+  <meta name="description" content="Perfil, carta de presentación y catálogo de propiedades del asesor INMOBLES." />
+  <title id="asesor-title">Asesor — INMOBLES</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="32x32" href="LOGOICONO.jpeg">
+  <link rel="icon" type="image/png" sizes="192x192" href="LOGOICONO.jpeg">
+  <link rel="apple-touch-icon" sizes="192x192" href="LOGOICONO.jpeg">
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+</head>
+<body class="landing-body">
+
+  <!-- HEADER -->
+  <header class="landing-header">
+    <a class="landing-brand" href="landing.html">
+      <img src="logoinmobles.png" alt="INMOBLES" class="landing-brand-logo">
+      <span><strong id="landing-brand-name">INMOBLES</strong><br /><small id="landing-brand-tagline">Profesionales en Negocios Inmobiliarios</small></span>
+    </a>
+    <nav class="landing-nav" id="landing-nav">
+      <a href="landing.html#inicio">Inicio</a>
+      <a href="landing.html#catalogo">Propiedades</a>
+      <a href="landing.html#servicios">Servicios</a>
+      <a href="landing.html#porque-nosotros">Por qué INMOBLES</a>
+      <a href="landing.html#equipo">Nuestro Equipo</a>
+      <a href="landing.html#contacto">Contacto</a>
+      <a class="btn btn-primary btn-sm" href="index.html">Acceso equipo</a>
+    </nav>
+    <div class="landing-header-actions">
+      <a href="tel:+526623188580" class="header-phone">&#128222; <span>662 318 8580</span></a>
+      <button class="landing-nav-toggle" id="nav-toggle" aria-label="Menú">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PERFIL DEL ASESOR -->
+  <section class="landing-section" id="asesor-inicio">
+    <div id="asesor-loading" class="loading">Cargando perfil del asesor...</div>
+    <div id="asesor-profile" hidden></div>
+  </section>
+
+  <!-- CARTA DE PRESENTACIÓN -->
+  <section class="landing-section landing-alt" id="carta">
+    <div class="landing-section-head">
+      <h2>&#128196; Carta de presentación digital</h2>
+    </div>
+    <p class="text-muted" style="margin:0 0 20px;max-width:640px;">
+      Descarga esta ficha como PDF o compártela por WhatsApp con tus clientes y prospectos.
+    </p>
+    <div id="carta-preview"></div>
+  </section>
+
+  <!-- CATÁLOGO DEL ASESOR -->
+  <section class="landing-section" id="catalogo">
+    <div class="landing-section-head">
+      <h2>&#127968; <span id="catalogo-title">Propiedades disponibles</span></h2>
+      <span class="text-muted" id="result-count"></span>
+    </div>
+    <div id="properties-grid" class="landing-grid">
+      <div class="loading">Cargando propiedades...</div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="landing-footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <img src="logoinmobles.png" alt="INMOBLES" class="footer-logo">
+        <p>Profesionales en Negocios Inmobiliarios. Tu hogar es nuestra prioridad.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Enlaces</h4>
+        <a href="landing.html#inicio">Inicio</a>
+        <a href="landing.html#catalogo">Propiedades</a>
+        <a href="landing.html#servicios">Servicios</a>
+        <a href="landing.html#equipo">Nuestro equipo</a>
+        <a href="contacto.html">Contacto</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contacto</h4>
+        <a href="tel:+526623188580">&#128222; <span>662 318 8580</span></a>
+        <a href="https://wa.me/526623188580" target="_blank" rel="noopener">&#128172; WhatsApp</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&#169; <span id="footer-year"></span> <strong>INMOBLES</strong>. Todos los derechos reservados.</span>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/cartaPresentacion.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="pages/asesor/asesor.js"></script>
+</body>
+</html>

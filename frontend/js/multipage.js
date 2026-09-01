@@ -14,13 +14,13 @@ window.AppShell = (() => {
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;' },
     { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;' },
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;' },
+    { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;' },
     { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;' },
     { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;' },
-    { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;' },
     { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;' },
-    { key: 'settings', label: 'Config', href: 'settings.html', icon: '&#9881;' },
     { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;' },
+    { key: 'settings', label: 'Config', href: 'settings.html', icon: '&#9881;' },
   ];
 
   function currentUserRole() {

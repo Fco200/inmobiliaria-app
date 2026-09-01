@@ -1,6 +1,12 @@
 'use strict';
 
 window.LandingPage = (() => {
+  // Número del propietario / oficina como respaldo cuando el backend no
+  // trae el WhatsApp configurado (viajes sin red, primera carga, etc.).
+  const OWNER_WHATSAPP = '526623188580';
+  const OWNER_PHONE = '+526623188580';
+  const OWNER_PHONE_DISPLAY = '662 318 8580';
+
   const TYPE_LABELS = {
     casa: 'Casa',
     departamento: 'Departamento',
@@ -227,7 +233,7 @@ window.LandingPage = (() => {
 
   function asesorCard(a) {
     const photo = a.photo
-      ? `<img src="${window.AppConfig.resolveUrl(a.photo)}" alt="${UI.escapeHtml(a.name)}" class="team-photo">`
+      ? `<img src="${window.AppConfig.resolveUrl(a.photo)}" alt="${UI.escapeHtml(a.name)}" class="team-photo" loading="lazy">`
       : `<span class="team-photo team-photo-fallback">${UI.escapeHtml(String(a.name || 'A').charAt(0).toUpperCase())}</span>`;
     const wa = a.phone
       ? `<a class="btn btn-wa btn-sm" href="${whatsappLink(`Hola ${a.name}, te contacté desde la página de INMOBLES.`, a.phone)}" target="_blank" rel="noopener">&#128172; WhatsApp</a>`
@@ -245,7 +251,7 @@ window.LandingPage = (() => {
           ${(a.propertyCount || 0) > 0 ? `${'&#127968;&#65039;'} ${a.propertyCount} ${a.propertyCount === 1 ? 'propiedad' : 'propiedades'} publicadas` : 'Sin propiedades publicadas'}
         </p>
         <div class="landing-card-actions">
-          <button class="btn btn-primary btn-sm" type="button" data-team data-id="${a.id}">Ver sus propiedades</button>
+          <a class="btn btn-primary btn-sm" href="asesor.html?id=${encodeURIComponent(String(a.id))}">Ver su perfil</a>
           ${wa}
           ${mail}
         </div>
@@ -267,19 +273,6 @@ window.LandingPage = (() => {
         return;
       }
       el.innerHTML = list.map(asesorCard).join('');
-      el.querySelectorAll('[data-team]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const id = btn.dataset.id;
-          const asesor = list.find((x) => x.id === id) || null;
-          state.asesorId = id;
-          state.activeAsesor = asesor;
-          state.page = 1;
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          await loadProperties();
-          const cat = document.getElementById('catalogo');
-          if (cat) cat.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      });
     } catch (error) {
       el.innerHTML = UI.errorAlert(error.message);
     }
@@ -311,7 +304,25 @@ window.LandingPage = (() => {
     text('landing-footer-text', l.footerText ? `${settings.agencyName || ''} ${l.footerText}`.trim() : settings.agencyName || '');
     text('landing-title', `${settings.agencyName || 'Inmobiliaria'} — Catálogo de inmuebles`);
 
-    state.whatsapp = l.whatsappNumber || settings.whatsappNumber || '';
+    state.whatsapp = l.whatsappNumber || settings.whatsappNumber || OWNER_WHATSAPP;
+
+    const setNumber = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && value) el.textContent = value;
+    };
+    setNumber('header-phone-text', OWNER_PHONE_DISPLAY);
+    setNumber('agent-phone-text', OWNER_PHONE_DISPLAY);
+    setNumber('footer-phone-text', OWNER_PHONE_DISPLAY);
+    const headerPhone = document.getElementById('header-phone');
+    if (headerPhone) headerPhone.href = `tel:${OWNER_PHONE}`;
+    const agentPhone = document.getElementById('agent-phone');
+    if (agentPhone) agentPhone.href = `tel:${OWNER_PHONE}`;
+    const footerPhone = document.getElementById('footer-phone');
+    if (footerPhone) footerPhone.href = `tel:${OWNER_PHONE}`;
+    const agentWa = document.getElementById('agent-whatsapp');
+    if (agentWa) agentWa.href = `https://wa.me/${state.whatsapp}`;
+    const footerWa = document.getElementById('footer-wa');
+    if (footerWa) footerWa.href = `https://wa.me/${state.whatsapp}`;
 
     const wa = document.getElementById('wa-contact');
     if (wa) {
@@ -321,6 +332,13 @@ window.LandingPage = (() => {
     }
     const waFoot = document.getElementById('footer-wa');
     if (waFoot) waFoot.textContent = state.whatsapp ? `WhatsApp: +${state.whatsapp}` : '';
+    const waBtn = document.getElementById('cta-wa-float');
+    if (waBtn) {
+      waBtn.hidden = !state.whatsapp;
+      waBtn.href = `https://wa.me/${state.whatsapp}?text=${encodeURIComponent('Hola, quiero información sobre los inmuebles disponibles.')}`;
+    }
+    const callBtn = document.getElementById('cta-call-float');
+    if (callBtn) callBtn.href = `tel:${OWNER_PHONE}`;
 
     const enabled = l.catalogEnabled !== false;
     const form = document.getElementById('search-form');

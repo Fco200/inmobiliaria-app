@@ -123,25 +123,44 @@ const listAsesores = asyncHandler(async (req, res) => {
     .sort({ name: 1 })
     .lean();
 
-  // Conteo de propiedades publicadas activas por asesor (responsables + inventario asignado).
-  const counts = await Promise.all(
-    users.map(async (u) => {
-      const invIds = await publishedInventoryIds(u._id);
-      const total = await Property.countDocuments({
-        isPublished: true,
-        status: { $ne: 'inactiva' },
-        price: { $gt: 0 },
-        $or: [
-          { responsibleUser: u._id },
-          { _id: invIds.length ? { $in: invIds } : { $in: [] } },
-        ],
-      });
-      return { id: String(u._id), count: total };
-    })
-  );
-  const countMap = counts.reduce((acc, c) => { acc[c.id] = c.count; return acc; }, {});
+  if (!users.length) {
+    return res.json({ success: true, data: [], meta: { total: 0 } });
+  }
+  const userIds = users.map((u) => u._id);
 
-  const data = users.map((u) => ({ ...asesorSummary(u), propertyCount: countMap[String(u._id)] || 0 }));
+  // Conteo de propiedades publicadas activas por asesor (responsables + inventario
+  // asignado). Se hace en SÓLO 2 consultas (una a Inventory y una a Property), no
+  // 2 por asesor, para que el directorio del equipo escale sin bloquearse.
+  const sets = new Map(userIds.map((id) => [String(id), new Set()]));
+
+  const inventory = await Inventory.find({
+    assignedAgent: { $in: userIds },
+    isPublished: true,
+  })
+    .select('assignedAgent property')
+    .lean();
+  for (const inv of inventory) {
+    const key = String(inv.assignedAgent);
+    const bucket = sets.get(key);
+    if (bucket && inv.property) bucket.add(String(inv.property));
+  }
+
+  const props = await Property.find({
+    isPublished: true,
+    status: { $ne: 'inactiva' },
+    price: { $gt: 0 },
+    responsibleUser: { $in: userIds },
+  })
+    .select('_id responsibleUser')
+    .lean();
+  for (const prop of props) {
+    const key = String(prop.responsibleUser);
+    const bucket = sets.get(key);
+    if (bucket) bucket.add(String(prop._id));
+  }
+
+  const countOf = (id) => (sets.get(String(id)) || new Set()).size;
+  const data = users.map((u) => ({ ...asesorSummary(u), propertyCount: countOf(u._id) }));
   res.json({ success: true, data, meta: { total: data.length } });
 });
 

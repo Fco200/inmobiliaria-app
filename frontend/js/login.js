@@ -536,6 +536,52 @@ window.LoginPage = (() => {
     }
   }
 
+  // ---- Restablecer aplicación (iPhone Safari / caché dañada) ----
+  // Borra toda la caché del service worker y el almacenamiento local, fuerza la
+  // actualización del worker (skipWaiting) y recarga la página desde cero.
+
+  function resetAppFlow() {
+    const btn = document.getElementById('btn-reset-app');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+      const ok = UI.confirm
+        ? await UI.confirm('Esto eliminará los datos guardados en este dispositivo (preferencias y caché) y volverá a cargar la aplicación. ¿Continuar?')
+        : true;
+      if (!ok) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Restableciendo…';
+
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+      } catch (error) { /* seguir de todos modos */ }
+
+      try {
+        localStorage.removeItem('crm_theme');
+        localStorage.removeItem('crm_reminders');
+        localStorage.removeItem('crm_reminded');
+        localStorage.removeItem('crm_alerted');
+        localStorage.removeItem('crm_welcome_seen');
+        if (window.ApiClient && window.ApiClient.clearToken) window.ApiClient.clearToken();
+      } catch (error) { /* sin almacenamiento */ }
+
+      if ('serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg && reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        } catch (error) { /* silencioso */ }
+      }
+
+      window.location.reload(true);
+    });
+  }
+
   function setup() {
     registerServiceWorker();
 
@@ -572,6 +618,8 @@ window.LoginPage = (() => {
     refreshGoogleStatus();
 
     if (window.AppInstall) window.AppInstall.init();
+
+    resetAppFlow();
   }
 
   function init() {

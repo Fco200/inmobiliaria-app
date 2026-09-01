@@ -1091,6 +1091,16 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   color: var(--text-muted);
   opacity: 0.85;
 }
+.login-reset-line {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+.login-reset-line .link-btn {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
 .soporte-badge {
   display: inline-flex;
   align-items: center;

@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const apiRoutes = require('./routes');
 const notFound = require('./middlewares/notFound');
 const errorHandler = require('./middlewares/errorHandler');
+const { maintenance, maintenancePage } = require('./middlewares/maintenance');
 const { clientUrl, isProduction } = require('./config/env');
 
 const app = express();
@@ -77,6 +78,11 @@ app.use(
 );
 
 const frontendDir = path.join(__dirname, '../../frontend');
+
+// En modo mantenimiento se muestra la pantalla amigable para las navegaciones
+// de páginas (no bloquear recursos estáticos ni las páginas públicas/panel de
+// soporte). Se registra antes del estático para interceptar el contenido HTML.
+app.use(maintenancePage);
 app.use(
   express.static(frontendDir, {
     setHeaders: (res) => {
@@ -101,7 +107,7 @@ app.use(
   express.static(uploadsDir)
 );
 
-app.use('/api', apiRoutes);
+app.use('/api', maintenance, apiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

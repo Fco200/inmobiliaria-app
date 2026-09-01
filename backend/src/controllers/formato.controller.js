@@ -5,6 +5,7 @@ const fs = require('fs');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { Document } = require('../models');
 const { POSICIONES, DEFAULT_LAYOUT } = require('../config/formatoPosiciones');
+const logger = require('../services/logger.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
 const UPLOADS_DIR = path.join(__dirname, '../../uploads');
@@ -614,6 +615,7 @@ const generarPDF = async (req, res) => {
     res.send(Buffer.from(modifiedPdfBytes));
   } catch (error) {
     console.error('Error al generar PDF:', error);
+    logger.error('Falla al generar PDF', { plantilla: req.params.plantillaId, reason: error.message }, 'pdf');
     res.status(500).json({ success: false, message: 'Error al generar el PDF', error: error.message });
   }
 };

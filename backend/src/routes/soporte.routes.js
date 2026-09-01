@@ -24,9 +24,14 @@ const {
   listarSolicitudesPassword,
   listarRolesPermisos,
   listarLogs,
+  listarLogsSistema,
+  limpiarLogsSistema,
+  estadoMantenimiento,
+  cambiarMantenimiento,
   generarRespaldo,
   listarPlantillas,
   subirPlantilla,
+  renombrarPlantilla,
   eliminarPlantilla,
   descargarPlantillaSoporte,
   plantillaUpload,
@@ -80,9 +85,16 @@ router.put('/config', requireSoporte, guardarConfig);
 router.get('/soporte-config', requireSoporte, listarSoporteConfig);
 router.put('/soporte-config', requireSoporte, guardarSoporteConfig);
 
+// Modo mantenimiento
+router.get('/mantenimiento', requireSoporte, estadoMantenimiento);
+router.put('/mantenimiento', requireSoporte, cambiarMantenimiento);
+
 // Logs
 router.get('/logs', requireSoporte, listarLogs);
 router.get('/logs/errors', requireSoporte, listarLogs);
+// Logs en tiempo real del sistema/servidor (buffer en memoria)
+router.get('/logs/sistema', requireSoporte, listarLogsSistema);
+router.delete('/logs/sistema', requireSoporte, limpiarLogsSistema);
 
 // Respaldos
 router.get('/respaldo', requireSoporte, generarRespaldo);
@@ -90,6 +102,7 @@ router.get('/respaldo', requireSoporte, generarRespaldo);
 // Plantillas PDF
 router.get('/plantillas', requireSoporte, listarPlantillas);
 router.post('/plantillas', requireSoporte, plantillaUpload.single('plantilla'), subirPlantilla);
+router.patch('/plantillas/:archivo', requireSoporte, renombrarPlantilla);
 router.delete('/plantillas/:archivo', requireSoporte, eliminarPlantilla);
 router.get('/plantillas/:archivo/descargar', requireSoporte, descargarPlantillaSoporte);
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mantenimiento · INMOBILIARIA</title>
+  <meta name="theme-color" content="#171310">
+  <link rel="icon" type="image/png" sizes="32x32" href="logoinmobles.png">
+  <style>
+    :root {
+      --gold: #d4af37;
+      --gold-light: #f0d98c;
+      --gold-dark: #a8832a;
+      --bg: #171310;
+      --bg-2: #1f1a15;
+      --panel: #262019;
+      --border: #3a322a;
+      --text: #f2ead9;
+      --text-muted: #a89f8f;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .mt-box {
+      max-width: 520px; width: 100%; text-align: center;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 18px; padding: 48px 36px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .mt-logo { height: 56px; width: auto; border-radius: 12px; margin-bottom: 22px; }
+    .gear {
+      width: 74px; height: 74px; margin: 0 auto 22px;
+      border: 3px solid var(--gold); border-top-color: transparent;
+      border-radius: 50%; border-right-color: transparent;
+      animation: spin 1.4s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 24px; margin: 0 0 10px; color: var(--gold); }
+    p { font-size: 14px; line-height: 1.7; color: var(--text-muted); margin: 0 0 8px; }
+    .mt-status {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 20px; padding: 7px 16px; border-radius: 999px;
+      background: rgba(212,175,55,0.12); color: var(--gold); font-size: 12px; font-weight: 600;
+    }
+    .mt-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .mt-msg { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--text); }
+    .mt-fin {
+      display: none; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 14px; padding: 10px 16px; border-radius: 12px;
+      background: var(--bg-2); border: 1px solid var(--border); font-size: 13px; color: var(--gold-light);
+    }
+    .mt-fin.show { display: inline-flex; }
+    .mt-fin .ico { font-size: 15px; }
+    .mt-small { margin-top: 26px; font-size: 11px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="mt-box">
+    <img class="mt-logo" src="logoinmobles.png" alt="INMOBILIARIA" onerror="this.style.display='none'">
+    <div class="gear"></div>
+    <h1>Estamos en mantenimiento</h1>
+    <p>La plataforma se encuentra temporalmente en mantenimiento técnico.</p>
+    <p>Estamos trabajando para mejorar tu experiencia. Por favor, intenta de nuevo en unos minutos.</p>
+    <div class="mt-status"><span class="dot"></span> Mantenimiento programado</div>
+    <div class="mt-msg" id="mt-msg"></div>
+    <div class="mt-fin" id="mt-fin"><span class="ico">&#128336;&#65039;</span> <span id="mt-fin-txt">Volveremos muy pronto</span></div>
+    <div class="mt-small">INMOBILIARIA · FV DIGITAL</div>
+  </div>
+  <script>
+    // Muestra el mensaje y la hora/fecha estimada de fin que el servidor envía.
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+
+        var msg = params.get('m');
+        if (msg) {
+          document.getElementById('mt-msg').textContent = msg;
+        } else {
+          document.getElementById('mt-msg').style.display = 'none';
+        }
+
+        var hasta = params.get('hasta');
+        if (hasta) {
+          var d = new Date(hasta);
+          if (!isNaN(d.getTime())) {
+            var text = 'Volveremos el ' + d.toLocaleString('es-MX', {
+              day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+            });
+            document.getElementById('mt-fin-txt').textContent = text;
+            document.getElementById('mt-fin').classList.add('show');
+          } else if (hasta) {
+            document.getElementById('mt-fin-txt').textContent = 'Volveremos: ' + hasta;
+            document.getElementById('mt-fin').classList.add('show');
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>

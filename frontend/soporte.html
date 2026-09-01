@@ -55,8 +55,7 @@
     .sp-brand b { color: var(--gold); letter-spacing: 0.02em; }
     .sp-brand small { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
     .sp-user { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
-    .sp-user img { height: 30px; width: 30px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); }
-    .sp-outline-btn {
+    .sp-user img { height: 30px; width: 30px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); }    .sp-outline-btn {
       background: transparent; border: 1px solid var(--gold); color: var(--gold);
       padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all .2s;
     }
@@ -148,6 +147,14 @@
     .log-msg { color: var(--text); }
     .log-msg.error { color: var(--danger); }
     .log-user { color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
+    .log-badge {
+      flex-shrink: 0; min-width: 52px; text-align: center;
+      padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+    }
+    .log-badge-INFO { background: rgba(212,175,55,0.14); color: var(--gold); }
+    .log-badge-WARN { background: rgba(224,169,58,0.18); color: var(--warning); }
+    .log-badge-ERROR { background: rgba(224,83,61,0.18); color: var(--danger); }
+    .log-row .log-msg.warn { color: var(--warning); }
 
     .plantilla-row {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -179,6 +186,25 @@
     .kv { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
     .kv b { display: block; font-size: 18px; color: var(--text); }
     .kv span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* ── Interruptor de mantenimiento ── */
+    .mt-switch { display: flex; align-items: center; gap: 10px; }
+    .mt-switch label { cursor: pointer; }
+    .mt-track {
+      position: relative; width: 46px; height: 24px; border-radius: 999px;
+      background: var(--border); border: 1px solid var(--border);
+      transition: background .2s; cursor: pointer; flex-shrink: 0; padding: 0;
+    }
+    .mt-track::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+      border-radius: 50%; background: var(--text-muted); transition: all .2s;
+    }
+    .mt-track.on { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); border-color: var(--gold); }
+    .mt-track.on::after { left: 24px; background: #14100c; }
+    .mt-label { font-size: 12px; font-weight: 600; }
+    .mt-label .st { color: var(--success); font-weight: 700; }
+    .mt-label .off { color: var(--danger); font-weight: 700; }
+    .mt-msg-input { width: 100%; }
 
     .mega-table th, .mega-table td { white-space: normal; }
     .role-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(212,175,55,0.15); color: var(--gold); }
@@ -227,10 +253,21 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Guía ── */
+    .guia-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px; align-items: start;
+    }
+    .guia-list { list-style: none; margin: 0; padding: 0; }
+    .guia-list li { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .guia-list li:last-child { border-bottom: none; }
+    .guia-list li b { display: block; color: var(--text); font-size: 13px; margin-bottom: 3px; }
+    .guia-list li span { color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+
     @media (max-width: 768px) {
       .sp-body { flex-direction: column; }
       .sp-side { width: 100%; flex-direction: row; overflow-x: auto; padding: 10px; border-right: none; border-bottom: 1px solid var(--border); }
-      .sp-tab { flex-shrink: 0; padding: 9px 12px; }
+      .sp-tab { flex-shrink: 0; padding: 9px 12px; white-space: nowrap; }
       .sp-main { padding: 16px; }
       .sp-user span { display: none; }
       .sp-topbar { padding: 0 12px; }
@@ -240,6 +277,20 @@
       .sp-chat { flex-direction: column; }
       .sp-chat-list { width: 100%; }
       .sp-chat-win { max-height: none; min-height: 60vh; }
+      .sp-table-wrap { display: block; }
+      .sp-table-wrap table { min-width: 640px; }
+      .stat-cards { grid-template-columns: repeat(2, 1fr); }
+      .kv-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+      .mt-switch { flex: 1 1 100%; justify-content: space-between; }
+      .guia-grid { grid-template-columns: 1fr; }
+      .sp-chat-msgs { max-height: 50vh; }
+      .log-row { flex-wrap: wrap; }
+    }
+    @media (max-width: 480px) {
+      .sp-pane-title { font-size: 18px; }
+      .sp-card { padding: 14px; }
+      .stat-card b { font-size: 20px; }
+      .sp-topbar { height: 54px; }
     }
   </style>
 </head>
@@ -260,6 +311,7 @@
   <div class="sp-body">
     <nav class="sp-side" id="sp-side">
       <button class="sp-tab active" data-tab="resumen"><span class="ico">&#128200;</span> Resumen</button>
+      <button class="sp-tab" data-tab="guia"><span class="ico">&#128214;</span> Guía</button>
       <button class="sp-tab" data-tab="usuarios"><span class="ico">&#128101;</span> Usuarios</button>
       <button class="sp-tab" data-tab="sesiones"><span class="ico">&#128275;&#65039;</span> Sesiones</button>
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
@@ -276,7 +328,36 @@
       <section class="sp-pane active" id="pane-resumen">
         <h1 class="sp-pane-title">Resumen del Sistema</h1>
         <p class="sp-pane-sub">Estado del servidor, base de datos y estadísticas generales de la plataforma.</p>
+        <div class="sp-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
+            <div>
+              <h3 style="margin-bottom:4px;color:var(--gold);">&#128681;&#65039;&nbsp; Modo Mantenimiento</h3>
+              <span style="font-size:12px;color:var(--text-muted);">Bloquea la app a TODOS los usuarios (incluidos los administradores). Solo el Soporte Técnico (SUPERADMIN) conserva acceso para revertirlo.</span>
+            </div>
+            <div class="mt-switch">
+              <button class="mt-track" id="mt-switch" type="button" role="switch" aria-checked="false" aria-label="Modo mantenimiento"></button>
+              <span class="mt-label" id="mt-label"><span class="off">OFF</span></span>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+            <input class="mt-msg-input" id="mt-mensaje" type="text" placeholder="Mensaje que verán los usuarios en la pantalla de mantenimiento…" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;flex:2;min-width:220px;">
+            <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              Fin estimado
+              <input class="mt-msg-input" id="mt-hasta" type="datetime-local" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;color-scheme:dark;">
+            </label>
+          </div>
+          <div style="margin-top:8px;">
+            <span class="alert" id="mt-alert"></span>
+          </div>
+        </div>
         <div id="resumen-container"></div>
+      </section>
+
+      <!-- ═══ Guía ═══ -->
+      <section class="sp-pane" id="pane-guia">
+        <h1 class="sp-pane-title">Guía del Soporte Técnico</h1>
+        <p class="sp-pane-sub">Manual de referencia rápida para la operación del panel y las herramientas de diagnóstico.</p>
+        <div id="guia-container"></div>
       </section>
 
       <!-- ═══ Usuarios ═══ -->
@@ -360,11 +441,14 @@
       <!-- ═══ Logs ═══ -->
       <section class="sp-pane" id="pane-logs">
         <h1 class="sp-pane-title">Visor de Logs y Errores</h1>
-        <p class="sp-pane-sub">Últimos eventos del backend para diagnosticar fallas sin abrir la consola.</p>
-        <div style="display:flex;gap:10px;margin-bottom:16px;">
-          <button class="btn btn-ghost btn-sm active" id="btn-logs-todos" type="button">Todos</button>
-          <button class="btn btn-ghost btn-sm" id="btn-logs-errores" type="button">Solo errores</button>
+        <p class="sp-pane-sub">Eventos del backend en tiempo real (errores de consultas, caídas de Socket.io, fallas en PDFs).</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn btn-ghost btn-sm active" id="btn-log-lvl-all" type="button">Todos</button>
+          <button class="btn btn-ghost btn-sm" id="btn-log-lvl-ERROR" type="button">ERROR</button>
+          <button class="btn btn-ghost btn-sm" id="btn-log-lvl-WARN" type="button">WARN</button>
+          <button class="btn btn-ghost btn-sm" id="btn-log-lvl-INFO" type="button">INFO</button>
           <span style="flex:1"></span>
+          <button class="btn btn-danger btn-sm" id="btn-logs-clear" type="button">&#128465;&#65039; Limpiar Logs</button>
           <button class="btn btn-gold btn-sm" id="btn-logs-refresh" type="button">&#8635; Actualizar</button>
         </div>
         <div id="logs-container"></div>
@@ -403,6 +487,7 @@
   <script src="js/components/ui.js"></script>
   <script src="js/components/crudPage.js"></script>
   <script src="js/services/index.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="js/pages/soporte/soporte.js"></script>
 </body>
 </html>

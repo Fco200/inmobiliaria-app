@@ -451,12 +451,13 @@ window.SoportePanel = (() => {
         <div class="sp-card sp-table-wrap">
           <table class="mega-table">
             <thead><tr>
-              <th>Usuario</th><th>Dispositivo</th><th>Duración</th><th>IP</th><th>Última actividad</th><th>Expira</th><th>Estado</th><th></th>
+              <th>Usuario</th><th>Rol</th><th>Dispositivo</th><th>Duración</th><th>IP</th><th>Última actividad</th><th>Expira</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody>
               ${sesiones.map((s) => {
                 const u = s.user || {};
                 const isCurrent = s.isCurrent;
+                const role = s.role || {};
                 return `
                   <tr>
                     <td>
@@ -464,13 +465,16 @@ window.SoportePanel = (() => {
                       ${isCurrent ? ' <span class="badge badge-role">actual</span>' : ''}
                       <br><small class="text-muted">${escapeHtml(u.email || '')}</small>
                     </td>
+                    <td>
+                      ${role.code ? `<span class="role-chip">${escapeHtml(role.name || role.code)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
+                    </td>
                     <td>${escapeHtml(deviceLabel(s.device))}</td>
                     <td>${s.remember ? '<span class="badge badge-on">Recordada</span>' : '<span class="badge badge-off">Temporal</span>'}</td>
                     <td>${escapeHtml(s.ip || '—')}</td>
                     <td>${fmtDate(s.lastSeenAt)}</td>
                     <td>${fmtDate(s.expiresAt)}</td>
                     <td>${isCurrent ? '<span class="badge badge-role">Este panel</span>' : '<span class="badge badge-on">Activa</span>'}</td>
-                    <td><button class="btn btn-danger btn-sm" data-rs="${s._id}" ${isCurrent ? 'disabled' : ''}>Cerrar</button></td>
+                    <td><button class="btn btn-danger btn-sm" data-rs="${s._id}" ${isCurrent ? 'disabled' : ''}>Cerrar Sesión</button></td>
                   </tr>`;
               }).join('')}
             </tbody>
@@ -638,55 +642,120 @@ window.SoportePanel = (() => {
     }
   }
 
-  // ── Pestaña Logs ──────────────────────────────────────────────────────────
-  function renderLogs(rows, showUser = false) {
+  // ── Pestaña Logs (visor en tiempo real) ───────────────────────────────────
+  let logLevel = null;      // null = todos, o 'ERROR' | 'WARN' | 'INFO'
+  let logTimer = null;
+  let logSocket = null;
+  let logLiveCache = [];
+
+  function logLevelClass(level) {
+    if (level === 'ERROR') return 'error';
+    if (level === 'WARN') return 'warn';
+    return 'info';
+  }
+
+  function renderLogs(rows) {
     const box = document.getElementById('logs-container');
     if (!rows.length) {
       box.innerHTML = '<div class="sp-empty">No hay eventos registrados.</div>';
       return;
     }
+    const filtered = logLevel ? rows.filter((r) => r.level === logLevel) : rows;
+    if (!filtered.length) {
+      box.innerHTML = `<div class="sp-empty">No hay eventos de nivel <b>${escapeHtml(logLevel)}</b>.</div>`;
+      return;
+    }
     box.innerHTML = `
       <div class="sp-card sp-logs">
-        ${rows.map((r) => `
+        ${filtered.map((r) => `
           <div class="log-row">
-            <span class="log-time">${fmtDate(r.createdAt)}</span>
-            <span class="log-msg ${isError(r) ? 'error' : ''}"><b>${escapeHtml(r.action)}</b> — ${escapeHtml(r.message || '')}</span>
-            ${showUser && r.user ? `<span class="log-user">${escapeHtml(r.user.name || r.user.email)}</span>` : ''}
+            <span class="log-badge log-badge-${logLevelClass(r.level)}">${escapeHtml(r.level)}</span>
+            <span class="log-time">${fmtDate(r.timestamp || r.createdAt)}</span>
+            <span class="log-msg ${r.level === 'ERROR' ? 'error' : ''}">
+              ${escapeHtml(r.message || r.action || '')}
+              ${r.source ? `<small style="color:var(--text-muted)"> [${escapeHtml(r.source)}]</small>` : ''}
+            </span>
+            ${r.user && r.user.name ? `<span class="log-user">${escapeHtml(r.user.name)}</span>` : ''}
           </div>
         `).join('')}
       </div>
     `;
   }
 
-  function isError(r) {
-    return /error|fallido|fail/i.test(String(r.action) + ' ' + String(r.message));
+  function applyLogFilter() {
+    renderLogs(logLiveCache);
   }
 
-  async function loadLogs(mode) {
+  async function loadLogs() {
     const box = document.getElementById('logs-container');
     box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando logs…</div>';
     try {
-      const params = { limit: 50 };
-      const data = mode === 'errors'
-        ? await window.API.soporte.logsErrores(params)
-        : await window.API.soporte.logs(params);
-      renderLogs(data, true);
+      const params = { limit: 100 };
+      if (logLevel) params.level = logLevel;
+      logLiveCache = await window.API.soporte.logsSistema(params);
+      renderLogs(logLiveCache);
     } catch (error) {
       box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
     }
   }
 
+  function pushLiveLog(entry) {
+    if (!entry) return;
+    // Inserta en la cabecera y recorta a 100 entradas.
+    logLiveCache.unshift(entry);
+    if (logLiveCache.length > 100) logLiveCache.length = 100;
+    if (logLevel && entry.level !== logLevel) return;
+    const box = document.getElementById('logs-container');
+    if (box) renderLogs(logLiveCache);
+  }
+
   function initLogs() {
-    let mode = 'todos';
-    const btnTodos = document.getElementById('btn-logs-todos');
-    const btnErrores = document.getElementById('btn-logs-errores');
-    function setButtons(m) {
-      btnTodos.classList.toggle('active', m === 'todos');
-      btnErrores.classList.toggle('active', m === 'errors');
+    const lvlBtns = {
+      'all': document.getElementById('btn-log-lvl-all'),
+      'ERROR': document.getElementById('btn-log-lvl-ERROR'),
+      'WARN': document.getElementById('btn-log-lvl-WARN'),
+      'INFO': document.getElementById('btn-log-lvl-INFO'),
+    };
+    function setActive() {
+      Object.entries(lvlBtns).forEach(([key, btn]) => btn.classList.toggle('active', key === (logLevel || 'all')));
     }
-    btnTodos.addEventListener('click', () => { mode = 'todos'; setButtons(mode); loadLogs(mode); });
-    btnErrores.addEventListener('click', () => { mode = 'errors'; setButtons(mode); loadLogs(mode); });
-    document.getElementById('btn-logs-refresh').addEventListener('click', () => loadLogs(mode));
+    Object.entries(lvlBtns).forEach(([key, btn]) => {
+      btn.addEventListener('click', () => {
+        logLevel = key === 'all' ? null : key;
+        setActive();
+        loadLogs();
+      });
+    });
+
+    document.getElementById('btn-logs-refresh').addEventListener('click', loadLogs);
+    document.getElementById('btn-logs-clear').addEventListener('click', async () => {
+      if (!confirm('¿Eliminar todos los logs del visor en tiempo real?')) return;
+      try {
+        await window.API.soporte.limpiarLogsSistema();
+        logLiveCache = [];
+        renderLogs([]);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    // Conexión en tiempo real: si hay Socket.io disponible se escucha el evento
+    // 'server-log'; si no, se cae en un polling cada 4 segundos.
+    try {
+      if (window.io && typeof window.io === 'function') {
+        logSocket = window.io(window.AppConfig.BASE_URL || window.AppConfig.API_URL, {
+          transports: ['websocket', 'polling'],
+          auth: { token: getToken() },
+          reconnectionAttempts: 3,
+        });
+        logSocket.on('connect', () => logSocket.on('server-log', pushLiveLog));
+        logSocket.on('disconnect', () => {});
+      }
+    } catch (e) { /* sin socket */ }
+
+    if (!window.io || !logSocket) {
+      logTimer = setInterval(loadLogs, 4000);
+    }
   }
 
   // ── Pestaña Respaldo ──────────────────────────────────────────────────────
@@ -725,6 +794,7 @@ window.SoportePanel = (() => {
               <div class="plantilla-meta">${(p.tamaño / 1024).toFixed(1)} KB · ${fmtDate(p.modificado)}</div>
             </div>
             <div class="row-actions">
+              <button class="btn btn-ghost btn-sm" data-pl="rename" data-f="${encodeURIComponent(p.archivo)}">Renombrar</button>
               <button class="btn btn-ghost btn-sm" data-pl="download" data-f="${encodeURIComponent(p.archivo)}">Descargar</button>
               <button class="btn btn-danger btn-sm" data-pl="delete" data-f="${encodeURIComponent(p.archivo)}">Eliminar</button>
             </div>
@@ -741,6 +811,8 @@ window.SoportePanel = (() => {
             await window.API.soporte.eliminarPlantilla(archivo);
             renderPlantillas(await window.API.soporte.plantillas());
           } catch (error) { alert(error.message); }
+        } else if (btn.dataset.pl === 'rename') {
+          renamePlantilla(archivo);
         } else {
           try {
             const blob = await window.API.soporte.descargarPlantilla(archivo);
@@ -749,6 +821,18 @@ window.SoportePanel = (() => {
         }
       });
     });
+  }
+
+  async function renamePlantilla(archivo) {
+    const name = await prompt('Nuevo nombre de la plantilla (debe terminar en .pdf):', archivo);
+    if (name === null || !name.trim()) return;
+    try {
+      await window.API.soporte.renombrarPlantilla(archivo, name.trim());
+      await loadPlantillas();
+      alert('Plantilla renombrada correctamente.');
+    } catch (error) {
+      alert(error.message);
+    }
   }
 
   async function loadPlantillas() {
@@ -948,6 +1032,141 @@ window.SoportePanel = (() => {
     }
   }
 
+  // ── Modo mantenimiento ────────────────────────────────────────────────────
+  function showAlert2(element, boxId, message, type) {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    box.className = `alert show alert-${type}`;
+    box.textContent = message;
+    setTimeout(() => { box.className = 'alert'; box.textContent = ''; }, 3000);
+  }
+
+  async function renderMantenimiento() {
+    const track = document.getElementById('mt-switch');
+    const label = document.getElementById('mt-label');
+    const input = document.getElementById('mt-mensaje');
+    const hastaInput = document.getElementById('mt-hasta');
+    try {
+      const state = await window.API.soporte.mantenimiento();
+      const activo = Boolean(state && state.activo);
+      track.classList.toggle('on', activo);
+      track.setAttribute('aria-checked', String(activo));
+      label.innerHTML = activo
+        ? '<span class="st">ON · Sistema en mantenimiento</span>'
+        : '<span class="off">OFF</span>';
+      if (input && document.activeElement !== input) input.value = (state && state.mensaje) || '';
+      if (hastaInput && document.activeElement !== hastaInput) {
+        hastaInput.value = toDatetimeLocal(state && state.hasta) || '';
+      }
+    } catch (error) {
+      /* mantener estado actual */
+    }
+  }
+
+  // Convierte un ISO string a valor aceptado por <input type="datetime-local">
+  // (YYYY-MM-DDTHH:mm) en la zona horaria local.
+  function toDatetimeLocal(value) {
+    if (!value) return '';
+    const d = new Date(String(value));
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function initMantenimiento() {
+    const track = document.getElementById('mt-switch');
+    const input = document.getElementById('mt-mensaje');
+    const hastaInput = document.getElementById('mt-hasta');
+    if (!track) return;
+
+    track.addEventListener('click', async () => {
+      const activo = !track.classList.contains('on');
+      track.disabled = true;
+      showAlert2(track, 'mt-alert', 'Guardando…', 'success');
+      try {
+        const body = { activo };
+        const msg = input ? input.value.trim() : '';
+        body.mensaje = msg;
+        // Convierte el valor datetime-local a ISO (o vacío si no se definió).
+        body.hasta = hastaInput && hastaInput.value ? new Date(hastaInput.value).toISOString() : '';
+        await window.API.soporte.cambiarMantenimiento(body);
+        showAlert2(track, 'mt-alert', activo
+          ? 'Mantenimiento activado. La app queda bloqueada para todos; solo Soporte Técnico conserva acceso.'
+          : 'Mantenimiento desactivado.', activo ? 'warning' : 'success');
+      } catch (error) {
+        showAlert2(track, 'mt-alert', error.message, 'error');
+      } finally {
+        track.disabled = false;
+        renderMantenimiento();
+      }
+    });
+
+    renderMantenimiento();
+  }
+
+  // ── Pestaña Guía ─────────────────────────────────────────────────────────
+  function guiaCard(icon, title, steps, extraClass) {
+    const items = (steps || []).map((s) =>
+      `<li><b>${escapeHtml(s.title)}</b><span>${s.text}</span></li>`
+    ).join('');
+    return `
+      <div class="sp-card ${extraClass || ''}">
+        <h3 style="margin-bottom:12px;color:var(--gold);">${icon}&nbsp; ${escapeHtml(title)}</h3>
+        <ul class="guia-list">${items}</ul>
+      </div>`;
+  }
+
+  function renderGuia() {
+    const box = document.getElementById('guia-container');
+    if (!box) return;
+
+    const mantenimiento = guiaCard('&#128681;&#65039;', 'Modo mantenimiento', [
+      { title: 'Activarlo / desactivarlo', text: 'Usa el interruptor del panel Resumen o esta guía. Al activarlo, la app se bloquea en 503 para TODOS los usuarios (incluidos los administradores); solo el Soporte Técnico (SUPERADMIN) conserva acceso.' },
+      { title: 'Mensaje y fin estimado', text: 'Puedes escribir el mensaje que verán los usuarios y programar una fecha/hora estimada de fin. Ambos se muestran en la pantalla de mantenimiento.' },
+      { title: 'Cómo revertirlo', text: 'Entra al panel de soporte e inicia sesión (sigue permitido durante el mantenimiento) y apaga el interruptor.' },
+    ]);
+
+    const sesiones = guiaCard('&#128275;&#65039;', 'Gestión de sesiones', [
+      { title: 'Ver usuarios conectados', text: 'La pestaña Sesiones muestra Nombre, Rol, IP, última actividad y estado de cada sesión activa.' },
+      { title: 'Cerrar sesión forzada', text: 'Pulsa «Cerrar Sesión» en cualquier fila para revocar el token de ese dispositivo de inmediato.' },
+      { title: 'Recomendación de seguridad', text: 'Al detectar un acceso sospechoso, cierra la sesión y restablece la contraseña del usuario desde la pestaña Usuarios.' },
+    ]);
+
+    const logs = guiaCard('&#128220;', 'Logs y errores en tiempo real', [
+      { title: 'Últimos 100 registros', text: 'El visor lee el buffer del servidor: errores de consultas, caídas de Socket.io y fallas de PDFs.' },
+      { title: 'Filtrar por nivel', text: 'Usa los botones ERROR / WARN / INFO para aislar el tipo de evento. Se actualiza en vivo vía Socket.io (con polling de respaldo).' },
+      { title: 'Limpiar buffer', text: 'El botón «Limpiar Logs» vacía el visor en memoria. Los eventos persisten en ActivityLog/Historial de actividad para auditoría.' },
+    ]);
+
+    const pdfs = guiaCard('&#128196;', 'Plantillas PDF', [
+      { title: 'Subir formato', text: 'Selecciona un archivo .pdf y pulsa «Subir PDF». Se guarda en ./plantillas sin tocar el servidor.' },
+      { title: 'Renombrar', text: 'Pulsa «Renombrar», escribe el nuevo nombre (debe terminar en .pdf) y confirma.' },
+      { title: 'Descargar / Eliminar', text: 'Descarga el PDF en blanco o elimínalo del gestor de plantillas directamente.' },
+    ]);
+
+    const soporte = guiaCard('&#128172;', 'Atención al equipo (Chat)', [
+      { title: 'Ver y responder chats', text: 'La pestaña Chat Interno lista todas las conversaciones; el soporte puede responder en cualquiera.' },
+      { title: 'Avisos', text: 'Publica anuncios (normal/importante/urgente) que aparecerán como banners para todos los usuarios.' },
+      { title: 'Solicitudes de contraseña', text: 'Desde la pestaña Avisos atiende los pedidos de «Olvidé mi contraseña» y restablece el acceso.' },
+    ]);
+
+    const respaldo = guiaCard('&#128190;', 'Respaldos', [
+      { title: 'Generar backup', text: 'La pestaña Respaldos descarga un JSON completo con todas las colecciones y conteos por módulo.' },
+      { title: 'Frecuencia sugerida', text: 'Genera un respaldo periódicamente antes de cambios importantes para poder restaurar información.' },
+    ]);
+
+    box.innerHTML = `
+      <div class="guia-grid">
+        ${mantenimiento}
+        ${sesiones}
+        ${logs}
+        ${pdfs}
+        ${soporte}
+        ${respaldo}
+      </div>
+    `;
+  }
+
   async function init() {
     const token = getToken();
     if (!token) {
@@ -981,12 +1200,14 @@ window.SoportePanel = (() => {
     initSesiones();
     initAnuncios();
     initChat();
+    initMantenimiento();
 
     renderResumen();
+    renderGuia();
     renderUsuarios();
     renderConfig();
     renderRolesPermisos();
-    loadLogs('todos');
+    loadLogs();
     loadPlantillas();
   }
 

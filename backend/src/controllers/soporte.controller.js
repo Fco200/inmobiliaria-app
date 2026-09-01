@@ -32,6 +32,7 @@ const { persistAndBroadcast, getOrCreateGeneralChat } = require('./chat.controll
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
 const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
+const logger = require('../services/logger.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
@@ -311,6 +312,81 @@ const guardarSoporteConfig = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Datos de soporte actualizados' });
 });
 
+// ── Modo mantenimiento ──────────────────────────────────────────────────────
+// El estado vive en la variable global Config `mantenimiento.on`. Un middleware
+// (middlewares/maintenance.js) intercepta las peticiones cuando está activo y
+// bloquea a todos salvo SUPERADMIN/SOPORTE con código 503.
+
+const leerMantenimiento = async () => {
+  const cfg = await Config.findOne({ key: 'mantenimiento.on' }).lean();
+  return cfg ? String(cfg.value) === 'true' : false;
+};
+
+const leerMensajeMantenimiento = async () => {
+  const cfg = await Config.findOne({ key: 'mantenimiento.mensaje' }).lean();
+  return cfg ? String(cfg.value) : '';
+};
+
+const leerHastaMantenimiento = async () => {
+  const cfg = await Config.findOne({ key: 'mantenimiento.hasta' }).lean();
+  return cfg ? String(cfg.value) : '';
+};
+
+// GET /soporte/mantenimiento — estado actual (encendido/apagado + mensaje + fin).
+const estadoMantenimiento = asyncHandler(async (req, res) => {
+  const [on, mensaje, hasta] = await Promise.all([
+    leerMantenimiento(),
+    leerMensajeMantenimiento(),
+    leerHastaMantenimiento(),
+  ]);
+  res.json({ success: true, data: { activo: on, mensaje, hasta } });
+});
+
+// PUT /soporte/mantenimiento — prende o apaga el modo mantenimiento. Acepta
+// `mensaje` (texto mostrado) y `hasta` (fecha/hora estimada de fin, ISO string).
+const cambiarMantenimiento = asyncHandler(async (req, res) => {
+  const activo = Boolean(req.body && req.body.activo);
+  const mensaje = String((req.body && req.body.mensaje) || '').trim();
+  const hasta = String((req.body && req.body.hasta) || '').trim();
+
+  await Config.findOneAndUpdate(
+    { key: 'mantenimiento.on' },
+    { value: String(activo), group: 'mantenimiento', description: 'Estado de mantenimiento ON/OFF para todo el sistema.', updatedBy: req.user._id },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  await Config.findOneAndUpdate(
+    { key: 'mantenimiento.mensaje' },
+    { value: mensaje, group: 'mantenimiento', description: 'Mensaje mostrado en la pantalla de mantenimiento.', updatedBy: req.user._id },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  await Config.findOneAndUpdate(
+    { key: 'mantenimiento.hasta' },
+    { value: hasta, group: 'mantenimiento', description: 'Fecha/hora estimada de fin del mantenimiento.', updatedBy: req.user._id },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  await logActivity({
+    entityType: 'Config',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'mantenimiento',
+    message: `Modo mantenimiento ${activo ? 'ACTIVADO' : 'desactivado'}`,
+  });
+
+  logger.warn(`Modo mantenimiento ${activo ? 'ACTIVADO' : 'desactivado'} por ${req.user.email}`, {
+    por: req.user.email,
+    activo,
+  }, 'mantenimiento');
+
+  res.json({
+    success: true,
+    message: activo ? 'Modo mantenimiento activado' : 'Modo mantenimiento desactivado',
+    data: { activo, mensaje, hasta },
+  });
+});
+
 // ── Resumen / estado del sistema ────────────────────────────────────────────
 const resumenSistema = asyncHandler(async (req, res) => {
   const dbState = mongoose.connection.readyState;
@@ -397,13 +473,18 @@ const listarSesionesSoporte = asyncHandler(async (req, res) => {
   const sessions = await Session.find()
     .sort({ lastSeenAt: -1 })
     .limit(limit)
-    .populate('user', 'name username email photo role');
+    .populate({ path: 'user', select: 'name username email photo role', populate: { path: 'role', select: 'code name' } });
 
   const currentHash = hashToken(req.token);
-  const data = sessions.map((s) => ({
-    ...s.toJSON(),
-    isCurrent: s.tokenHash === currentHash,
-  }));
+  const data = sessions.map((s) => {
+    const json = s.toJSON();
+    const role = json.user && json.user.role ? json.user.role : null;
+    return {
+      ...json,
+      role: role ? { code: role.code || '', name: role.name || role.code || '' } : null,
+      isCurrent: s.tokenHash === currentHash,
+    };
+  });
 
   res.json({ success: true, data });
 });
@@ -533,6 +614,32 @@ const listarLogs = asyncHandler(async (req, res) => {
     .populate('user', 'name email');
   res.json({ success: true, data: logs });
 });
+
+// ── Visor de logs en tiempo real (sistema/servidor) ────────────────────────
+// Lee el buffer circular en memoria del proceso (errores de consultas, caídas
+// de Socket.io, fallas en PDFs, etc.). Acepta filtro por nivel (ERROR, WARN,
+// INFO) y devuelve los últimos 100 por defecto.
+const listarLogsSistema = asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+  const level = String(req.query.level || '').toUpperCase();
+  const logs = logger.getLogs({ limit, level });
+  res.json({ success: true, data: logs });
+});
+
+// DELETE — limpia el buffer de logs en tiempo real.
+const limpiarLogsSistema = asyncHandler(async (req, res) => {
+  const borrados = logger.clear();
+  await logActivity({
+    entityType: 'System',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'limpiar_logs',
+    message: `Soporte limpió el visor de logs en tiempo real (${borrados} registros)`,
+  });
+  logger.info('Visor de logs en tiempo real limpiado', { borrados }, 'logs');
+  res.json({ success: true, message: 'Logs limpiados', data: { borrados } });
+});
+
 
 // ── Respaldos / Backups ─────────────────────────────────────────────────────
 const generarRespaldo = asyncHandler(async (req, res) => {
@@ -670,6 +777,51 @@ const descargarPlantillaSoporte = asyncHandler(async (req, res) => {
   res.sendFile(filePath);
 });
 
+// Renombra una plantilla PDF existente en ./plantillas desde la interfaz.
+// PATCH /soporte/plantillas/:archivo  body: { nuevoNombre }
+const renombrarPlantilla = asyncHandler(async (req, res) => {
+  const original = path.basename(String(req.params.archivo || ''));
+  if (!original.toLowerCase().endsWith('.pdf')) {
+    return res.status(400).json({ success: false, message: 'Solo se permiten archivos PDF' });
+  }
+
+  let nuevoNombre = String((req.body && req.body.nuevoNombre) || '').trim();
+  if (!nuevoNombre || !/\.pdf$/i.test(nuevoNombre)) {
+    return res.status(400).json({ success: false, message: 'El nuevo nombre debe terminar en .pdf' });
+  }
+
+  // Reemplaza caracteres inseguros para evitar modificaciones de ruta.
+  const base = nuevoNombre.replace(/\.pdf$/i, '').replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim();
+  nuevoNombre = `${base || 'plantilla'}.pdf`;
+
+  if (nuevoNombre.toLowerCase() === original.toLowerCase()) {
+    return res.status(400).json({ success: false, message: 'El nuevo nombre es igual al actual' });
+  }
+
+  const filePath = path.join(PLANTILLAS_DIR, original);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
+  }
+
+  const newPath = path.join(PLANTILLAS_DIR, nuevoNombre);
+  if (fs.existsSync(newPath)) {
+    return res.status(409).json({ success: false, message: 'Ya existe una plantilla con ese nombre' });
+  }
+
+  fs.renameSync(filePath, newPath);
+
+  await logActivity({
+    entityType: 'Plantilla',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'renombrar_plantilla',
+    message: `Soporte renombró la plantilla ${original} → ${nuevoNombre}`,
+  });
+
+  res.json({ success: true, message: 'Plantilla renombrada', data: { anterior: original, archivo: nuevoNombre } });
+});
+
+
 // ── Chat interno (soporte ve y responde los mensajes del equipo) ────────────
 // El soporte es SUPERADMIN y puede ver TODOS los chats (grupales y 1 a 1) para
 // atender los mensajes que los asesores le envían, sin estar necesariamente en
@@ -783,9 +935,14 @@ module.exports = {
   listarSolicitudesPassword,
   listarRolesPermisos,
   listarLogs,
+  listarLogsSistema,
+  limpiarLogsSistema,
+  estadoMantenimiento,
+  cambiarMantenimiento,
   generarRespaldo,
   listarPlantillas,
   subirPlantilla,
+  renombrarPlantilla,
   eliminarPlantilla,
   descargarPlantillaSoporte,
   plantillaUpload,

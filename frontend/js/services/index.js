@@ -247,6 +247,9 @@ window.API = {
     soporteConfig: () => soporteJson('/soporte/soporte-config'),
     guardarSoporteConfig: (body) => soporteJson('/soporte/soporte-config', { method: 'PUT', body }),
 
+    mantenimiento: () => soporteJson('/soporte/mantenimiento'),
+    cambiarMantenimiento: (body) => soporteJson('/soporte/mantenimiento', { method: 'PUT', body }),
+
     resumen: () => soporteJson('/soporte/resumen'),
 
     sesiones: (params) => soporteJson(`/soporte/sesiones${qs(params)}`),
@@ -262,6 +265,10 @@ window.API = {
 
     logs: (params) => soporteJson(`/soporte/logs${qs(params)}`),
     logsErrores: (params) => soporteJson(`/soporte/logs/errors${qs(params)}`),
+
+    // Visor de logs en tiempo real (buffer de sistema/servidor).
+    logsSistema: (params) => soporteJson(`/soporte/logs/sistema${qs(params)}`),
+    limpiarLogsSistema: () => soporteJson('/soporte/logs/sistema', { method: 'DELETE' }),
 
     respaldo: () => {
       const token = localStorage.getItem('soporte_token');
@@ -294,6 +301,7 @@ window.API = {
       });
     },
     eliminarPlantilla: (archivo) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'DELETE' }),
+    renombrarPlantilla: (archivo, nuevoNombre) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'PATCH', body: { nuevoNombre } }),
     descargarPlantilla: (archivo) => {
       const token = localStorage.getItem('soporte_token');
       return fetch(`${window.AppConfig.API_URL}/soporte/plantillas/${encodeURIComponent(archivo)}/descargar`, {

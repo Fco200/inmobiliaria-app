@@ -12,6 +12,7 @@ const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
 const { getOrCreateGeneralChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
 const { setIo } = require('./src/services/notification.service');
+const logger = require('./src/services/logger.service');
 
 async function start() {
   const connection = await connectDB();
@@ -31,6 +32,8 @@ async function start() {
     cors: { origin: '*', methods: ['GET', 'POST'] },
   });
 
+  logger.setIo(io);
+
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
@@ -47,6 +50,10 @@ async function start() {
 
   io.on('connection', (socket) => {
     console.log(`[Socket] ${socket.user && socket.user.name ? socket.user.name : 'usuario'} conectado (${socket.id})`);
+    logger.info('Cliente Socket.io conectado', {
+      socketId: socket.id,
+      usuario: socket.user && (socket.user.name || socket.user.username),
+    }, 'socket');
 
     // Cada usuario entra a su habitación privada (para avisos 1 a 1) y al
     // canal grupal general del equipo.
@@ -54,6 +61,20 @@ async function start() {
       socket.join(`user:${socket.user._id.toString()}`);
     }
     socket.join('general');
+
+    socket.on('connect_error', (err) => {
+      logger.error('Error de conexión de Socket.io', {
+        socketId: socket.id,
+        reason: err && err.message,
+      }, 'socket');
+    });
+
+    socket.on('error', (err) => {
+      logger.error('Error en Socket.io', {
+        socketId: socket.id,
+        reason: err && err.message,
+      }, 'socket');
+    });
 
     socket.on('join-chat', (chatId) => {
       socket.join(`chat:${chatId}`);
@@ -78,11 +99,20 @@ async function start() {
       try {
         await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text);
       } catch (err) {
+        logger.error('Error al enviar mensaje por Socket.io', {
+          chatId,
+          reason: err.message,
+        }, 'socket');
         socket.emit('message-error', { message: err.message || 'Error al enviar mensaje' });
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      logger.info('Cliente Socket.io desconectado', {
+        socketId: socket.id,
+        usuario: socket.user && (socket.user.name || socket.user.username),
+        reason: reason || '',
+      }, 'socket');
       console.log(`[Socket] ${socket.user && socket.user.name ? socket.user.name : 'usuario'} desconectado`);
     });
   });
@@ -104,6 +134,17 @@ async function start() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('unhandledRejection', (reason) => {
     console.error('Promesa rechazada sin capturar:', reason);
+    logger.error('Promesa rechazada sin capturar', {
+      reason: reason instanceof Error ? reason.message : String(reason),
+      stack: reason && reason.stack,
+    }, 'proceso');
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('Excepción no capturada:', err);
+    logger.error('Excepción no capturada', {
+      reason: err && err.message,
+      stack: err && err.stack,
+    }, 'proceso');
   });
 }
 

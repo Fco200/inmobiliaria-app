@@ -1,10 +1,20 @@
 'use strict';
 
 const { isProduction } = require('../config/env');
+const logger = require('../services/logger.service');
 
 const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
   let message = err.message || 'Error interno del servidor';
+
+  if (statusCode >= 500) {
+    logger.error(message, {
+      method: req.method,
+      path: req.originalUrl,
+      ip: req.ip || '',
+      stack: isProduction ? undefined : err.stack,
+    }, 'errorHandler');
+  }
 
   if (err.name === 'ValidationError') {
     statusCode = 400;

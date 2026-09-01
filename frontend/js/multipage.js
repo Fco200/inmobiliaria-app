@@ -349,6 +349,18 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
+  // Carga el módulo de mantenimiento programado (cuenta regresiva + auto-logout
+  // para roles Asesor/Operador). Se inyecta dinámicamente como el resto.
+  function loadMantenimiento() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    const script = document.createElement('script');
+    script.src = 'js/mantenimiento.js';
+    script.onload = () => {
+      if (window.Mantenimiento) window.Mantenimiento.init();
+    };
+    document.head.appendChild(script);
+  }
+
   // Carga el módulo de onboarding (guía rápida de bienvenida). Se inyecta al
   // vuelo; cuando el script está listo, se llama inmediatamente a maybeShow()
   // para no perder la oportunidad si init() terminó antes de la carga.
@@ -554,6 +566,7 @@ window.AppShell = (() => {
     startClock();
     injectAssistant();
     loadRealtime();
+    loadMantenimiento();
     loadWelcome();
     loadOnboarding();
     injectActivityFab();

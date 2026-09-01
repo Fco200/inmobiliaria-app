@@ -21,6 +21,7 @@ const chatRoutes = require('./chat.routes');
 const announcementRoutes = require('./announcement.routes');
 const formatoRoutes = require('./formato.routes');
 const soporteRoutes = require('./soporte.routes');
+const configRoutes = require('./config.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -54,6 +55,7 @@ router.get('/', (req, res) => {
       '/api/announcements',
       '/api/formatos',
       '/api/soporte',
+      '/api/config',
       '/api/health',
     ],
   });
@@ -86,5 +88,6 @@ router.use('/chats', chatRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/formatos', formatoRoutes);
 router.use('/soporte', soporteRoutes);
+router.use('/config', configRoutes);
 
 module.exports = router;

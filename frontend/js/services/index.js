@@ -219,6 +219,12 @@ window.API = {
     remove: (id) => ApiClient.remove(`/announcements/${id}`),
   },
 
+  config: {
+    // Estado del mantenimiento (público) y configuración programada.
+    mantenimiento: () => ApiClient.get('/config/mantenimiento'),
+    setMantenimiento: (body) => ApiClient.post('/config/mantenimiento', body),
+  },
+
   soporte: {
     // El panel de soporte usa su PROPIA sesión (soporte_token), independiente
     // de la sesión normal del CRM (crm_token). Todas las llamadas se hacen

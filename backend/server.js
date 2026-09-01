@@ -7,6 +7,7 @@ const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
 const { port, nodeEnv, jwtSecret } = require('./src/config/env');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
+const maintenanceJob = require('./src/jobs/maintenance.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
@@ -119,10 +120,13 @@ async function start() {
 
   app.set('io', io);
   setIo(io);
+  maintenanceJob.setIo(io);
+  maintenanceJob.startMaintenanceJob();
 
   const shutdown = (signal) => {
     console.log(`\n${signal} recibido, cerrando servidor...`);
     stopJobs();
+    maintenanceJob.stopMaintenanceJob();
     io.close();
     server.close(() => {
       console.log('Servidor cerrado.');

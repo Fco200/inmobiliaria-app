@@ -2,16 +2,19 @@
 
 // Middleware de MODO MANTENIMIENTO.
 //
-// Cuando la variable global `mantenimiento.on` está en 'true', todas las
-// peticiones a la API (excepto el login del panel de soporte) reciben un
-// código 503 con una vista amigable de mantenimiento, salvo que el solicitante
-// sea un usuario de rol SUPERADMIN (soporte técnico). De esta forma el equipo
-// técnico puede seguir accediendo a la plataforma para diagnosticar o revertir
-// el modo mientras el resto de usuarios ven la pantalla de mantenimiento.
+// Cuando el mantenimiento está ACTIVO (variable `mantenimiento.activo` en
+// 'true' — ver servicios/maintenance.service.js), todas las peticiones a la API
+// (excepto el login del panel de soporte, /health y el estado público de
+// mantenimiento) reciben un código 503 con una vista amigable de mantenimiento,
+// salvo que el solicitante sea un usuario de rol SUPERADMIN (soporte técnico).
+// De esta forma el equipo técnico puede seguir accediendo a la plataforma para
+// diagnosticar o revertir el modo mientras el resto de usuarios ven la pantalla
+// de mantenimiento.
 
 const jwt = require('jsonwebtoken');
-const { Config, User } = require('../models');
+const { User } = require('../models');
 const { jwtSecret } = require('../config/env');
+const maintenanceService = require('../services/maintenance.service');
 
 const CACHE_TTL_MS = 5000;
 let cache = { value: null, at: 0 };
@@ -23,8 +26,7 @@ async function mantenimientoActivo() {
   }
   let value = false;
   try {
-    const cfg = await Config.findOne({ key: 'mantenimiento.on' }).lean();
-    value = cfg ? String(cfg.value) === 'true' : false;
+    value = await maintenanceService.isActive();
   } catch (e) {
     value = false;
   }
@@ -52,14 +54,12 @@ async function esSuperadmin(req) {
 
 // Lee el mensaje y la hora/fecha estimada de fin del mantenimiento.
 async function datosMantenimiento() {
-  const [mensajeCfg, hastaCfg] = await Promise.all([
-    Config.findOne({ key: 'mantenimiento.mensaje' }).lean(),
-    Config.findOne({ key: 'mantenimiento.hasta' }).lean(),
-  ]);
-  return {
-    mensaje: mensajeCfg ? String(mensajeCfg.value) : '',
-    hasta: hastaCfg ? String(hastaCfg.value) : '',
-  };
+  try {
+    const datos = await maintenanceService.getDisplayData();
+    return { mensaje: datos.mensaje, hasta: datos.hasta };
+  } catch (e) {
+    return { mensaje: '', hasta: '' };
+  }
 }
 
 // Construye la URL de la pantalla de mantenimiento con el mensaje y la
@@ -76,7 +76,8 @@ async function maintenance(req, res, next) {
   // desactivar el mantenimiento desde el panel.
   if (
     req.path === '/soporte/auth/login' ||
-    (req.path === '/health')
+    (req.path === '/health') ||
+    (req.method === 'GET' && req.path === '/config/mantenimiento')
   ) {
     return next();
   }

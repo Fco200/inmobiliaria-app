@@ -911,6 +911,27 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 @keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
+/* Aviso de mantenimiento (login) */
+.login-maint-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7f1d1d;
+  background: linear-gradient(135deg, rgba(220,38,38,0.06), rgba(220,38,38,0.12));
+  border: 1px solid rgba(220,38,38,0.35);
+  border-left: 4px solid #b91c1c;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  animation: statusPulse 2.5s ease-in-out infinite;
+}
+.login-maint-icon { font-size: 16px; line-height: 1; color: #b91c1c; }
+.login-maint-title { display: block; font-weight: 700; }
+.login-maint-msg { display: block; margin-top: 2px; color: #991b1b; }
+
 /* Formulario */
 .login-form {
   text-align: left;

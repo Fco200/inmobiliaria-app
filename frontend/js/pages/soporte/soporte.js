@@ -1046,6 +1046,8 @@ window.SoportePanel = (() => {
     const label = document.getElementById('mt-label');
     const input = document.getElementById('mt-mensaje');
     const hastaInput = document.getElementById('mt-hasta');
+    const fechaInput = document.getElementById('mt-fecha');
+    const avisoInput = document.getElementById('mt-aviso');
     try {
       const state = await window.API.soporte.mantenimiento();
       const activo = Boolean(state && state.activo);
@@ -1058,6 +1060,10 @@ window.SoportePanel = (() => {
       if (hastaInput && document.activeElement !== hastaInput) {
         hastaInput.value = toDatetimeLocal(state && state.hasta) || '';
       }
+      if (fechaInput && document.activeElement !== fechaInput) {
+        fechaInput.value = toDatetimeLocal(state && state.fechaProgramada) || '';
+      }
+      if (avisoInput) avisoInput.checked = Boolean(state && state.mostrarAvisoPrevio);
     } catch (error) {
       /* mantener estado actual */
     }
@@ -1077,10 +1083,11 @@ window.SoportePanel = (() => {
     const track = document.getElementById('mt-switch');
     const input = document.getElementById('mt-mensaje');
     const hastaInput = document.getElementById('mt-hasta');
+    const fechaInput = document.getElementById('mt-fecha');
+    const avisoInput = document.getElementById('mt-aviso');
     if (!track) return;
 
-    track.addEventListener('click', async () => {
-      const activo = !track.classList.contains('on');
+    const save = async (activo, message) => {
       track.disabled = true;
       showAlert2(track, 'mt-alert', 'Guardando…', 'success');
       try {
@@ -1089,16 +1096,34 @@ window.SoportePanel = (() => {
         body.mensaje = msg;
         // Convierte el valor datetime-local a ISO (o vacío si no se definió).
         body.hasta = hastaInput && hastaInput.value ? new Date(hastaInput.value).toISOString() : '';
+        // Programación del inicio automático + aviso previo.
+        body.fechaProgramada = fechaInput && fechaInput.value ? new Date(fechaInput.value).toISOString() : '';
+        body.mostrarAvisoPrevio = avisoInput ? avisoInput.checked : false;
         await window.API.soporte.cambiarMantenimiento(body);
-        showAlert2(track, 'mt-alert', activo
-          ? 'Mantenimiento activado. La app queda bloqueada para todos; solo Soporte Técnico conserva acceso.'
-          : 'Mantenimiento desactivado.', activo ? 'warning' : 'success');
+        showAlert2(track, 'mt-alert', message, activo ? 'warning' : 'success');
       } catch (error) {
         showAlert2(track, 'mt-alert', error.message, 'error');
       } finally {
         track.disabled = false;
         renderMantenimiento();
       }
+    };
+
+    track.addEventListener('click', async () => {
+      const activo = !track.classList.contains('on');
+      await save(activo, activo
+        ? 'Mantenimiento activado. La app queda bloqueada para todos; solo Soporte Técnico conserva acceso.'
+        : 'Mantenimiento desactivado.');
+    });
+
+    // Aplicar la programación (inicio + aviso) sin apagar/encender el switch.
+    const scheduleFields = [fechaInput, avisoInput];
+    scheduleFields.forEach((el) => {
+      if (!el) return;
+      el.addEventListener('change', () => {
+        const activo = track.classList.contains('on');
+        save(activo, 'Configuración programada guardada.');
+      });
     });
 
     renderMantenimiento();

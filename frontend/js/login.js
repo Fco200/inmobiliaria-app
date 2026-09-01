@@ -65,13 +65,64 @@ window.LoginPage = (() => {
     setError(null);
     setLoading(true);
 
+    // Si el sistema está en mantenimiento, se avisa al usuario y se detiene el
+    // intento con un mensaje claro (rojo/dorado) para roles de consumo.
+    const maint = await getMaintenanceState();
+    if (maint) {
+      setError(maint);
+      setLoading(false);
+      return;
+    }
+
     try {
       const result = await window.API.auth.login({ identifier, password, remember });
       window.ApiClient.setLogin(result.token, result.user);
       window.location.replace('home.html');
     } catch (error) {
-      setError(error.message || 'No se pudo iniciar sesión. Intenta nuevamente.');
+      // El backend puede responder 503 durante mantenimiento; se traduce.
+      if (error && error.status === 503 && error.data && error.data.code === 'MAINTENANCE_MODE') {
+        setError((error.data.mantenimiento && error.data.mantenimiento.mensaje) || error.data.message || 'El sistema se encuentra en mantenimiento. Intenta más tarde.');
+      } else {
+        setError(error.message || 'No se pudo iniciar sesión. Intenta nuevamente.');
+      }
       setLoading(false);
+    }
+  }
+
+  // Consulta el estado público de mantenimiento. Devuelve un mensaje de bloqueo
+  // si el mantenimiento está activo, o '' si se puede iniciar sesión.
+  async function getMaintenanceState() {
+    try {
+      if (!window.API || !window.API.config || !window.API.config.mantenimiento) return '';
+      const estado = await window.API.config.mantenimiento();
+      if (estado && (estado.activo === true || estado.mantenimientoActivo === true)) {
+        const msg = (estado.mensaje && estado.mensaje.trim()) || 'El sistema se encuentra en mantenimiento programado. Intenta más tarde.';
+        return msg;
+      }
+    } catch (e) {
+      // Sin estado disponible: se deja pasar al intento (el backend decidirá).
+      return '';
+    }
+    return '';
+  }
+
+  // Muestra el banner de mantenimiento si el sistema está activo en modo
+  // mantenimiento al cargar la pantalla de login.
+  async function refreshMaintenanceBanner() {
+    const banner = document.getElementById('login-maintenance-banner');
+    const msgEl = document.getElementById('login-maint-msg');
+    if (!banner) return;
+    try {
+      if (!window.API || !window.API.config || !window.API.config.mantenimiento) return;
+      const estado = await window.API.config.mantenimiento();
+      if (estado && (estado.activo === true || estado.mantenimientoActivo === true)) {
+        if (msgEl) msgEl.textContent = (estado.mensaje && estado.mensaje.trim()) || 'Estamos realizando mejoras. Intenta más tarde.';
+        banner.classList.remove('hide');
+      } else {
+        banner.classList.add('hide');
+      }
+    } catch (e) {
+      banner.classList.add('hide');
     }
   }
 
@@ -459,6 +510,7 @@ window.LoginPage = (() => {
     if (googleBtn) googleBtn.addEventListener('click', openRoleModal);
 
     refreshGoogleStatus();
+    refreshMaintenanceBanner();
 
     if (window.AppInstall) window.AppInstall.init();
   }

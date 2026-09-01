@@ -2,56 +2,73 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mantenimiento · INMOBILIARIA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Mantenimiento programado · INMOBILIARIA × FV DIGITAL</title>
   <meta name="theme-color" content="#171310">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="icon" type="image/png" sizes="32x32" href="logoinmobles.png">
   <style>
     :root {
       --gold: #d4af37;
       --gold-light: #f0d98c;
       --gold-dark: #a8832a;
-      --bg: #171310;
-      --bg-2: #1f1a15;
-      --panel: #262019;
+      --bg: #120f0c;
+      --bg-2: #1c1712;
+      --panel: #241e17;
       --border: #3a322a;
       --text: #f2ead9;
       --text-muted: #a89f8f;
+      --danger: #f0685a;
     }
     * { box-sizing: border-box; }
     html, body {
       margin: 0; padding: 0; min-height: 100%;
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
-      color: var(--text); background: var(--bg);
+      color: var(--text); background: radial-gradient(1200px 600px at 50% -10%, #2a2118, var(--bg) 60%);
       -webkit-font-smoothing: antialiased;
     }
     body {
-      display: flex; align-items: center; justify-content: center; padding: 24px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; min-height: 100vh;
     }
     .mt-box {
-      max-width: 520px; width: 100%; text-align: center;
-      background: var(--panel); border: 1px solid var(--border);
-      border-radius: 18px; padding: 48px 36px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+      max-width: 480px; width: 100%; text-align: center;
+      background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 40px 28px 28px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.5);
+      position: relative; overflow: hidden;
     }
-    .mt-logo { height: 56px; width: auto; border-radius: 12px; margin-bottom: 22px; }
+    .mt-box::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    /* Branding FV DIGITAL con imagen y respaldo tipográfico dorado */
+    .mt-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
+    .mt-brand img.mt-logo { height: 46px; width: auto; border-radius: 10px; }
+    .mt-brand .mt-logo-text {
+      display: inline-flex; align-items: center;
+      font-weight: 800; letter-spacing: 1.5px; font-size: 18px; color: var(--gold-light);
+      text-shadow: 0 2px 10px rgba(212,175,55,0.25);
+    }
     .gear {
-      width: 74px; height: 74px; margin: 0 auto 22px;
+      width: 66px; height: 66px; margin: 0 auto 20px;
       border: 3px solid var(--gold); border-top-color: transparent;
       border-radius: 50%; border-right-color: transparent;
-      animation: spin 1.4s linear infinite;
+      animation: spin 1.6s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    h1 { font-size: 24px; margin: 0 0 10px; color: var(--gold); }
+    h1 { font-size: 23px; margin: 0 0 10px; color: var(--gold-light); letter-spacing: .3px; }
     p { font-size: 14px; line-height: 1.7; color: var(--text-muted); margin: 0 0 8px; }
     .mt-status {
       display: inline-flex; align-items: center; gap: 8px;
-      margin-top: 20px; padding: 7px 16px; border-radius: 999px;
+      margin-top: 18px; padding: 7px 16px; border-radius: 999px;
       background: rgba(212,175,55,0.12); color: var(--gold); font-size: 12px; font-weight: 600;
     }
     .mt-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); animation: pulse 1.6s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-    .mt-msg { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--text); }
+    .mt-msg { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
     .mt-fin {
       display: none; align-items: center; justify-content: center; gap: 8px;
       margin-top: 14px; padding: 10px 16px; border-radius: 12px;
@@ -59,49 +76,118 @@
     }
     .mt-fin.show { display: inline-flex; }
     .mt-fin .ico { font-size: 15px; }
-    .mt-small { margin-top: 26px; font-size: 11px; color: var(--text-muted); }
+    .mt-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .btn {
+      flex: 1 1 150px; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;
+      border: 1px solid transparent; transition: transform .1s ease, opacity .15s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-gold {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #14100c;
+      box-shadow: 0 8px 20px rgba(212,175,55,0.25);
+    }
+    .btn-gold:hover { opacity: .92; }
+    .btn-outline {
+      background: transparent; color: var(--gold); border-color: var(--gold-dark);
+    }
+    .btn-outline:hover { background: rgba(212,175,55,0.08); }
+    .mt-small {
+      margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted);
+    }
+    .mt-small strong { color: var(--gold); }
+    .mt-check-note {
+      margin-top: 16px; font-size: 11px; color: var(--text-muted); opacity: .8;
+    }
+    @media (max-width: 420px) {
+      .mt-box { padding: 32px 20px 24px; }
+      h1 { font-size: 20px; }
+      .mt-actions { flex-direction: column; }
+      .btn { flex: 1 1 auto; }
+    }
   </style>
 </head>
 <body>
   <div class="mt-box">
-    <img class="mt-logo" src="logoinmobles.png" alt="INMOBILIARIA" onerror="this.style.display='none'">
+    <div class="mt-brand">
+      <img class="mt-logo" src="fv_digital_logo.png.webp" alt="FV DIGITAL"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+      <span class="mt-logo-text" style="display:none;">FV DIGITAL</span>
+    </div>
     <div class="gear"></div>
-    <h1>Estamos en mantenimiento</h1>
+    <h1>Sistema en mantenimiento programado</h1>
     <p>La plataforma se encuentra temporalmente en mantenimiento técnico.</p>
-    <p>Estamos trabajando para mejorar tu experiencia. Por favor, intenta de nuevo en unos minutos.</p>
+    <p>Estamos realizando mejoras para brindarte una mejor experiencia.</p>
     <div class="mt-status"><span class="dot"></span> Mantenimiento programado</div>
     <div class="mt-msg" id="mt-msg"></div>
     <div class="mt-fin" id="mt-fin"><span class="ico">&#128336;&#65039;</span> <span id="mt-fin-txt">Volveremos muy pronto</span></div>
-    <div class="mt-small">INMOBILIARIA · FV DIGITAL</div>
+
+    <div class="mt-actions">
+      <button class="btn btn-gold" id="btn-retry" type="button">&#8635;&nbsp; Reintentar</button>
+      <a class="btn btn-outline" href="index.html" id="btn-admin">&#128274;&nbsp; Acceso Administrativo</a>
+    </div>
+
+    <div class="mt-small">INMOBILIARIA &times; <strong>FV DIGITAL</strong></div>
   </div>
+
   <script>
-    // Muestra el mensaje y la hora/fecha estimada de fin que el servidor envía.
+    // Muestra el mensaje y la fecha/hora estimada de fin enviados por el servidor,
+    // y reintenta de forma automática/pulsando el botón cuando el modo termine.
     (function () {
-      try {
+      function readParams() {
         var params = new URLSearchParams(window.location.search);
-
         var msg = params.get('m');
-        if (msg) {
-          document.getElementById('mt-msg').textContent = msg;
+        var msgEl = document.getElementById('mt-msg');
+        if (msg && msg.trim()) {
+          msgEl.textContent = msg;
         } else {
-          document.getElementById('mt-msg').style.display = 'none';
+          msgEl.style.display = 'none';
         }
-
         var hasta = params.get('hasta');
+        var finEl = document.getElementById('mt-fin');
+        var finTxt = document.getElementById('mt-fin-txt');
         if (hasta) {
           var d = new Date(hasta);
           if (!isNaN(d.getTime())) {
-            var text = 'Volveremos el ' + d.toLocaleString('es-MX', {
+            finTxt.textContent = 'Volveremos el ' + d.toLocaleString('es-MX', {
               day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
             });
-            document.getElementById('mt-fin-txt').textContent = text;
-            document.getElementById('mt-fin').classList.add('show');
-          } else if (hasta) {
-            document.getElementById('mt-fin-txt').textContent = 'Volveremos: ' + hasta;
-            document.getElementById('mt-fin').classList.add('show');
+            finEl.classList.add('show');
+          } else {
+            finTxt.textContent = 'Volveremos: ' + hasta;
+            finEl.classList.add('show');
           }
         }
-      } catch (e) {}
+      }
+
+      // Consulta el estado público de mantenimiento; si ya terminó, reenvía al login.
+      function checkStatus() {
+        try {
+          fetch(window.AppConfig && window.AppConfig.API_URL
+            ? window.AppConfig.API_URL + '/config/mantenimiento'
+            : '/api/config/mantenimiento')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data && data.data && data.data.activo === false) {
+                window.location.replace('index.html');
+              }
+            })
+            .catch(function () {});
+        } catch (e) {}
+      }
+
+      var btnRetry = document.getElementById('btn-retry');
+      if (btnRetry) btnRetry.addEventListener('click', function () {
+        btnRetry.disabled = true;
+        checkStatus();
+        setTimeout(function () { btnRetry.disabled = false; }, 4000);
+      });
+
+      readParams();
+      // Comprobación automática cada 20 s del estado.
+      setInterval(checkStatus, 20000);
     })();
   </script>
 </body>

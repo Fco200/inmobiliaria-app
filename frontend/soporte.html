@@ -332,7 +332,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
             <div>
               <h3 style="margin-bottom:4px;color:var(--gold);">&#128681;&#65039;&nbsp; Modo Mantenimiento</h3>
-              <span style="font-size:12px;color:var(--text-muted);">Bloquea la app a TODOS los usuarios (incluidos los administradores). Solo el Soporte Técnico (SUPERADMIN) conserva acceso para revertirlo.</span>
+              <span style="font-size:12px;color:var(--text-muted);">Bloquea la app a TODOS los usuarios (incluidos los administradores). Solo el Soporte Técnico (SUPERADMIN) conserva acceso para revertirlo. Puedes programar la activación para que se dispare sola y, con aviso previo, los asesores ven una cuenta regresiva de 5&nbsp;min antes del cierre.</span>
             </div>
             <div class="mt-switch">
               <button class="mt-track" id="mt-switch" type="button" role="switch" aria-checked="false" aria-label="Modo mantenimiento"></button>
@@ -344,6 +344,16 @@
             <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               Fin estimado
               <input class="mt-msg-input" id="mt-hasta" type="datetime-local" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;color-scheme:dark;">
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;background:rgba(128,90,0,0.06);border:1px dashed rgba(243,200,107,0.4);border-radius:10px;padding:10px 12px;">
+            <div style="font-size:12px;font-weight:600;color:var(--gold);flex:1 1 100%;">Programar mantenimiento automático</div>
+            <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              Inicio programado
+              <input class="mt-msg-input" id="mt-fecha" type="datetime-local" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;color-scheme:dark;">
+            </label>
+            <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
+              <input type="checkbox" id="mt-aviso" style="accent-color:var(--gold);"> Aviso previo de 5&nbsp;min (cuenta regresiva)
             </label>
           </div>
           <div style="margin-top:8px;">

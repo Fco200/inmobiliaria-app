@@ -229,10 +229,28 @@ async function seed() {
         description: 'Porcentaje base de comisiones.',
       },
       {
-        key: 'mantenimiento.on',
-        value: 'false',
+        key: 'mantenimiento.activo',
+        value: false,
         group: 'mantenimiento',
-        description: 'Estado de mantenimiento ON/OFF para todo el sistema.',
+        description: 'Bloqueo duro del modo mantenimiento (mantenimientoActivo).',
+      },
+      {
+        key: 'mantenimiento.fechaProgramada',
+        value: null,
+        group: 'mantenimiento',
+        description: 'Fecha/hora programada de inicio del mantenimiento.',
+      },
+      {
+        key: 'mantenimiento.mensaje',
+        value: '',
+        group: 'mantenimiento',
+        description: 'Mensaje mostrado en la pantalla de mantenimiento.',
+      },
+      {
+        key: 'mantenimiento.mostrarAvisoPrevio',
+        value: false,
+        group: 'mantenimiento',
+        description: '¿Mostrar aviso previo de 5 minutos antes del mantenimiento?',
       },
     ]);
     console.log('Configuración global por defecto sembrada');

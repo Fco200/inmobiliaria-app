@@ -33,6 +33,7 @@ const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
 const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
 const logger = require('../services/logger.service');
+const maintenanceService = require('../services/maintenance.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
@@ -313,77 +314,86 @@ const guardarSoporteConfig = asyncHandler(async (req, res) => {
 });
 
 // ── Modo mantenimiento ──────────────────────────────────────────────────────
-// El estado vive en la variable global Config `mantenimiento.on`. Un middleware
+// El estado vive en las variables globales Config gestionadas por el servicio
+// mantenimiento.service.js (claves `mantenimiento.*`). Un middleware
 // (middlewares/maintenance.js) intercepta las peticiones cuando está activo y
 // bloquea a todos salvo SUPERADMIN/SOPORTE con código 503.
 
-const leerMantenimiento = async () => {
-  const cfg = await Config.findOne({ key: 'mantenimiento.on' }).lean();
-  return cfg ? String(cfg.value) === 'true' : false;
-};
-
-const leerMensajeMantenimiento = async () => {
-  const cfg = await Config.findOne({ key: 'mantenimiento.mensaje' }).lean();
-  return cfg ? String(cfg.value) : '';
-};
-
-const leerHastaMantenimiento = async () => {
-  const cfg = await Config.findOne({ key: 'mantenimiento.hasta' }).lean();
-  return cfg ? String(cfg.value) : '';
-};
-
-// GET /soporte/mantenimiento — estado actual (encendido/apagado + mensaje + fin).
+// GET /soporte/mantenimiento — estado actual (activo + mensaje + fecha + aviso).
 const estadoMantenimiento = asyncHandler(async (req, res) => {
-  const [on, mensaje, hasta] = await Promise.all([
-    leerMantenimiento(),
-    leerMensajeMantenimiento(),
-    leerHastaMantenimiento(),
-  ]);
-  res.json({ success: true, data: { activo: on, mensaje, hasta } });
+  const state = await maintenanceService.getState();
+  res.json({
+    success: true,
+    data: {
+      activo: state.activo,
+      mantenimientoActivo: state.mantenimientoActivo,
+      mensaje: state.mensaje,
+      hasta: state.fechaProgramada || '',
+      fechaProgramada: state.fechaProgramada,
+      mostrarAvisoPrevio: state.mostrarAvisoPrevio,
+    },
+  });
 });
 
-// PUT /soporte/mantenimiento — prende o apaga el modo mantenimiento. Acepta
-// `mensaje` (texto mostrado) y `hasta` (fecha/hora estimada de fin, ISO string).
+// PUT /soporte/mantenimiento — prende/apaga el modo mantenimiento o programa
+// uno futuro. Acepta `activo`, `mensaje`, `fechaProgramada` y `mostrarAvisoPrevio`.
 const cambiarMantenimiento = asyncHandler(async (req, res) => {
-  const activo = Boolean(req.body && req.body.activo);
-  const mensaje = String((req.body && req.body.mensaje) || '').trim();
-  const hasta = String((req.body && req.body.hasta) || '').trim();
-
-  await Config.findOneAndUpdate(
-    { key: 'mantenimiento.on' },
-    { value: String(activo), group: 'mantenimiento', description: 'Estado de mantenimiento ON/OFF para todo el sistema.', updatedBy: req.user._id },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  await Config.findOneAndUpdate(
-    { key: 'mantenimiento.mensaje' },
-    { value: mensaje, group: 'mantenimiento', description: 'Mensaje mostrado en la pantalla de mantenimiento.', updatedBy: req.user._id },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  await Config.findOneAndUpdate(
-    { key: 'mantenimiento.hasta' },
-    { value: hasta, group: 'mantenimiento', description: 'Fecha/hora estimada de fin del mantenimiento.', updatedBy: req.user._id },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+  const body = req.body || {};
+  const state = await maintenanceService.saveState(
+    {
+      activo: body.activo !== undefined ? body.activo : undefined,
+      mensaje: body.mensaje !== undefined ? body.mensaje : undefined,
+      fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : body.hasta,
+      mostrarAvisoPrevio: body.mostrarAvisoPrevio !== undefined ? body.mostrarAvisoPrevio : undefined,
+    },
+    req.user._id
   );
 
   await logActivity({
     entityType: 'Config',
     entityId: req.user._id,
     user: req.user._id,
-    action: 'mantenimiento',
-    message: `Modo mantenimiento ${activo ? 'ACTIVADO' : 'desactivado'}`,
+    action: state.activo ? 'mantenimiento_activado' : 'mantenimiento_desactivado',
+    message: state.activo
+      ? `Modo mantenimiento ACTIVADO (${state.mensaje || 'sin mensaje'})`
+      : 'Modo mantenimiento desactivado',
   });
 
-  logger.warn(`Modo mantenimiento ${activo ? 'ACTIVADO' : 'desactivado'} por ${req.user.email}`, {
+  logger.warn(`Modo mantenimiento ${state.activo ? 'ACTIVADO' : 'desactivado'} por ${req.user.email}`, {
     por: req.user.email,
-    activo,
+    activo: state.activo,
+    mensaje: state.mensaje,
+    fechaProgramada: state.fechaProgramada,
+    mostrarAvisoPrevio: state.mostrarAvisoPrevio,
   }, 'mantenimiento');
+
+  const io = req.app.get('io');
+  if (io) {
+    if (state.activo) {
+      io.emit('mantenimiento-iniciado', {
+        mensaje: state.mensaje,
+        fechaProgramada: state.fechaProgramada,
+      });
+      logger.info('Evento Socket.io emitido: mantenimiento-iniciado', {}, 'mantenimiento');
+    } else {
+      io.emit('mantenimiento-desactivado', {
+        mensaje: state.mensaje,
+      });
+      logger.info('Evento Socket.io emitido: mantenimiento-desactivado', {}, 'mantenimiento');
+    }
+  }
 
   res.json({
     success: true,
-    message: activo ? 'Modo mantenimiento activado' : 'Modo mantenimiento desactivado',
-    data: { activo, mensaje, hasta },
+    message: state.activo ? 'Modo mantenimiento activado' : 'Modo mantenimiento desactivado',
+    data: {
+      activo: state.activo,
+      mantenimientoActivo: state.activo,
+      mensaje: state.mensaje,
+      hasta: state.fechaProgramada || '',
+      fechaProgramada: state.fechaProgramada,
+      mostrarAvisoPrevio: state.mostrarAvisoPrevio,
+    },
   });
 });
 

@@ -71,6 +71,8 @@ const UI = (() => {
 
   function confirm(message, { danger = true } = {}) {
     return new Promise((resolve) => {
+      let resolved = false;
+      const safeResolve = (val) => { if (!resolved) { resolved = true; resolve(val); } };
       const footer = `
         <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
         <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" type="button" data-ok>Aceptar</button>
@@ -85,13 +87,22 @@ const UI = (() => {
         const cancelBtn = overlay.querySelector('[data-cancel]');
         if (cancelBtn) cancelBtn.addEventListener('click', () => {
           closeModal();
-          resolve(false);
+          safeResolve(false);
         });
         const okBtn = overlay.querySelector('[data-ok]');
         if (okBtn) okBtn.addEventListener('click', () => {
           closeModal();
-          resolve(true);
+          safeResolve(true);
         });
+        const observer = new MutationObserver(() => {
+          if (!document.getElementById('modal-overlay')) {
+            observer.disconnect();
+            safeResolve(false);
+          }
+        });
+        observer.observe(document.body, { childList: true });
+      } else {
+        safeResolve(false);
       }
     });
   }
@@ -204,11 +215,12 @@ const UI = (() => {
     const id = `fld-${name}`;
     let control = '';
     if (type === 'select') {
+      const valStr = value && typeof value === 'object' && value._id ? String(value._id) : String(value == null ? '' : value);
       const opts = selectOptions
         .map((o) => {
           const optValue = typeof o === 'object' ? o.value : o;
           const optLabel = typeof o === 'object' ? o.label : o;
-          const selected = String(value) === String(optValue) ? 'selected' : '';
+          const selected = valStr === String(optValue) ? 'selected' : '';
           return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(optLabel)}</option>`;
         })
         .join('');

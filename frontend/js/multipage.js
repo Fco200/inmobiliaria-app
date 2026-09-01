@@ -194,6 +194,32 @@ window.AppShell = (() => {
     right.insertBefore(btn, right.querySelector('#btn-notifications'));
   }
 
+  // Abre la calculadora de negocio (hipoteca / comisión). El script del
+  // componente se inyecta la primera vez para no tocar cada HTML del CRM.
+  function openCalculator() {
+    if (window.Calculator) {
+      window.Calculator.open();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'js/components/calculator.js';
+    script.onload = () => { if (window.Calculator) window.Calculator.open(); };
+    document.head.appendChild(script);
+  }
+
+  function injectCalculatorButton() {
+    const right = document.querySelector('.topnav-right');
+    if (!right || right.querySelector('#btn-calc')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-calc';
+    btn.className = 'icon-btn calc-toggle';
+    btn.title = 'Calculadora de negocio (hipoteca y comisión)';
+    btn.setAttribute('aria-label', 'Calculadora de negocio');
+    btn.innerHTML = '&#128200;';
+    btn.addEventListener('click', openCalculator);
+    right.insertBefore(btn, right.querySelector('#btn-notifications'));
+  }
+
   // Botón (?) de guía rápida en el encabezado, visible para todos. Reabre la
   // guía de bienvenida on-demand sin importar si el usuario ya la completó.
   function injectGuideButton() {
@@ -564,6 +590,7 @@ window.AppShell = (() => {
     injectBrandCollab();
     injectThemeButton();
     injectGuideButton();
+    injectCalculatorButton();
     startClock();
     injectAssistant();
     loadRealtime();

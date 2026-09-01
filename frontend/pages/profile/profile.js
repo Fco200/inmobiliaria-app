@@ -145,6 +145,30 @@ window.Pages.profile = {
         </div>
       </div>
 
+      <div class="card profile-cover-letter" style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+          <div>
+            <h3 style="margin:0 0 6px;display:flex;align-items:center;gap:8px;">&#128196; Mi carta de presentación digital</h3>
+            <p class="text-muted" style="margin:0;font-size:13px;">
+              Apostilla institucional con tu foto, datos de contacto y semblanza. Descárgala en PDF o compártela por WhatsApp con clientes y prospectos.
+            </p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" type="button" data-carta-pdf>&#128424; Descargar PDF</button>
+            <button class="btn btn-wa" type="button" data-carta-wa>&#128172; Compartir por WhatsApp</button>
+          </div>
+        </div>
+        <div class="carta-preview" style="margin-top:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#fff;">
+          <div style="background:linear-gradient(135deg,#2d1048,#4A1A6B);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;">
+            <img src="logoinmobles.png" alt="" style="height:28px;width:auto;">
+            <span style="font-size:14px;font-weight:700;">Carta de presentación</span>
+          </div>
+          <div style="padding:16px;color:var(--text);">
+            ${CartaPresentacion.buildCarta(me, { skipLink: true })}
+          </div>
+        </div>
+      </div>
+
       ${goals.length ? `
       <div class="card profile-goal-card" style="margin-top:16px;">
         <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#127919; Tu meta en curso</h3>
@@ -198,5 +222,11 @@ window.Pages.profile = {
         }
       });
     }
+
+    // Carta de presentación: PDF + WhatsApp
+    const pdfBtn = container.querySelector('[data-carta-pdf]');
+    if (pdfBtn) pdfBtn.addEventListener('click', () => CartaPresentacion.openPdf(me));
+    const waBtn = container.querySelector('[data-carta-wa]');
+    if (waBtn) waBtn.addEventListener('click', () => CartaPresentacion.shareWhatsApp(me));
   },
 };

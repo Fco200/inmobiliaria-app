@@ -24,7 +24,12 @@ function crudPage(container, config) {
     let statusSelect = '';
     if (config.statusOptions) {
       const opts = config.statusOptions
-        .map((o) => `<option value="${UI.escapeHtml(typeof o === 'object' ? o.value : o)}">${UI.escapeHtml(typeof o === 'object' ? o.label : o)}</option>`)
+        .map((o) => {
+          const val = typeof o === 'object' ? o.value : o;
+          const lbl = typeof o === 'object' ? o.label : o;
+          const sel = state.status === val ? 'selected' : '';
+          return `<option value="${UI.escapeHtml(val)}" ${sel}>${UI.escapeHtml(lbl)}</option>`;
+        })
         .join('');
       statusSelect = `
         <select class="form-control" data-status style="max-width:220px;">
@@ -55,7 +60,7 @@ function crudPage(container, config) {
       : '';
 
     el.innerHTML = `
-      <input class="form-control" data-search placeholder="Buscar..." style="max-width:280px;">
+      <input class="form-control" data-search placeholder="Buscar..." style="max-width:280px;" value="${UI.escapeHtml(state.q)}">
       ${statusSelect}
       ${filterControls}
       <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
@@ -181,6 +186,7 @@ ${rowXml}
     const title = UI.escapeHtml(config.title);
     const when = new Date().toLocaleString('es-MX');
     const win = window.open('', '_blank', 'width=1000,height=700');
+    if (!win) { UI.toast('El navegador bloqueó la ventana emergente. Permita popups para este sitio.', 'error'); return; }
     win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title>
       <style>
         body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; margin: 24px; }
@@ -332,6 +338,9 @@ ${rowXml}
         }
         if (form) form.addEventListener('submit', async (e) => {
           e.preventDefault();
+          const submitBtn = form.querySelector('[type="submit"]');
+          if (submitBtn && submitBtn.disabled) return;
+          if (submitBtn) submitBtn.disabled = true;
           try {
             const values = UI.collectForm(form);
             const body = config.formData ? config.formData(values, record, form) : values;
@@ -346,6 +355,7 @@ ${rowXml}
             load();
           } catch (error) {
             UI.toast(error.message, 'error');
+            if (submitBtn) submitBtn.disabled = false;
           }
         });
       },

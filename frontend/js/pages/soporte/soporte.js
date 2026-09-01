@@ -54,8 +54,22 @@ window.SoportePanel = (() => {
         tab.classList.add('active');
         const pane = document.getElementById('pane-' + tab.dataset.tab);
         if (pane) pane.classList.add('active');
+        onTabChanged(tab.dataset.tab);
       });
     });
+  }
+
+  // Pausa/reactiva los temporizadores y sockets según la pestaña visible para
+  // evitar fugas de memoria y peticiones innecesarias en segundo plano.
+  function onTabChanged(tab) {
+    if (tab === 'logs') startLogs();
+    else stopLogs();
+    if (tab === 'chat') startChatTimer();
+    else stopChatTimer();
+    if (tab === 'sesiones') renderSesiones();
+    if (tab === 'solicitudes') renderSolicitudes();
+    if (tab === 'usuarios') renderUsuarios();
+    if (tab === 'anuncios') renderAnuncios();
   }
 
   // ── Pestaña Usuarios ──────────────────────────────────────────────────────
@@ -512,7 +526,7 @@ window.SoportePanel = (() => {
       box.innerHTML = `
         <div class="sp-card sp-table-wrap">
           <table class="mega-table">
-            <thead><tr><th>Título</th><th>Mensaje</th><th>Prioridad</th><th>Autor</th><th>Fecha</th><th>Lecturas</th><th></th></tr></thead>
+            <thead><tr><th>Título</th><th>Mensaje</th><th>Prioridad</th><th>Autor</th><th>Fecha</th><th>Vence</th><th>Lecturas</th><th></th></tr></thead>
             <tbody>
               ${anuncios.map((a) => `
                 <tr>
@@ -521,6 +535,7 @@ window.SoportePanel = (() => {
                   <td>${prioBadge(a.priority)}</td>
                   <td>${escapeHtml((a.author && (a.author.name || a.author.email)) || '—')}</td>
                   <td>${fmtDate(a.createdAt)}</td>
+                  <td>${a.expiresAt ? fmtDate(a.expiresAt) : '<span class="prio prio-normal">Sin vencimiento</span>'}</td>
                   <td>${Array.isArray(a.readBy) ? a.readBy.length : 0}</td>
                   <td><button class="btn btn-danger btn-sm" data-aviso="${a._id}">Eliminar</button></td>
                 </tr>`).join('')}
@@ -581,11 +596,14 @@ window.SoportePanel = (() => {
       const alertBox = document.getElementById('anuncio-alert');
       hideAlert(alertBox);
       try {
-        await window.API.soporte.crearAnuncio({
+        const payload = {
           title: data.get('title'),
           message: data.get('message'),
           priority: data.get('priority'),
-        });
+        };
+        const expRaw = data.get('expiresAt');
+        if (expRaw) payload.expiresAt = new Date(expRaw).toISOString();
+        await window.API.soporte.crearAnuncio(payload);
         form.reset();
         showAlert(alertBox, 'Aviso publicado correctamente.', 'success');
         setTimeout(() => hideAlert(alertBox), 3000);
@@ -610,10 +628,10 @@ window.SoportePanel = (() => {
     if (!box) return;
     box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando solicitudes…</div>';
     try {
-      const [solicitudes, roles] = await Promise.all([
-        window.API.soporte.solicitudesUsuario(),
-        window.API.soporte.roles(),
-      ]);
+      if (!rolesCache.length) {
+        rolesCache = await window.API.soporte.roles();
+      }
+      const solicitudes = await window.API.soporte.solicitudesUsuario();
 
       const stats = {
         total: solicitudes.length,
@@ -660,7 +678,7 @@ window.SoportePanel = (() => {
           const action = btn.dataset.srqAction;
           const request = solicitudes.find((x) => String(x._id) === String(id));
           if (!request) return;
-          if (action === 'aprobar') aprobarSolicitud(request, roles);
+          if (action === 'aprobar') aprobarSolicitud(request, rolesCache);
           else if (action === 'rechazar') rechazarSolicitud(request);
           else if (action === 'eliminar') eliminarSolicitud(request);
         });
@@ -713,7 +731,7 @@ window.SoportePanel = (() => {
     const defaultRoleId = (roles.find((r) => r.code === request.role) || roles[0] || {})._id || '';
     const options = roles.map((r) => `<option value="${r._id}" ${String(r._id) === String(defaultRoleId) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
 
-    const modal = window.UI.openModal({
+    const modal = UI.openModal({
       title: '&#128994;&nbsp; Aprobar solicitud y crear usuario',
       size: 560,
       body: `
@@ -756,7 +774,7 @@ window.SoportePanel = (() => {
     const okBtn = overlay.querySelector('[data-ok]');
     const cancelBtn = overlay.querySelector('[data-cancel]');
 
-    if (cancelBtn) cancelBtn.addEventListener('click', () => window.UI.closeModal());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
     if (okBtn) {
       okBtn.addEventListener('click', async () => {
@@ -782,7 +800,7 @@ window.SoportePanel = (() => {
             status: 'activo',
           });
           await window.API.soporte.atenderSolicitud(request._id, { action: 'aprobada', comment: 'Usuario creado' });
-          window.UI.closeModal();
+          UI.closeModal();
           alert('Usuario creado y solicitud aprobada.');
           renderSolicitudes();
         } catch (error) {
@@ -800,7 +818,7 @@ window.SoportePanel = (() => {
   }
 
   async function rechazarSolicitud(request) {
-    const modal = window.UI.openModal({
+    const modal = UI.openModal({
       title: '&#10060;&nbsp; Rechazar solicitud',
       size: 460,
       body: `
@@ -824,18 +842,19 @@ window.SoportePanel = (() => {
     const errBox = bodyEl.querySelector('#srq-err-reject');
     const okBtn = overlay.querySelector('[data-ok]');
     const cancelBtn = overlay.querySelector('[data-cancel]');
-    if (cancelBtn) cancelBtn.addEventListener('click', () => window.UI.closeModal());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
     if (okBtn) {
       okBtn.addEventListener('click', async () => {
         okBtn.disabled = true;
         try {
           await window.API.soporte.atenderSolicitud(request._id, { action: 'rechazada', comment: bodyEl.querySelector('#srq-reason').value.trim() });
-          window.UI.closeModal();
+          UI.closeModal();
           renderSolicitudes();
         } catch (error) {
           okBtn.disabled = false;
-          errBox.innerHTML = `<span style="display:block;">${escapeHtml(error.message)}</span>`;
+          errBox.className = 'alert show alert-error';
+          errBox.textContent = error.message;
         }
       });
     }
@@ -954,6 +973,33 @@ window.SoportePanel = (() => {
     if (box) renderLogs(logLiveCache);
   }
 
+  function stopLogs() {
+    if (logTimer) { clearInterval(logTimer); logTimer = null; }
+    if (logSocket) { try { logSocket.removeAllListeners(); logSocket.disconnect(); } catch (e) { /* ignore */ } logSocket = null; }
+  }
+
+  function startLogs() {
+    if (logTimer || logSocket) return;
+    // Conexión en tiempo real: si hay Socket.io disponible se escucha el evento
+    // 'server-log'; si no, se cae en un polling cada 4 segundos.
+    try {
+      if (window.io && typeof window.io === 'function') {
+        const socket = window.io(window.AppConfig.BASE_URL || window.AppConfig.API_URL, {
+          transports: ['websocket', 'polling'],
+          auth: { token: getToken() },
+          reconnectionAttempts: 3,
+        });
+        socket.on('connect', () => socket.on('server-log', pushLiveLog));
+        socket.on('disconnect', () => {});
+        logSocket = socket;
+      }
+    } catch (e) { /* sin socket */ }
+
+    if (!logSocket) {
+      logTimer = setInterval(loadLogs, 4000);
+    }
+  }
+
   function initLogs() {
     const lvlBtns = {
       'all': document.getElementById('btn-log-lvl-all'),
@@ -983,24 +1029,6 @@ window.SoportePanel = (() => {
         alert(error.message);
       }
     });
-
-    // Conexión en tiempo real: si hay Socket.io disponible se escucha el evento
-    // 'server-log'; si no, se cae en un polling cada 4 segundos.
-    try {
-      if (window.io && typeof window.io === 'function') {
-        logSocket = window.io(window.AppConfig.BASE_URL || window.AppConfig.API_URL, {
-          transports: ['websocket', 'polling'],
-          auth: { token: getToken() },
-          reconnectionAttempts: 3,
-        });
-        logSocket.on('connect', () => logSocket.on('server-log', pushLiveLog));
-        logSocket.on('disconnect', () => {});
-      }
-    } catch (e) { /* sin socket */ }
-
-    if (!window.io || !logSocket) {
-      logTimer = setInterval(loadLogs, 4000);
-    }
   }
 
   // ── Pestaña Respaldo ──────────────────────────────────────────────────────
@@ -1175,8 +1203,7 @@ window.SoportePanel = (() => {
         await window.API.soporte.enviarMensajeChat(activeChatId, { message: text });
         textEl.value = '';
         textEl.focus();
-        renderChatDetail(await window.API.soporte.verChat(activeChatId));
-        loadChatList(true);
+        await loadChatList(true);
       } catch (error) {
         alert(error.message);
       } finally {
@@ -1227,7 +1254,6 @@ window.SoportePanel = (() => {
     try {
       const chat = await window.API.soporte.verChat(chatId);
       renderChatDetail(chat);
-      loadChatList(true);
     } catch (error) {
       const el = document.getElementById('sp-chat-msgs');
       if (el) el.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
@@ -1245,12 +1271,17 @@ window.SoportePanel = (() => {
     }
     try {
       chatListCache = await window.API.soporte.chats();
-      // Si un chat está abierto, refrescar detalles en segundo plano.
+      // Primero reconstruir la lista (reemplaza el DOM de sp-chat-root).
+      renderChatList();
+      // Luego cargar y renderizar el detalle del chat activo (si existe).
       if (activeChatId) {
         const chat = await window.API.soporte.verChat(activeChatId).catch(() => null);
-        if (chat && document.getElementById('sp-chat-win-title')) renderChatDetail(chat);
+        if (chat && document.getElementById('sp-chat-win-title')) {
+          renderChatDetail(chat);
+        } else if (document.getElementById('sp-chat-msgs')) {
+          document.getElementById('sp-chat-msgs').innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando conversación…</div>';
+        }
       }
-      renderChatList();
     } catch (error) {
       /* mantener estado actual */
     } finally {
@@ -1259,11 +1290,22 @@ window.SoportePanel = (() => {
     }
   }
 
+  function stopChatTimer() {
+    if (chatReloadTimer) { clearInterval(chatReloadTimer); chatReloadTimer = null; }
+  }
+
+  function startChatTimer() {
+    if (chatReloadTimer || !soporteUserId) return;
+    chatReloadTimer = setInterval(() => loadChatList(true), 15000);
+  }
+
   function initChat() {
     const me = getSavedUser() || {};
     soporteUserId = me.id || null;
-    loadChatList();
-    chatReloadTimer = setInterval(() => loadChatList(true), 15000);
+    if (soporteUserId) {
+      loadChatList();
+      startChatTimer();
+    }
   }
 
   // ── Inicio / autenticación ────────────────────────────────────────────────

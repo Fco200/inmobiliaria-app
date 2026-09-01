@@ -1,10 +1,26 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Property } = require('../models');
+const { Property, Inventory, User, Role } = require('../models');
 
 const PUBLIC_FIELDS =
   '_id type operationType price ticketValue address zone city state description characteristics photos status createdAt';
+
+// Roles del equipo que se muestran en el directorio público de asesores.
+const TEAM_ROLE_CODES = ['asesor', 'admin', 'gerencia'];
+
+// Código de rol robusto: puede venir como documento poblado u ObjectId.
+function roleCode(user) {
+  if (!user || !user.role) return '';
+  if (typeof user.role === 'object' && user.role !== null) return user.role.code || '';
+  return '';
+}
+
+// Ids de inventario publicados asignados a un asesor (para el catálogo por asesor).
+async function publishedInventoryIds(asesorId) {
+  return Inventory.find({ assignedAgent: asesorId, isPublished: true })
+    .distinct('property');
+}
 
 const list = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -31,6 +47,19 @@ const list = asyncHandler(async (req, res) => {
     ];
   }
 
+  // Catálogo de un asesor específico (?asesorId=id): propiedades responsables
+  // del asesor + las asignadas a su inventario publicado.
+  if (req.query.asesorId) {
+    const invIds = await publishedInventoryIds(req.query.asesorId);
+    if (!filter.$and) filter.$and = [];
+    filter.$and.push({
+      $or: [
+        { responsibleUser: req.query.asesorId },
+        { _id: invIds.length ? { $in: invIds } : { $in: [] } },
+      ],
+    });
+  }
+
   const [total, items] = await Promise.all([
     Property.countDocuments(filter),
     Property.find(filter)
@@ -54,11 +83,88 @@ const get = asyncHandler(async (req, res) => {
     _id: req.params.id,
     isPublished: true,
     status: { $ne: 'inactiva' },
-  }).select(PUBLIC_FIELDS);
+  })
+    .select(`${PUBLIC_FIELDS} responsibleUser`)
+    .populate('responsibleUser', 'name phone email photo position bio');
   if (!property) {
     return res.status(404).json({ success: false, message: 'Propiedad no disponible' });
   }
   res.json({ success: true, data: property });
 });
 
-module.exports = { list, get };
+// Ficha pública de un asesor (foto, contacto, semblanza).
+function asesorSummary(user) {
+  return {
+    id: user._id,
+    name: user.name,
+    photo: user.photo || '',
+    position: user.position || 'Asesor inmobiliario',
+    bio: user.bio || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    facebook: user.facebook || '',
+    instagram: user.instagram || '',
+    // Relevantes para el catálogo: rol y estado del usuario.
+    role: roleCode(user),
+  };
+}
+
+// Directorio público del equipo (usuarios activos con rol de asesor/administración).
+const listAsesores = asyncHandler(async (req, res) => {
+  const roles = await Role.find({ code: { $in: TEAM_ROLE_CODES }, status: 'activo' }).select('_id').lean();
+  if (!roles.length) {
+    return res.json({ success: true, data: [], meta: { total: 0 } });
+  }
+  const roleIds = roles.map((r) => r._id);
+
+  const users = await User.find({ role: { $in: roleIds }, status: 'activo' })
+    .select('name photo position bio email phone facebook instagram role')
+    .populate('role', 'code name')
+    .sort({ name: 1 })
+    .lean();
+
+  // Conteo de propiedades publicadas activas por asesor (responsables + inventario asignado).
+  const counts = await Promise.all(
+    users.map(async (u) => {
+      const invIds = await publishedInventoryIds(u._id);
+      const total = await Property.countDocuments({
+        isPublished: true,
+        status: { $ne: 'inactiva' },
+        price: { $gt: 0 },
+        $or: [
+          { responsibleUser: u._id },
+          { _id: invIds.length ? { $in: invIds } : { $in: [] } },
+        ],
+      });
+      return { id: String(u._id), count: total };
+    })
+  );
+  const countMap = counts.reduce((acc, c) => { acc[c.id] = c.count; return acc; }, {});
+
+  const data = users.map((u) => ({ ...asesorSummary(u), propertyCount: countMap[String(u._id)] || 0 }));
+  res.json({ success: true, data, meta: { total: data.length } });
+});
+
+// Ficha de un solo asesor.
+const getAsesor = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id)
+    .select('status name photo position bio email phone facebook instagram role')
+    .populate('role', 'code name')
+    .lean();
+  if (!user || user.status !== 'activo' || !TEAM_ROLE_CODES.includes(roleCode(user))) {
+    return res.status(404).json({ success: false, message: 'Asesor no disponible' });
+  }
+  const invIds = await publishedInventoryIds(user._id);
+  const propertyCount = await Property.countDocuments({
+    isPublished: true,
+    status: { $ne: 'inactiva' },
+    price: { $gt: 0 },
+    $or: [
+      { responsibleUser: user._id },
+      { _id: invIds.length ? { $in: invIds } : { $in: [] } },
+    ],
+  });
+  res.json({ success: true, data: { ...asesorSummary(user), propertyCount } });
+});
+
+module.exports = { list, get, listAsesores, getAsesor };

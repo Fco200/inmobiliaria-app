@@ -20,6 +20,14 @@ window.Pages['inventory-general'] = {
       users = [];
     }
 
+    let clients = [];
+    try {
+      const c = await API.clients.list({ limit: 100 }).catch(() => ({ data: [] }));
+      clients = c.data;
+    } catch (error) {
+      clients = [];
+    }
+
     // Asesores y jefes que pueden verse como responsables en el inventario.
     const agents = users.filter((u) =>
       u && u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role)
@@ -43,6 +51,7 @@ window.Pages['inventory-general'] = {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               ${!isBoss ? '<button class="btn btn-secondary" type="button" data-appointment>Agendar cita</button>' : ''}
               ${!isBoss ? '<button class="btn btn-secondary" type="button" data-business>Crear negocio</button>' : ''}
+              <button class="btn btn-success" type="button" data-whatsapp>WhatsApp</button>
             </div>
             <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
           </div>`,
@@ -55,6 +64,14 @@ window.Pages['inventory-general'] = {
         if (apptBtn) apptBtn.addEventListener('click', () => { UI.closeModal(); openAppointmentModal(item); });
         const bizBtn = overlay.querySelector('[data-business]');
         if (bizBtn) bizBtn.addEventListener('click', () => { UI.closeModal(); openBusinessModal(item); });
+        const waBtn = overlay.querySelector('[data-whatsapp]');
+        if (waBtn) waBtn.addEventListener('click', () => {
+          WhatsAppGenerator.open({
+            property: prop,
+            clients,
+            asesor: (item.assignedAgent && typeof item.assignedAgent === 'object') ? item.assignedAgent : null,
+          });
+        });
       }
 
       const paint = async () => {

@@ -26,6 +26,11 @@ const announcementSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Vigencia (opcional): tras esta fecha el aviso deja de mostrarse en el banner.
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
     readBy: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

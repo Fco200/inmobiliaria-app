@@ -9,5 +9,8 @@ const router = Router();
 // Rutas públicas para el catálogo de la landing (sin autenticación).
 router.get('/properties', publicController.list);
 router.get('/properties/:id', idParam, publicController.get);
+router.get('/asesores', publicController.listAsesores);
+router.get('/asesores/:id', idParam, publicController.getAsesor);
+router.get('/propiedades', publicController.list);
 
 module.exports = router;

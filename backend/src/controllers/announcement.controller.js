@@ -16,7 +16,10 @@ function isBossRole(user) {
 }
 
 const listAnnouncements = asyncHandler(async (req, res) => {
-  const announcements = await Announcement.find()
+  // Solo avisos vigentes (no expirados) para el banner/header del equipo.
+  const announcements = await Announcement.find({
+    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+  })
     .populate('author', 'name username role')
     .sort({ createdAt: -1 })
     .limit(50);
@@ -35,6 +38,11 @@ const createAnnouncement = asyncHandler(async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim().slice(0, 200);
   const messageText = String((req.body && req.body.message) || '').trim().slice(0, 2000);
   const priority = (req.body && req.body.priority) || 'normal';
+  let expiresAt = (req.body && req.body.expiresAt) || null;
+  if (expiresAt) {
+    expiresAt = new Date(expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) expiresAt = null;
+  }
 
   if (!title) {
     return res.status(400).json({ success: false, message: 'El título es obligatorio' });
@@ -52,6 +60,7 @@ const createAnnouncement = asyncHandler(async (req, res) => {
     priority,
     author: req.user._id,
     readBy: [req.user._id],
+    expiresAt,
   });
 
   const populated = await announcement.populate('author', 'name username role');

@@ -28,7 +28,7 @@
       <a href="#inicio">Inicio</a>
       <a href="#catalogo">Propiedades</a>
       <a href="#servicios">Servicios</a>
-      <a href="#agente">Tu asesor</a>
+      <a href="#equipo">Nuestro Equipo</a>
       <a href="#contacto">Contacto</a>
       <a class="btn btn-primary btn-sm" href="index.html">Acceso equipo</a>
     </nav>
@@ -91,13 +91,28 @@
   <!-- LISTADO DE PROPIEDADES -->
   <section class="landing-section" id="catalogo">
     <div class="landing-section-head">
-      <h2>&#127968; Propiedades disponibles</h2>
+      <h2>&#127968; <span id="catalogo-title">Propiedades disponibles</span></h2>
       <span class="text-muted" id="result-count"></span>
     </div>
+    <div id="asesor-banner" hidden></div>
     <div id="properties-grid" class="landing-grid">
       <div class="loading">Cargando propiedades...</div>
     </div>
     <div id="landing-pagination" class="landing-pagination"></div>
+  </section>
+
+  <!-- EQUIPO / ASESORES -->
+  <section class="landing-section" id="equipo">
+    <div class="landing-section-head">
+      <h2>&#128101; Nuestro equipo de asesores</h2>
+      <span class="text-muted" id="equipo-count"></span>
+    </div>
+    <p class="text-muted" style="margin:0 0 28px;max-width:640px;">
+      Conoce a los profesionales que te acompañan a encontrar el inmueble ideal. Elige un asesor para ver su catálogo y contactarlo directamente.
+    </p>
+    <div id="equipo-grid" class="landing-grid">
+      <div class="loading">Cargando equipo...</div>
+    </div>
   </section>
 
   <!-- SERVICIOS -->

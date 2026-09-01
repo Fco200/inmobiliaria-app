@@ -52,6 +52,7 @@ window.Pages.inventory = {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
+              <button class="btn btn-success" type="button" data-whatsapp>WhatsApp</button>
               ${isMine ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
             </div>
             <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
@@ -68,6 +69,14 @@ window.Pages.inventory = {
         if (bizBtn) bizBtn.addEventListener('click', () => { UI.closeModal(); openBusinessModal(item); });
         const obsBtn = overlay.querySelector('[data-obs]');
         if (obsBtn) obsBtn.addEventListener('click', () => { UI.closeModal(); openObservationsModal(item); });
+        const waBtn = overlay.querySelector('[data-whatsapp]');
+        if (waBtn) waBtn.addEventListener('click', () => {
+          WhatsAppGenerator.open({
+            property: prop,
+            clients,
+            asesor: me || (item.assignedAgent && typeof item.assignedAgent === 'object' ? item.assignedAgent : null),
+          });
+        });
       }
 
       const paint = async () => {

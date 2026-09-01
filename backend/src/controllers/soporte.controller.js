@@ -550,6 +550,11 @@ const crearAnuncio = asyncHandler(async (req, res) => {
   const title = String((req.body && req.body.title) || '').trim().slice(0, 200);
   const message = String((req.body && req.body.message) || '').trim().slice(0, 2000);
   const priority = (req.body && req.body.priority) || 'normal';
+  let expiresAt = (req.body && req.body.expiresAt) || null;
+  if (expiresAt) {
+    expiresAt = new Date(expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) expiresAt = null;
+  }
 
   if (!title) return res.status(400).json({ success: false, message: 'El título es obligatorio' });
   if (!message) return res.status(400).json({ success: false, message: 'El mensaje es obligatorio' });
@@ -563,6 +568,7 @@ const crearAnuncio = asyncHandler(async (req, res) => {
     priority,
     author: req.user._id,
     readBy: [req.user._id],
+    expiresAt,
   });
   const populated = await anuncio.populate('author', 'name username email');
 

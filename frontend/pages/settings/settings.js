@@ -340,8 +340,7 @@ window.Pages.settings = {
     async function renderAdminSolicitudes(box) {
       if (!box) return;
       try {
-        const solicitudes = await API.userRequests.list();
-        const pendientes = solicitudes.filter((s) => s.status === 'pendiente');
+        const solicitudes = await API.userRequests.list();        const pendientes = solicitudes.filter((s) => s.status === 'pendiente');
         if (!pendientes.length) {
           box.innerHTML = '';
           return;
@@ -397,7 +396,7 @@ window.Pages.settings = {
           });
         });
       } catch (e) {
-        box.innerHTML = '';
+        box.innerHTML = `<div class="card" style="border-left:4px solid var(--danger);padding:12px;"><strong>No se pudieron cargar las solicitudes</strong><p class="text-muted" style="font-size:12px;margin:2px 0 0;">${UI.escapeHtml(e.message || 'Error de red')}</p></div>`;
       }
     }
 
@@ -417,7 +416,7 @@ window.Pages.settings = {
             <div class="form-group"><label>Teléfono</label><input id="adm-srq-phone" type="tel" value="${UI.escapeHtml(request.phone || '')}"></div>
             <div class="form-group"><label>Rol *</label><select id="adm-srq-role">${options}</select></div>
           </div>
-          <div class="form-group"><label>Contraseña * (mín. 8 caracteres)</label><input id="adm-srq-password" type="text" autocomplete="off"></div>
+          <div class="form-group"><label>Contraseña * (mín. 8 caracteres)</label><input id="adm-srq-password" type="password" autocomplete="new-password"></div>
           <div id="adm-srq-error" class="alert alert-error" style="display:none;"></div>
         `,
         footer: `
@@ -443,9 +442,9 @@ window.Pages.settings = {
           const phone = bodyEl.querySelector('#adm-srq-phone').value.trim();
           const role = bodyEl.querySelector('#adm-srq-role').value;
           const password = bodyEl.querySelector('#adm-srq-password').value;
-          if (!name || username.length < 3 || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email) || (password && password.length < 8)) {
+          if (!name || username.length < 3 || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email) || !password || password.length < 8) {
             errBox.style.display = 'block';
-            errBox.textContent = 'Completa nombre, usuario (3+), correo válido y contraseña (8+) si la indicas.';
+            errBox.textContent = 'Completa nombre, usuario (3+), correo válido y contraseña (8+).';
             return;
           }
           errBox.style.display = 'none';
@@ -454,8 +453,8 @@ window.Pages.settings = {
             await API.users.create({ name, username, email, phone, role, password, status: 'activo' });
             await API.userRequests.handle(request._id, { action: 'aprobada', comment: 'Cuenta creada desde panel admin' });
             UI.closeModal();
-            renderAdminSolicitudes(document.getElementById('solicitudes-admin-card'));
-            alert('Usuario creado y solicitud aprobada.');
+            renderUsers();
+            UI.toast('Usuario creado y solicitud aprobada.', 'success');
           } catch (error) {
             okBtn.disabled = false;
             errBox.style.display = 'block';
@@ -493,7 +492,8 @@ window.Pages.settings = {
           try {
             await API.userRequests.handle(request._id, { action: 'rechazada', comment: bodyEl.querySelector('#adm-srq-reason').value.trim() });
             UI.closeModal();
-            renderAdminSolicitudes(document.getElementById('solicitudes-admin-card'));
+            renderUsers();
+            UI.toast('Solicitud rechazada.', 'success');
           } catch (error) {
             okBtn.disabled = false;
             errBox.style.display = 'block';

@@ -12,6 +12,7 @@ const create = asyncHandler(async (req, res) => {
   const { name, phone, email, role, message } = req.body || {};
 
   const cleanName = String(name || '').trim();
+  const cleanPhone = String(phone || '').trim();
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanRole = ['asesor', 'admin', 'gerencia'].includes(role) ? role : 'asesor';
 
@@ -32,7 +33,7 @@ const create = asyncHandler(async (req, res) => {
 
   const requestDoc = await UserRequest.create({
     name: cleanName,
-    phone: String(phone || '').trim(),
+    phone: cleanPhone,
     email: cleanEmail,
     role: cleanRole,
     message: String(message || '').trim(),

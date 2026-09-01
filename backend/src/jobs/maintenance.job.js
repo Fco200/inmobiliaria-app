@@ -46,6 +46,17 @@ async function runMaintenanceJob() {
     const state = await maintenanceService.getState();
     const now = Date.now();
 
+    // 0) AUTO-DESACTIVACIÓN: si el mantenimiento está activo y hay fecha-hora de
+    //    fin (`hasta`) ya superada, se desbloquea el sistema automáticamente.
+    if (state.mantenimientoActivo && state.hasta && new Date(state.hasta).getTime() <= now) {
+      logger.warn('Fecha/hora de fin de mantenimiento superada; desactivando automáticamente', {
+        hasta: state.hasta,
+      }, 'mantenimiento');
+      const desactivado = await maintenanceService.disable();
+      emit('mantenimiento-desactivado', { mensaje: desactivado.mensaje });
+      return;
+    }
+
     // 1) Cuenta regresiva expirada → activa el bloqueo duro.
     if (
       state.enCuentaRegresiva &&

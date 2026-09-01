@@ -1201,8 +1201,19 @@ window.SoportePanel = (() => {
     const nameEl = document.getElementById('sp-user-name');
     const photoEl = document.getElementById('sp-user-photo');
     if (nameEl) nameEl.textContent = (session && session.name) || (getSavedUser() || {}).name || 'Soporte';
-    if (photoEl && session && session.photo) photoEl.src = session.photo;
-    else if (photoEl) photoEl.style.display = 'none';
+    if (photoEl) {
+      if (!photoEl._wired) {
+        photoEl._wired = true;
+        photoEl.addEventListener('error', () => { photoEl.style.display = 'none'; });
+      }
+      if (session && session.photo) {
+        photoEl.style.display = '';
+        photoEl.src = session.photo;
+      } else {
+        photoEl.style.display = 'none';
+        photoEl.removeAttribute('src');
+      }
+    }
 
     document.getElementById('btn-sp-logout').addEventListener('click', async () => {
       try { await window.API.soporte.logout(); } catch (e) { /* ignore */ }

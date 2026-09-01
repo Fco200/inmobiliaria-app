@@ -35,6 +35,7 @@ function publicPayload(state) {
     mantenimientoActivo: state.mantenimientoActivo,
     activo: state.mantenimientoActivo,
     fechaProgramada,
+    hasta: state.hasta || null,
     mensaje: state.mensaje,
     mostrarAvisoPrevio: state.mostrarAvisoPrevio,
     enCuentaRegresiva: state.enCuentaRegresiva,
@@ -73,10 +74,11 @@ const setMantenimiento = asyncHandler(async (req, res) => {
     }
     state = await maintenanceService.startCountdown(msg, req.user._id);
     // Aplicar programación/aviso si vinieron.
-    if (body.fechaProgramada !== undefined || body.mostrarAvisoPrevio !== undefined) {
+    if (body.fechaProgramada !== undefined || body.mostrarAvisoPrevio !== undefined || body.hasta !== undefined) {
       state = await maintenanceService.saveState(
         {
           fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : undefined,
+          hasta: body.hasta !== undefined ? body.hasta : undefined,
           mostrarAvisoPrevio: body.mostrarAvisoPrevio !== undefined ? body.mostrarAvisoPrevio : undefined,
         },
         req.user._id
@@ -88,13 +90,14 @@ const setMantenimiento = asyncHandler(async (req, res) => {
     const extra = {};
     if (body.mensaje !== undefined) extra.mensaje = body.mensaje;
     if (body.fechaProgramada !== undefined) extra.fechaProgramada = body.fechaProgramada;
+    if (body.hasta !== undefined) extra.hasta = body.hasta;
     if (body.mostrarAvisoPrevio !== undefined) extra.mostrarAvisoPrevio = body.mostrarAvisoPrevio;
     if (Object.keys(extra).length) {
       state = await maintenanceService.saveState(extra, req.user._id);
     }
   } else if (body.activo === false || body.activo === 'false') {
     // Desactivación completa (por si se desactiva el interruptor).
-    if (body.mensaje === undefined && body.fechaProgramada === undefined && body.mostrarAvisoPrevio === undefined) {
+    if (body.mensaje === undefined && body.fechaProgramada === undefined && body.mostrarAvisoPrevio === undefined && body.hasta === undefined) {
       state = await maintenanceService.disable(req.user._id);
     } else {
       state = await maintenanceService.saveState(
@@ -102,6 +105,7 @@ const setMantenimiento = asyncHandler(async (req, res) => {
           activo: false,
           mensaje: body.mensaje !== undefined ? body.mensaje : undefined,
           fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : undefined,
+          hasta: body.hasta !== undefined ? body.hasta : undefined,
           mostrarAvisoPrevio: body.mostrarAvisoPrevio !== undefined ? body.mostrarAvisoPrevio : undefined,
         },
         req.user._id
@@ -113,6 +117,7 @@ const setMantenimiento = asyncHandler(async (req, res) => {
       {
         mensaje: body.mensaje !== undefined ? body.mensaje : undefined,
         fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : undefined,
+        hasta: body.hasta !== undefined ? body.hasta : undefined,
         mostrarAvisoPrevio: body.mostrarAvisoPrevio !== undefined ? body.mostrarAvisoPrevio : undefined,
       },
       req.user._id

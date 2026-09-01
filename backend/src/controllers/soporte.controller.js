@@ -328,9 +328,11 @@ const estadoMantenimiento = asyncHandler(async (req, res) => {
       activo: state.activo,
       mantenimientoActivo: state.mantenimientoActivo,
       mensaje: state.mensaje,
-      hasta: state.fechaProgramada || '',
+      hasta: state.hasta || '',
       fechaProgramada: state.fechaProgramada,
       mostrarAvisoPrevio: state.mostrarAvisoPrevio,
+      enCuentaRegresiva: state.enCuentaRegresiva,
+      finCuentaRegresiva: state.finCuentaRegresiva,
     },
   });
 });
@@ -343,7 +345,8 @@ const cambiarMantenimiento = asyncHandler(async (req, res) => {
     {
       activo: body.activo !== undefined ? body.activo : undefined,
       mensaje: body.mensaje !== undefined ? body.mensaje : undefined,
-      fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : body.hasta,
+      fechaProgramada: body.fechaProgramada !== undefined ? body.fechaProgramada : undefined,
+      hasta: body.hasta !== undefined ? body.hasta : undefined,
       mostrarAvisoPrevio: body.mostrarAvisoPrevio !== undefined ? body.mostrarAvisoPrevio : undefined,
     },
     req.user._id
@@ -364,6 +367,7 @@ const cambiarMantenimiento = asyncHandler(async (req, res) => {
     activo: state.activo,
     mensaje: state.mensaje,
     fechaProgramada: state.fechaProgramada,
+    hasta: state.hasta,
     mostrarAvisoPrevio: state.mostrarAvisoPrevio,
   }, 'mantenimiento');
 
@@ -373,6 +377,7 @@ const cambiarMantenimiento = asyncHandler(async (req, res) => {
       io.emit('mantenimiento-iniciado', {
         mensaje: state.mensaje,
         fechaProgramada: state.fechaProgramada,
+        hasta: state.hasta,
       });
       logger.info('Evento Socket.io emitido: mantenimiento-iniciado', {}, 'mantenimiento');
     } else {
@@ -390,7 +395,7 @@ const cambiarMantenimiento = asyncHandler(async (req, res) => {
       activo: state.activo,
       mantenimientoActivo: state.activo,
       mensaje: state.mensaje,
-      hasta: state.fechaProgramada || '',
+      hasta: state.hasta || '',
       fechaProgramada: state.fechaProgramada,
       mostrarAvisoPrevio: state.mostrarAvisoPrevio,
     },

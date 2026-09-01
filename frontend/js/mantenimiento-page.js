@@ -60,26 +60,30 @@
 
   function checkStatus() {
     try {
-      fetch(apiUrl())
+      fetch(apiUrl(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (!data || !data.data) return;
           var estado = data.data;
           // Cuenta regresiva en curso (el sistema sigue arriba): regresar.
           if (estado.enCuentaRegresiva === true && estado.mantenimientoActivo === false) {
-            window.location.replace('index.html');
+            goLogin();
             return;
           }
           if (estado.mantenimientoActivo === true || estado.activo === true) {
             setMensaje(estado.mensaje);
-            setHasta(estado.fechaProgramada || '');
+            setHasta(estado.hasta || '');
             return;
           }
           // Terminó.
-          window.location.replace('index.html');
+          goLogin();
         })
         .catch(function () {});
     } catch (e) {}
+  }
+
+  function goLogin() {
+    window.location.replace('index.html');
   }
 
   function init() {
@@ -87,7 +91,9 @@
     if (btnRetry) btnRetry.addEventListener('click', function () {
       btnRetry.disabled = true;
       checkStatus();
-      setTimeout(function () { btnRetry.disabled = false; }, 4000);
+      // Redirige de inmediato al login; si el mantenimiento sigue activo, el
+      // propio index.html muestra de nuevo la capa de bloqueo.
+      setTimeout(function () { window.location.replace('index.html'); }, 600);
     });
 
     // Respaldo tipográfico dorado si el logo (webp) no carga.

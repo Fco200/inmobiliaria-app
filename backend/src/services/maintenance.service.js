@@ -18,7 +18,8 @@
 //
 // Claves canónicas (colección Config, prefijo `mantenimiento.`):
 //   mantenimiento.activo             Boolean  → mantenimientoActivo (bloqueo duro)
-//   mantenimiento.fechaProgramada    Date     → fecha/hora programada de inicio
+//   mantenimiento.fechaProgramada    Date     → fecha/hora programada de INICIO
+//   mantenimiento.hasta              Date     → fecha/hora estimada de FIN (auto-desactiva)
 //   mantenimiento.mensaje            String   → mensaje personalizado del admin
 //   mantenimiento.mostrarAvisoPrevio Boolean  → ¿mostrar aviso previo/banner?
 //   mantenimiento.enCuentaRegresiva  Boolean  → ¿la cuenta regresiva de 5 min está activa?
@@ -35,6 +36,7 @@ const GRACE_MS = 5 * 60 * 1000; // ventana de gracia de 5 minutos
 const KEYS = {
   activo: 'mantenimiento.activo',
   fechaProgramada: 'mantenimiento.fechaProgramada',
+  hasta: 'mantenimiento.hasta',
   mensaje: 'mantenimiento.mensaje',
   mostrarAvisoPrevio: 'mantenimiento.mostrarAvisoPrevio',
   enCuentaRegresiva: 'mantenimiento.enCuentaRegresiva',
@@ -56,6 +58,7 @@ async function getState() {
   const [
     activo,
     fechaProgramada,
+    hasta,
     mensaje,
     mostrarAvisoPrevio,
     enCuentaRegresiva,
@@ -64,6 +67,7 @@ async function getState() {
   ] = await Promise.all([
     getRaw(KEYS.activo),
     getRaw(KEYS.fechaProgramada),
+    getRaw(KEYS.hasta),
     getRaw(KEYS.mensaje),
     getRaw(KEYS.mostrarAvisoPrevio),
     getRaw(KEYS.enCuentaRegresiva),
@@ -100,6 +104,7 @@ async function getState() {
     activo: activoBool,
     mantenimientoActivo: activoBool,
     fechaProgramada: toIso(fechaProgramada),
+    hasta: toIso(hasta),
     mensaje: String(mensaje || '').trim(),
     mostrarAvisoPrevio: toBool(mostrarAvisoPrevio, false),
     enCuentaRegresiva: enCuenta,
@@ -142,6 +147,17 @@ async function saveState(patch, actorId = null) {
     }
   }
 
+  // hasta: fecha/hora estimada de FIN (acepta Date, ISO string o null).
+  let hasta = current.hasta;
+  if (patch.hasta !== undefined) {
+    if (patch.hasta === null || patch.hasta === '') {
+      hasta = null;
+    } else {
+      const d = new Date(patch.hasta);
+      hasta = isNaN(d.getTime()) ? null : d.toISOString();
+    }
+  }
+
   // enCuentaRegresiva / finCuentaRegresiva (la ventana de gracia de 5 min).
   let enCuenta = current.enCuentaRegresiva;
   let finCuenta = current.finCuentaRegresiva;
@@ -160,6 +176,7 @@ async function saveState(patch, actorId = null) {
   await Promise.allSettled([
     writeField(KEYS.activo, activo, 'Bloqueo duro del modo mantenimiento (mantenimientoActivo)'),
     writeField(KEYS.fechaProgramada, fecha, 'Fecha/hora programada de inicio del mantenimiento'),
+    writeField(KEYS.hasta, hasta, 'Fecha/hora estimada de fin; al pasar se desactiva el mantenimiento'),
     writeField(KEYS.mensaje, mensaje, 'Mensaje personalizado mostrado en la pantalla de mantenimiento'),
     writeField(KEYS.mostrarAvisoPrevio, mostrarAvisoPrevio, '¿Mostrar aviso previo/banner de mantenimiento programado?'),
     writeField(KEYS.enCuentaRegresiva, enCuenta, '¿La cuenta regresiva de 5 minutos está activa?'),
@@ -179,11 +196,12 @@ async function saveState(patch, actorId = null) {
     finCuentaRegresiva: finCuenta,
     mensaje,
     fechaProgramada: fecha,
+    hasta,
     mostrarAvisoPrevio,
     por: actorId ? String(actorId) : 'sistema',
   }, 'mantenimiento');
 
-  return { activo, mantenimientoActivo: activo, fechaProgramada: fecha, mensaje, mostrarAvisoPrevio, enCuentaRegresiva: enCuenta, finCuentaRegresiva: finCuenta };
+  return { activo, mantenimientoActivo: activo, fechaProgramada: fecha, hasta, mensaje, mostrarAvisoPrevio, enCuentaRegresiva: enCuenta, finCuentaRegresiva: finCuenta };
 }
 
 // Inicia la cuenta regresiva de 5 minutos (ventana de gracia): deja el bloqueo
@@ -209,7 +227,7 @@ async function activate(actorId = null) {
 // Desactiva TODO el mantenimiento (bloqueo + cuenta regresiva + programación).
 async function disable(actorId = null) {
   return saveState(
-    { activo: false, enCuentaRegresiva: false, finCuentaRegresiva: null, fechaProgramada: null },
+    { activo: false, enCuentaRegresiva: false, finCuentaRegresiva: null, fechaProgramada: null, hasta: null },
     actorId
   );
 }
@@ -219,7 +237,7 @@ async function getDisplayData() {
   const state = await getState();
   return {
     mensaje: state.mensaje,
-    hasta: state.fechaProgramada ? state.fechaProgramada : '',
+    hasta: state.hasta ? state.hasta : '',
   };
 }
 

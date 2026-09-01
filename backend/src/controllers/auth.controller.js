@@ -107,7 +107,7 @@ const login = asyncHandler(async (req, res) => {
       success: false,
       message: msg,
       code: 'MAINTENANCE_MODE',
-      mantenimiento: { mensaje: msg, hasta: state.fechaProgramada || '' },
+      mantenimiento: { mensaje: msg, hasta: state.hasta || '' },
     });
   }
 

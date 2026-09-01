@@ -2,35 +2,48 @@
 
 // Servicio central del MODO MANTENIMIENTO PROGRAMADO.
 //
-// Unifica la lectura/escritura del estado de mantenimiento sobre la colección
-// Config usando un esquema único y reemplaza los helpers dispersos que antes
-// vivían en el middleware y en el controlador de soporte.
+// Modelo en DOS FASES para dar a los usuarios tiempo de guardar su trabajo:
 //
-// Claves canónicas (todas con prefijo `mantenimiento.`):
-//   mantenimiento.activo             Boolean  → bloqueo duro (mantenimientoActivo)
-//   mantenimiento.fechaProgramada    Date     → cuándo inicia el mantenimiento
-//   mantenimiento.mensaje            String   → mensaje mostrado
-//   mantenimiento.mostrarAvisoPrevio Boolean  → ¿mostrar aviso previo de 5 min?
+//   FASE CUENTA REGRESIVA (enCuentaRegresiva=true, mantenimientoActivo=false):
+//     - El sistema sigue funcionando (el middleware NO bloquea la API).
+//     - Los Asesores/Operadores ven un modal de cuenta regresiva calculado con
+//       `finCuentaRegresiva` y la hora actual; al llegar a 00:00 se cierran.
+//     - Admin/Superadmin no se interrumpen.
 //
-// Para no perder el estado existente se leen las claves antiguas
-// (`mantenimiento.on`, `mantenimiento.hasta`) como respaldo y se migran al
-// nuevo esquema la primera vez que se invoca una escritura.
+//   FASE ACTIVA (mantenimientoActivo=true):
+//     - El bloqueo duro se aplica en el middleware: solo Admin y Superadmin
+//       siguen accediendo; el resto recibe 503 y la pantalla de mantenimiento.
+//     - La cuenta regresiva expira automáticamente a `finCuentaRegresiva`
+//       (el job maintenance.job activa la fase ACTIVA al llegar a la hora).
+//
+// Claves canónicas (colección Config, prefijo `mantenimiento.`):
+//   mantenimiento.activo             Boolean  → mantenimientoActivo (bloqueo duro)
+//   mantenimiento.fechaProgramada    Date     → fecha/hora programada de inicio
+//   mantenimiento.mensaje            String   → mensaje personalizado del admin
+//   mantenimiento.mostrarAvisoPrevio Boolean  → ¿mostrar aviso previo/banner?
+//   mantenimiento.enCuentaRegresiva  Boolean  → ¿la cuenta regresiva de 5 min está activa?
+//   mantenimiento.finCuentaRegresiva Date     → timestamp de expiración de los 5 min
+//
+// Por compatibilidad se sigue leyendo la clave legacy `mantenimiento.on` como
+// respaldo de `activo`.
 
 const { Config } = require('../models');
 const logger = require('./logger.service');
+
+const GRACE_MS = 5 * 60 * 1000; // ventana de gracia de 5 minutos
 
 const KEYS = {
   activo: 'mantenimiento.activo',
   fechaProgramada: 'mantenimiento.fechaProgramada',
   mensaje: 'mantenimiento.mensaje',
   mostrarAvisoPrevio: 'mantenimiento.mostrarAvisoPrevio',
+  enCuentaRegresiva: 'mantenimiento.enCuentaRegresiva',
+  finCuentaRegresiva: 'mantenimiento.finCuentaRegresiva',
 };
 
 // Claves antiguas (legacy) que se siguen leyendo por compatibilidad.
 const LEGACY_KEYS = {
   activo: 'mantenimiento.on',
-  mensaje: 'mantenimiento.mensaje',
-  hasta: 'mantenimiento.hasta',
 };
 
 async function getRaw(key) {
@@ -38,41 +51,59 @@ async function getRaw(key) {
   return cfg ? cfg.value : null;
 }
 
-// Devuelve el estado completo del mantenimiento.
+// Lee el estado completo del mantenimiento.
 async function getState() {
   const [
     activo,
     fechaProgramada,
     mensaje,
     mostrarAvisoPrevio,
+    enCuentaRegresiva,
+    finCuentaRegresiva,
     legacyActivo,
   ] = await Promise.all([
     getRaw(KEYS.activo),
     getRaw(KEYS.fechaProgramada),
     getRaw(KEYS.mensaje),
     getRaw(KEYS.mostrarAvisoPrevio),
+    getRaw(KEYS.enCuentaRegresiva),
+    getRaw(KEYS.finCuentaRegresiva),
     getRaw(LEGACY_KEYS.activo),
   ]);
 
-  // El estado ACTIVO se resuelve con el nuevo esquema; si aún no existe, se
+  // Estado ACTIVO: se resuelve con el nuevo esquema; si aún no existe, se
   // respeta la configuración heredada (mantenimiento.on).
   let activoBool = typeof activo === 'boolean' ? activo : String(activo || '').toLowerCase() === 'true';
   if (activo === null || activo === undefined) {
     activoBool = String(legacyActivo || '').toLowerCase() === 'true';
   }
 
-  let fecha = null;
-  if (fechaProgramada) {
-    const d = new Date(fechaProgramada);
-    fecha = isNaN(d.getTime()) ? null : d;
+  const toIso = (v) => {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
+  const toBool = (v, fallback = false) =>
+    typeof v === 'boolean' ? v : (v === null || v === undefined ? fallback : String(v).toLowerCase() === 'true');
+
+  // Si hay cuenta regresiva que ya expiró y el bloqueo no se activó, se calcula
+  // el estado como si el mantenimiento ya estuviera activo (ver también el job).
+  const fin = toIso(finCuentaRegresiva);
+  let enCuenta = toBool(enCuentaRegresiva, false);
+  if (enCuenta && fin && new Date(fin).getTime() <= Date.now() && !activoBool) {
+    activoBool = true;
+    enCuenta = false;
   }
 
   return {
     activo: activoBool,
     mantenimientoActivo: activoBool,
-    fechaProgramada: fecha ? fecha.toISOString() : null,
+    fechaProgramada: toIso(fechaProgramada),
     mensaje: String(mensaje || '').trim(),
-    mostrarAvisoPrevio: typeof mostrarAvisoPrevio === 'boolean' ? mostrarAvisoPrevio : String(mostrarAvisoPrevio || '').toLowerCase() === 'true',
+    mostrarAvisoPrevio: toBool(mostrarAvisoPrevio, false),
+    enCuentaRegresiva: enCuenta,
+    finCuentaRegresiva: enCuenta ? fin : null,
   };
 }
 
@@ -91,7 +122,7 @@ async function writeField(key, value, description) {
 }
 
 // Guarda el estado completo del mantenimiento. Acepta un objeto parcial.
-//   { activo, fechaProgramada, mensaje, mostrarAvisoPrevio }
+//   { activo, fechaProgramada, mensaje, mostrarAvisoPrevio, enCuentaRegresiva, finCuentaRegresiva }
 async function saveState(patch, actorId = null) {
   const current = await getState();
 
@@ -111,11 +142,28 @@ async function saveState(patch, actorId = null) {
     }
   }
 
+  // enCuentaRegresiva / finCuentaRegresiva (la ventana de gracia de 5 min).
+  let enCuenta = current.enCuentaRegresiva;
+  let finCuenta = current.finCuentaRegresiva;
+  if (patch.enCuentaRegresiva !== undefined) enCuenta = Boolean(patch.enCuentaRegresiva);
+  if (patch.finCuentaRegresiva !== undefined) {
+    if (patch.finCuentaRegresiva === null || patch.finCuentaRegresiva === '') {
+      finCuenta = null;
+    } else {
+      const d = new Date(patch.finCuentaRegresiva);
+      finCuenta = isNaN(d.getTime()) ? null : d.toISOString();
+    }
+  }
+  // Si se desactiva la cuenta regresiva, se limpia su timestamp.
+  if (!enCuenta) finCuenta = null;
+
   await Promise.allSettled([
     writeField(KEYS.activo, activo, 'Bloqueo duro del modo mantenimiento (mantenimientoActivo)'),
-    writeField(KEYS.mensaje, mensaje, 'Mensaje mostrado en la pantalla de mantenimiento'),
-    writeField(KEYS.mostrarAvisoPrevio, mostrarAvisoPrevio, '¿Mostrar aviso previo de 5 minutos antes del mantenimiento?'),
     writeField(KEYS.fechaProgramada, fecha, 'Fecha/hora programada de inicio del mantenimiento'),
+    writeField(KEYS.mensaje, mensaje, 'Mensaje personalizado mostrado en la pantalla de mantenimiento'),
+    writeField(KEYS.mostrarAvisoPrevio, mostrarAvisoPrevio, '¿Mostrar aviso previo/banner de mantenimiento programado?'),
+    writeField(KEYS.enCuentaRegresiva, enCuenta, '¿La cuenta regresiva de 5 minutos está activa?'),
+    writeField(KEYS.finCuentaRegresiva, finCuenta, 'Timestamp de expiración de la ventana de gracia de 5 minutos'),
   ]);
 
   if (actorId) {
@@ -126,14 +174,44 @@ async function saveState(patch, actorId = null) {
   }
 
   logger.info('Estado de mantenimiento actualizado', {
-    activo,
+    mantenimientoActivo: activo,
+    enCuentaRegresiva: enCuenta,
+    finCuentaRegresiva: finCuenta,
     mensaje,
     fechaProgramada: fecha,
     mostrarAvisoPrevio,
     por: actorId ? String(actorId) : 'sistema',
   }, 'mantenimiento');
 
-  return { activo, mantenimientoActivo: activo, fechaProgramada: fecha, mensaje, mostrarAvisoPrevio };
+  return { activo, mantenimientoActivo: activo, fechaProgramada: fecha, mensaje, mostrarAvisoPrevio, enCuentaRegresiva: enCuenta, finCuentaRegresiva: finCuenta };
+}
+
+// Inicia la cuenta regresiva de 5 minutos (ventana de gracia): deja el bloqueo
+// duro apagado para que los asesores puedan guardar su trabajo antes del cierre.
+async function startCountdown(mensaje = '', actorId = null) {
+  const fin = new Date(Date.now() + GRACE_MS).toISOString();
+  return saveState(
+    { activo: false, enCuentaRegresiva: true, finCuentaRegresiva: fin, mensaje },
+    actorId
+  );
+}
+
+// Detiene la cuenta regresiva (sin activar el bloqueo).
+async function stopCountdown(actorId = null) {
+  return saveState({ enCuentaRegresiva: false, finCuentaRegresiva: null }, actorId);
+}
+
+// Activa el bloqueo duro y limpia la cuenta regresiva.
+async function activate(actorId = null) {
+  return saveState({ activo: true, enCuentaRegresiva: false, finCuentaRegresiva: null }, actorId);
+}
+
+// Desactiva TODO el mantenimiento (bloqueo + cuenta regresiva + programación).
+async function disable(actorId = null) {
+  return saveState(
+    { activo: false, enCuentaRegresiva: false, finCuentaRegresiva: null, fechaProgramada: null },
+    actorId
+  );
 }
 
 // Lee el mensaje y la fecha estimada de fin para la pantalla de mantenimiento.
@@ -148,13 +226,18 @@ async function getDisplayData() {
 // Indica si el bloqueo duro está activo (sin cache) — usado por el middleware.
 async function isActive() {
   const state = await getState();
-  return state.activo;
+  return state.mantenimientoActivo;
 }
 
 module.exports = {
   KEYS,
+  GRACE_MS,
   getState,
   saveState,
+  startCountdown,
+  stopCountdown,
+  activate,
+  disable,
   getDisplayData,
   isActive,
 };

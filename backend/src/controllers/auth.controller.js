@@ -18,6 +18,9 @@ const {
   revokeSessionByToken,
 } = require('../services/session.service');
 const { ensure } = require('../services/notification.service');
+const maintenanceService = require('../services/maintenance.service');
+
+const PRIVILEGED_MAINTENANCE_ROLES = ['admin', 'superadmin'];
 
 const signToken = (userId, expiresIn = jwtExpiresIn) =>
   jwt.sign({ id: userId }, jwtSecret, { expiresIn });
@@ -91,6 +94,21 @@ const login = asyncHandler(async (req, res) => {
 
   if (user.status !== 'activo') {
     return res.status(403).json({ success: false, message: 'El usuario está inactivo' });
+  }
+
+  // Durante el mantenimiento ACTIVO solo pueden ingresar ADMIN y SUPERADMIN.
+  // El mensaje personalizado del administrador se envía al frontend para que
+  // lo muestre en el contenedor de mantenimiento.
+  const roleCode = user.role && user.role.code ? user.role.code : '';
+  if (!PRIVILEGED_MAINTENANCE_ROLES.includes(roleCode) && (await maintenanceService.isActive())) {
+    const state = await maintenanceService.getState();
+    const msg = state.mensaje || 'El sistema se encuentra en mantenimiento. Intenta más tarde.';
+    return res.status(503).json({
+      success: false,
+      message: msg,
+      code: 'MAINTENANCE_MODE',
+      mantenimiento: { mensaje: msg, hasta: state.fechaProgramada || '' },
+    });
   }
 
   // Login correcto: limpia contadores de bloqueo.

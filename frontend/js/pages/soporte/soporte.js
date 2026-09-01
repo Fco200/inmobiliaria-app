@@ -227,13 +227,6 @@ window.SoportePanel = (() => {
                 <label>Comisión base (%)</label>
                 <input name="comisiones.base" type="number" value="${escapeHtml(def('comisiones.base', '5'))}">
               </div>
-              <div class="fgroup">
-                <label>Estado de mantenimiento</label>
-                <select name="mantenimiento.on">
-                  <option value="false" ${String(def('mantenimiento.on', 'false')) === 'false' ? 'selected' : ''}>OFF</option>
-                  <option value="true" ${String(def('mantenimiento.on', 'false')) === 'true' ? 'selected' : ''}>ON</option>
-                </select>
-              </div>
             </div>
             <div style="margin-top:18px;display:flex;gap:10px;">
               <button class="btn btn-gold" type="submit">Guardar ajustes</button>
@@ -302,7 +295,6 @@ window.SoportePanel = (() => {
           'empresa.telefonos',
           'empresa.logo',
           'comisiones.base',
-          'mantenimiento.on',
         ];
         try {
           for (const key of campos) {
@@ -1146,8 +1138,8 @@ window.SoportePanel = (() => {
     if (!box) return;
 
     const mantenimiento = guiaCard('&#128681;&#65039;', 'Modo mantenimiento', [
-      { title: 'Activarlo / desactivarlo', text: 'Usa el interruptor del panel Resumen o esta guía. Al activarlo, la app se bloquea en 503 para TODOS los usuarios (incluidos los administradores); solo el Soporte Técnico (SUPERADMIN) conserva acceso.' },
-      { title: 'Mensaje y fin estimado', text: 'Puedes escribir el mensaje que verán los usuarios y programar una fecha/hora estimada de fin. Ambos se muestran en la pantalla de mantenimiento.' },
+      { title: 'Activarlo / desactivarlo', text: 'Usa el interruptor del panel Resumen o esta guía. Al activarlo, el bloqueo se aplica: ADMIN y SUPERADMIN conservan acceso; Asesores/Operadores ven la cuenta regresiva y luego la pantalla de mantenimiento.' },
+      { title: 'Mensaje y fin estimado', text: 'Puedes escribir el mensaje que verán los usuarios y programar una fecha/hora estimada de fin. Se muestran en la pantalla de mantenimiento y en el login.' },
       { title: 'Cómo revertirlo', text: 'Entra al panel de soporte e inicia sesión (sigue permitido durante el mantenimiento) y apaga el interruptor.' },
     ]);
 

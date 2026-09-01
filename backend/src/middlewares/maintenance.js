@@ -2,14 +2,15 @@
 
 // Middleware de MODO MANTENIMIENTO.
 //
-// Cuando el mantenimiento está ACTIVO (variable `mantenimiento.activo` en
-// 'true' — ver servicios/maintenance.service.js), todas las peticiones a la API
-// (excepto el login del panel de soporte, /health y el estado público de
-// mantenimiento) reciben un código 503 con una vista amigable de mantenimiento,
-// salvo que el solicitante sea un usuario de rol SUPERADMIN (soporte técnico).
-// De esta forma el equipo técnico puede seguir accediendo a la plataforma para
-// diagnosticar o revertir el modo mientras el resto de usuarios ven la pantalla
-// de mantenimiento.
+// Solo bloquea en la FASE ACTIVA (mantenimientoActivo=true). Durante la fase de
+// cuenta regresiva (enCuentaRegresiva) el sistema sigue funcionando para que los
+// usuarios puedan guardar su trabajo; el frontend se encarga de mostrar la
+// cuenta regresiva y de cerrar la sesión de Asesores/Operadores.
+//
+// Cuando el bloqueo está activo, todas las peticiones a la API (excepto el login,
+// el estado público de mantenimiento y /health) reciben un código 503 con la
+// vista amigable de mantenimiento, salvo que el solicitante sea ADMIN o
+// SUPERADMIN, que conservan acceso.
 
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
@@ -17,6 +18,7 @@ const { jwtSecret } = require('../config/env');
 const maintenanceService = require('../services/maintenance.service');
 
 const CACHE_TTL_MS = 5000;
+const PRIVILEGED_ROLES = ['superadmin', 'admin'];
 let cache = { value: null, at: 0 };
 
 async function mantenimientoActivo() {
@@ -34,22 +36,29 @@ async function mantenimientoActivo() {
   return value;
 }
 
-async function esSuperadmin(req) {
+// Devuelve el código de rol del usuario autenticado (o '' si no hay sesión).
+async function roleOf(req) {
   const header = req.headers && req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) return false;
+  if (!header || !header.startsWith('Bearer ')) return '';
   const token = header.split(' ')[1];
   let decoded;
   try {
     decoded = jwt.verify(token, jwtSecret);
   } catch (e) {
-    return false;
+    return '';
   }
   try {
     const user = await User.findById(decoded.id).populate('role').select('status').lean();
-    return Boolean(user && user.status === 'activo' && user.role && user.role.code === 'superadmin');
+    if (!user || user.status !== 'activo' || !user.role) return '';
+    return user.role.code;
   } catch (e) {
-    return false;
+    return '';
   }
+}
+
+async function esPrivilegiado(req) {
+  const role = await roleOf(req);
+  return PRIVILEGED_ROLES.includes(role);
 }
 
 // Lee el mensaje y la hora/fecha estimada de fin del mantenimiento.
@@ -72,9 +81,11 @@ function maintenanceUrl(datos) {
 }
 
 async function maintenance(req, res, next) {
-  // Rutas públicas de autenticación de soporte: SIEMPRE accesibles para poder
-  // desactivar el mantenimiento desde el panel.
+  // Rutas siempre accesibles: login normal (el login decide quién entra según
+  // su rol), login del panel de soporte, /health y el estado público de
+  // mantenimiento. Así el frontend puede consultar el estado y el acceso.
   if (
+    req.path === '/auth/login' ||
     req.path === '/soporte/auth/login' ||
     (req.path === '/health') ||
     (req.method === 'GET' && req.path === '/config/mantenimiento')
@@ -85,8 +96,8 @@ async function maintenance(req, res, next) {
   const activo = await mantenimientoActivo();
   if (!activo) return next();
 
-  const superadmin = await esSuperadmin(req);
-  if (superadmin) return next();
+  const privilegiado = await esPrivilegiado(req);
+  if (privilegiado) return next();
 
   const datos = await datosMantenimiento();
 
@@ -116,11 +127,14 @@ async function maintenancePage(req, res, next) {
   // sigan siendo alcanzables.
   if (STATIC_PATTERNS.some((rx) => rx.test(pathname))) return next();
   if (PUBLIC_PAGES.includes(pathname)) return next();
+  // Las peticiones a la API (JSON) las resuelve el middleware `maintenance`
+  // (aplicado bajo /api), no este redirector de páginas.
+  if (pathname.startsWith('/api/')) return next();
 
   const activo = await mantenimientoActivo();
   if (!activo) return next();
-  const superadmin = await esSuperadmin(req);
-  if (superadmin) return next();
+  const privilegiado = await esPrivilegiado(req);
+  if (privilegiado) return next();
 
   const datos = await datosMantenimiento();
   const url = maintenanceUrl(datos);

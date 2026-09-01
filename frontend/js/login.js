@@ -65,15 +65,6 @@ window.LoginPage = (() => {
     setError(null);
     setLoading(true);
 
-    // Si el sistema está en mantenimiento, se avisa al usuario y se detiene el
-    // intento con un mensaje claro (rojo/dorado) para roles de consumo.
-    const maint = await getMaintenanceState();
-    if (maint) {
-      setError(maint);
-      setLoading(false);
-      return;
-    }
-
     try {
       const result = await window.API.auth.login({ identifier, password, remember });
       window.ApiClient.setLogin(result.token, result.user);
@@ -89,40 +80,109 @@ window.LoginPage = (() => {
     }
   }
 
-  // Consulta el estado público de mantenimiento. Devuelve un mensaje de bloqueo
-  // si el mantenimiento está activo, o '' si se puede iniciar sesión.
-  async function getMaintenanceState() {
-    try {
-      if (!window.API || !window.API.config || !window.API.config.mantenimiento) return '';
-      const estado = await window.API.config.mantenimiento();
-      if (estado && (estado.activo === true || estado.mantenimientoActivo === true)) {
-        const msg = (estado.mensaje && estado.mensaje.trim()) || 'El sistema se encuentra en mantenimiento programado. Intenta más tarde.';
-        return msg;
-      }
-    } catch (e) {
-      // Sin estado disponible: se deja pasar al intento (el backend decidirá).
-      return '';
-    }
-    return '';
+  // Muestra en el login los distintos estados de mantenimiento:
+  //   - ACTIVO        → capa de bloqueo FV DIGITAL con el mensaje personalizado
+  //                     (el backend rechaza a quien no sea admin/superadmin con 503).
+  //   - CUENTA REGRESIVA → alerta con contador en vivo ("Mantenimiento en progreso").
+  //   - programado con aviso previo → banner de aviso.
+  let countdownTick = null;
+
+  function formatNum(n) { return String(n).padStart(2, '0'); }
+
+  function hideAllMaintenance() {
+    const banner = document.getElementById('login-maintenance-banner');
+    const countdown = document.getElementById('login-countdown-alert');
+    const overlay = document.getElementById('login-maintenance-overlay');
+    if (banner) banner.classList.add('hide');
+    if (countdown) countdown.classList.add('hide');
+    if (overlay) overlay.classList.add('hide');
+    if (countdownTick) { clearInterval(countdownTick); countdownTick = null; }
   }
 
-  // Muestra el banner de mantenimiento si el sistema está activo en modo
-  // mantenimiento al cargar la pantalla de login.
-  async function refreshMaintenanceBanner() {
+  function updateCountdownTimeEnds(fin) {
+    const timeEl = document.getElementById('login-countdown-time');
+    if (!timeEl) return;
+    const end = new Date(fin).getTime();
+    const render = () => {
+      const secs = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      timeEl.textContent = `${formatNum(Math.floor(secs / 60))}:${formatNum(secs % 60)}`;
+      if (secs <= 0) refreshMaintenanceStatus();
+    };
+    render();
+    if (countdownTick) clearInterval(countdownTick);
+    countdownTick = setInterval(render, 1000);
+  }
+
+  function showMaintenanceActive(estado) {
+    const overlay = document.getElementById('login-maintenance-overlay');
+    const msgEl = document.getElementById('mensajeMantenimiento');
     const banner = document.getElementById('login-maintenance-banner');
-    const msgEl = document.getElementById('login-maint-msg');
-    if (!banner) return;
+    if (msgEl) msgEl.textContent = (estado && estado.mensaje) || '';
+    if (banner) banner.classList.add('hide');
+    if (overlay) overlay.classList.remove('hide');
+
+    const retryBtn = document.getElementById('btn-lm-retry');
+    if (retryBtn && !retryBtn._wired) {
+      retryBtn._wired = true;
+      retryBtn.addEventListener('click', () => {
+        retryBtn.disabled = true;
+        refreshMaintenanceStatus();
+        setTimeout(() => { retryBtn.disabled = false; }, 2500);
+      });
+    }
+    const adminBtn = document.getElementById('btn-lm-admin');
+    if (adminBtn && !adminBtn._wired) {
+      adminBtn._wired = true;
+      adminBtn.addEventListener('click', () => { overlay.classList.add('hide'); });
+    }
+  }
+
+  function showMaintenanceCountdown(estado) {
+    const countdown = document.getElementById('login-countdown-alert');
+    const overlay = document.getElementById('login-maintenance-overlay');
+    const banner = document.getElementById('login-maintenance-banner');
+    if (banner) banner.classList.add('hide');
+    if (overlay) overlay.classList.add('hide');
+    if (countdown) countdown.classList.remove('hide');
+    const fin = (estado && estado.finCuentaRegresiva) || '';
+    if (fin) updateCountdownTimeEnds(fin);
+  }
+
+  async function refreshMaintenanceStatus() {
+    const banner = document.getElementById('login-maintenance-banner');
+    const countdown = document.getElementById('login-countdown-alert');
+    const overlay = document.getElementById('login-maintenance-overlay');
+    if (!banner && !countdown && !overlay) return;
     try {
       if (!window.API || !window.API.config || !window.API.config.mantenimiento) return;
       const estado = await window.API.config.mantenimiento();
+
+      // 1) MANTENIMIENTO ACTIVO.
       if (estado && (estado.activo === true || estado.mantenimientoActivo === true)) {
-        if (msgEl) msgEl.textContent = (estado.mensaje && estado.mensaje.trim()) || 'Estamos realizando mejoras. Intenta más tarde.';
-        banner.classList.remove('hide');
-      } else {
-        banner.classList.add('hide');
+        showMaintenanceActive(estado);
+        if (countdownTick) { clearInterval(countdownTick); countdownTick = null; }
+        return;
       }
+      // 2) CUENTA REGRESIVA en curso.
+      if (estado && estado.enCuentaRegresiva === true && estado.finCuentaRegresiva) {
+        showMaintenanceCountdown(estado);
+        if (banner) banner.classList.add('hide');
+        return;
+      }
+      // 3) PROGRAMADO con aviso previo → banner.
+      if (estado && estado.programado && estado.mostrarAvisoPrevio) {
+        hideAllMaintenance();
+        if (banner) {
+          const msgEl = document.getElementById('login-maint-msg');
+          if (msgEl) msgEl.textContent = (estado.mensaje && estado.mensaje.trim()) || 'Estamos realizando mejoras. Intenta más tarde.';
+          banner.classList.remove('hide');
+        }
+        return;
+      }
+      // Sin mantenimiento.
+      hideAllMaintenance();
     } catch (e) {
-      banner.classList.add('hide');
+      hideAllMaintenance();
     }
   }
 
@@ -510,7 +570,9 @@ window.LoginPage = (() => {
     if (googleBtn) googleBtn.addEventListener('click', openRoleModal);
 
     refreshGoogleStatus();
-    refreshMaintenanceBanner();
+    refreshMaintenanceStatus();
+    // Revisión periódica del estado de mantenimiento en la pantalla de login.
+    setInterval(refreshMaintenanceStatus, 20000);
 
     if (window.AppInstall) window.AppInstall.init();
   }

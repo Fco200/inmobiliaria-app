@@ -50,6 +50,35 @@
       </div>
     </div>
 
+    <!-- Alerta de cuenta regresiva (mantenimiento por comenzar) -->
+    <div id="login-countdown-alert" class="login-countdown-alert hide" role="alert">
+      <span class="login-countdown-icon">&#9888;&#65039;</span>
+      <div>
+        <strong class="login-countdown-title">Mantenimiento en progreso...</strong>
+        <span id="login-countdown-time" class="login-countdown-time">--:--</span>
+      </div>
+    </div>
+
+    <!-- Capa de bloqueo de mantenimiento (modo activo): sustituye el formulario
+         para roles no administrativos, mostrando el branding FV DIGITAL y el
+         mensaje personalizado del administrador. -->
+    <div id="login-maintenance-overlay" class="login-maintenance-overlay hide">
+      <div class="lm-card">
+        <div class="lm-brand">
+          <img class="lm-logo" src="fv_digital_logo.png.webp" alt="FV DIGITAL"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+          <span class="lm-logo-text" style="display:none;">FV DIGITAL</span>
+        </div>
+        <div class="lm-gear"></div>
+        <h1 class="lm-title">SISTEMA EN MANTENIMIENTO</h1>
+        <p class="lm-sub">La plataforma se encuentra temporalmente fuera de servicio por tareas de mantenimiento técnico.</p>
+        <div class="lm-msg" id="mensajeMantenimiento"></div>
+        <button class="btn btn-gold lm-retry" id="btn-lm-retry" type="button">&#8635;&nbsp; Comprobar estado / Reintentar</button>
+        <button class="lm-admin-link" id="btn-lm-admin" type="button">&#128274;&nbsp; Acceso administrativo</button>
+        <div class="lm-small">INMOBLES &times; <strong>FV DIGITAL</strong></div>
+      </div>
+    </div>
+
     <!-- Formulario -->
     <form id="login-form" class="login-form" novalidate>
       <div class="form-group">

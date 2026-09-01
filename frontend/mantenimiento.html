@@ -122,6 +122,7 @@
     <p>Estamos realizando mejoras para brindarte una mejor experiencia.</p>
     <div class="mt-status"><span class="dot"></span> Mantenimiento programado</div>
     <div class="mt-msg" id="mt-msg"></div>
+    <div class="mt-msg" id="mensajeMantenimiento" style="display:none;"></div>
     <div class="mt-fin" id="mt-fin"><span class="ico">&#128336;&#65039;</span> <span id="mt-fin-txt">Volveremos muy pronto</span></div>
 
     <div class="mt-actions">
@@ -133,46 +134,78 @@
   </div>
 
   <script>
-    // Muestra el mensaje y la fecha/hora estimada de fin enviados por el servidor,
-    // y reintenta de forma automática/pulsando el botón cuando el modo termine.
+    // Muestra el mensaje y la fecha/hora estimada de fin enviados por el servidor
+    // (o por la API pública de mantenimiento), y reintenta de forma automática /
+    // pulsando el botón cuando el modo termine.
     (function () {
+      function setMensaje(msg) {
+        var m1 = document.getElementById('mt-msg');
+        var m2 = document.getElementById('mensajeMantenimiento');
+        var text = (msg || '').trim();
+        if (!text) {
+          if (m1) m1.style.display = 'none';
+          if (m2) m2.style.display = 'none';
+          return;
+        }
+        if (m1) { m1.style.display = ''; m1.textContent = text; }
+        if (m2) { m2.style.display = ''; m2.textContent = text; }
+      }
+
+      function setHasta(hasta) {
+        var finEl = document.getElementById('mt-fin');
+        var finTxt = document.getElementById('mt-fin-txt');
+        if (!finEl || !finTxt) return;
+        if (!hasta) { finEl.classList.remove('show'); return; }
+        var d = new Date(hasta);
+        if (!isNaN(d.getTime())) {
+          finTxt.textContent = 'Volveremos el ' + d.toLocaleString('es-MX', {
+            day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+          });
+        } else {
+          finTxt.textContent = 'Volveremos: ' + hasta;
+        }
+        finEl.classList.add('show');
+      }
+
+      // Estado inicial desde los parámetros URL (respaldo si la API no responde).
       function readParams() {
         var params = new URLSearchParams(window.location.search);
         var msg = params.get('m');
-        var msgEl = document.getElementById('mt-msg');
-        if (msg && msg.trim()) {
-          msgEl.textContent = msg;
-        } else {
-          msgEl.style.display = 'none';
-        }
+        if (msg && msg.trim()) setMensaje(msg);
         var hasta = params.get('hasta');
-        var finEl = document.getElementById('mt-fin');
-        var finTxt = document.getElementById('mt-fin-txt');
-        if (hasta) {
-          var d = new Date(hasta);
-          if (!isNaN(d.getTime())) {
-            finTxt.textContent = 'Volveremos el ' + d.toLocaleString('es-MX', {
-              day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
-            });
-            finEl.classList.add('show');
-          } else {
-            finTxt.textContent = 'Volveremos: ' + hasta;
-            finEl.classList.add('show');
-          }
-        }
+        if (hasta) setHasta(hasta);
       }
 
-      // Consulta el estado público de mantenimiento; si ya terminó, reenvía al login.
+      // Consulta el estado público de mantenimiento.
+      //  - Si sigue ACTIVO: muestra mensaje/fecha reales.
+      //  - Si está en CUENTA REGRESIVA (aún no activo): reenvía al login, porque
+      //    la plataforma aún está operativa.
+      //  - Si terminó: reenvía al login.
+      function apiUrl() {
+        return (window.AppConfig && window.AppConfig.API_URL)
+          ? window.AppConfig.API_URL + '/config/mantenimiento'
+          : '/api/config/mantenimiento';
+      }
+
       function checkStatus() {
         try {
-          fetch(window.AppConfig && window.AppConfig.API_URL
-            ? window.AppConfig.API_URL + '/config/mantenimiento'
-            : '/api/config/mantenimiento')
+          fetch(apiUrl())
             .then(function (r) { return r.json(); })
             .then(function (data) {
-              if (data && data.data && data.data.activo === false) {
+              if (!data || !data.data) return;
+              var estado = data.data;
+              // Cuenta regresiva en curso (el sistema sigue arriba): regresar.
+              if (estado.enCuentaRegresiva === true && estado.mantenimientoActivo === false) {
                 window.location.replace('index.html');
+                return;
               }
+              if (estado.mantenimientoActivo === true || estado.activo === true) {
+                setMensaje(estado.mensaje);
+                setHasta((estado.fechaProgramada) || '');
+                return;
+              }
+              // Terminó.
+              window.location.replace('index.html');
             })
             .catch(function () {});
         } catch (e) {}
@@ -186,6 +219,7 @@
       });
 
       readParams();
+      checkStatus();
       // Comprobación automática cada 20 s del estado.
       setInterval(checkStatus, 20000);
     })();

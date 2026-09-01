@@ -59,27 +59,10 @@
   }
 
   function checkStatus() {
-    try {
-      fetch(apiUrl(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!data || !data.data) return;
-          var estado = data.data;
-          // Cuenta regresiva en curso (el sistema sigue arriba): regresar.
-          if (estado.enCuentaRegresiva === true && estado.mantenimientoActivo === false) {
-            goLogin();
-            return;
-          }
-          if (estado.mantenimientoActivo === true || estado.activo === true) {
-            setMensaje(estado.mensaje);
-            setHasta(estado.hasta || '');
-            return;
-          }
-          // Terminó.
-          goLogin();
-        })
-        .catch(function () {});
-    } catch (e) {}
+    // MANTENIMIENTO DESACTIVADO: la pantalla de mantenimiento ya no bloquea.
+    // Esta página redirige siempre al login para que ningún usuario quede
+    // atrapado, aunque la URL llegue cacheada o por enlaces antiguos.
+    goLogin();
   }
 
   function goLogin() {

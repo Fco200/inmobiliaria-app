@@ -81,34 +81,11 @@ function maintenanceUrl(datos) {
 }
 
 async function maintenance(req, res, next) {
-  // Rutas siempre accesibles: login normal (el login decide quién entra según
-  // su rol), login del panel de soporte, /health y el estado público de
-  // mantenimiento. Así el frontend puede consultar el estado y el acceso.
-  if (
-    req.path === '/auth/login' ||
-    req.path === '/soporte/auth/login' ||
-    (req.path === '/health') ||
-    (req.method === 'GET' && req.path === '/config/mantenimiento')
-  ) {
-    return next();
-  }
-
-  const activo = await mantenimientoActivo();
-  if (!activo) return next();
-
-  const privilegiado = await esPrivilegiado(req);
-  if (privilegiado) return next();
-
-  const datos = await datosMantenimiento();
-
-  // Petición de API en mantenimiento: respuesta 503 (JSON para clientes). La
-  // vista amigable de mantenimiento la maneja `maintenancePage` (navegación).
-  return res.status(503).json({
-    success: false,
-    message: datos.mensaje || 'El sistema se encuentra en mantenimiento. Intenta más tarde.',
-    code: 'MAINTENANCE_MODE',
-    mantenimiento: { mensaje: datos.mensaje, hasta: datos.hasta },
-  });
+  // MANTENIMIENTO DESACTIVADO. El bloqueo del modo mantenimiento se ha
+  // neutralizado: ninguna petición a la API se bloquea, el sistema siempre
+  // responde normal. (Se conserva la estructura para poder reactivarlo en el
+  // futuro si se desea.)
+  return next();
 }
 
 // Renderiza la vista amigable de mantenimiento para peticiones de páginas web
@@ -121,25 +98,9 @@ const STATIC_PATTERNS = [
 const PUBLIC_PAGES = ['/index.html', '/', '/login', '/mantenimiento.html', '/soporte.html'];
 
 async function maintenancePage(req, res, next) {
-  const pathname = req.path || '/';
-  // Nunca bloquear recursos estáticos ni las páginas públicas de acceso para
-  // que el login, el panel de soporte y la propia pantalla de mantenimiento
-  // sigan siendo alcanzables.
-  if (STATIC_PATTERNS.some((rx) => rx.test(pathname))) return next();
-  if (PUBLIC_PAGES.includes(pathname)) return next();
-  // Las peticiones a la API (JSON) las resuelve el middleware `maintenance`
-  // (aplicado bajo /api), no este redirector de páginas.
-  if (pathname.startsWith('/api/')) return next();
-
-  const activo = await mantenimientoActivo();
-  if (!activo) return next();
-  const privilegiado = await esPrivilegiado(req);
-  if (privilegiado) return next();
-
-  const datos = await datosMantenimiento();
-  const url = maintenanceUrl(datos);
-  // Redirige a la pantalla amigable con el mensaje y la hora estimada de fin.
-  return res.status(503).redirect(url);
+  // MANTENIMIENTO DESACTIVADO. No se redirige ningún navegador a la pantalla
+  // de mantenimiento: todas las páginas se sirven con normalidad.
+  return next();
 }
 
 module.exports = { maintenance, maintenancePage, mantenimientoActivo };

@@ -62,15 +62,11 @@ window.Mantenimiento = (() => {
     return params.length ? `/mantenimiento.html?${params.join('&')}` : '/mantenimiento.html';
   }
 
-  // Auto-logout: limpia localStorage y redirige a la pantalla de mantenimiento.
+  // Auto-logout: DESACTIVADO. Ya no se limpia la sesión ni se redirige a la
+  // pantalla de mantenimiento. (Se conserva la firma para no romper llamadas.)
   function autoLogout() {
-    if (alreadyLoggedOut || !esAfectado()) return;
-    alreadyLoggedOut = true;
-    stopTimers();
-    removeModal();
-    removeBanner();
-    try { localStorage.clear(); } catch (e) { /* sin almacenamiento */ }
-    window.location.replace(maintenanceUrl());
+    try { removeModal(); } catch (e) {}
+    try { removeBanner(); } catch (e) {}
   }
 
   function fetchEstado() {
@@ -90,33 +86,12 @@ window.Mantenimiento = (() => {
   }
 
   async function check() {
-    const estado = await fetchEstado();
-    if (!estado) return;
-    currentMessage = estado.mensaje || currentMessage;
-
-    // 1) MANTENIMIENTO ACTIVO → salida inmediata para roles afectados.
-    if (estado.mantenimientoActivo === true || estado.activo === true) {
-      autoLogout();
-      return;
-    }
-
-    // 2) CUENTA REGRESIVA activa → modal con contador en vivo.
-    if (estado.enCuentaRegresiva && estado.finCuentaRegresiva) {
-      const end = new Date(estado.finCuentaRegresiva).getTime();
-      startCountdown(end);
-      return;
-    }
-
-    // 3) MANTENIMIENTO PROGRAMADO A FUTURO → banner de aviso previo.
-    if (estado.programado && estado.mostrarAvisoPrevio && estado.fechaProgramada) {
-      removeModalIfNotNeeded();
-      showBanner(estado.fechaProgramada);
-      return;
-    }
-
-    // Sin mantenimiento: limpiar.
-    removeModalIfNotNeeded();
-    removeBanner();
+    // MANTENIMIENTO DESACTIVADO: este módulo ya no bloquea ni fuerza ninguna
+    // salida de sesión. Se limpian los avisos si existieran y se omite todo el
+    // flujo de mantenimiento programado.
+    try { removeModalIfNotNeeded(); } catch (e) {}
+    try { removeBanner(); } catch (e) {}
+    return;
   }
 
   // ---- Cuenta regresiva (modal flotante no bloqueante) ----
@@ -248,15 +223,11 @@ window.Mantenimiento = (() => {
         currentMessage = (payload && payload.mensaje) || currentMessage;
         if (payload && payload.fechaProgramada) showBanner(payload.fechaProgramada);
       });
-      socket.on('mantenimiento-countdown', (payload) => {
-        if (!esAfectado()) return;
-        if (payload && payload.fin) { autoLogout(); return; }
-        if (payload && payload.finCuentaRegresiva) {
-          startCountdown(new Date(payload.finCuentaRegresiva).getTime());
-        }
+      socket.on('mantenimiento-countdown', () => {
+        // Desactivado: sin auto-logout ni cuenta regresiva forzada.
       });
       socket.on('mantenimiento-iniciado', () => {
-        if (esAfectado()) autoLogout();
+        // Desactivado: sin auto-logout.
       });
       socket.on('mantenimiento-desactivado', () => {
         removeModal(); removeBanner();

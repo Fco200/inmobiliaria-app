@@ -80,93 +80,6 @@ window.LoginPage = (() => {
     }
   }
 
-  // Muestra en el login los distintos estados de mantenimiento:
-  //   - ACTIVO        → capa de bloqueo FV DIGITAL con el mensaje personalizado
-  //                     (el backend rechaza a quien no sea admin/superadmin con 503).
-  //   - CUENTA REGRESIVA → alerta con contador en vivo ("Mantenimiento en progreso").
-  //   - programado con aviso previo → banner de aviso.
-  let countdownTick = null;
-
-  function formatNum(n) { return String(n).padStart(2, '0'); }
-
-  function hideAllMaintenance() {
-    const banner = document.getElementById('login-maintenance-banner');
-    const countdown = document.getElementById('login-countdown-alert');
-    const overlay = document.getElementById('login-maintenance-overlay');
-    if (banner) banner.classList.add('hide');
-    if (countdown) countdown.classList.add('hide');
-    if (overlay) overlay.classList.add('hide');
-    if (countdownTick) { clearInterval(countdownTick); countdownTick = null; }
-  }
-
-  function updateCountdownTimeEnds(fin) {
-    const timeEl = document.getElementById('login-countdown-time');
-    if (!timeEl) return;
-    const end = new Date(fin).getTime();
-    const render = () => {
-      const secs = Math.max(0, Math.floor((end - Date.now()) / 1000));
-      timeEl.textContent = `${formatNum(Math.floor(secs / 60))}:${formatNum(secs % 60)}`;
-      if (secs <= 0) refreshMaintenanceStatus();
-    };
-    render();
-    if (countdownTick) clearInterval(countdownTick);
-    countdownTick = setInterval(render, 1000);
-  }
-
-  function showMaintenanceActive(estado) {
-    // DESACTIVADO: la capa de bloqueo del login se ha eliminado. El formulario
-    // permanece siempre visible sin importar el estado de mantenimiento.
-    return;
-  }
-
-  function showMaintenanceCountdown(estado) {
-    // DESACTIVADO: la alerta de cuenta regresiva se oculta siempre.
-    const countdown = document.getElementById('login-countdown-alert');
-    const overlay = document.getElementById('login-maintenance-overlay');
-    const banner = document.getElementById('login-maintenance-banner');
-    if (banner) banner.classList.add('hide');
-    if (overlay) overlay.classList.add('hide');
-    if (countdown) countdown.classList.add('hide');
-  }
-
-  async function refreshMaintenanceStatus() {
-    const banner = document.getElementById('login-maintenance-banner');
-    const countdown = document.getElementById('login-countdown-alert');
-    const overlay = document.getElementById('login-maintenance-overlay');
-    if (!banner && !countdown && !overlay) return;
-    try {
-      if (!window.API || !window.API.config || !window.API.config.mantenimiento) return;
-      const estado = await window.API.config.mantenimiento();
-
-      // 1) MANTENIMIENTO ACTIVO.
-      if (estado && (estado.activo === true || estado.mantenimientoActivo === true)) {
-        showMaintenanceActive(estado);
-        if (countdownTick) { clearInterval(countdownTick); countdownTick = null; }
-        return;
-      }
-      // 2) CUENTA REGRESIVA en curso.
-      if (estado && estado.enCuentaRegresiva === true && estado.finCuentaRegresiva) {
-        showMaintenanceCountdown(estado);
-        if (banner) banner.classList.add('hide');
-        return;
-      }
-      // 3) PROGRAMADO con aviso previo → banner.
-      if (estado && estado.programado && estado.mostrarAvisoPrevio) {
-        hideAllMaintenance();
-        if (banner) {
-          const msgEl = document.getElementById('login-maint-msg');
-          if (msgEl) msgEl.textContent = (estado.mensaje && estado.mensaje.trim()) || 'Estamos realizando mejoras. Intenta más tarde.';
-          banner.classList.remove('hide');
-        }
-        return;
-      }
-      // Sin mantenimiento.
-      hideAllMaintenance();
-    } catch (e) {
-      hideAllMaintenance();
-    }
-  }
-
   // ---- Registro con Google ----
 
   let pendingGoogle = null; // { role, roleKey }
@@ -551,9 +464,6 @@ window.LoginPage = (() => {
     if (googleBtn) googleBtn.addEventListener('click', openRoleModal);
 
     refreshGoogleStatus();
-    refreshMaintenanceStatus();
-    // Revisión periódica del estado de mantenimiento en la pantalla de login.
-    setInterval(refreshMaintenanceStatus, 20000);
 
     if (window.AppInstall) window.AppInstall.init();
   }

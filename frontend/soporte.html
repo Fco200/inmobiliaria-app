@@ -1,14 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Panel de Soporte Técnico · INMOBILIARIA</title>
+  <title>Panel de Soporte T�cnico � INMOBILIARIA</title>
   <meta name="theme-color" content="#14100c">
-  <meta name="description" content="Panel administrativo de soporte técnico">
-  <link rel="icon" type="image/png" sizes="32x32" href="logoinmobles.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/logoconicono-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/logoconicono-180.png">
+  <meta name="description" content="Panel administrativo de soporte t�cnico">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-maskable-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-maskable-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-maskable-192.png">
   <style>
     :root {
       --gold: #d4af37;
@@ -187,7 +187,7 @@
     .kv b { display: block; font-size: 18px; color: var(--text); }
     .kv span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
-    /* ── Interruptor de mantenimiento ── */
+    /* -- Interruptor de mantenimiento -- */
     .mt-switch { display: flex; align-items: center; gap: 10px; }
     .mt-switch label { cursor: pointer; }
     .mt-track {
@@ -210,7 +210,7 @@
     .role-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(212,175,55,0.15); color: var(--gold); }
     textarea { resize: vertical; }
 
-    /* ── Chat interno ── */
+    /* -- Chat interno -- */
     .sp-chat { display: flex; gap: 14px; align-items: flex-start; }
     .sp-chat-list { width: 300px; flex-shrink: 0; }
     .sp-chat-item {
@@ -253,7 +253,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Guía ── */
+    /* -- Gu�a -- */
     .guia-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 18px; align-items: start;
@@ -302,16 +302,16 @@
       <small>FV DIGITAL</small>
     </div>
     <div class="sp-user">
-      <span id="sp-user-name">Cargando…</span>
+      <span id="sp-user-name">Cargando�</span>
       <img id="sp-user-photo" src="" alt="">
-      <button class="sp-outline-btn" id="btn-sp-logout" type="button">Cerrar Sesión</button>
+      <button class="sp-outline-btn" id="btn-sp-logout" type="button">Cerrar Sesi�n</button>
     </div>
   </header>
 
   <div class="sp-body">
     <nav class="sp-side" id="sp-side">
       <button class="sp-tab active" data-tab="resumen"><span class="ico">&#128200;</span> Resumen</button>
-      <button class="sp-tab" data-tab="guia"><span class="ico">&#128214;</span> Guía</button>
+      <button class="sp-tab" data-tab="guia"><span class="ico">&#128214;</span> Gu�a</button>
       <button class="sp-tab" data-tab="usuarios"><span class="ico">&#128101;</span> Usuarios</button>
       <button class="sp-tab" data-tab="sesiones"><span class="ico">&#128275;&#65039;</span> Sesiones</button>
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
@@ -324,15 +324,15 @@
     </nav>
 
     <main class="sp-main" id="sp-main">
-      <!-- ═══ Resumen ═══ -->
+      <!-- --- Resumen --- -->
       <section class="sp-pane active" id="pane-resumen">
         <h1 class="sp-pane-title">Resumen del Sistema</h1>
-        <p class="sp-pane-sub">Estado del servidor, base de datos y estadísticas generales de la plataforma.</p>
+        <p class="sp-pane-sub">Estado del servidor, base de datos y estad�sticas generales de la plataforma.</p>
         <div class="sp-card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
             <div>
               <h3 style="margin-bottom:4px;color:var(--gold);">&#128681;&#65039;&nbsp; Modo Mantenimiento</h3>
-              <span style="font-size:12px;color:var(--text-muted);">Bloquea la app a TODOS los usuarios (incluidos los administradores). Solo el Soporte Técnico (SUPERADMIN) conserva acceso para revertirlo. Puedes programar la activación para que se dispare sola y, con aviso previo, los asesores ven una cuenta regresiva de 5&nbsp;min antes del cierre.</span>
+              <span style="font-size:12px;color:var(--text-muted);">Bloquea la app a TODOS los usuarios (incluidos los administradores). Solo el Soporte T�cnico (SUPERADMIN) conserva acceso para revertirlo. Puedes programar la activaci�n para que se dispare sola y, con aviso previo, los asesores ven una cuenta regresiva de 5&nbsp;min antes del cierre.</span>
             </div>
             <div class="mt-switch">
               <button class="mt-track" id="mt-switch" type="button" role="switch" aria-checked="false" aria-label="Modo mantenimiento"></button>
@@ -340,14 +340,14 @@
             </div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-            <input class="mt-msg-input" id="mt-mensaje" type="text" placeholder="Mensaje que verán los usuarios en la pantalla de mantenimiento…" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;flex:2;min-width:220px;">
+            <input class="mt-msg-input" id="mt-mensaje" type="text" placeholder="Mensaje que ver�n los usuarios en la pantalla de mantenimiento�" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;flex:2;min-width:220px;">
             <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               Fin estimado
               <input class="mt-msg-input" id="mt-hasta" type="datetime-local" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;color-scheme:dark;">
             </label>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;background:rgba(128,90,0,0.06);border:1px dashed rgba(243,200,107,0.4);border-radius:10px;padding:10px 12px;">
-            <div style="font-size:12px;font-weight:600;color:var(--gold);flex:1 1 100%;">Programar mantenimiento automático</div>
+            <div style="font-size:12px;font-weight:600;color:var(--gold);flex:1 1 100%;">Programar mantenimiento autom�tico</div>
             <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               Inicio programado
               <input class="mt-msg-input" id="mt-fecha" type="datetime-local" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12px;color-scheme:dark;">
@@ -363,24 +363,24 @@
         <div id="resumen-container"></div>
       </section>
 
-      <!-- ═══ Guía ═══ -->
+      <!-- --- Gu�a --- -->
       <section class="sp-pane" id="pane-guia">
-        <h1 class="sp-pane-title">Guía del Soporte Técnico</h1>
-        <p class="sp-pane-sub">Manual de referencia rápida para la operación del panel y las herramientas de diagnóstico.</p>
+        <h1 class="sp-pane-title">Gu�a del Soporte T�cnico</h1>
+        <p class="sp-pane-sub">Manual de referencia r�pida para la operaci�n del panel y las herramientas de diagn�stico.</p>
         <div id="guia-container"></div>
       </section>
 
-      <!-- ═══ Usuarios ═══ -->
+      <!-- --- Usuarios --- -->
       <section class="sp-pane" id="pane-usuarios">
         <h1 class="sp-pane-title">Control de Usuarios</h1>
-        <p class="sp-pane-sub">Lista, roles, activación y restablecimiento de contraseñas sin tocar la base de datos.</p>
+        <p class="sp-pane-sub">Lista, roles, activaci�n y restablecimiento de contrase�as sin tocar la base de datos.</p>
         <div id="usuarios-container"></div>
       </section>
 
-      <!-- ═══ Sesiones ═══ -->
+      <!-- --- Sesiones --- -->
       <section class="sp-pane" id="pane-sesiones">
         <h1 class="sp-pane-title">Sesiones del Equipo</h1>
-        <p class="sp-pane-sub">Dispositivos y sesiones activas de todos los usuarios. Cierra cualquier sesión sospechosa.</p>
+        <p class="sp-pane-sub">Dispositivos y sesiones activas de todos los usuarios. Cierra cualquier sesi�n sospechosa.</p>
         <div style="display:flex;gap:10px;margin-bottom:16px;">
           <span style="flex:1"></span>
           <button class="btn btn-gold btn-sm" id="btn-sesiones-refresh" type="button">&#8635; Actualizar</button>
@@ -388,16 +388,16 @@
         <div id="sesiones-container"></div>
       </section>
 
-      <!-- ═══ Avisos ═══ -->
+      <!-- --- Avisos --- -->
       <section class="sp-pane" id="pane-anuncios">
         <h1 class="sp-pane-title">Avisos del Equipo</h1>
-        <p class="sp-pane-sub">Publica anuncios que se mostrarán como banners a todos los usuarios de la plataforma.</p>
+        <p class="sp-pane-sub">Publica anuncios que se mostrar�n como banners a todos los usuarios de la plataforma.</p>
         <div class="sp-card">
           <h3 style="margin-bottom:12px;">Nuevo aviso</h3>
           <form id="anuncio-form">
             <div class="form-grid">
               <div class="fgroup fgroup-full">
-                <label>Título</label>
+                <label>T�tulo</label>
                 <input name="title" placeholder="Ej. Mantenimiento programado" required>
               </div>
               <div class="fgroup fgroup-full">
@@ -420,38 +420,38 @@
           </form>
         </div>
         <div class="sp-card" style="margin-bottom:18px;">
-          <h3 style="margin-bottom:6px;">&#128274;&#65039;&nbsp; Solicitudes de restablecimiento de contraseña</h3>
-          <p class="sp-pane-sub" style="margin-top:0;">Asesores que olvidaron su contraseña y solicitan que se la restablezcan.</p>
+          <h3 style="margin-bottom:6px;">&#128274;&#65039;&nbsp; Solicitudes de restablecimiento de contrase�a</h3>
+          <p class="sp-pane-sub" style="margin-top:0;">Asesores que olvidaron su contrase�a y solicitan que se la restablezcan.</p>
           <div id="solicitudes-password-container"></div>
         </div>
         <div id="anuncios-container"></div>
       </section>
 
-      <!-- ═══ Chat Interno ═══ -->
+      <!-- --- Chat Interno --- -->
       <section class="sp-pane" id="pane-chat">
         <h1 class="sp-pane-title">Chat Interno</h1>
-        <p class="sp-pane-sub">Ve y responde los mensajes que los asesores y el equipo envían por el chat del CRM.</p>
+        <p class="sp-pane-sub">Ve y responde los mensajes que los asesores y el equipo env�an por el chat del CRM.</p>
         <div class="sp-chat" id="sp-chat-root"></div>
       </section>
 
-      <!-- ═══ Config ═══ -->
+      <!-- --- Config --- -->
       <section class="sp-pane" id="pane-config">
         <h1 class="sp-pane-title">Variables y Ajustes Globales</h1>
-        <p class="sp-pane-sub">Parámetros dinámicos de la inmobiliaria guardados en la colección <b>Config</b>.</p>
+        <p class="sp-pane-sub">Par�metros din�micos de la inmobiliaria guardados en la colecci�n <b>Config</b>.</p>
         <div id="config-container"></div>
       </section>
 
-      <!-- ═══ Roles y Permisos ═══ -->
+      <!-- --- Roles y Permisos --- -->
       <section class="sp-pane" id="pane-roles">
         <h1 class="sp-pane-title">Roles y Permisos</h1>
-        <p class="sp-pane-sub">Consulta la definición de roles y los permisos asignados a cada uno.</p>
+        <p class="sp-pane-sub">Consulta la definici�n de roles y los permisos asignados a cada uno.</p>
         <div id="roles-container"></div>
       </section>
 
-      <!-- ═══ Logs ═══ -->
+      <!-- --- Logs --- -->
       <section class="sp-pane" id="pane-logs">
         <h1 class="sp-pane-title">Visor de Logs y Errores</h1>
-        <p class="sp-pane-sub">Eventos del backend en tiempo real (errores de consultas, caídas de Socket.io, fallas en PDFs).</p>
+        <p class="sp-pane-sub">Eventos del backend en tiempo real (errores de consultas, ca�das de Socket.io, fallas en PDFs).</p>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
           <button class="btn btn-ghost btn-sm active" id="btn-log-lvl-all" type="button">Todos</button>
           <button class="btn btn-ghost btn-sm" id="btn-log-lvl-ERROR" type="button">ERROR</button>
@@ -464,18 +464,18 @@
         <div id="logs-container"></div>
       </section>
 
-      <!-- ═══ Respaldo ═══ -->
+      <!-- --- Respaldo --- -->
       <section class="sp-pane" id="pane-respaldo">
         <h1 class="sp-pane-title">Respaldos / Backups</h1>
         <p class="sp-pane-sub">Descarga un respaldo completo en formato JSON con todas las colecciones del sistema.</p>
         <div class="sp-card">
           <h3 style="margin-bottom:8px;">Generar respaldo completo</h3>
-          <p style="color:var(--text-muted);font-size:12px;margin:0 0 16px;">Incluye todas las colecciones (usuarios, clientes, propiedades, negocios, tareas, documentos, sesiones, actividad, configuración, etc.) junto con un conteo por módulo. Se descarga como archivo JSON.</p>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 16px;">Incluye todas las colecciones (usuarios, clientes, propiedades, negocios, tareas, documentos, sesiones, actividad, configuraci�n, etc.) junto con un conteo por m�dulo. Se descarga como archivo JSON.</p>
           <button class="btn btn-gold" id="btn-respaldo" type="button">&#128190; Descargar respaldo JSON</button>
         </div>
       </section>
 
-      <!-- ═══ Plantillas ═══ -->
+      <!-- --- Plantillas --- -->
       <section class="sp-pane" id="pane-plantillas">
         <h1 class="sp-pane-title">Gestor de Plantillas PDF</h1>
         <p class="sp-pane-sub">Sube, reemplaza o elimina los formatos PDF en <b>./plantillas</b> directamente desde el navegador.</p>

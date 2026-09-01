@@ -4,10 +4,19 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { Chat, User, Role } = require('../models');
 
 // Códigos de rol que participan en el canal grupal general.
-const TEAM_ROLES = ['admin', 'gerencia', 'asesor'];
+const TEAM_ROLES = ['admin', 'gerencia', 'asesor', 'superadmin'];
 
 // Nombre del canal grupal accesible para todo el equipo.
 const GENERAL_NAME = 'general';
+
+// Nombre del canal grupal dedicado a la comunicación directa con Soporte Técnico.
+const SOPORTE_NAME = 'soporte';
+
+// Códigos de rol del equipo que participan en el canal de Soporte (emisores).
+const SUPPORT_TEAM_ROLES = ['admin', 'gerencia', 'asesor'];
+
+// Códigos de rol del Soporte Técnico (superadmin), exento de mantenimiento.
+const SUPPORT_ROLE = 'superadmin';
 
 /**
  * Devuelve (creándolo si hace falta) el chat grupal general en el que
@@ -43,6 +52,39 @@ async function getOrCreateGeneralChat() {
   return chat;
 }
 
+/**
+ * Devuelve (creándolo si hace falta) el canal grupal dedicado a Soporte
+ * Técnico, en el que participan todos los asesores/administradores y el
+ * usuario de Soporte (SUPERADMIN). Los asesores escriben ahí para recibir
+ * atención directa del Soporte.
+ */
+async function getOrCreateSupportChat() {
+  let chat = await Chat.findOne({ type: 'grupal', name: SOPORTE_NAME });
+  if (chat) {
+    // Mantener sincronizados los participantes con el equipo y el soporte actual.
+    const roles = await Role.find({ code: { $in: [...SUPPORT_TEAM_ROLES, SUPPORT_ROLE] } });
+    const roleIds = roles.map((r) => r._id);
+    const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
+    const teamIds = team.map((u) => u._id);
+    const missing = teamIds.filter((id) => !chat.participants.some((p) => p && p.toString() === id.toString()));
+    if (missing.length) {
+      chat.participants.push(...missing);
+      await chat.save();
+    }
+    return chat;
+  }
+
+  const roles = await Role.find({ code: { $in: [...SUPPORT_TEAM_ROLES, SUPPORT_ROLE] } });
+  const roleIds = roles.map((r) => r._id);
+  const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
+  chat = await Chat.create({
+    name: SOPORTE_NAME,
+    type: 'grupal',
+    participants: team.map((u) => u._id),
+  });
+  return chat;
+}
+
 // Listar chats del usuario (los grupales cierran sesión de participantes y se
 // devuelven aunque el usuario haya sido agregado después de la creación).
 const listChats = asyncHandler(async (req, res) => {
@@ -60,6 +102,13 @@ const listChats = asyncHandler(async (req, res) => {
 // Devuelve (creándolo) el canal grupal general para el equipo.
 const general = asyncHandler(async (req, res) => {
   const chat = await getOrCreateGeneralChat();
+  const populated = await chat.populate('participants', 'name username role');
+  res.json({ success: true, data: populated });
+});
+
+// Devuelve (creándolo) el canal grupal dedicado a Soporte Técnico.
+const supportChat = asyncHandler(async (req, res) => {
+  const chat = await getOrCreateSupportChat();
   const populated = await chat.populate('participants', 'name username role');
   res.json({ success: true, data: populated });
 });
@@ -117,6 +166,13 @@ const createChat = asyncHandler(async (req, res) => {
     // Chat grupal con todo el equipo. "Chat General" apunta al canal general.
     if (name === 'general' || (name || '').toLowerCase().startsWith('general')) {
       const chat = await getOrCreateGeneralChat();
+      const populated = await chat.populate('participants', 'name username role');
+      return res.status(200).json({ success: true, data: populated });
+    }
+
+    // Canal dedicado a Soporte Técnico (comunicación directa con Soporte).
+    if (name === 'soporte' || (name || '').toLowerCase().startsWith('soporte')) {
+      const chat = await getOrCreateSupportChat();
       const populated = await chat.populate('participants', 'name username role');
       return res.status(200).json({ success: true, data: populated });
     }
@@ -282,6 +338,8 @@ module.exports = {
   markAsRead,
   unreadCount,
   general,
+  supportChat,
   getOrCreateGeneralChat,
+  getOrCreateSupportChat,
   persistAndBroadcast,
 };

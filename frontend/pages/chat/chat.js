@@ -44,11 +44,23 @@ window.Pages.chat = {
       res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res
     );
 
+    // Nombre legible de un chat del equipo (canales fijos + respaldo).
+    const isGeneral = (c) => c && c.type === 'grupal' && (c.name === 'general' || (c.name || '').toLowerCase().startsWith('general'));
+    const isSoporte = (c) => c && c.type === 'grupal' && (c.name === 'soporte' || (c.name || '').toLowerCase().startsWith('soporte'));
+    const chatLabel = (c) => {
+      if (isGeneral(c)) return 'Canal general';
+      if (isSoporte(c)) return 'Soporte técnico';
+      if (c && c.type === 'grupal') return c.name || 'Chat de equipo';
+      const other = (c.participants || []).filter(Boolean).find(p => !sameAsUser(p && (p._id || p)));
+      return (other && (other.name || other.username)) || 'Chat';
+    };
+
     container.innerHTML = `
       <div class="chat-wrap">
         <div class="chat-sidebar" id="chat-sidebar">
           <div class="chat-sidebar-head">
             <button class="btn btn-primary" id="btn-general">&#128172; Canal general</button>
+            <button class="btn btn-primary" id="btn-soporte">&#128736;&#65039; Soporte</button>
             <button class="btn btn-secondary" id="btn-new-chat">+ Chat 1:1</button>
             <button class="btn btn-secondary" id="btn-new-announcement" style="display:none;">+ Aviso</button>
           </div>
@@ -88,6 +100,7 @@ window.Pages.chat = {
     const chatParticipants = $('#chat-participants');
     const btnBack = $('#btn-back-chat');
     const btnGeneral = $('#btn-general');
+    const btnSoporte = $('#btn-soporte');
     const btnNewAnnouncement = $('#btn-new-announcement');
     const btnNewChat = $('#btn-new-chat');
     const btnSend = $('#btn-send');
@@ -184,16 +197,11 @@ window.Pages.chat = {
         return;
       }
       chatList.innerHTML = chats.map(c => {
-        const isGeneral = c.type === 'grupal' && (c.name === 'general' || (c.name || '').toLowerCase().startsWith('general'));
-        const name = isGeneral
-          ? 'Canal general'
-          : (c.type === 'grupal'
-              ? (c.name || 'Chat de equipo')
-              : ((c.participants || []).filter(Boolean).find(p => !sameAsUser(p && (p._id || p))) || {}).name || 'Chat');
+        const name = chatLabel(c);
         const msgs = c.messages || [];
         const unread = msgs.filter(m => !(m.readBy || []).some(sameAsUser)).length;
         const preview = c.lastMessage || 'Sin mensajes';
-        return `<div class="chat-item${isGeneral ? ' general-item' : ''}" data-id="${c._id}">
+        return `<div class="chat-item${isGeneral(c) ? ' general-item' : ''}" data-id="${c._id}">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span class="chat-item-name">${UI.escapeHtml(String(name))}</span>
             ${unread ? `<span class="unread-badge">${unread}</span>` : ''}
@@ -271,12 +279,7 @@ window.Pages.chat = {
         const result = await API.chats.get(chatId);
         currentChat = pickData(result);
         if (!currentChat || !currentChat._id) throw new Error('Chat no disponible');
-        const isGeneral = currentChat.type === 'grupal' && (currentChat.name === 'general' || (currentChat.name || '').toLowerCase().startsWith('general'));
-        chatTitle.textContent = isGeneral
-          ? 'Canal general'
-          : (currentChat.type === 'grupal'
-              ? (currentChat.name || 'Chat de equipo')
-              : ((currentChat.participants || []).filter(Boolean).find(p => !sameAsUser(p && (p._id || p))) || {}).name || 'Chat');
+        chatTitle.textContent = chatLabel(currentChat);
         chatParticipants.textContent = (currentChat.participants || []).filter(Boolean).map(p => {
           const pName = typeof p === 'object' ? (p.name || p.username) : p;
           return pName || 'Usuario';
@@ -343,6 +346,18 @@ window.Pages.chat = {
       }
     });
 
+    // Abrir el canal dedicado de Soporte Técnico (comunicación con Soporte).
+    btnSoporte.addEventListener('click', async () => {
+      try {
+        const result = await API.chats.soporte();
+        const chat = pickData(result);
+        if (!chat || !chat._id) throw new Error('Canal no disponible');
+        openChat(chat._id);
+      } catch (e) {
+        UI.toast('No se pudo abrir el canal de Soporte', 'error');
+      }
+    });
+
     btnSend.addEventListener('click', sendMessage);
     msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
@@ -377,7 +392,7 @@ window.Pages.chat = {
       }
       // Quién puede iniciar un chat 1:1: todos pueden con todos (menos ellos mismos).
       const others = users.filter(u =>
-        u && u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role) &&
+        u && u.role && ['admin', 'gerencia', 'asesor', 'superadmin'].includes(u.role.code || u.role) &&
         String(u._id || u.id) !== String(userId)
       );
       const modal = UI.openModal({

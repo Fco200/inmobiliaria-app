@@ -11,7 +11,7 @@ const maintenanceJob = require('./src/jobs/maintenance.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User } = require('./src/models');
-const { getOrCreateGeneralChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
+const { getOrCreateGeneralChat, getOrCreateSupportChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
 const { setIo } = require('./src/services/notification.service');
 const logger = require('./src/services/logger.service');
 
@@ -21,8 +21,9 @@ async function start() {
   if (connection) {
     await seed();
     startJobs();
-    // Asegura el canal grupal general accesible para todo el equipo.
+    // Asegura el canal grupal general y el canal de Soporte accesibles para el equipo.
     try { await getOrCreateGeneralChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal general:', e.message); }
+    try { await getOrCreateSupportChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal de soporte:', e.message); }
   }
 
   const server = app.listen(port, () => {

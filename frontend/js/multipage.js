@@ -349,8 +349,9 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
-  // Carga el módulo de mantenimiento programado (cuenta regresiva + auto-logout
-  // para roles Asesor/Operador). Se inyecta dinámicamente como el resto.
+  // Carga el módulo de mantenimiento programado (cuenta regresiva + capa de
+  // bloqueo MANTENIMIENTO ACTIVO para roles Asesor/Admin/Gerencia). Se
+  // inyecta dinámicamente como el resto. Superadmin/Soporte nunca se bloquean.
   function loadMantenimiento() {
     if (!window.ApiClient.isAuthenticated()) return;
     const script = document.createElement('script');

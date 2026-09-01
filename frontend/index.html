@@ -59,24 +59,8 @@
       </div>
     </div>
 
-    <!-- Capa de bloqueo de mantenimiento (modo activo): sustituye el formulario
-         para roles no administrativos, mostrando el branding FV DIGITAL y el
-         mensaje personalizado del administrador. -->
-    <div id="login-maintenance-overlay" class="login-maintenance-overlay hide">
-      <div class="lm-card">
-        <div class="lm-brand">
-          <img class="lm-logo" id="lm-logo-img" src="fv_digital_logo.png.webp" alt="FV DIGITAL">
-          <span class="lm-logo-text" id="lm-logo-text" style="display:none;">FV DIGITAL</span>
-        </div>
-        <div class="lm-gear"></div>
-        <h1 class="lm-title">SISTEMA EN MANTENIMIENTO</h1>
-        <p class="lm-sub">La plataforma se encuentra temporalmente fuera de servicio por tareas de mantenimiento técnico.</p>
-        <div class="lm-msg" id="mensajeMantenimiento"></div>
-        <button class="btn btn-gold lm-retry" id="btn-lm-retry" type="button">&#8635;&nbsp; Comprobar estado / Reintentar</button>
-        <button class="lm-admin-link" id="btn-lm-admin" type="button">&#128274;&nbsp; Acceso administrativo</button>
-        <div class="lm-small">INMOBLES &times; <strong>FV DIGITAL</strong></div>
-      </div>
-    </div>
+    <!-- FORMULARIO SIEMPRE VISIBLE: la capa de bloqueo de mantenimiento se ha
+         eliminado para que el login nunca quede cubierto. -->
 
     <!-- Formulario -->
     <form id="login-form" class="login-form" novalidate>

@@ -114,49 +114,19 @@ window.LoginPage = (() => {
   }
 
   function showMaintenanceActive(estado) {
-    const overlay = document.getElementById('login-maintenance-overlay');
-    const msgEl = document.getElementById('mensajeMantenimiento');
-    const banner = document.getElementById('login-maintenance-banner');
-    if (msgEl) msgEl.textContent = (estado && estado.mensaje) || '';
-    if (banner) banner.classList.add('hide');
-    if (overlay) overlay.classList.remove('hide');
-
-    // Respaldo tipográfico dorado si el logo (webp) no carga.
-    const lmg = document.getElementById('lm-logo-img');
-    const lmt = document.getElementById('lm-logo-text');
-    if (lmg && lmt && !lmg._wired) {
-      lmg._wired = true;
-      lmg.addEventListener('error', () => {
-        lmg.style.display = 'none';
-        lmt.style.display = 'inline-flex';
-      });
-    }
-
-    const retryBtn = document.getElementById('btn-lm-retry');
-    if (retryBtn && !retryBtn._wired) {
-      retryBtn._wired = true;
-      retryBtn.addEventListener('click', () => {
-        retryBtn.disabled = true;
-        refreshMaintenanceStatus();
-        setTimeout(() => { retryBtn.disabled = false; }, 2500);
-      });
-    }
-    const adminBtn = document.getElementById('btn-lm-admin');
-    if (adminBtn && !adminBtn._wired) {
-      adminBtn._wired = true;
-      adminBtn.addEventListener('click', () => { overlay.classList.add('hide'); });
-    }
+    // DESACTIVADO: la capa de bloqueo del login se ha eliminado. El formulario
+    // permanece siempre visible sin importar el estado de mantenimiento.
+    return;
   }
 
   function showMaintenanceCountdown(estado) {
+    // DESACTIVADO: la alerta de cuenta regresiva se oculta siempre.
     const countdown = document.getElementById('login-countdown-alert');
     const overlay = document.getElementById('login-maintenance-overlay');
     const banner = document.getElementById('login-maintenance-banner');
     if (banner) banner.classList.add('hide');
     if (overlay) overlay.classList.add('hide');
-    if (countdown) countdown.classList.remove('hide');
-    const fin = (estado && estado.finCuentaRegresiva) || '';
-    if (fin) updateCountdownTimeEnds(fin);
+    if (countdown) countdown.classList.add('hide');
   }
 
   async function refreshMaintenanceStatus() {

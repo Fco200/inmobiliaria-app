@@ -26,7 +26,7 @@ router.get('/permissions', listPermissions);
 router.get('/roles', listRoles);
 router.get('/:id', userIdParam, getUser);
 
-router.use(authorize('admin'));
+router.use(authorize('admin', 'superadmin'));
 
 router.post('/', userRules, createUser);
 router.post('/roles', roleRules, createRole);

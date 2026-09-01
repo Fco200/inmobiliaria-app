@@ -864,9 +864,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 .login-logo-img {
-  height: 56px;
+  height: 72px;
   width: auto;
-  filter: drop-shadow(0 2px 8px rgba(91, 45, 142, 0.2));
+  object-fit: contain;
+  border-radius: 14px;
+  filter: drop-shadow(0 3px 10px rgba(91, 45, 142, 0.28));
+}
+
+.login-logo-sub {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.85;
+  padding: 0 4px;
 }
 
 /* Colaboración de marcas en el login: INMOBLES + FV DIGITAL */
@@ -968,6 +979,26 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 .login-links a:hover { text-decoration: underline; }
+
+/* Solicitud de nuevo usuario (el visitante pide cuenta) */
+.login-request {
+  margin-top: 16px;
+  border-top: 1px dashed var(--border);
+  padding-top: 14px;
+}
+.login-request-sep {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+#btn-solicitar-usuario {
+  font-size: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
 
 .link-btn {
   background: none;

@@ -598,6 +598,259 @@ window.SoportePanel = (() => {
     renderSolicitudesPassword();
   }
 
+  // ── Pestaña Solicitudes de Nuevo Usuario ───────────────────────────────────
+  function initSolicitudes() {
+    const refresh = document.getElementById('btn-solicitudes-refresh');
+    if (refresh) refresh.addEventListener('click', renderSolicitudes);
+    renderSolicitudes();
+  }
+
+  async function renderSolicitudes() {
+    const box = document.getElementById('solicitudes-usuario-container');
+    if (!box) return;
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando solicitudes…</div>';
+    try {
+      const [solicitudes, roles] = await Promise.all([
+        window.API.soporte.solicitudesUsuario(),
+        window.API.soporte.roles(),
+      ]);
+
+      const stats = {
+        total: solicitudes.length,
+        pendientes: solicitudes.filter((s) => s.status === 'pendiente').length,
+        aprobadas: solicitudes.filter((s) => s.status === 'aprobada').length,
+        rechazadas: solicitudes.filter((s) => s.status === 'rechazada').length,
+      };
+
+      if (!solicitudes.length) {
+        box.innerHTML = `
+          <div class="stat-cards">
+            <div class="stat-card"><b>0</b><span>Total</span></div>
+            <div class="stat-card"><b>0</b><span>Pendientes</span></div>
+          </div>
+          <div class="sp-empty">No hay solicitudes de nuevo usuario.</div>
+        `;
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="stat-cards">
+          <div class="stat-card"><b>${stats.total}</b><span>Total</span></div>
+          <div class="stat-card"><b>${stats.pendientes}</b><span>Pendientes</span></div>
+          <div class="stat-card"><b>${stats.aprobadas}</b><span>Aprobadas</span></div>
+          <div class="stat-card"><b>${stats.rechazadas}</b><span>Rechazadas</span></div>
+        </div>
+        <div class="sp-card">
+          <div class="sp-table-wrap">
+            <table class="mega-table">
+              <thead><tr>
+                <th>Solicitante</th><th>Correo</th><th>Teléfono</th><th>Rol</th><th>Estado</th><th>Fecha</th><th>Mensaje</th><th>Acciones</th>
+              </tr></thead>
+              <tbody>
+                ${solicitudes.map((s, i) => renderSolicitudRow(s, i)).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      box.querySelectorAll('[data-srq]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.srq;
+          const action = btn.dataset.srqAction;
+          const request = solicitudes.find((x) => String(x._id) === String(id));
+          if (!request) return;
+          if (action === 'aprobar') aprobarSolicitud(request, roles);
+          else if (action === 'rechazar') rechazarSolicitud(request);
+          else if (action === 'eliminar') eliminarSolicitud(request);
+        });
+      });
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function renderSolicitudRow(s, i) {
+    const estado = s.status === 'pendiente'
+      ? '<span class="prio prio-importante">Pendiente</span>'
+      : s.status === 'aprobada'
+        ? '<span class="prio prio-normal">Aprobada</span>'
+        : '<span class="prio" style="background:rgba(224,83,61,0.15);color:var(--danger);">Rechazada</span>';
+    const rolLabel = { asesor: 'Asesor', admin: 'Administrador', gerencia: 'Gerencia' }[s.role] || escapeHtml(s.role);
+
+    return `
+      <tr>
+        <td><strong>${escapeHtml(s.name)}</strong></td>
+        <td>${escapeHtml(s.email)}</td>
+        <td>${escapeHtml(s.phone || '—')}</td>
+        <td><span class="role-chip">${rolLabel}</span></td>
+        <td>${estado}</td>
+        <td style="font-size:12px;">${fmtDate(s.createdAt)}</td>
+        <td style="max-width:260px;white-space:normal;color:var(--text-muted);">${escapeHtml(s.message || '—')}</td>
+        <td>
+          <div class="row-actions">
+            ${s.status === 'pendiente' ? `
+              <button class="btn btn-gold btn-sm" data-srq="${s._id}" data-srq-action="aprobar">&#128994;&nbsp; Aprobar</button>
+              <button class="btn btn-danger btn-sm" data-srq="${s._id}" data-srq-action="rechazar">&#10060;&nbsp; Rechazar</button>
+            ` : `
+              <span style="font-size:11px;color:var(--text-muted);">${escapeHtml(s.comment || '')}</span>
+            `}
+            <button class="btn btn-ghost btn-sm" data-srq="${s._id}" data-srq-action="eliminar" title="Eliminar solicitud">&#128465;&#65039;</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function defaultUsernameFromEmail(email) {
+    const base = String(email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9._]/g, '').replace(/^[.\-_]+|[.\-_]+$/g, '');
+    const result = (base || 'usuario').slice(0, 18);
+    return result.length >= 3 ? result : result + (result.length === 1 ? 'ux' : 'x');
+  }
+
+  async function aprobarSolicitud(request, roles) {
+    const grid = (items) => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${items.join('')}</div>`;
+    const defaultRoleId = (roles.find((r) => r.code === request.role) || roles[0] || {})._id || '';
+    const options = roles.map((r) => `<option value="${r._id}" ${String(r._id) === String(defaultRoleId) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
+
+    const modal = window.UI.openModal({
+      title: '&#128994;&nbsp; Aprobar solicitud y crear usuario',
+      size: 560,
+      body: `
+        <p class="text-muted" style="margin-top:0;">Se creará una cuenta de <strong>${escapeHtml(request.name)}</strong> con el rol seleccionado. Al terminar, la solicitud quedará marcada como aprobada.</p>
+        <div class="fgroup fgroup-full">
+          <label for="srq-name">Nombre completo *</label>
+          <input id="srq-name" type="text" value="${escapeHtml(request.name)}">
+        </div>
+        ${grid([
+          `<div class="fgroup"><label for="srq-username">Usuario *</label><input id="srq-username" type="text" value="${escapeHtml(defaultUsernameFromEmail(request.email))}" autocomplete="off"></div>`,
+          `<div class="fgroup"><label for="srq-email">Correo *</label><input id="srq-email" type="email" value="${escapeHtml(request.email)}"></div>`,
+        ])}
+        ${grid([
+          `<div class="fgroup"><label for="srq-phone">Teléfono</label><input id="srq-phone" type="tel" value="${escapeHtml(request.phone || '')}"></div>`,
+          `<div class="fgroup"><label for="srq-role">Rol *</label><select id="srq-role">${options}</select></div>`,
+        ])}
+        <div class="fgroup fgroup-full">
+          <label for="srq-password">Contraseña * (mín. 8 caracteres)</label>
+          <input id="srq-password" type="text" autocomplete="off">
+        </div>
+        <div id="srq-error" class="alert alert-error"></div>
+      `,
+      footer: `
+        <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button>
+        <button class="btn btn-gold" type="button" data-ok>&#128994;&nbsp; Crear usuario</button>
+      `,
+    });
+
+    const bodyEl = modal.bodyEl;
+    const overlay = bodyEl.closest('#modal-overlay');
+    if (!overlay) return;
+
+    const getName = () => bodyEl.querySelector('#srq-name').value.trim();
+    const getUsername = () => bodyEl.querySelector('#srq-username').value.trim();
+    const getEmail = () => bodyEl.querySelector('#srq-email').value.trim();
+    const getPhone = () => bodyEl.querySelector('#srq-phone').value.trim();
+    const getRole = () => bodyEl.querySelector('#srq-role').value;
+    const getPassword = () => bodyEl.querySelector('#srq-password').value;
+    const errBox = bodyEl.querySelector('#srq-error');
+    const okBtn = overlay.querySelector('[data-ok]');
+    const cancelBtn = overlay.querySelector('[data-cancel]');
+
+    if (cancelBtn) cancelBtn.addEventListener('click', () => window.UI.closeModal());
+
+    if (okBtn) {
+      okBtn.addEventListener('click', async () => {
+        const name = getName();
+        const username = getUsername();
+        const email = getEmail();
+        const password = getPassword();
+        if (!name) return showModalError(errBox, 'El nombre es obligatorio.');
+        if (!username || username.length < 3) return showModalError(errBox, 'El usuario debe tener al menos 3 caracteres.');
+        if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) return showModalError(errBox, 'Ingresa un correo válido.');
+        if (password && password.length < 8) return showModalError(errBox, 'La contraseña debe tener al menos 8 caracteres.');
+        errBox.className = 'alert alert-error';
+        errBox.textContent = '';
+        okBtn.disabled = true;
+        try {
+          await window.API.soporte.crearUsuarioSoporte({
+            name,
+            username: username.toLowerCase(),
+            email: email.toLowerCase(),
+            phone: getPhone(),
+            role: getRole(),
+            password,
+            status: 'activo',
+          });
+          await window.API.soporte.atenderSolicitud(request._id, { action: 'aprobada', comment: 'Usuario creado' });
+          window.UI.closeModal();
+          alert('Usuario creado y solicitud aprobada.');
+          renderSolicitudes();
+        } catch (error) {
+          okBtn.disabled = false;
+          showModalError(errBox, error.message || 'No se pudo crear el usuario.');
+        }
+      });
+    }
+    setTimeout(() => bodyEl.querySelector('#srq-name').focus(), 120);
+  }
+
+  function showModalError(box, message) {
+    box.className = 'alert show alert-error';
+    box.textContent = message;
+  }
+
+  async function rechazarSolicitud(request) {
+    const modal = window.UI.openModal({
+      title: '&#10060;&nbsp; Rechazar solicitud',
+      size: 460,
+      body: `
+        <p class="text-muted" style="margin-top:0;">¿Rechazar la solicitud de <strong>${escapeHtml(request.name)}</strong>? Puedes escribir un motivo.</p>
+        <div class="fgroup fgroup-full">
+          <label for="srq-reason">Motivo (opcional)</label>
+          <textarea id="srq-reason" rows="3" placeholder="Ej. Ya existe un correo alternativo del solicitante…"></textarea>
+        </div>
+        <div id="srq-err-reject" class="alert alert-error"></div>
+      `,
+      footer: `
+        <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button>
+        <button class="btn btn-danger" type="button" data-ok>&#10060;&nbsp; Rechazar</button>
+      `,
+    });
+
+    const bodyEl = modal.bodyEl;
+    const overlay = bodyEl.closest('#modal-overlay');
+    if (!overlay) return;
+
+    const errBox = bodyEl.querySelector('#srq-err-reject');
+    const okBtn = overlay.querySelector('[data-ok]');
+    const cancelBtn = overlay.querySelector('[data-cancel]');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => window.UI.closeModal());
+
+    if (okBtn) {
+      okBtn.addEventListener('click', async () => {
+        okBtn.disabled = true;
+        try {
+          await window.API.soporte.atenderSolicitud(request._id, { action: 'rechazada', comment: bodyEl.querySelector('#srq-reason').value.trim() });
+          window.UI.closeModal();
+          renderSolicitudes();
+        } catch (error) {
+          okBtn.disabled = false;
+          errBox.innerHTML = `<span style="display:block;">${escapeHtml(error.message)}</span>`;
+        }
+      });
+    }
+  }
+
+  async function eliminarSolicitud(request) {
+    if (!confirm(`¿Eliminar la solicitud de ${request.name}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await window.API.soporte.eliminarSolicitud(request._id);
+      renderSolicitudes();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
   // ── Pestaña Roles y Permisos ──────────────────────────────────────────────
   async function renderRolesPermisos() {
     const box = document.getElementById('roles-container');
@@ -1227,6 +1480,7 @@ window.SoportePanel = (() => {
     initPlantillas();
     initSesiones();
     initAnuncios();
+    initSolicitudes();
     initChat();
     initMantenimiento();
 

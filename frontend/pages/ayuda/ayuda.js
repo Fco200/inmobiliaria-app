@@ -22,6 +22,7 @@ window.Pages.ayuda = {
 
     const supportName = support.name || 'Soporte';
     const supportTitle = support.title || 'Atención a clientes y equipo';
+    const supportTelefono = support.telefono || '';
     const supportWhatsapp = support.whatsapp || '';
     const supportEmail = support.email || '';
     const supportPhoto = support.photo || '';
@@ -34,7 +35,16 @@ window.Pages.ayuda = {
       ? `<img class="ayuda-avatar" src="${window.AppConfig.resolveUrl(supportPhoto)}" alt="${UI.escapeHtml(supportName)}">`
       : `<span class="ayuda-avatar ayuda-avatar-fallback">${UI.escapeHtml(String(supportName).charAt(0).toUpperCase())}</span>`;
 
-    const whatsappCard = supportWhatsapp
+    const telefonoCard = supportTelefono
+      ? `<a class="card ayuda-contact-card anim-fade-in-up anim-delay-1" href="tel:${UI.escapeHtml(supportTelefono)}">
+           <span class="ayuda-contact-icon" style="background:#25d366;">&#128222;</span>
+           <span class="ayuda-contact-body">
+             <strong>Teléfono de soporte</strong>
+             <small>${UI.escapeHtml(supportTelefono)}</small>
+           </span>
+         </a>`
+      : '';
+      const whatsappCard = supportWhatsapp
       ? `<a class="card ayuda-contact-card anim-fade-in-up anim-delay-1" href="${waLink}" target="_blank" rel="noopener">
            <span class="ayuda-contact-icon" style="background:#25d366;">&#128172;</span>
            <span class="ayuda-contact-body">
@@ -83,6 +93,7 @@ window.Pages.ayuda = {
             </div>
           </div>
           <div class="ayuda-support-contact">
+            ${telefonoCard}
             ${whatsappCard}
             ${emailCard}
             ${support.facebook ? `<a class="card ayuda-contact-card anim-fade-in-up anim-delay-3" href="${UI.escapeHtml(support.facebook)}" target="_blank" rel="noopener">

@@ -289,7 +289,12 @@ window.Pages.settings = {
 
     function renderUsers() {
       if (!isAdmin) return renderAdminOnly();
-      crudPage(tabContent, {
+      tabContent.innerHTML = `
+        <div id="solicitudes-admin-card" style="margin-bottom:18px;"></div>
+        <div id="users-crud"></div>
+      `;
+      renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
+      crudPage(tabContent.querySelector('#users-crud'), {
         title: 'Usuarios',
         newLabel: 'Nuevo usuario',
         service: {
@@ -324,6 +329,178 @@ window.Pages.settings = {
         onEdit: true,
         onRemove: true,
       });
+    }
+
+    function defaultUsernameFromEmailAdmin(email) {
+      const base = String(email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9._]/g, '').replace(/^[.\-_]+|[.\-_]+$/g, '');
+      const result = (base || 'usuario').slice(0, 18);
+      return result.length >= 3 ? result : result + (result.length === 1 ? 'ux' : 'x');
+    }
+
+    async function renderAdminSolicitudes(box) {
+      if (!box) return;
+      try {
+        const solicitudes = await API.userRequests.list();
+        const pendientes = solicitudes.filter((s) => s.status === 'pendiente');
+        if (!pendientes.length) {
+          box.innerHTML = '';
+          return;
+        }
+        const rolLabel = { asesor: 'Asesor', admin: 'Administrador', gerencia: 'Gerencia' };
+        box.innerHTML = `
+          <div class="card" style="border-left:4px solid var(--warning);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div>
+                <strong>&#128229;&nbsp; ${pendientes.length} solicitud(es) de acceso pendiente(s)</strong>
+                <p class="text-muted" style="font-size:12px;margin:2px 0 0;">Revisa y crea la cuenta desde aquí.</p>
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              ${pendientes.map((s) => `
+                <div class="ann-item" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:var(--bg-card,var(--surface));">
+                  <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+                    <div>
+                      <strong>${UI.escapeHtml(s.name)}</strong>
+                      <div class="text-muted" style="font-size:12px;margin-top:2px;">${UI.escapeHtml(s.email)} &middot; Rol: ${rolLabel[s.role] || s.role} &middot; ${Format.date(s.createdAt)}</div>
+                      ${s.phone ? `<div class="text-muted" style="font-size:11px;">Tel: ${UI.escapeHtml(s.phone)}</div>` : ''}
+                      ${s.message ? `<div class="text-muted" style="font-size:12px;margin-top:4px;font-style:italic;">"${UI.escapeHtml(s.message)}"</div>` : ''}
+                    </div>
+                    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+                      <button class="btn btn-primary btn-sm admin-srq-approve" data-id="${s._id}">Aprobar</button>
+                      <button class="btn btn-danger btn-sm admin-srq-reject" data-id="${s._id}">Rechazar</button>
+                      <button class="btn btn-secondary btn-sm admin-srq-delete" data-id="${s._id}">Eliminar</button>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+        box.querySelectorAll('.admin-srq-approve').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const s = pendientes.find((x) => String(x._id) === String(btn.dataset.id));
+            if (s) aprobarSolicitudAdmin(s);
+          });
+        });
+        box.querySelectorAll('.admin-srq-reject').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const s = pendientes.find((x) => String(x._id) === String(btn.dataset.id));
+            if (s) rechazarSolicitudAdmin(s);
+          });
+        });
+        box.querySelectorAll('.admin-srq-delete').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const s = pendientes.find((x) => String(x._id) === String(btn.dataset.id));
+            if (s && confirm(`¿Eliminar la solicitud de ${s.name}?`)) {
+              API.userRequests.remove(s._id).then(() => renderAdminSolicitudes(box)).catch((e) => alert(e.message));
+            }
+          });
+        });
+      } catch (e) {
+        box.innerHTML = '';
+      }
+    }
+
+    async function aprobarSolicitudAdmin(request) {
+      const options = roles.map((r) => `<option value="${r._id}" ${r.code === request.role ? 'selected' : ''}>${UI.escapeHtml(r.name)}</option>`).join('');
+      const modal = UI.openModal({
+        title: '&#128994;&nbsp; Aprobar solicitud',
+        size: 540,
+        body: `
+          <p class="text-muted" style="margin-top:0;">Se creará una cuenta para <strong>${UI.escapeHtml(request.name)}</strong>. Completa los datos.</p>
+          <div class="form-group"><label>Nombre *</label><input id="adm-srq-name" type="text" value="${UI.escapeHtml(request.name)}"></div>
+          <div class="form-grid">
+            <div class="form-group"><label>Usuario *</label><input id="adm-srq-username" type="text" value="${UI.escapeHtml(defaultUsernameFromEmailAdmin(request.email))}"></div>
+            <div class="form-group"><label>Correo *</label><input id="adm-srq-email" type="email" value="${UI.escapeHtml(request.email)}"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label>Teléfono</label><input id="adm-srq-phone" type="tel" value="${UI.escapeHtml(request.phone || '')}"></div>
+            <div class="form-group"><label>Rol *</label><select id="adm-srq-role">${options}</select></div>
+          </div>
+          <div class="form-group"><label>Contraseña * (mín. 8 caracteres)</label><input id="adm-srq-password" type="text" autocomplete="off"></div>
+          <div id="adm-srq-error" class="alert alert-error" style="display:none;"></div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" data-cancel type="button">Cancelar</button>
+          <button class="btn btn-primary" data-ok type="button">Crear usuario</button>
+        `,
+      });
+
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+      const errBox = bodyEl.querySelector('#adm-srq-error');
+      const okBtn = overlay.querySelector('[data-ok]');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      const close = () => UI.closeModal();
+      if (cancelBtn) cancelBtn.addEventListener('click', close);
+
+      if (okBtn) {
+        okBtn.addEventListener('click', async () => {
+          const name = bodyEl.querySelector('#adm-srq-name').value.trim();
+          const username = bodyEl.querySelector('#adm-srq-username').value.trim().toLowerCase();
+          const email = bodyEl.querySelector('#adm-srq-email').value.trim().toLowerCase();
+          const phone = bodyEl.querySelector('#adm-srq-phone').value.trim();
+          const role = bodyEl.querySelector('#adm-srq-role').value;
+          const password = bodyEl.querySelector('#adm-srq-password').value;
+          if (!name || username.length < 3 || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email) || (password && password.length < 8)) {
+            errBox.style.display = 'block';
+            errBox.textContent = 'Completa nombre, usuario (3+), correo válido y contraseña (8+) si la indicas.';
+            return;
+          }
+          errBox.style.display = 'none';
+          okBtn.disabled = true;
+          try {
+            await API.users.create({ name, username, email, phone, role, password, status: 'activo' });
+            await API.userRequests.handle(request._id, { action: 'aprobada', comment: 'Cuenta creada desde panel admin' });
+            UI.closeModal();
+            renderAdminSolicitudes(document.getElementById('solicitudes-admin-card'));
+            alert('Usuario creado y solicitud aprobada.');
+          } catch (error) {
+            okBtn.disabled = false;
+            errBox.style.display = 'block';
+            errBox.textContent = error.message || 'No se pudo crear el usuario.';
+          }
+        });
+      }
+      setTimeout(() => bodyEl.querySelector('#adm-srq-name').focus(), 120);
+    }
+
+    async function rechazarSolicitudAdmin(request) {
+      const modal = UI.openModal({
+        title: '&#10060;&nbsp; Rechazar solicitud',
+        size: 440,
+        body: `
+          <p class="text-muted" style="margin-top:0;">¿Rechazar la solicitud de <strong>${UI.escapeHtml(request.name)}</strong>?</p>
+          <div class="form-group"><label>Motivo (opcional)</label><textarea id="adm-srq-reason" rows="3"></textarea></div>
+          <div id="adm-srq-reject-error" class="alert alert-error" style="display:none;"></div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" data-cancel type="button">Cancelar</button>
+          <button class="btn btn-danger" data-ok type="button">Rechazar</button>
+        `,
+      });
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+      const errBox = bodyEl.querySelector('#adm-srq-reject-error');
+      const okBtn = overlay.querySelector('[data-ok]');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      if (okBtn) {
+        okBtn.addEventListener('click', async () => {
+          okBtn.disabled = true;
+          try {
+            await API.userRequests.handle(request._id, { action: 'rechazada', comment: bodyEl.querySelector('#adm-srq-reason').value.trim() });
+            UI.closeModal();
+            renderAdminSolicitudes(document.getElementById('solicitudes-admin-card'));
+          } catch (error) {
+            okBtn.disabled = false;
+            errBox.style.display = 'block';
+            errBox.textContent = error.message || 'No se pudo rechazar.';
+          }
+        });
+      }
     }
 
     function renderRoles() {

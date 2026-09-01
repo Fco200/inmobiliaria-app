@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>INMOBLES � Iniciar sesi�n</title>
+  <title>INMOBLES · Iniciar sesión</title>
   <meta name="theme-color" content="#2d1048">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Plataforma corporativa de gesti�n inmobiliaria">
+  <meta name="description" content="Plataforma corporativa de gestión inmobiliaria">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-maskable-192.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-maskable-192.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-maskable-192.png">
+  <link rel="icon" type="image/jpeg" sizes="32x32" href="LOGOICONO.jpeg">
+  <link rel="icon" type="image/jpeg" sizes="192x192" href="LOGOICONO.jpeg">
+  <link rel="apple-touch-icon" sizes="192x192" href="LOGOICONO.jpeg">
   <link rel="stylesheet" href="css/base.css">
 </head>
 <body class="login-body">
@@ -25,12 +25,11 @@
 
   <main class="login-card">
     <!-- Logo -->
-     
     <div class="login-logo-wrap">
-      <img src="logoinmobles.png" alt="INMOBLES" class="login-logo-img">
+      <img src="LOGOICONO.jpeg" alt="INMOBLES" class="login-logo-img">
       <div class="login-logo-collab">
         <span class="login-collab-line"></span>
-       <!-- <img src="fv_digital_logo.png.webp" alt="FV DIGITAL" class="login-logo-dev" title="Desarrollado por FV DIGITAL">-->
+        <span class="login-logo-sub">Sistema Corporativo</span>
         <span class="login-collab-line"></span>
       </div>
     </div>
@@ -38,27 +37,24 @@
     <!-- Estado -->
     <div class="login-status-pill">
       <span class="status-dot"></span>
-      En linea
+      En línea
     </div>
-
-    <!-- FORMULARIO SIEMPRE VISIBLE: la capa de bloqueo de mantenimiento se ha
-         eliminado para que el login nunca quede cubierto. -->
 
     <!-- Formulario -->
     <form id="login-form" class="login-form" novalidate>
       <div class="form-group">
         <label for="identifier">Usuario o correo</label>
         <input class="form-control" id="identifier" name="identifier" type="text"
-               placeholder="admin" autocomplete="username" autofocus required>
+               placeholder="Ingresa tu usuario" autocomplete="username" autofocus required>
       </div>
 
       <div class="form-group">
-        <label for="password">Contrase�a</label>
+        <label for="password">Contraseña</label>
         <div class="password-wrap">
           <input class="form-control" id="password" name="password" type="password"
-                 placeholder="��������" autocomplete="current-password" required>
+                 placeholder="••••••••" autocomplete="current-password" required>
           <button type="button" class="password-toggle" id="btn-toggle-password"
-                  aria-label="Mostrar contrase�a">&#128065;</button>
+                  aria-label="Mostrar contraseña">&#128065;</button>
         </div>
       </div>
 
@@ -68,7 +64,7 @@
           Recordar
         </label>
         <button type="button" class="link-btn login-forgot-btn" id="btn-forgot-password">
-          &#128274;&nbsp; �Olvidaste tu contrase�a?
+          &#128274;&nbsp; ¿Olvidaste tu contraseña?
         </button>
       </div>
 
@@ -81,50 +77,24 @@
     </form>
 
     <div class="login-links">
-      <a href="landing.html">Cat�logo p�blico</a>
-      <span>�</span>
+      <a href="landing.html">Catálogo público</a>
+      <span>·</span>
       <button class="link-btn" data-install type="button">Instalar app</button>
     </div>
-    <div class="login-netline">
-      <span class="login-version">Version 1.5</span>
-      <button class="soporte-badge" id="btn-soporte" type="button" title="Acceso de soporte t�cnico">
-        &#128736;&#65039; Acceso Soporte T�cnico
+
+    <!-- Solicitud de nuevo usuario -->
+    <div class="login-request">
+      <span class="login-request-sep">¿Aún no tienes cuenta?</span>
+      <button class="btn btn-secondary btn-block" id="btn-solicitar-usuario" type="button">
+        &#128100;&nbsp; Solicitar acceso
       </button>
     </div>
-    </div>
 
-    <!-- Modal de inicio de sesi�n de Soporte T�cnico -->
-    <div class="soporte-modal" id="soporte-modal" hidden>
-      <div class="soporte-modal-backdrop" data-soporte-close></div>
-      <div class="soporte-modal-card">
-        <button class="soporte-modal-close" type="button" data-soporte-close aria-label="Cerrar">&times;</button>
-        <div class="soporte-modal-head">
-          <span class="soporte-modal-icon">&#128736;&#65039;</span>
-          <h3>Soporte T�cnico</h3>
-          <p>Acceso exclusivo FV DIGITAL</p>
-        </div>
-        <form id="soporte-form" class="soporte-form" novalidate>
-          <div class="form-group">
-            <label for="soporte-identifier">Usuario o correo de soporte</label>
-            <input class="form-control" id="soporte-identifier" name="identifier" type="text"
-                   placeholder="soporte" autocomplete="username" required>
-          </div>
-          <div class="form-group">
-            <label for="soporte-password">Contrase�a</label>
-            <div class="password-wrap">
-              <input class="form-control" id="soporte-password" name="password" type="password"
-                     placeholder="��������" autocomplete="current-password" required>
-              <button type="button" class="password-toggle" id="btn-toggle-soporte-password"
-                      aria-label="Mostrar contrase�a">&#128065;</button>
-            </div>
-          </div>
-          <div id="soporte-error" class="alert alert-error hide" role="alert"></div>
-          <button class="btn btn-primary btn-block" id="btn-soporte-login" type="submit">
-            <span id="soporte-spinner" class="spinner hide"></span>
-            <span>Entrar a Soporte</span>
-          </button>
-        </form>
-      </div>
+    <div class="login-netline">
+      <span class="login-version">Versión 1.5</span>
+      <button class="soporte-badge" id="btn-soporte" type="button" title="Acceso de soporte técnico">
+        &#128736;&#65039; Acceso Soporte Técnico
+      </button>
     </div>
 
     <!-- Marca de agua -->
@@ -138,6 +108,40 @@
       <small>Soluciones Digitales y Desarrollo</small>
     </div>
   </main>
+
+  <!-- Modal de inicio de sesión de Soporte Técnico -->
+  <div class="soporte-modal" id="soporte-modal" hidden>
+    <div class="soporte-modal-backdrop" data-soporte-close></div>
+    <div class="soporte-modal-card">
+      <button class="soporte-modal-close" type="button" data-soporte-close aria-label="Cerrar">&times;</button>
+      <div class="soporte-modal-head">
+        <span class="soporte-modal-icon">&#128736;&#65039;</span>
+        <h3>Soporte Técnico</h3>
+        <p>Acceso exclusivo FV DIGITAL</p>
+      </div>
+      <form id="soporte-form" class="soporte-form" novalidate>
+        <div class="form-group">
+          <label for="soporte-identifier">Usuario o correo de soporte</label>
+          <input class="form-control" id="soporte-identifier" name="identifier" type="text"
+                 placeholder="soporte" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="soporte-password">Contraseña</label>
+          <div class="password-wrap">
+            <input class="form-control" id="soporte-password" name="password" type="password"
+                   placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="password-toggle" id="btn-toggle-soporte-password"
+                    aria-label="Mostrar contraseña">&#128065;</button>
+          </div>
+        </div>
+        <div id="soporte-error" class="alert alert-error hide" role="alert"></div>
+        <button class="btn btn-primary btn-block" id="btn-soporte-login" type="submit">
+          <span id="soporte-spinner" class="spinner hide"></span>
+          <span>Entrar a Soporte</span>
+        </button>
+      </form>
+    </div>
+  </div>
 
   <button id="btn-theme-login" type="button" title="Cambiar tema" aria-label="Cambiar tema">&#9788;</button>
 

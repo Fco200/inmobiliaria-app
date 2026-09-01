@@ -24,6 +24,7 @@ const Session = require('./session.model');
 const Interaction = require('./interaction.model');
 const Chat = require('./chat.model');
 const Announcement = require('./announcement.model');
+const UserRequest = require('./userRequest.model');
 
 module.exports = {
   User,
@@ -50,4 +51,5 @@ module.exports = {
   Interaction,
   Chat,
   Announcement,
+  UserRequest,
 };

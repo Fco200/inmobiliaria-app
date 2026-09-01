@@ -80,6 +80,112 @@ window.LoginPage = (() => {
     }
   }
 
+  // ---- Solicitud de nuevo usuario (login) ----
+  // Abre un modal con un mini formulario para solicitar la creación de un
+  // usuario nuevo. La solicitud se notifica al administrador y al soporte.
+
+  function userRequestFlow() {
+    const btn = document.getElementById('btn-solicitar-usuario');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      const modal = UI.openModal({
+        title: '&#128100;&nbsp; Solicitar acceso',
+        size: 500,
+        body: `
+          <p class="text-muted" style="margin-top:0;">Si aún no tienes cuenta, llena este breve formulario. Notificaremos al <strong>administrador</strong> y al <strong>soporte técnico</strong> para que te den acceso.</p>
+          <div class="form-group">
+            <label for="ur-name">Nombre completo *</label>
+            <input class="form-control" id="ur-name" type="text" placeholder="Tu nombre" autocomplete="name">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group">
+              <label for="ur-email">Correo electrónico *</label>
+              <input class="form-control" id="ur-email" type="email" placeholder="correo@ejemplo.com" autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label for="ur-phone">Teléfono</label>
+              <input class="form-control" id="ur-phone" type="tel" placeholder="Ej. 55 1234 5678" autocomplete="tel">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="ur-role">Rol solicitado</label>
+            <select class="form-control" id="ur-role">
+              <option value="asesor">Asesor</option>
+              <option value="admin">Administrador</option>
+              <option value="gerencia">Gerencia</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ur-message">Mensaje (opcional)</label>
+            <textarea class="form-control" id="ur-message" rows="3" placeholder="Cuéntanos brevemente por qué necesitas acceso"></textarea>
+          </div>
+          <div id="ur-error" class="alert alert-error hide" role="alert"></div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>&#10148;&nbsp; Enviar solicitud</button>
+        `,
+      });
+
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+
+      const nameEl = bodyEl.querySelector('#ur-name');
+      const emailEl = bodyEl.querySelector('#ur-email');
+      const phoneEl = bodyEl.querySelector('#ur-phone');
+      const roleEl = bodyEl.querySelector('#ur-role');
+      const msgEl = bodyEl.querySelector('#ur-message');
+      const errBox = bodyEl.querySelector('#ur-error');
+      const okBtn = overlay.querySelector('[data-ok]');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+
+      if (okBtn) {
+        okBtn.addEventListener('click', async () => {
+          const name = (nameEl.value || '').trim();
+          const email = (emailEl.value || '').trim();
+          if (!name) {
+            errBox.textContent = 'Ingresa tu nombre completo.';
+            errBox.classList.remove('hide');
+            return;
+          }
+          if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) {
+            errBox.textContent = 'Ingresa un correo electrónico válido.';
+            errBox.classList.remove('hide');
+            return;
+          }
+          errBox.classList.add('hide');
+          okBtn.disabled = true;
+          okBtn.classList.add('loading');
+          try {
+            const result = await window.API.userRequests.create({
+              name,
+              email,
+              phone: (phoneEl.value || '').trim(),
+              role: roleEl.value || 'asesor',
+              message: (msgEl.value || '').trim(),
+            });
+            UI.closeModal();
+            UI.toast((result && result.message) || 'Solicitud enviada correctamente', 'success');
+          } catch (error) {
+            okBtn.disabled = false;
+            okBtn.classList.remove('loading');
+            errBox.textContent = error.message || 'No se pudo enviar la solicitud. Intenta de nuevo.';
+            errBox.classList.remove('hide');
+          }
+        });
+      }
+
+      if (nameEl) setTimeout(() => nameEl.focus(), 120);
+      [nameEl, emailEl, phoneEl, msgEl].forEach((el) => {
+        if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && okBtn) okBtn.click(); });
+      });
+    });
+  }
+
   // ---- Registro con Google ----
 
   let pendingGoogle = null; // { role, roleKey }
@@ -472,6 +578,7 @@ window.LoginPage = (() => {
     initTheme();
     setup();
     soporteLoginFlow();
+    userRequestFlow();
   }
 
   return { init };

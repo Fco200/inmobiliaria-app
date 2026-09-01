@@ -22,6 +22,7 @@ const announcementRoutes = require('./announcement.routes');
 const formatoRoutes = require('./formato.routes');
 const soporteRoutes = require('./soporte.routes');
 const configRoutes = require('./config.routes');
+const userRequestRoutes = require('./userRequest.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -56,6 +57,7 @@ router.get('/', (req, res) => {
       '/api/formatos',
       '/api/soporte',
       '/api/config',
+      '/api/user-requests',
       '/api/health',
     ],
   });
@@ -89,5 +91,6 @@ router.use('/announcements', announcementRoutes);
 router.use('/formatos', formatoRoutes);
 router.use('/soporte', soporteRoutes);
 router.use('/config', configRoutes);
+router.use('/user-requests', userRequestRoutes);
 
 module.exports = router;

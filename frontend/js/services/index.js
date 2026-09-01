@@ -13,6 +13,13 @@ window.API = {
     forgotPassword: (body) => ApiClient.post('/auth/forgot-password', body),
   },
 
+  userRequests: {
+    create: (body) => ApiClient.post('/user-requests', body),
+    list: (params) => ApiClient.get('/user-requests', params),
+    handle: (id, body) => ApiClient.patch(`/user-requests/${id}`, body),
+    remove: (id) => ApiClient.remove(`/user-requests/${id}`),
+  },
+
   sessions: {
     list: (params) => ApiClient.get('/sessions', params),
     revoke: (id) => ApiClient.remove(`/sessions/${id}`),
@@ -325,6 +332,13 @@ window.API = {
     verChat: (id) => soporteJson(`/soporte/chat/${id}`),
     enviarMensajeChat: (id, body) => soporteJson(`/soporte/chat/${id}/messages`, { method: 'POST', body }),
     marcarLeidoChat: (id) => soporteJson(`/soporte/chat/${id}/leido`, { method: 'POST' }),
+
+    // Solicitudes de creación de usuario que llegan desde el login público.
+    // Se usan los mismos endpoints del CRM (el token de soporte es SUPERADMIN).
+    solicitudesUsuario: (params) => soporteJson(`/user-requests${qs(params)}`),
+    atenderSolicitud: (id, body) => soporteJson(`/user-requests/${id}`, { method: 'PATCH', body }),
+    eliminarSolicitud: (id) => soporteJson(`/user-requests/${id}`, { method: 'DELETE' }),
+    crearUsuarioSoporte: (body) => soporteJson('/users', { method: 'POST', body }),
   },
 };
 

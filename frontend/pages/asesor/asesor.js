@@ -1,154 +1,41 @@
 'use strict';
 
-// Página pública por asesor: perfil, carta de presentación digital (PDF /
-// WhatsApp) y su catálogo de propiedades. Se accede con ?id=<userId> desde
-// "Nuestro Equipo" de la landing.
+// Página pública por asesor (asesor.html?id=): perfil, carta de presentación
+// digital (PDF/WhatsApp) y su catálogo de propiedades.
 window.AsesorPage = (() => {
-  const TYPE_LABELS = {
-    casa: 'Casa',
-    departamento: 'Departamento',
-    local: 'Local',
-    bodega: 'Bodega',
-    rancho: 'Rancho',
-    terreno: 'Terreno',
-    playa: 'Playa',
-    otro: 'Otro',
-  };
+  const PS = window.PublicSite;
 
-  const state = { id: '', asesor: null, settings: null };
+  const state = { id: '', asesor: null };
 
   const grid = () => document.getElementById('properties-grid');
   const countEl = () => document.getElementById('result-count');
-
-  function digits(value) {
-    return String(value || '').replace(/\D/g, '');
-  }
-
-  function whatsappLink(text, phone) {
-    if (!phone) return '';
-    return `https://wa.me/${digits(phone)}?text=${encodeURIComponent(text)}`;
-  }
-
-  function propertyLink(record, asesorId) {
-    const base = window.location.origin === 'null' || !window.location.origin ? '' : window.location.origin;
-    return `${base}/landing.html?prop=${encodeURIComponent(String(record._id))}${asesorId ? `&asesorId=${encodeURIComponent(asesorId)}` : ''}`;
-  }
-
-  function qrUrl(data) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=10&data=${encodeURIComponent(data)}`;
-  }
-
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (error) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    }
-    UI.toast('Enlace copiado', 'success');
-  }
 
   function imageUrl(record) {
     if (record.photos && record.photos.length) return window.AppConfig.resolveUrl(record.photos[0]);
     return '';
   }
 
-  function characteristicsText(record) {
-    const c = record.characteristics;
-    if (!c) return '';
-    if (Array.isArray(c)) {
-      return c
-        .map((item) => {
-          if (item && typeof item === 'object') return item.name && item.value ? `${item.name}: ${item.value}` : item.value || item.name || '';
-          return String(item);
-        })
-        .filter(Boolean)
-        .join(' · ');
-    }
-    return String(c);
-  }
-
-  function renderProfile(a) {
-    const profile = document.getElementById('asesor-profile');
-    const loading = document.getElementById('asesor-loading');
-    loading.hidden = true;
-    profile.hidden = false;
-
-    const photo = a.photo
-      ? `<img class="asesor-banner-photo" src="${window.AppConfig.resolveUrl(a.photo)}" alt="${String(a.name || '').replace(/"/g, '&quot;')}" style="width:128px;height:128px;">`
-      : `<span class="asesor-banner-photo asesor-banner-fallback">${String(a.name || 'A').charAt(0).toUpperCase()}</span>`;
-
-    const tel = a.phone ? `tel:+${digits(a.phone)}` : null;
-    const wa = a.phone ? whatsappLink(`Hola ${a.name}, te contacté desde la página de INMOBLES.`, a.phone) : null;
-
-    profile.innerHTML = `
-      <div class="asesor-banner-card card" style="max-width:760px;">
-        ${photo}
-        <div class="asesor-banner-info">
-          <small class="text-muted">Asesor inmobiliario</small>
-          <h3 style="margin:2px 0 4px;">${String(a.name || 'Asesor').replace(/</g, '&lt;')}</h3>
-          <p class="text-muted" style="margin:0 0 8px;font-size:14px;">${String(a.position || 'Asesor inmobiliario').replace(/</g, '&lt;')}${a.propertyCount != null ? ` · ${a.propertyCount} ${a.propertyCount === 1 ? 'propiedad' : 'propiedades'}` : ''}</p>
-          ${a.bio ? `<p class="text-muted team-bio" style="font-size:14px;">${String(a.bio).replace(/</g, '&lt;')}</p>` : ''}
-          <div class="landing-card-actions" style="margin-top:10px;flex-wrap:wrap;">
-            ${wa ? `<a class="btn btn-wa btn-sm" href="${wa}" target="_blank" rel="noopener">&#128172; WhatsApp</a>` : ''}
-            ${tel ? `<a class="btn btn-secondary btn-sm" href="${tel}">&#128222; ${String(a.phone).replace(/</g, '&lt;')}</a>` : ''}
-            ${a.email ? `<a class="btn btn-secondary btn-sm" href="mailto:${String(a.email).replace(/"/g, '&quot;')}">&#128231; Correo</a>` : ''}
-            <a class="btn btn-secondary btn-sm" href="${window.OFFICIAL_WEBSITE || 'https://inmobles.com'}" target="_blank" rel="noopener">&#127760; inmobles.com</a>
-            <a class="btn btn-primary btn-sm" href="landing.html">&#127968; Ver todo el catálogo</a>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderCarta(a) {
-    const box = document.getElementById('carta-preview');
-    // La vista previa reutiliza las clases .carta-preview del perfil interno.
-    box.innerHTML = `
-      <div class="carta-preview card" style="max-width:760px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#2d1048,#4A1A6B);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;">
-          <span style="font-size:14px;font-weight:700;">Carta de presentación</span>
-          <span style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" type="button" data-carta-pdf>&#128424; PDF</button>
-            <button class="btn btn-wa btn-sm" type="button" data-carta-wa>&#128172; WhatsApp</button>
-          </span>
-        </div>
-        <div style="padding:16px;">
-          ${CartaPresentacion.buildCarta(a, { skipLink: true })}
-        </div>
-      </div>
-    `;
-    const pdf = box.querySelector('[data-carta-pdf]');
-    if (pdf) pdf.addEventListener('click', () => CartaPresentacion.openPdf(a));
-    const wa = box.querySelector('[data-carta-wa]');
-    if (wa) wa.addEventListener('click', () => CartaPresentacion.shareWhatsApp(a));
-  }
-
   function card(record) {
     const img = imageUrl(record);
-    const type = TYPE_LABELS[record.type] || record.type || 'Inmueble';
-    const op = (record.operationType || '').toUpperCase();
-    const place = [record.zone, record.city, record.state].filter(Boolean).join(', ') || 'Sin ubicación';
+    const type = PS.label(record);
+    const op = PS.opText(record).toLowerCase();
+    const place = PS.placeText(record) || 'Sin ubicación';
     const waPhone = state.asesor && state.asesor.phone;
     return `
       <article class="card landing-card">
         <div class="landing-card-img${img ? '' : ' placeholder'}" ${img ? `style="background-image:url('${img.replace(/'/g, '%27')}');"` : ''}>
-          <span class="landing-card-op">${String(op).replace(/</g, '&lt;')}</span>
+          <span class="landing-card-op">${UI.escapeHtml((record.operationType || '').toUpperCase())}</span>
         </div>
         <div class="landing-card-body">
-          <h3>${String(type).replace(/</g, '&lt;')} en ${String(op.toLowerCase()).replace(/</g, '&lt;')}</h3>
-          <p class="text-muted">${String(place).replace(/</g, '&lt;')}</p>
+          <h3>${UI.escapeHtml(type)} en ${UI.escapeHtml(op)}</h3>
+          <p class="text-muted">${UI.escapeHtml(place)}</p>
           <div class="landing-card-price">${Format.currency(record.price)}</div>
-          ${characteristicsText(record) ? `<p class="text-muted landing-card-chars">${String(characteristicsText(record)).replace(/</g, '&lt;')}</p>` : ''}
+          ${PS.characteristicsText(record) ? `<p class="text-muted landing-card-chars">${UI.escapeHtml(PS.characteristicsText(record))}</p>` : ''}
           <div class="landing-card-actions">
             <button class="btn btn-primary btn-sm" type="button" data-detail data-id="${record._id}">Ver detalle</button>
             <button class="btn btn-secondary btn-sm" type="button" data-share data-id="${record._id}" title="Copiar enlace directo">&#128279;</button>
             ${waPhone
-              ? `<a class="btn btn-secondary btn-sm" href="${whatsappLink(`Hola, me interesa esta propiedad: ${type} en ${place} (${op}). ¿Pueden darme más información?`, waPhone)}" target="_blank" rel="noopener">WhatsApp</a>`
+              ? `<a class="btn btn-secondary btn-sm" href="${PS.whatsappLink(`Hola, me interesa esta propiedad: ${type} en ${place} (${record.operationType || ''}). ¿Pueden darme más información?`, waPhone)}" target="_blank" rel="noopener">WhatsApp</a>`
               : ''}
           </div>
         </div>
@@ -169,23 +56,23 @@ window.AsesorPage = (() => {
     });
     el.querySelectorAll('[data-share]').forEach((btn) => {
       const rec = list.find((p) => p._id === btn.dataset.id);
-      btn.addEventListener('click', () => copyText(propertyLink(rec, state.asesor ? state.asesor.id : '')));
+      btn.addEventListener('click', () => PS.copyText(PS.propertyLink(rec)));
     });
   }
 
   function openDetail(record) {
-    const type = TYPE_LABELS[record.type] || record.type || 'Inmueble';
+    const type = PS.label(record);
     const op = (record.operationType || '').toUpperCase();
-    const place = [record.address, record.zone, record.city, record.state].filter(Boolean).join(', ') || 'Sin ubicación';
+    const place = PS.placeText(record) || 'Sin ubicación';
     const photos = (record.photos || []).slice(0, 6);
     const gallery = photos.length
       ? photos.map((p) => `<img class="landing-detail-img" src="${window.AppConfig.resolveUrl(p).replace(/"/g, '&quot;')}" alt="Fotografía" loading="lazy" />`).join('')
       : '<div class="landing-card-img placeholder" style="height:200px;"></div>';
     const waPhone = state.asesor && state.asesor.phone;
     const waMsg = `Hola, me interesa: ${type} en ${place} (${op}). Precio publicado: ${Format.currency(record.price)}`;
-    const ownWa = waPhone ? whatsappLink(waMsg, waPhone) : '';
-    const share = propertyLink(record, state.asesor ? state.asesor.id : '');
-    const shareWa = waPhone ? whatsappLink(`${waMsg} Ver: ${share}`, waPhone) : '';
+    const ownWa = waPhone ? PS.whatsappLink(waMsg, waPhone) : '';
+    const share = `${window.location.origin || ''}/propiedades.html?prop=${encodeURIComponent(String(record._id))}`;
+    const shareWa = waPhone ? PS.whatsappLink(`${waMsg} Ver: ${share}`, waPhone) : '';
 
     UI.openModal({
       title: `${type} en ${op.toLowerCase()}`,
@@ -194,9 +81,9 @@ window.AsesorPage = (() => {
         <div class="landing-detail">
           ${gallery}
           <h3>${Format.currency(record.price)}</h3>
-          <p class="text-muted">${String(place).replace(/</g, '&lt;')}</p>
-          ${characteristicsText(record) ? `<p><strong>Características:</strong> ${String(characteristicsText(record)).replace(/</g, '&lt;')}</p>` : ''}
-          ${record.description ? `<p>${String(record.description).replace(/</g, '&lt;')}</p>` : ''}
+          <p class="text-muted">${UI.escapeHtml(place)}</p>
+          ${PS.characteristicsText(record) ? `<p><strong>Características:</strong> ${UI.escapeHtml(PS.characteristicsText(record))}</p>` : ''}
+          ${record.description ? `<p>${UI.escapeHtml(record.description)}</p>` : ''}
 
           <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
             <p style="margin:0 0 10px;font-weight:700;">&#128198;&nbsp; Agenda una visita</p>
@@ -222,10 +109,10 @@ window.AsesorPage = (() => {
           </div>
 
           <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-            <img src="${qrUrl(share)}" alt="QR de la propiedad" style="width:120px;height:120px;border-radius:8px;" />
+            <img src="${PS.qrDataUrl(share, 120)}" alt="QR de la propiedad" style="width:120px;height:120px;border-radius:8px;" />
             <div style="flex:1;min-width:200px;">
               <p style="margin:0 0 6px;font-weight:700;">&#128279;&nbsp; Comparte esta propiedad</p>
-              <p class="text-muted" style="font-size:13px;margin:0 0 10px;overflow-wrap:break-word;">${String(share).replace(/</g, '&lt;')}</p>
+              <p class="text-muted" style="font-size:13px;margin:0 0 10px;overflow-wrap:break-word;">${UI.escapeHtml(share)}</p>
               <button class="btn btn-secondary btn-sm" type="button" id="asesor-copy-link">&#128203;&nbsp; Copiar enlace</button>
               ${shareWa ? `<a class="btn btn-wa btn-sm" href="${shareWa}" target="_blank" rel="noopener">&#128172;&nbsp; Compartir por WhatsApp</a>` : ''}
             </div>
@@ -249,12 +136,12 @@ window.AsesorPage = (() => {
         }
         const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
         const msg = `Hola, quiero AGENDAR una visita para ver: ${type} en ${place} (${op}).\n\nMi nombre: ${name}\nFecha y hora: ${when}\nPrecio publicado: ${Format.currency(record.price)}\n\n¿Está disponible?`;
-        window.open(whatsappLink(msg, waPhone), '_blank', 'noopener');
+        window.open(PS.whatsappLink(msg, waPhone), '_blank', 'noopener');
       });
     }
 
     const copyLink = document.getElementById('asesor-copy-link');
-    if (copyLink) copyLink.addEventListener('click', () => copyText(share));
+    if (copyLink) copyLink.addEventListener('click', () => PS.copyText(share));
 
     for (const id of ['asesor-calc-price', 'asesor-calc-down', 'asesor-calc-rate', 'asesor-calc-years']) {
       const input = document.getElementById(id);
@@ -280,6 +167,62 @@ window.AsesorPage = (() => {
     }
   }
 
+  function renderProfile(a) {
+    const profile = document.getElementById('asesor-profile');
+    const loading = document.getElementById('asesor-loading');
+    loading.hidden = true;
+    profile.hidden = false;
+
+    const photo = a.photo
+      ? `<img class="asesor-banner-photo" src="${window.AppConfig.resolveUrl(a.photo)}" alt="${UI.escapeHtml(a.name || '')}" style="width:128px;height:128px;">`
+      : `<span class="asesor-banner-photo asesor-banner-fallback">${UI.escapeHtml(String(a.name || 'A').charAt(0).toUpperCase())}</span>`;
+
+    const tel = a.phone ? `tel:+${PS.digits(a.phone)}` : null;
+    const wa = a.phone ? PS.whatsappLink(`Hola ${a.name}, te contacté desde la página de INMOBLES.`, a.phone) : null;
+
+    profile.innerHTML = `
+      <div class="asesor-banner-card card" style="max-width:760px;">
+        ${photo}
+        <div class="asesor-banner-info">
+          <small class="text-muted">Asesor inmobiliario</small>
+          <h3 style="margin:2px 0 4px;">${UI.escapeHtml(a.name || 'Asesor')}</h3>
+          <p class="text-muted" style="margin:0 0 8px;font-size:14px;">${UI.escapeHtml(a.position || 'Asesor inmobiliario')}${a.propertyCount != null ? ` · ${a.propertyCount} ${a.propertyCount === 1 ? 'propiedad' : 'propiedades'}` : ''}</p>
+          ${a.bio ? `<p class="text-muted team-bio" style="font-size:14px;">${UI.escapeHtml(a.bio)}</p>` : ''}
+          <div class="landing-card-actions" style="margin-top:10px;flex-wrap:wrap;">
+            ${wa ? `<a class="btn btn-wa btn-sm" href="${wa}" target="_blank" rel="noopener">&#128172; WhatsApp</a>` : ''}
+            ${tel ? `<a class="btn btn-secondary btn-sm" href="${tel}">&#128222; ${UI.escapeHtml(a.phone)}</a>` : ''}
+            ${a.email ? `<a class="btn btn-secondary btn-sm" href="mailto:${UI.escapeHtml(a.email)}">&#128231; Correo</a>` : ''}
+            <a class="btn btn-secondary btn-sm" href="${PS.state.websiteUrl || 'https://inmobles.com'}" target="_blank" rel="noopener">&#127760; inmobles.com</a>
+            <a class="btn btn-primary btn-sm" href="propiedades.html">&#127968; Ver todo el catálogo</a>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCarta(a) {
+    const box = document.getElementById('carta-preview');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="carta-preview card" style="max-width:760px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#2d1048,#4A1A6B);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;">
+          <span style="font-size:14px;font-weight:700;">Carta de presentación</span>
+          <span style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" type="button" data-carta-pdf>&#128424; PDF</button>
+            <button class="btn btn-wa btn-sm" type="button" data-carta-wa>&#128172; WhatsApp</button>
+          </span>
+        </div>
+        <div style="padding:16px;">
+          ${CartaPresentacion.buildCarta(a, { skipLink: true })}
+        </div>
+      </div>
+    `;
+    const pdf = box.querySelector('[data-carta-pdf]');
+    if (pdf) pdf.addEventListener('click', () => CartaPresentacion.openPdf(a));
+    const wa = box.querySelector('[data-carta-wa]');
+    if (wa) wa.addEventListener('click', () => CartaPresentacion.shareWhatsApp(a));
+  }
+
   async function loadProperties() {
     const el = grid();
     if (el) el.innerHTML = '<div class="loading">Cargando propiedades...</div>';
@@ -287,61 +230,24 @@ window.AsesorPage = (() => {
       const result = await window.API.public.properties({ page: 1, limit: 24, asesorId: state.asesor.id });
       const meta = result.meta || {};
       renderCards(result.data);
-      if (countEl()) countEl().textContent = `${meta.total || 0} ${meta.total === 1 ? 'inmueble' : 'inmuebles'} de ${String(state.asesor.name || 'este asesor').replace(/</g, '&lt;')}`;
+      if (countEl()) countEl().textContent = `${meta.total || 0} ${meta.total === 1 ? 'inmueble' : 'inmuebles'} de ${UI.escapeHtml(state.asesor.name || 'este asesor')}`;
       const title = document.getElementById('catalogo-title');
-      if (title) title.textContent = state.asesor.name ? `Propiedades de ${String(state.asesor.name).replace(/</g, '&lt;')}` : 'Propiedades disponibles';
+      if (title) title.textContent = state.asesor.name ? `Propiedades de ${UI.escapeHtml(state.asesor.name)}` : 'Propiedades disponibles';
     } catch (error) {
       if (el) el.innerHTML = UI.errorAlert(error.message);
     }
   }
 
-  function initNav() {
-    const toggle = document.getElementById('nav-toggle');
-    if (toggle) {
-      document.getElementById('landing-nav').addEventListener('click', function onToggle() {});
-      toggle.addEventListener('click', () => {
-        const nav = document.getElementById('landing-nav');
-        nav.classList.toggle('open');
-        toggle.classList.toggle('active');
-      });
-    }
-  }
-
   async function init() {
-    const year = document.getElementById('footer-year');
-    if (year) year.textContent = String(new Date().getFullYear());
-
-    initNav();
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    await PS.initCommon();
 
     const id = new URLSearchParams(window.location.search).get('id');
     if (!id) {
       const loading = document.getElementById('asesor-loading');
-      if (loading) loading.innerHTML = '<p class="text-muted landing-empty">No se indicó un asesor. <a href="landing.html#equipo">Conoce a nuestro equipo</a>.</p>';
+      if (loading) loading.innerHTML = '<p class="text-muted landing-empty">No se indicó un asesor. <a href="equipo.html">Conoce a nuestro equipo</a>.</p>';
       return;
     }
     state.id = String(id).trim();
-
-    try {
-      const settings = await window.API.settings.public();
-      state.settings = settings || null;
-      const l = (settings && settings.landing) || {};
-      const text = (elId, value) => {
-        const el = document.getElementById(elId);
-        if (el && value) el.textContent = value;
-        return el;
-      };
-      text('landing-brand-name', settings.agencyName || l.agencyName || 'Inmobiliaria');
-      text('landing-brand-tagline', l.brandTagline || 'Bienes raíces');
-      const website = l.websiteUrl || settings.websiteUrl || 'https://inmobles.com';
-      window.OFFICIAL_WEBSITE = website;
-      document.querySelectorAll('#nav-website, .footer-website').forEach((el) => {
-        if (el) el.href = website;
-      });
-    } catch (error) { /* sin configuración */ }
 
     try {
       const asesor = await window.API.public.asesor(state.id);
@@ -356,6 +262,8 @@ window.AsesorPage = (() => {
       const loading = document.getElementById('asesor-loading');
       if (loading) loading.innerHTML = UI.errorAlert(error.message);
     }
+    PS.initNewsletter();
+    PS.initAssistant();
   }
 
   return { init };

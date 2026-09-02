@@ -288,10 +288,6 @@ const remove = asyncHandler(async (req, res) => {
 });
 
 const togglePublish = asyncHandler(async (req, res) => {
-  if (!isBoss(req.user)) {
-    return res.status(403).json({ success: false, message: 'Solo administración y gerencia publican el inventario' });
-  }
-
   const inventory = await Inventory.findById(req.params.id).populate('property');
   if (!inventory) return res.status(404).json({ success: false, message: 'Registro no encontrado' });
 

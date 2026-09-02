@@ -1,20 +1,17 @@
 'use strict';
 
-// Página pública de contacto — SIN base de datos.
-// El formulario arma el mensaje y lo envía por WhatsApp o correo (mailto).
+// Página pública de CONTACTO (contacto.html): formulario que arma el mensaje
+// y lo envía por WhatsApp o correo (mailto). Sin base de datos.
 window.ContactoPage = (() => {
-  const state = { whatsapp: '', email: '', phone: '', agencyName: 'Inmobiliaria' };
-
-  function digits(value) {
-    return String(value || '').replace(/\D/g, '');
-  }
+  const PS = window.PublicSite;
 
   function buildMessage() {
-    const name = document.getElementById('c-name').value.trim();
-    const phone = document.getElementById('c-phone').value.trim();
-    const email = document.getElementById('c-email').value.trim();
-    const interest = document.getElementById('c-interest');
-    const message = document.getElementById('c-message').value.trim();
+    const get = (id) => (document.getElementById(id) || {}).value || '';
+    const name = get('c-name').trim();
+    const phone = get('c-phone').trim();
+    const email = get('c-email').trim();
+    const interest = get('c-interest');
+    const message = get('c-message').trim();
 
     const interests = {
       comprar: 'Comprar un inmueble',
@@ -26,7 +23,7 @@ window.ContactoPage = (() => {
 
     const lines = [
       `Hola, soy ${name || 'un cliente interesado'}.`,
-      `Tema: ${interests[interest.value] || interest.value}.`,
+      `Tema: ${interests[interest] || interest}.`,
     ];
     if (phone) lines.push(`Teléfono: ${phone}`);
     if (email) lines.push(`Correo: ${email}`);
@@ -40,103 +37,59 @@ window.ContactoPage = (() => {
     if (!box) return;
     box.className = `alert ${isError ? 'alert-error' : 'alert-success'}`;
     box.textContent = text;
-    setTimeout(() => box.classList.add('hide'), 6000);
+    clearTimeout(box._t);
+    box._t = setTimeout(() => box.classList.add('hide'), 6000);
+  }
+
+  function validForm() {
+    const name = (document.getElementById('c-name') || {}).value || '';
+    const message = (document.getElementById('c-message') || {}).value || '';
+    if (!name.trim() || !message.trim()) {
+      showFeedback('Completa tu nombre y tu mensaje para continuar.', true);
+      return false;
+    }
+    return true;
   }
 
   function sendWhatsApp() {
-    const name = document.getElementById('c-name').value.trim();
-    const message = document.getElementById('c-message').value.trim();
-
-    if (!name || !message) {
-      showFeedback('Completa tu nombre y tu mensaje para continuar.', true);
-      return;
-    }
-    if (!state.whatsapp) {
+    if (!validForm()) return;
+    if (!PS.OWNER_WHATSAPP) {
       showFeedback('WhatsApp no está disponible por el momento, usa la opción de correo.', true);
       return;
     }
-
-    const url = `https://wa.me/${state.whatsapp}?text=${encodeURIComponent(buildMessage())}`;
+    const url = `https://wa.me/${PS.OWNER_WHATSAPP}?text=${encodeURIComponent(buildMessage())}`;
     window.open(url, '_blank', 'noopener');
     showFeedback('Abrimos WhatsApp con tu mensaje listo. Solo presiona enviar. ¡Gracias!');
   }
 
   function sendEmail() {
-    const name = document.getElementById('c-name').value.trim();
-    const message = document.getElementById('c-message').value.trim();
-
-    if (!name || !message) {
-      showFeedback('Completa tu nombre y tu mensaje para continuar.', true);
-      return;
-    }
-    if (!state.email) {
+    if (!validForm()) return;
+    if (!PS.OWNER_EMAIL) {
       showFeedback('No hay correo de contacto configurado.', true);
       return;
     }
-
+    const name = (document.getElementById('c-name') || {}).value || '';
     const subject = encodeURIComponent(`Contacto web — ${name}`);
-    window.location.href = `mailto:${state.email}?subject=${subject}&body=${encodeURIComponent(buildMessage())}`;
+    window.location.href = `mailto:${PS.OWNER_EMAIL}?subject=${subject}&body=${encodeURIComponent(buildMessage())}`;
     showFeedback('Abrimos tu app de correo con el mensaje listo.');
   }
 
-  function applyConfig(settings) {
-    const l = settings.landing || {};
-    state.agencyName = settings.agencyName || 'Inmobiliaria';
-    state.whatsapp = l.whatsappNumber || settings.whatsappNumber || '';
-    state.email = l.contactEmail || settings.contactEmail || '';
-    state.phone = settings.phone || '';
-
-    const set = (id, value) => {
-      const el = document.getElementById(id);
-      if (el && value) el.textContent = value;
-    };
-    set('brand-name', state.agencyName);
-    set('footer-name', `${state.agencyName} Bienes Raíces`);
-    set('contacto-title', `Contacto — ${state.agencyName}`);
-
-    if (state.whatsapp) {
-      const wa = document.getElementById('info-wa-link');
-      wa.href = `https://wa.me/${state.whatsapp}?text=${encodeURIComponent('Hola, quiero información sobre los inmuebles disponibles.')}`;
-      wa.textContent = `WhatsApp +${state.whatsapp}`;
-    }
-    if (state.phone) {
-      const tel = document.getElementById('info-tel-link');
-      tel.href = `tel:+${digits(state.phone)}`;
-      tel.textContent = `Llamar al +${digits(state.phone)}`;
-    } else {
-      document.getElementById('info-tel-link').closest('.card').style.display = 'none';
-    }
-    if (state.email) {
-      const mail = document.getElementById('info-mail-link');
-      mail.href = `mailto:${state.email}`;
-      mail.textContent = state.email;
-    } else {
-      document.getElementById('info-mail-link').closest('.card').style.display = 'none';
-      document.getElementById('btn-send-mail').style.display = 'none';
-    }
-  }
-
-  async function init() {
-    const year = document.getElementById('footer-year');
-    if (year) year.textContent = String(new Date().getFullYear());
-
-    // PWA: registra el service worker también en la página pública.
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
-
-    try {
-      const settings = await window.API.settings.public();
-      applyConfig(settings);
-    } catch (error) {
-      // Sin backend la página sigue funcionando con las opciones básicas.
-    }
-
-    document.getElementById('contact-form').addEventListener('submit', (e) => {
+  function initForm() {
+    const form = document.getElementById('contact-form');
+    if (!form) return;
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
       sendWhatsApp();
     });
-    document.getElementById('btn-send-mail').addEventListener('click', sendEmail);
+    const mailBtn = document.getElementById('btn-send-mail');
+    if (mailBtn) mailBtn.addEventListener('click', sendEmail);
+  }
+
+  async function init() {
+    await PS.initCommon();
+    initForm();
+    PS.initNewsletter();
+    PS.initAssistant();
   }
 
   return { init };

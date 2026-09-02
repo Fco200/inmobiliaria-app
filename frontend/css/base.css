@@ -1589,6 +1589,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .carta-preview .ccarta-name { font-size: 22px; color: #2d1048; margin: 0 0 3px; }
 .carta-preview .ccarta-position { font-size: 13px; color: #555; }
 .carta-preview .ccarta-bio { margin-top: 14px; font-size: 13px; line-height: 1.6; color: #333; }
+.carta-preview .ccarta-servicios { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.carta-preview .ccarta-servicio { background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #2d1048; font-weight: 600; }
   .carta-preview .ccarta-qr { margin-top: 16px; display: flex; align-items: center; gap: 14px; padding: 14px; background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; }
   .carta-preview .ccarta-qr-img { width: 96px; height: 96px; border: 1px solid #e8d28a; border-radius: 6px; }
   .carta-preview .ccarta-qr-txt small { display: block; font-size: 10px; color: #8a6a1f; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 3px; }

@@ -10,7 +10,15 @@ window.CartaPresentacion = (() => {
 
   function resolver(path) {
     if (!path) return '';
-    return window.AppConfig ? window.AppConfig.resolveUrl(path) : path;
+    if (window.AppConfig) return window.AppConfig.resolveUrl(path);
+    return path;
+  }
+
+  // URL absoluta (cargable desde una ventana de impresión about:blank).
+  function absoluteUrl(path) {
+    const base = document.location.origin && document.location.origin !== 'null' ? document.location.origin : '';
+    if (!path) return '';
+    return `${base}/${String(path).replace(/^\//, '')}`;
   }
 
   function digits(phone) {
@@ -23,22 +31,27 @@ window.CartaPresentacion = (() => {
     return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
   }
 
-  // Código QR con el enlace al catálogo del asesor (servicio externo gratuito).
+  // Código QR con el enlace al catálogo del asesor (local si está disponible).
   function qrDataUrl(data) {
+    if (window.PublicQR) return window.PublicQR.toDataUrl(data, 120);
     return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=6&data=${encodeURIComponent(data)}`;
   }
 
   // Enlace público que muestra el catálogo del asesor en la landing.
   function catalogLink(user) {
-    if (!user || !user._id) return document.location.origin + '/landing.html';
-    const base = document.location.origin + '/landing.html';
-    return `${base}?asesorId=${encodeURIComponent(String(user._id))}`;
+    const base = document.location.origin && document.location.origin !== 'null' ? document.location.origin : '';
+    if (!user || !user._id) return base + '/propiedades.html';
+    return `${base}/propiedades.html?asesorId=${encodeURIComponent(String(user._id))}`;
   }
 
   // HTML de la ficha (imprimible). Se usa tanto en la vista previa del perfil
   // como en la ventana de impresión para generar el PDF.
   function buildCarta(user, opts = {}) {
-    const photo = resolver(user && user.photo);
+    const photoResolved = resolver(user && user.photo);
+    // Para la ventana de impresión (about:blank) el logo debe ser una URL
+    // absoluta para poder cargarse. En línea basta con la ruta relativa.
+    const logo = opts.print ? absoluteUrl('logoinmobles.png') : resolver('logoinmobles.png');
+    const photo = opts.print && photoResolved ? absoluteUrl(photoResolved) : photoResolved;
     const name = (user && user.name) || 'Asesor inmobiliario';
     const position = (user && user.position) || 'Asesor inmobiliario';
     const email = (user && user.email) || '';
@@ -49,7 +62,7 @@ window.CartaPresentacion = (() => {
     return `
       <div class="ccarta">
         <div class="ccarta-head">
-          <img class="ccarta-logo" src="${resolver('logoinmobles.png').replace(/"/g, '&quot;')}" alt="${AGENCY}">
+          <img class="ccarta-logo" src="${logo.replace(/"/g, '&quot;')}" alt="${AGENCY}">
           <div class="ccarta-head-txt">
             <strong>${AGENCY}</strong>
             <span>${TAGLINE}</span>
@@ -73,6 +86,13 @@ window.CartaPresentacion = (() => {
           </table>
 
           ${bio ? `<p class="ccarta-bio">${bio}</p>` : ''}
+
+          <div class="ccarta-servicios">
+            <div class="ccarta-servicio">&#128195; Asesoría personalizada</div>
+            <div class="ccarta-servicio">&#128179; Financiamiento</div>
+            <div class="ccarta-servicio">&#128279; Trámites y escrituración</div>
+            <div class="ccarta-servicio">&#128737; Inversión inmobiliaria</div>
+          </div>
 
           ${!opts.skipQr ? `
           <div class="ccarta-qr">
@@ -106,7 +126,7 @@ window.CartaPresentacion = (() => {
 
   // Abre la ventana de impresión con la carta maquetada (el usuario guarda PDF).
   function openPdf(user) {
-    const content = buildCarta(user);
+    const content = buildCarta(user, { print: true });
     const win = window.open('', '_blank', 'width=820,height=1000');
     if (!win) {
       if (typeof UI !== 'undefined') UI.toast('Permite ventanas emergentes para generar el PDF.', 'warning');
@@ -136,6 +156,8 @@ window.CartaPresentacion = (() => {
   .ccarta-name { font-size: 28px; color: #2d1048; margin: 0 0 4px; }
   .ccarta-position { font-size: 15px; color: #555; }
   .ccarta-bio { margin-top: 18px; font-size: 14px; line-height: 1.65; color: #333; }
+  .ccarta-servicios { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+  .ccarta-servicio { background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #2d1048; font-weight: 600; }
   .ccarta-qr { margin-top: 20px; display: flex; align-items: center; gap: 16px; padding: 16px 18px; background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; }
   .ccarta-qr-img { width: 120px; height: 120px; border: 1px solid #e8d28a; border-radius: 6px; }
   .ccarta-qr-txt small { display: block; font-size: 10px; color: #8a6a1f; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }

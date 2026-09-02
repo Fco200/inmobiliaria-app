@@ -281,16 +281,16 @@ title: 'Mis Propiedades',
       },
       extraActions(record) {
         const waHref = waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
-        let out = `<button class="btn btn-secondary btn-sm" data-extra data-detail data-record="${record._id}" style="margin-left:6px;" title="Ver detalle completo">Detalle</button>`;
+        let out = `<button class="btn btn-secondary btn-sm" data-extra data-detail="1" data-record="${record._id}" style="margin-left:6px;" title="Ver detalle completo">Detalle</button>`;
         if (record.photos && record.photos.length) {
-          out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
+          out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos="1" data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
         }
         const pub = record.isPublished
-          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
-          : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
+          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
+          : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
         return out + pub +
-          `<button class="btn btn-secondary btn-sm" data-extra data-property-history data-record="${record._id}" style="margin-left:6px;">Historial</button>` +
-          `<button class="btn btn-secondary btn-sm" data-extra data-price-market data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>` +
+          `<button class="btn btn-secondary btn-sm" data-extra data-property-history="1" data-record="${record._id}" style="margin-left:6px;">Historial</button>` +
+          `<button class="btn btn-secondary btn-sm" data-extra data-price-market="1" data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>` +
           (waHref ? `<a class="btn btn-sm crm-btn-wa" style="margin-left:6px;" target="_blank" rel="noopener" href="${waHref}" title="Enviar WhatsApp">&#128172;&nbsp; WhatsApp</a>` : '');
       },
       onExtraAction(record, btn, ctx) {

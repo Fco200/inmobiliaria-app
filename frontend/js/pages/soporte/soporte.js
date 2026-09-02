@@ -267,7 +267,7 @@ window.SoportePanel = (() => {
               </div>
               <div class="fgroup">
                 <label>WhatsApp (con código de país)</label>
-                <input name="whatsapp" value="${sp('whatsapp')}" placeholder="Ej. 5216625374491">
+                <input name="whatsapp" value="${sp('whatsapp')}" placeholder="Ej. 5216623188580">
               </div>
               <div class="fgroup">
                 <label>Correo de soporte</label>

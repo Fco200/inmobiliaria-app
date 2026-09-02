@@ -172,6 +172,21 @@
   font-weight: 800;
 }
 
+/* ---- Hero compacto (páginas secundarias) ---- */
+.landing-hero-compact {
+  padding: 56px 20px 48px;
+  min-height: auto;
+  text-align: center;
+}
+.landing-hero-compact h1 {
+  position: relative;
+  font-size: 32px;
+  margin: 0 0 10px;
+}
+.landing-hero-compact .landing-hero-sub {
+  margin-bottom: 0;
+}
+
 .stat-item span {
   font-size: 13px;
   opacity: 0.85;

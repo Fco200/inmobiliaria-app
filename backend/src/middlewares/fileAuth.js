@@ -3,7 +3,7 @@
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('./asyncHandler');
-const { Session, Property } = require('../models');
+const { Session, Property, User } = require('../models');
 const { jwtSecret } = require('../config/env');
 const { hashToken } = require('../services/session.service');
 
@@ -11,6 +11,10 @@ const { hashToken } = require('../services/session.service');
 // golpear la BD en cada imagen del catálogo público.
 const publicCache = new Map();
 const CACHE_TTL = 60 * 1000;
+
+// Caché de "¿este archivo es la foto de perfil de un usuario activo?" de modo
+// que el directorio público de asesores pueda mostrar los avatares actualizados.
+const photoCache = new Map();
 
 async function isPubliclyShared(fileName) {
   const now = Date.now();
@@ -29,6 +33,29 @@ async function isPubliclyShared(fileName) {
     isPublic = false;
   }
   publicCache.set(fileName, { isPublic, expiresAt: now + CACHE_TTL });
+  return isPublic;
+}
+
+// Foto de perfil de un usuario activo → pública (para la landing y el
+// directorio de asesores). Un nuevo avatar sube con nombre único (Date.now),
+// así el navegador siempre pide el archivo nuevo; el caché solo evita repetir
+// la consulta a BD durante un minuto.
+async function isPublicUserPhoto(fileName) {
+  const now = Date.now();
+  const cached = photoCache.get(fileName);
+  if (cached && cached.expiresAt > now) return cached.isPublic;
+
+  let isPublic = false;
+  try {
+    const count = await User.countDocuments({
+      photo: `/uploads/${fileName}`,
+      status: 'activo',
+    });
+    isPublic = count > 0;
+  } catch (error) {
+    isPublic = false;
+  }
+  photoCache.set(fileName, { isPublic, expiresAt: now + CACHE_TTL });
   return isPublic;
 }
 
@@ -59,6 +86,9 @@ const fileAuth = asyncHandler(async (req, res, next) => {
 
   const fileName = path.basename(req.path || '');
   if (fileName && (await isPubliclyShared(fileName))) {
+    return next();
+  }
+  if (fileName && (await isPublicUserPhoto(fileName))) {
     return next();
   }
 

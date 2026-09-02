@@ -237,7 +237,7 @@ window.Pages.settings = {
               </div>
               <form id="catalog-form">
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-                  ${UI.field('whatsappNumber', 'Número de WhatsApp (con código de país)', { type: 'text', value: settings.whatsappNumber || '', placeholder: 'Ej. 5216625374491', hint: 'Solo dígitos. El número que recibirá los mensajes del catálogo.' })}
+                  ${UI.field('whatsappNumber', 'Número de WhatsApp (con código de país)', { type: 'text', value: settings.whatsappNumber || '', placeholder: 'Ej. 5216623188580', hint: 'Solo dígitos. El número que recibirá los mensajes del catálogo.' })}
                   ${UI.field('agencyName', 'Nombre de la agencia / empresa', { type: 'text', value: settings.agencyName || '', placeholder: 'Ej. FV DIGITAL' })}
                   ${UI.field('heroTitle', 'Título del encabezado', { type: 'text', value: l.heroTitle || '', full: true })}
                   ${UI.field('heroSubtitle', 'Subtítulo del encabezado', { type: 'text', value: l.heroSubtitle || '', full: true })}

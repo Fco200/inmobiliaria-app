@@ -141,6 +141,8 @@ window.API = {
     asesores: (params) => ApiClient.get('/public/asesores', params),
     asesor: (id) => ApiClient.get(`/public/asesores/${id}`),
     asesorProperties: (params) => ApiClient.get('/public/propiedades', params),
+    newsletterSubscribe: (body) => ApiClient.post('/public/newsletter', body),
+    assistant: (body) => ApiClient.post('/public/assistant', body),
   },
 
   prospecting: {

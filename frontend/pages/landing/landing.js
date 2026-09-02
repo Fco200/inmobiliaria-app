@@ -6,6 +6,7 @@ window.LandingPage = (() => {
   const OWNER_WHATSAPP = '526623188580';
   const OWNER_PHONE = '+526623188580';
   const OWNER_PHONE_DISPLAY = '662 318 8580';
+  const OWNER_WEBSITE = 'https://inmobles.com';
 
   const TYPE_LABELS = {
     casa: 'Casa',
@@ -27,12 +28,37 @@ window.LandingPage = (() => {
     whatsapp: '',
     asesorId: '',
     activeAsesor: null,
+    propId: '',
   };
 
   const grid = () => document.getElementById('properties-grid');
   const countEl = () => document.getElementById('result-count');
   const paginationEl = () => document.getElementById('landing-pagination');
   const citySelect = () => document.getElementById('search-city');
+
+  // Enlace público directo a la ficha de una propiedad (deep-link).
+  function propertyLink(record) {
+    const base = window.location.origin === 'null' || !window.location.origin ? '' : window.location.origin;
+    return `${base}/landing.html?prop=${encodeURIComponent(String(record._id))}`;
+  }
+
+  function qrUrl(data) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(data)}`;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    UI.toast('Enlace copiado', 'success');
+  }
 
   function imageUrl(record) {
     if (record.photos && record.photos.length) return window.AppConfig.resolveUrl(record.photos[0]);
@@ -86,6 +112,7 @@ window.LandingPage = (() => {
           ${asesor ? `<p class="landing-card-asesor">&#128100; ${UI.escapeHtml(asesor.name)}</p>` : ''}
           <div class="landing-card-actions">
             <button class="btn btn-primary btn-sm" type="button" data-detail data-id="${record._id}">Ver detalle</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-share data-id="${record._id}" title="Copiar enlace directo">&#128279;</button>
             ${waPhone
               ? `<a class="btn btn-secondary btn-sm" href="${whatsappLink(`Hola, me interesa el inmueble: ${type} en ${place} (${op}). ¿Pueden darme más información?`, waPhone)}" target="_blank" rel="noopener">WhatsApp</a>`
               : ''}
@@ -105,6 +132,9 @@ window.LandingPage = (() => {
     el.innerHTML = list.map(card).join('');
     el.querySelectorAll('[data-detail]').forEach((btn) => {
       btn.addEventListener('click', () => openDetail(list.find((p) => p._id === btn.dataset.id)));
+    });
+    el.querySelectorAll('[data-share]').forEach((btn) => {
+      btn.addEventListener('click', () => copyText(propertyLink(list.find((p) => p._id === btn.dataset.id))));
     });
   }
 
@@ -140,6 +170,10 @@ window.LandingPage = (() => {
     const asesorBlock = asesor
       ? `<p class="landing-card-asesor" style="margin:8px 0 0;">&#128100; Asesor: <strong>${UI.escapeHtml(asesor.name)}</strong>${asesor.phone ? ` · &#128222; ${UI.escapeHtml(asesor.phone)}` : ''}</p>`
       : '';
+    const share = propertyLink(record);
+    const waMsg = `Hola, me interesa: ${type} en ${place} (${op}). Precio publicado: ${Format.currency(record.price)}`;
+    const ownWa = waPhone ? whatsappLink(waMsg, waPhone) : '';
+    const shareWa = waPhone ? whatsappLink(`${waMsg} Ver: ${share}`, waPhone) : '';
 
     UI.openModal({
       title: `${type} en ${op.toLowerCase()}`,
@@ -152,12 +186,87 @@ window.LandingPage = (() => {
           ${characteristicsText(record) ? `<p><strong>Características:</strong> ${UI.escapeHtml(characteristicsText(record))}</p>` : ''}
           ${record.description ? `<p>${UI.escapeHtml(record.description)}</p>` : ''}
           ${asesorBlock}
+
+          <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
+            <p style="margin:0 0 10px;font-weight:700;">&#128198;&nbsp; Agenda una visita</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+              <label style="font-size:13px;">Nombre<input class="form-control" id="landing-date-name" type="text" placeholder="Tu nombre" /></label>
+              <label style="font-size:13px;">Fecha<input class="form-control" id="landing-date-date" type="date" /></label>
+              <label style="font-size:13px;">Hora<input class="form-control" id="landing-date-time" type="time" /></label>
+            </div>
+            <button class="btn btn-wa btn-sm" type="button" id="landing-confirm-visit" style="margin-top:12px;" ${ownWa ? '' : 'disabled title="No hay WhatsApp disponible"'}>
+              &#128198;&nbsp; Confirmar visita por WhatsApp
+            </button>
+          </div>
+
+          <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
+            <p style="margin:0 0 10px;font-weight:700;">&#128176;&nbsp; Calcula tu mensualidad</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+              <label style="font-size:13px;">Precio<input class="form-control" id="landing-calc-price" type="number" value="${Number(record.price) || ''}" /></label>
+              <label style="font-size:13px;">Enganche %<input class="form-control" id="landing-calc-down" type="number" value="10" min="0" max="100" /></label>
+              <label style="font-size:13px;">Tasa anual %<input class="form-control" id="landing-calc-rate" type="number" value="10.45" step="0.01" /></label>
+              <label style="font-size:13px;">Plazo (años)<input class="form-control" id="landing-calc-years" type="number" value="20" min="1" max="30" /></label>
+            </div>
+            <div class="text-muted" id="landing-calc-result" style="margin-top:10px;font-size:14px;"></div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+            <img src="${qrUrl(share)}" alt="QR de la propiedad" style="width:120px;height:120px;border-radius:8px;" />
+            <div style="flex:1;min-width:200px;">
+              <p style="margin:0 0 6px;font-weight:700;">&#128279;&nbsp; Comparte esta propiedad</p>
+              <p class="text-muted" style="font-size:13px;margin:0 0 10px;overflow-wrap:break-word;">${UI.escapeHtml(share)}</p>
+              <button class="btn btn-secondary btn-sm" type="button" id="landing-copy-link">&#128203;&nbsp; Copiar enlace</button>
+              ${shareWa ? `<a class="btn btn-wa btn-sm" href="${shareWa}" target="_blank" rel="noopener">&#128172;&nbsp; Compartir por WhatsApp</a>` : ''}
+            </div>
+          </div>
         </div>
       `,
       footer: waPhone
-        ? `<a class="btn btn-primary" href="${whatsappLink(`Hola, me interesa: ${type} en ${place} (${op}). Precio publicado: ${Format.currency(record.price)}`, waPhone)}" target="_blank" rel="noopener">Solicitar información por WhatsApp</a>`
+        ? `<a class="btn btn-primary" href="${ownWa}" target="_blank" rel="noopener">Solicitar información por WhatsApp</a>`
         : '',
     });
+
+    const confirmVisit = document.getElementById('landing-confirm-visit');
+    if (confirmVisit && ownWa) {
+      confirmVisit.addEventListener('click', () => {
+        const name = (document.getElementById('landing-date-name').value || '').trim();
+        const date = document.getElementById('landing-date-date').value;
+        const time = document.getElementById('landing-date-time').value;
+        if (!name || !date || !time) {
+          UI.toast('Completa tu nombre, fecha y hora.', 'warning');
+          return;
+        }
+        const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+        const msg = `Hola, quiero AGENDAR una visita para ver: ${type} en ${place} (${op}).\n\nMi nombre: ${name}\nFecha y hora: ${when}\nPrecio publicado: ${Format.currency(record.price)}\n\n¿Está disponible?`;
+        window.open(whatsappLink(msg, waPhone), '_blank', 'noopener');
+      });
+    }
+
+    const copyLink = document.getElementById('landing-copy-link');
+    if (copyLink) copyLink.addEventListener('click', () => copyText(share));
+
+    for (const id of ['landing-calc-price', 'landing-calc-down', 'landing-calc-rate', 'landing-calc-years']) {
+      const input = document.getElementById(id);
+      if (input) input.addEventListener('input', recalc);
+    }
+    recalc();
+
+    function recalc() {
+      const price = Number(document.getElementById('landing-calc-price').value) || 0;
+      const down = Number(document.getElementById('landing-calc-down').value) || 0;
+      const rate = (Number(document.getElementById('landing-calc-rate').value) || 0) / 100 / 12;
+      const years = Number(document.getElementById('landing-calc-years').value) || 0;
+      const principal = price * (1 - Math.min(100, Math.max(0, down)) / 100);
+      const n = years * 12;
+      const out = document.getElementById('landing-calc-result');
+      if (!principal || !n || rate <= 0) {
+        out.textContent = 'Completa los campos para estimar tu mensualidad.';
+        return;
+      }
+      const payment = (principal * rate * Math.pow(1 + rate, n)) / (Math.pow(1 + rate, n) - 1);
+      const totalInterest = payment * n - principal;
+      out.innerHTML = `<strong>Mensualidad estimada: ${Format.currency(payment)}</strong> · Financiado: ${Format.currency(principal)} · Intereses: ${Format.currency(totalInterest)}`;
+    }
   }
 
   async function loadProperties() {
@@ -340,6 +449,12 @@ window.LandingPage = (() => {
     const callBtn = document.getElementById('cta-call-float');
     if (callBtn) callBtn.href = `tel:${OWNER_PHONE}`;
 
+    const website = l.websiteUrl || settings.websiteUrl || OWNER_WEBSITE;
+    ['nav-website', 'footer-website', 'agent-website', 'cta-website'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.href = website;
+    });
+
     const enabled = l.catalogEnabled !== false;
     const form = document.getElementById('search-form');
     const heroNote = document.getElementById('hero-note');
@@ -349,6 +464,98 @@ window.LandingPage = (() => {
     } else if (form) {
       form.style.display = '';
     }
+  }
+
+  function initNewsletter() {
+    const form = document.getElementById('newsletter-form');
+    const msg = document.getElementById('newsletter-msg');
+    if (!form) return;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('newsletter-email').value.trim();
+      if (!email) return;
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      const show = (text, kind) => {
+        if (msg) {
+          msg.textContent = text;
+          msg.classList.remove('ok', 'err');
+          if (kind) msg.classList.add(kind);
+        }
+      };
+      try {
+        const result = await window.API.public.newsletterSubscribe({ email });
+        show(result.message || '¡Gracias por suscribirte!', 'ok');
+        form.reset();
+      } catch (error) {
+        show(error.message || 'No se pudo suscribir. Intenta de nuevo.', 'err');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    });
+  }
+
+  function initAssistant() {
+    const root = document.getElementById('assistant-root');
+    if (!root) return;
+
+    const openLabel = '&#128172;&nbsp; ¿Te ayudamos?';
+    root.innerHTML = `
+      <div class="landing-assistant-widget">
+        <div class="landing-assistant-panel" id="assistant-panel" hidden>
+          <div class="landing-assistant-head">
+            <strong>Asistente INMOBLES</strong>
+            <button type="button" class="landing-assistant-close" id="assistant-close" aria-label="Cerrar">&times;</button>
+          </div>
+          <div class="landing-assistant-body" id="assistant-body">
+            <div class="landing-assistant-msg bot">¡Hola! Soy el asistente de INMOBLES. ¿Qué buscas? Pregunta por propiedades, precios, financiamiento o cómo agendar una visita.</div>
+          </div>
+          <form class="landing-assistant-input" id="assistant-form">
+            <input class="form-control" id="assistant-q" type="text" placeholder="Escribe tu pregunta..." autocomplete="off" />
+            <button class="btn btn-primary btn-sm" type="submit">&#10148;</button>
+          </form>
+        </div>
+        <button class="landing-assistant-toggle" id="assistant-toggle" type="button">${openLabel}</button>
+      </div>
+    `;
+
+    const panel = root.querySelector('#assistant-panel');
+    const body = root.querySelector('#assistant-body');
+    const toggle = root.querySelector('#assistant-toggle');
+    const close = root.querySelector('#assistant-close');
+    const form = root.querySelector('#assistant-form');
+    const input = root.querySelector('#assistant-q');
+
+    const appendMsg = (text, who) => {
+      const div = document.createElement('div');
+      div.className = `landing-assistant-msg ${who}`;
+      div.textContent = text;
+      body.appendChild(div);
+      body.scrollTop = body.scrollHeight;
+    };
+
+    toggle.addEventListener('click', () => {
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      if (opening) input.focus();
+    });
+    close.addEventListener('click', () => { panel.hidden = true; });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      appendMsg(q, 'user');
+      input.value = '';
+      try {
+        const res = await window.API.public.assistant({ question: q });
+        appendMsg((res && res.answer) || 'No pude responder en este momento.', 'bot');
+      } catch (error) {
+        appendMsg('No pude conectar con el asistente. Intenta de nuevo.', 'bot');
+      }
+    });
   }
 
   function initNav() {
@@ -379,11 +586,17 @@ window.LandingPage = (() => {
     if (year) year.textContent = String(new Date().getFullYear());
 
     initNav();
+    initNewsletter();
+    initAssistant();
 
     // Deep-link al catálogo de un asesor concreto (p. ej. desde la Carta de
     // presentación compartida por WhatsApp): landing.html?asesorId=<id>.
     const urlAsesorId = new URLSearchParams(window.location.search).get('asesorId');
     if (urlAsesorId) state.asesorId = String(urlAsesorId).trim();
+
+    // Deep-link a la ficha de una propiedad: landing.html?prop=<id>.
+    const urlPropId = new URLSearchParams(window.location.search).get('prop');
+    if (urlPropId) state.propId = String(urlPropId).trim();
 
     // PWA: registra el service worker también en la página pública.
     if ('serviceWorker' in navigator) {
@@ -432,6 +645,16 @@ window.LandingPage = (() => {
     }
 
     loadAsesores();
+
+    // Deep-link de una propiedad: se abre su ficha automáticamente.
+    if (state.propId) {
+      try {
+        const prop = await window.API.public.property(state.propId);
+        if (prop) openDetail(prop);
+      } catch (error) {
+        // La propiedad no está disponible: se muestra el catálogo normal.
+      }
+    }
   }
 
   return { init };

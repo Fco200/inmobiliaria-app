@@ -23,6 +23,11 @@ window.CartaPresentacion = (() => {
     return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
   }
 
+  // Código QR con el enlace al catálogo del asesor (servicio externo gratuito).
+  function qrDataUrl(data) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=6&data=${encodeURIComponent(data)}`;
+  }
+
   // Enlace público que muestra el catálogo del asesor en la landing.
   function catalogLink(user) {
     if (!user || !user._id) return document.location.origin + '/landing.html';
@@ -68,6 +73,16 @@ window.CartaPresentacion = (() => {
           </table>
 
           ${bio ? `<p class="ccarta-bio">${bio}</p>` : ''}
+
+          ${!opts.skipQr ? `
+          <div class="ccarta-qr">
+            <img class="ccarta-qr-img" src="${qrDataUrl(url)}" alt="Código QR del catálogo">
+            <div class="ccarta-qr-txt">
+              <small>Escanea para ver</small>
+              <strong>Mis propiedades en línea</strong>
+            </div>
+          </div>
+          ` : ''}
 
           <div class="ccarta-contact">
             ${phone ? `<div class="ccarta-contact-item">&#128222;</div><div><small>Teléfono</small><strong>${phone}</strong></div>` : ''}
@@ -121,6 +136,10 @@ window.CartaPresentacion = (() => {
   .ccarta-name { font-size: 28px; color: #2d1048; margin: 0 0 4px; }
   .ccarta-position { font-size: 15px; color: #555; }
   .ccarta-bio { margin-top: 18px; font-size: 14px; line-height: 1.65; color: #333; }
+  .ccarta-qr { margin-top: 20px; display: flex; align-items: center; gap: 16px; padding: 16px 18px; background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; }
+  .ccarta-qr-img { width: 120px; height: 120px; border: 1px solid #e8d28a; border-radius: 6px; }
+  .ccarta-qr-txt small { display: block; font-size: 10px; color: #8a6a1f; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+  .ccarta-qr-txt strong { font-size: 14px; color: #2d1048; }
   .ccarta-contact { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 10px 14px; margin-top: 20px; padding: 18px; background: #faf7ee; border: 1px solid #eadfc0; border-radius: 8px; align-items: center; }
   .ccarta-contact small { display: block; font-size: 10px; color: #8a6a1f; text-transform: uppercase; letter-spacing: .08em; }
   .ccarta-contact strong { font-size: 13px; }

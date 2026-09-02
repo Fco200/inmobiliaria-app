@@ -2,7 +2,6 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const bcrypt = require('bcryptjs');
 const { User, Role, Permission } = require('../models');
 const { logActivity } = require('../services/log.service');
 
@@ -16,10 +15,10 @@ const userCrud = buildCrud(User, {
     return body;
   },
   beforeUpdate: async (body) => {
-    if (body.password) {
-      const salt = await bcrypt.genSalt(10);
-      body.password = await bcrypt.hash(body.password, salt);
-    } else {
+    // IMPORTANTE: NO hashear aquí. El modelo User ya hashea la contraseña en su
+    // hook pre('save') (user.model.js); si también se hashea aquí, la contraseña
+    // queda con DOBLE hash y nadie puede volver a iniciar sesión.
+    if (!body.password) {
       delete body.password;
     }
     return body;

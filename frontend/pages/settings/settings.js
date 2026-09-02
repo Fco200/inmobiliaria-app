@@ -244,6 +244,7 @@ window.Pages.settings = {
                   ${UI.field('contactTitle', 'Título de la sección de contacto', { type: 'text', value: l.contactTitle || '' })}
                   ${UI.field('contactText', 'Texto de contacto', { type: 'text', value: l.contactText || '' })}
                   ${UI.field('footerText', 'Texto del pie de página', { type: 'text', value: l.footerText || '' })}
+                  ${UI.field('websiteUrl', 'Sitio web oficial (inmobles.com)', { type: 'text', value: l.websiteUrl || '', placeholder: 'https://inmobles.com', hint: 'Enlace que aparece en el menú, pie de página y tarjetas.' })}
                   ${UI.field('catalogEnabled', 'Mostrar el catálogo público', { type: 'checkbox', value: l.catalogEnabled !== false })}
                 </div>
                 <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
@@ -266,6 +267,7 @@ window.Pages.settings = {
               contactTitle: values.contactTitle,
               contactText: values.contactText,
               footerText: values.footerText,
+              websiteUrl: values.websiteUrl,
               catalogEnabled: values.catalogEnabled,
             };
             const btn = form.querySelector('button[type="submit"]');

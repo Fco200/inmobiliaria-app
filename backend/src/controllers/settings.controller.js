@@ -26,6 +26,7 @@ const LANDING_SETTINGS = {
   contactText: { key: 'landing.contactText', group: 'landing', description: 'Texto de la sección de contacto del catálogo.' },
   footerText: { key: 'landing.footerText', group: 'landing', description: 'Texto del pie de página del catálogo.' },
   catalogEnabled: { key: 'landing.enabled', group: 'landing', description: 'Permite ver el catálogo público.' },
+  websiteUrl: { key: 'landing.websiteUrl', group: 'landing', description: 'URL del sitio web oficial (p. ej. https://inmobles.com).' },
 };
 
 const LANDING_DEFAULTS = {
@@ -35,6 +36,7 @@ const LANDING_DEFAULTS = {
   contactText: 'Escríbenos por WhatsApp o entra a la plataforma para agendar una visita.',
   footerText: 'Bienes Raíces',
   catalogEnabled: true,
+  websiteUrl: 'https://inmobles.com',
 };
 
 async function readSetting(key) {

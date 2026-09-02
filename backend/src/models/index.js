@@ -25,6 +25,7 @@ const Interaction = require('./interaction.model');
 const Chat = require('./chat.model');
 const Announcement = require('./announcement.model');
 const UserRequest = require('./userRequest.model');
+const Newsletter = require('./newsletter.model');
 
 module.exports = {
   User,
@@ -52,4 +53,5 @@ module.exports = {
   Chat,
   Announcement,
   UserRequest,
+  Newsletter,
 };

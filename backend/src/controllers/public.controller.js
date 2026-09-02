@@ -1,7 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Property, Inventory, User, Role } = require('../models');
+const { Property, Inventory, User, Role, Newsletter } = require('../models');
 
 const PUBLIC_FIELDS =
   '_id type operationType price ticketValue address zone city state description characteristics photos status createdAt';
@@ -164,7 +164,6 @@ const listAsesores = asyncHandler(async (req, res) => {
   res.json({ success: true, data, meta: { total: data.length } });
 });
 
-// Ficha de un solo asesor.
 const getAsesor = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
     .select('status name photo position bio email phone facebook instagram role')
@@ -186,4 +185,119 @@ const getAsesor = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...asesorSummary(user), propertyCount } });
 });
 
-module.exports = { list, get, listAsesores, getAsesor };
+// Suscripción al newsletter desde la landing pública (sin autenticación).
+const subscribeNewsletter = asyncHandler(async (req, res) => {
+  const { email, name } = req.body || {};
+  const clean = String(email || '').trim().toLowerCase();
+  if (!clean || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(clean)) {
+    return res.status(400).json({ success: false, message: 'Ingresa un correo electrónico válido.' });
+  }
+  const existing = await Newsletter.findOne({ email: clean });
+  if (existing) {
+    if (existing.status === 'dado_baja') {
+      existing.status = 'suscrito';
+      if (name) existing.name = String(name).trim();
+      await existing.save();
+    }
+    return res.json({ success: true, message: 'Ya estás suscrito a nuestras promociones. ¡Gracias!' });
+  }
+  await Newsletter.create({ email: clean, name: String(name || '').trim(), source: 'landing' });
+  res.status(201).json({ success: true, message: '¡Suscripción exitosa! Recibirás nuestras promociones.' });
+});
+
+// Lista de suscriptores (solo admin/gerencia/soporte) para el panel.
+const listNewsletter = asyncHandler(async (req, res) => {
+  const subs = await Newsletter.find().sort({ createdAt: -1 });
+  res.json({ success: true, data: subs });
+});
+
+const normalize = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const hasWords = (text, ...words) => words.some((w) => text.includes(normalize(w)));
+
+const money = (n) => (Number(n) || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+
+// Asistente IA de la página pública (sin autenticación): responde sobre
+// propiedades, financiamiento y cómo contactar a la inmobiliaria.
+const ask = asyncHandler(async (req, res) => {
+  const { question } = req.body || {};
+  const text = normalize(question);
+  if (!text) {
+    return res.json({ success: true, data: { answer: '¡Hola! Soy el asistente de INMOBLES. Pregúntame por propiedades disponibles, tipos de inmuebles, precios o cómo agendar una visita.' } });
+  }
+
+  if (hasWords(text, 'hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'que tal')) {
+    return res.json({ success: true, data: { answer: '¡Hola! Bienvenido a INMOBLES. Puedo ayudarte a encontrar propiedades, resolver dudas de financiamiento o indicarte cómo agendar una visita. ¿Qué buscas?' } });
+  }
+
+  if (hasWords(text, 'quien eres', 'que eres', 'como te llamas', 'asistente')) {
+    return res.json({ success: true, data: { answer: 'Soy el asistente virtual de INMOBLES. Te ayudo a explorar el catálogo de inmuebles, entender opciones de crédito y contactar a nuestros asesores.' } });
+  }
+
+  if (hasWords(text, 'gracias')) {
+    return res.json({ success: true, data: { answer: '¡Con gusto! Si necesitas ver las propiedades, abre el catálogo o escríbenos por WhatsApp.' } });
+  }
+
+  // Cuántas propiedades / catálogo general.
+  if (hasWords(text, 'cuantas', 'cuantos', 'hay propiedades', 'disponibles', 'disponibilidad', 'catalogo', 'cuantas casas')) {
+    const filter = { isPublished: true, status: { $ne: 'inactiva' }, price: { $gt: 0 } };
+    const [total, cities] = await Promise.all([
+      Property.countDocuments(filter),
+      Property.distinct('city', filter),
+    ]);
+    const citiesText = cities.length ? ` Tenemos inmuebles en: ${cities.slice(0, 6).join(', ')}${cities.length > 6 ? ' y más' : ''}.` : '';
+    return res.json({ success: true, data: { answer: `Actualmente tenemos ${total} propiedades publicadas en nuestro catálogo.${citiesText} ¿Buscas casa, departamento, local o terreno?` } });
+  }
+
+  if (hasWords(text, 'casa', 'departamento', 'local', 'terreno', 'bodega', 'oficina', 'rancho', 'playa', 'tipos', 'tipo')) {
+    const filter = { isPublished: true, status: { $ne: 'inactiva' }, price: { $gt: 0 } };
+    const counts = await Property.aggregate([
+      { $match: filter },
+      { $group: { _id: '$type', count: { $sum: 1 } } },
+    ]);
+    const types = { casa: 'Casa', departamento: 'Departamento', local: 'Local', bodega: 'Bodega', oficina: 'Oficina', terreno: 'Terreno', rancho: 'Rancho', playa: 'Playa', otro: 'Otro' };
+    const lines = counts
+      .map((c) => (types[c._id] || c._id) + ': ' + c.count)
+      .join('\n');
+    return res.json({ success: true, data: { answer: `Tenemos disponibles:\n${lines || 'Por el momento no hay inmuebles publicados.'}\n\nPuedes filtrar por tipo y ciudad en el catálogo. Escríbenos por WhatsApp si quieres ver alguno.` } });
+  }
+
+  if (hasWords(text, 'precio', 'barato', 'economico', 'costo', 'cuanto cuesta', 'presupuesto', 'mas caro')) {
+    const filter = { isPublished: true, status: { $ne: 'inactiva' }, price: { $gt: 0 } };
+    const agg = await Property.aggregate([
+      { $match: filter },
+      { $group: { _id: null, min: { $min: '$price' }, max: { $max: '$price' } } },
+    ]);
+    const r = agg[0];
+    if (!r) return res.json({ success: true, data: { answer: 'Por el momento no tenemos inmuebles publicados.' } });
+    return res.json({ success: true, data: { answer: `Nuestro rango de precios va de ${money(r.min)} a ${money(r.max)}. En el catálogo puedes ordenar y filtrar por tu presupuesto, o dime qué buscas y te orientamos.` } });
+  }
+
+  if (hasWords(text, 'horario', 'donde estan', 'ubicacion', 'direccion', 'oficina', 'en donde')) {
+    return res.json({ success: true, data: { answer: 'Estamos en Hermosillo, Sonora, México. Visita inmobles.com para ver la dirección y los medios de contacto, o escríbenos por WhatsApp y un asesor te atiende.' } });
+  }
+
+  if (hasWords(text, 'agendar', 'visita', 'cita', 'ver una propiedad', 'visitas')) {
+    return res.json({ success: true, data: { answer: 'Para agendar una visita: elige una propiedad del catálogo, pulsa "Agendar visita", escribe tu nombre, fecha y hora, y se abrirá WhatsApp para confirmar con tu asesor. ¡Sin compromiso!' } });
+  }
+
+  if (hasWords(text, 'credito', 'financiamiento', 'infonavit', 'fovissste', 'hipoteca', 'mensualidad', 'presupuesto')) {
+    return res.json({ success: true, data: { answer: 'Trabajamos con créditos Infonavit, Fovissste y bancarios. En la ficha de cada propiedad hay una calculadora de mensualidades para estimar tu pago según enganche, tasa y plazo. ¿Te ayudo a calcular?' } });
+  }
+
+  if (hasWords(text, 'whatsapp', 'contacto', 'contactar', 'telefono', 'llamar', 'escribir')) {
+    return res.json({ success: true, data: { answer: 'Puedes escribirnos directo por WhatsApp desde el botón flotante o en el footer de esta página, o llamar al número que aparece en el encabezado. ¡Te atendemos de inmediato!' } });
+  }
+
+  if (hasWords(text, 'venta', 'renta', 'operacion')) {
+    return res.json({ success: true, data: { answer: 'Publicamos propiedades tanto en venta como en renta. En el catálogo puedes filtrar por operación para ver solo las que te interesan.' } });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      answer: 'Aún no estoy seguro de cómo ayudarte. Prueba preguntando: "¿cuántas propiedades hay?", "¿qué tipos de inmuebles tienen?", "¿cómo agendo una visita?" o "¿qué opciones de crédito hay?".',
+    },
+  });
+});
+
+module.exports = { list, get, listAsesores, getAsesor, subscribeNewsletter, listNewsletter, ask };

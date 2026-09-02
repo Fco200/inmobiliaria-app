@@ -7,6 +7,8 @@
 window.CartaPresentacion = (() => {
   const AGENCY = 'INMOBLES';
   const TAGLINE = 'Profesionales en Negocios Inmobiliarios';
+  const SITE_URL = 'https://inmobles.com';
+  const SITE_LABEL = 'inmobles.com';
 
   function resolver(path) {
     if (!path) return '';
@@ -114,11 +116,14 @@ window.CartaPresentacion = (() => {
           <div class="ccarta-link">
             Ve mi catálogo de propiedades: <strong>${url}</strong>
           </div>
+          <div class="ccarta-link">
+            Sitio oficial: <strong>${SITE_LABEL}</strong>
+          </div>
           ` : ''}
         </div>
         <div class="ccarta-rule"></div>
         <div class="ccarta-foot">
-          ${AGENCY} · ${TAGLINE} · Todos los derechos reservados
+          ${AGENCY} · ${TAGLINE} · ${SITE_LABEL} · Todos los derechos reservados
         </div>
       </div>
     `;
@@ -184,7 +189,7 @@ window.CartaPresentacion = (() => {
   // Arma el texto de WhatsApp con el enlace al catálogo del asesor.
   function whatsappText(user) {
     const name = (user && user.name) || 'Asesor INMOBLES';
-    return `Hola ${name}, te comparto mi carta de presentación. Soy parte del equipo de ${AGENCY}. Puedes ver mi perfil y mi catálogo de propiedades aquí: ${catalogLink(user)}`;
+    return `Hola ${name}, te comparto mi carta de presentación. Soy parte del equipo de ${AGENCY}. Puedes ver mi perfil y mi catálogo de propiedades aquí: ${catalogLink(user)} · Sitio oficial: ${SITE_LABEL}`;
   }
 
   function shareWhatsApp(user) {

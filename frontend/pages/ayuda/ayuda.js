@@ -65,6 +65,14 @@ window.Pages.ayuda = {
          </a>`
       : '';
 
+    const siteCard = `<a class="card ayuda-contact-card anim-fade-in-up anim-delay-2" href="https://inmobles.com" target="_blank" rel="noopener">
+           <span class="ayuda-contact-icon" style="background:#2d1048;">&#127760;</span>
+           <span class="ayuda-contact-body">
+             <strong>Página oficial</strong>
+             <small>inmobles.com</small>
+           </span>
+         </a>`;
+
     container.innerHTML = `
       <div class="page-header">
         <h2>&#128172;&nbsp; Ayuda y soporte</h2>
@@ -96,6 +104,7 @@ window.Pages.ayuda = {
             ${telefonoCard}
             ${whatsappCard}
             ${emailCard}
+            ${siteCard}
             ${support.facebook ? `<a class="card ayuda-contact-card anim-fade-in-up anim-delay-3" href="${UI.escapeHtml(support.facebook)}" target="_blank" rel="noopener">
               <span class="ayuda-contact-icon" style="background:#1877f2;">f</span>
               <span class="ayuda-contact-body"><strong>Facebook</strong><small>@${UI.escapeHtml(support.facebook.replace(/^https?:\/\/(www\.)?(facebook\.com|fb\.com)\//, ''))}</small></span>
@@ -163,6 +172,7 @@ window.Pages.ayuda = {
         </div>
         <p>
           <strong>INMOBLES</strong> &times; <strong style="background:linear-gradient(135deg,#7B3FA0,#5B2D8E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">FV DIGITAL</strong>
+          &middot; <a href="https://inmobles.com" target="_blank" rel="noopener" style="color:var(--primary);">inmobles.com</a>
         </p>
         <small class="text-muted">&copy; ${new Date().getFullYear()} INMOBLES · Desarrollado por FV Digital · Soluciones Digitales y Desarrollo</small>
       </div>
@@ -390,6 +400,7 @@ window.Pages.ayuda = {
             <ul>
               <li><strong>WhatsApp</strong>: el medio más rápido.</li>
               <li><strong>Correo electrónico</strong>: para temas formales.</li>
+              <li><strong>Página oficial</strong>: <a href="https://inmobles.com" target="_blank" rel="noopener" style="color:var(--primary);">inmobles.com</a>.</li>
               <li><strong>Redes sociales</strong> (Facebook e Instagram) si están configuradas.</li>
             </ul>
             <p>Describe tu problema con el mayor detalle posible (qué hacías, qué mensaje viste) para que podamos ayudarte rápido.</p>

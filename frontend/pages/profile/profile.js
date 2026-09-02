@@ -113,10 +113,11 @@ window.Pages.profile = {
             </div>` : ''}
             <div style="display:flex;justify-content:space-between;padding:10px 0;">
               <span class="text-muted">Redes sociales</span>
-              <div style="display:flex;gap:8px;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                <a href="https://inmobles.com" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">&#127760; Sitio oficial</a>
                 ${me.facebook ? `<a href="${UI.escapeHtml(me.facebook)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Facebook</a>` : ''}
                 ${me.instagram ? `<a href="${UI.escapeHtml(me.instagram)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Instagram</a>` : ''}
-                ${!me.facebook && !me.instagram ? '<span class="text-muted">—</span>' : ''}
+                ${!me.facebook && !me.instagram ? '' : ''}
               </div>
             </div>
           </div>

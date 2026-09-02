@@ -76,6 +76,7 @@ window.Realtime = (() => {
     // como window.UI / window.Format. Se referencia el global lexical directo.
     if (!announcement || !announcement._id || typeof UI === 'undefined') return;
     if (seenIds().includes(announcement._id)) return;
+    if (typeof Sounds !== 'undefined') Sounds.announcement();
     // Quien publica el aviso ya lo conoce; no se le vuelve a mostrar.
     const author = announcement.author || {};
     const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
@@ -189,6 +190,7 @@ window.Realtime = (() => {
   function showNotification(item) {
     if (!item || !item._id || typeof UI === 'undefined') return;
     if (seenNotifIds().includes(item._id)) return;
+    if (typeof Sounds !== 'undefined') Sounds.notification();
 
     markNotifSeen(item._id);
 

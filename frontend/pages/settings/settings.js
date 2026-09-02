@@ -635,6 +635,7 @@ window.Pages.settings = {
     function renderAlerts() {
       const remindersOn = window.App && window.App.remindersEnabled ? window.App.remindersEnabled() : false;
       const permission = 'Notification' in window ? Notification.permission : 'unsupported';
+      const soundOn = window.Sounds ? window.Sounds.enabled() : true;
       tabContent.innerHTML = `
         <div class="card" style="margin-bottom:16px;">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -665,6 +666,26 @@ window.Pages.settings = {
           <p class="text-muted" style="font-size:12px;margin:8px 0 0;" id="reminder-permission">
             Permiso del navegador: ${permission === 'granted' ? UI.badge('Concedido', 'success') : permission === 'denied' ? UI.badge('Bloqueado', 'danger') : permission === 'unsupported' ? UI.badge('No compatible', 'muted') : UI.badge('Sin conceder', 'warning')}
           </p>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+              <h3 style="margin:0;">&#128266;&nbsp; Sonidos del sistema</h3>
+              <p class="text-muted" style="font-size:12px;margin:6px 0 0;">
+                Reproduce un sonido cuando llegan notificaciones, avisos del equipo y un tono de bienvenida
+                al iniciar sesión. Se aplica solo a este navegador y este dispositivo.
+              </p>
+            </div>
+            <button class="btn ${soundOn ? 'btn-primary' : 'btn-secondary'}" type="button" data-toggle-sounds>
+              ${soundOn ? '&#128266;&nbsp; Activados' : '&#128263;&nbsp; Desactivados'}
+            </button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="welcome">&#127911;&nbsp; Probar bienvenida</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="notification">&#128276;&nbsp; Probar notificación</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="announcement">&#128227;&nbsp; Probar aviso</button>
+          </div>
         </div>
 
         <div id="alerts-list"><div class="loading">Cargando avisos...</div></div>
@@ -718,6 +739,26 @@ window.Pages.settings = {
         } catch (error) {
           UI.toast(error.message, 'error');
         }
+      });
+
+      const toggleSoundsBtn = tabContent.querySelector('[data-toggle-sounds]');
+      if (toggleSoundsBtn) toggleSoundsBtn.addEventListener('click', () => {
+        if (window.Sounds) {
+          window.Sounds.setEnabled(!window.Sounds.enabled());
+          UI.toast(window.Sounds.enabled() ? 'Sonidos activados' : 'Sonidos desactivados', window.Sounds.enabled() ? 'success' : 'info');
+          renderAlerts();
+        } else {
+          UI.toast('Los sonidos aún no están disponibles.', 'error');
+        }
+      });
+
+      tabContent.querySelectorAll('[data-preview-sound]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (window.Sounds) {
+            window.Sounds.init();
+            window.Sounds.preview(btn.dataset.previewSound);
+          }
+        });
       });
 
       async function loadAlerts() {

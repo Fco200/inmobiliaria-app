@@ -123,47 +123,55 @@ window.AppShell = (() => {
       const existing = bell.querySelector('.badge-dot');
       if (existing) existing.remove();
     }
-    if (!window.ApiClient.isAuthenticated()) return;
-    try {
-      const data = await window.API.notifications.unreadCount();
-      const raw = data && typeof data === 'object'
-        ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
-        : undefined;
-      const count = Number(raw) || 0;
-      updateFabBadge('notifications', count);
-      if (bell && count) {
-        const dot = document.createElement('span');
-        dot.className = 'badge-dot';
-        dot.textContent = count > 99 ? '99+' : count;
-        bell.appendChild(dot);
-      }
-    } catch (error) { /* sin conexión */ }
+    if (!window.ApiClient.isAuthenticated()) return Promise.resolve();
+    return window.API.notifications.unreadCount()
+      .then((data) => {
+        const raw = data && typeof data === 'object'
+          ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
+          : undefined;
+        const count = Number(raw) || 0;
+        updateFabBadge('notifications', count);
+        if (bell && count) {
+          const dot = document.createElement('span');
+          dot.className = 'badge-dot';
+          dot.textContent = count > 99 ? '99+' : count;
+          bell.appendChild(dot);
+        }
+      })
+      .catch(() => {});
   }
 
-  async function refreshChatBadge() {
+  function refreshChatBadge() {
     injectActivityFab();
     const chatLink = document.querySelector('.topnav-link[href="chat.html"]');
     if (chatLink) {
       const existing = chatLink.querySelector('.badge-dot');
       if (existing) existing.remove();
     }
-    if (!window.ApiClient.isAuthenticated()) return;
-    try {
-      const data = await window.API.chats.unreadCount();
-      // ApiClient.unwrap desenrolla {data:{unread:N}} → {unread:N}; también se
-      // soporta el caso en que el payload llegue ya como {data:{unread:N}}.
-      const raw = data && typeof data === 'object'
-        ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
-        : undefined;
-      const count = Number(raw) || 0;
-      updateFabBadge('chat', count);
-      if (chatLink && count) {
-        const dot = document.createElement('span');
-        dot.className = 'badge-dot';
-        dot.textContent = count > 99 ? '99+' : count;
-        chatLink.appendChild(dot);
-      }
-    } catch (error) { /* sin conexión */ }
+    if (!window.ApiClient.isAuthenticated()) return Promise.resolve();
+    return window.API.chats.unreadCount()
+      .then((data) => {
+        const raw = data && typeof data === 'object'
+          ? (data.unread !== undefined ? data.unread : (data.data && data.data.unread))
+          : undefined;
+        const count = Number(raw) || 0;
+        updateFabBadge('chat', count);
+        if (chatLink && count) {
+          const dot = document.createElement('span');
+          dot.className = 'badge-dot';
+          dot.textContent = count > 99 ? '99+' : count;
+          chatLink.appendChild(dot);
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Actualiza ambos badges en paralelo. Si la pestaña no está visible se
+  // omite para no gastar ancho de banda innecesariamente.
+  function refreshAllBadges() {
+    if (document.hidden) return;
+    refreshNotificationBadge();
+    refreshChatBadge();
   }
 
   function applyTheme() {
@@ -360,6 +368,20 @@ window.AppShell = (() => {
 
   function initReminders() { setInterval(checkReminders, 60 * 1000); }
   function registerServiceWorker() { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); }
+
+  // Carga el módulo global de sonidos y desbloquea el contexto de audio en el
+  // primer gesto del usuario. Debe estar listo antes de conectar el tiempo real.
+  function loadSounds() {
+    if (document.getElementById('sounds-loaded')) return;
+    const marker = document.createElement('span');
+    marker.id = 'sounds-loaded';
+    marker.style.display = 'none';
+    document.body.appendChild(marker);
+    const script = document.createElement('script');
+    script.src = 'js/utils/sounds.js';
+    script.onload = () => { if (window.Sounds) window.Sounds.init(); };
+    document.head.appendChild(script);
+  }
 
   // Carga el módulo global de tiempo real (avisos en alerta modal + badges).
   // Se inyecta dinámicamente para no tocar cada HTML de la aplicación.
@@ -593,10 +615,8 @@ window.AppShell = (() => {
     injectCalculatorButton();
     startClock();
     injectAssistant();
+    loadSounds();
     loadRealtime();
-    loadMantenimiento();
-    loadWelcome();
-    loadOnboarding();
     injectActivityFab();
 
     // Hamburger toggle para mobile
@@ -615,13 +635,20 @@ window.AppShell = (() => {
 
     if (window.AppInstall) window.AppInstall.init();
 
-    refreshNotificationBadge();
-    refreshChatBadge();
-    setInterval(refreshNotificationBadge, 120000);
-    setInterval(refreshChatBadge, 120000);
+    refreshAllBadges();
+    setInterval(refreshAllBadges, 120000);
     initReminders();
 
     renderPage();
+
+    // Se difieren los módulos no críticos (mantenimiento, onboarding,
+    // bienvenida) hasta después del primer render para que la página
+    // aparezca lo antes posible.
+    setTimeout(() => {
+      loadMantenimiento();
+      loadWelcome();
+      loadOnboarding();
+    }, 50);
 
     // Tras el primer render se da la oportunidad al banner de avisos con un
     // pequeño retardo para no pisar ninguna animación de entrada. (La guía de

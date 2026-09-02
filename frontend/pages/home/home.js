@@ -4,6 +4,14 @@ window.Pages.home = {
   title: 'Inicio',
 
   async render(container) {
+    // Bienvenida con sonido: se reproduce una sola vez por sesión de login.
+    try {
+      if (window.Sounds && !sessionStorage.getItem('crm_sounds_welcomed')) {
+        sessionStorage.setItem('crm_sounds_welcomed', '1');
+        window.Sounds.welcome();
+      }
+    } catch (error) { /* sin almacenamiento */ }
+
     const user = window.ApiClient.getStoredUser();
     const name = (user && (user.name || user.username)) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';

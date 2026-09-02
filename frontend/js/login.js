@@ -68,6 +68,7 @@ window.LoginPage = (() => {
     try {
       const result = await window.API.auth.login({ identifier, password, remember });
       window.ApiClient.setLogin(result.token, result.user);
+      if (window.Sounds) { window.Sounds.init(); window.Sounds.welcome(); }
       window.location.replace('home.html');
     } catch (error) {
       // El backend puede responder 503 durante mantenimiento; se traduce.
@@ -344,6 +345,7 @@ window.LoginPage = (() => {
       const result = await window.API.auth.google({ credential: response.credential, role, roleKey });
       window.ApiClient.setLogin(result.token, result.user);
       UI.toast('Registro con Google completado', 'success');
+      if (window.Sounds) { window.Sounds.init(); window.Sounds.welcome(); }
       window.location.replace('home.html');
     } catch (error) {
       UI.toast(error.message || 'No se pudo completar el registro.', 'error');

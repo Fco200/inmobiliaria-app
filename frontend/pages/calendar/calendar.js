@@ -3,8 +3,8 @@
 window.Pages = window.Pages || {};
 
 // Calendario interno: muestra en una sola vista mes/semana/día los eventos de
-// citas, tareas, negocios, metas y prospección, y permite conectar Google
-// Calendar (OAuth 2 vías) para sincronizar los eventos al calendario de Google.
+// citas, tareas, negocios, metas y prospección.
+// (La integración con Google Calendar quedó como opción futura/pendiente.)
 window.Pages.calendar = (() => {
   const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   const WEEK_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -24,7 +24,6 @@ window.Pages.calendar = (() => {
     events: [],
     typesMeta: {},
     loaded: false,
-    gc: { configured: false, connected: false, syncEnabled: false, email: '', syncedAt: null },
     filters: { appointment: true, task: true, business: true, goal: true, prospecting: true },
   };
 
@@ -43,7 +42,7 @@ window.Pages.calendar = (() => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  // Rango de fechas a consultar según la vista actual (con margen para metas).
+  // Rango de fechas a consultar según la vista actual.
   function rangeForView() {
     const anchor = state.anchor;
     let from;
@@ -62,47 +61,34 @@ window.Pages.calendar = (() => {
     return { start: toLocalDate(from), end: toLocalDate(to) };
   }
 
-  function endOfDay(d) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-  }
-
   function keyToDate(key) {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d);
   }
 
-  async function loadEvents() {
-    const range = rangeForView();
-    // Para metas, que son rangos largos, ampliamos la consulta un poco.
-    const metaRange = { start: range.start, end: range.end };
-    try {
-      const data = await window.API.calendar.events(metaRange);
-      state.events = Array.isArray(data && data.events) ? data.events : [];
-      if (data && data.types) state.typesMeta = data.types;
-      Object.keys(TYPES).forEach((k) => {
-        if (!state.typesMeta[k] && TYPES[k]) state.typesMeta[k] = TYPES[k];
-      });
-      state.loaded = true;
-    } catch (error) {
-      state.events = [];
-      state.loaded = true;
-      throw error;
-    }
+  function endOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
   }
 
-  async function loadGoogleStatus() {
+  async function loadEvents() {
+    const range = rangeForView();
     try {
-      const data = await window.API.calendar.status();
-      state.gc = {
-        configured: Boolean(data && data.configured),
-        connected: Boolean(data && data.connected),
-        syncEnabled: Boolean(data && data.syncEnabled),
-        email: (data && data.email) || '',
-        syncedAt: (data && data.syncedAt) || null,
-      };
-    } catch (e) {
-      state.gc = { configured: false, connected: false, syncEnabled: false, email: '', syncedAt: null };
+      const data = await window.API.calendar.events({ start: range.start, end: range.end });
+      const payload = data && typeof data === 'object' ? data : {};
+      const list = Array.isArray(payload.events) ? payload.events : [];
+      state.events = list;
+      if (payload.types && typeof payload.types === 'object') state.typesMeta = payload.types;
+    } catch (error) {
+      state.events = [];
+      state.typesMeta = {};
+      throw error;
+    } finally {
+      state.loaded = true;
     }
+    // Garantiza color por tipo aunque el servidor no envíe metadatos.
+    Object.keys(TYPES).forEach((k) => {
+      if (!state.typesMeta[k] && TYPES[k]) state.typesMeta[k] = TYPES[k];
+    });
   }
 
   // ---- Toolbar / controles ----
@@ -126,17 +112,9 @@ window.Pages.calendar = (() => {
 
     const filterChips = Object.keys(TYPES).map((k) => {
       const active = state.filters[k] !== false;
-      return `<button class="cal-chip ${active ? 'cal-chip-active' : ''}" data-toggle-type="${k}" style="--chip-color:${(state.typesMeta[k] && state.typesMeta[k].color) || TYPES[k].color};" type="button">${TYPES[k].label}</button>`;
+      const meta = state.typesMeta[k] || {};
+      return `<button class="cal-chip ${active ? 'cal-chip-active' : ''}" data-toggle-type="${k}" style="--chip-color:${meta.color || TYPES[k].color};" type="button">${TYPES[k].label}</button>`;
     }).join('');
-
-    const gcBtn = state.gc.connected
-      ? `<div class="cal-gc-connected">
-           <span class="cal-gc-dot"></span> Google Calendar conectado${state.gc.email ? ` · ${UI.escapeHtml(state.gc.email)}` : ''}
-           <button class="btn btn-secondary btn-sm" type="button" data-gc-toggle>${state.gc.syncEnabled ? 'Sincronización activa' : 'Activar sincronización'}</button>
-           <button class="btn btn-secondary btn-sm" type="button" data-gc-sync>Sincronizar ahora</button>
-           <button class="btn btn-danger btn-sm" type="button" data-gc-disconnect>Desconectar</button>
-         </div>`
-      : ` <button class="btn btn-primary btn-sm" type="button" data-gc-connect>&#128467;&nbsp; Conectar Google Calendar</button> `;
 
     rootEl.innerHTML = `
       <div class="cal-page">
@@ -154,18 +132,12 @@ window.Pages.calendar = (() => {
             </div>
           </div>
         </div>
-        <div class="cal-google" style="margin-bottom:14px;">${gcBtn}</div>
         <div class="cal-filter-bar">${filterChips}</div>
         <div class="cal-view" data-cal-view>${renderView()}</div>
-        ${
-          !state.gc.connected && !state.gc.configured
-            ? `<div class="cal-setup-note">&#128467;&nbsp; La integración con Google Calendar aún no está configurada por el administrador (se requieren credenciales OAuth en el backend).</div>`
-            : ''
-        }
+        <div class="cal-setup-note">&#128467;&nbsp; Integración con Google Calendar próximamente.</div>
       </div>
     `;
 
-    // Bind events del filtro y toolbar
     rootEl.querySelectorAll('[data-toggle-type]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const k = btn.getAttribute('data-toggle-type');
@@ -186,15 +158,6 @@ window.Pages.calendar = (() => {
         refreshView();
       });
     });
-
-    const gcConnect = rootEl.querySelector('[data-gc-connect]');
-    if (gcConnect) gcConnect.addEventListener('click', connectGoogle);
-    const gcToggle = rootEl.querySelector('[data-gc-toggle]');
-    if (gcToggle) gcToggle.addEventListener('click', () => toggleGoogleSync(!state.gc.syncEnabled));
-    const gcSync = rootEl.querySelector('[data-gc-sync]');
-    if (gcSync) gcSync.addEventListener('click', syncNow);
-    const gcDisconnect = rootEl.querySelector('[data-gc-disconnect]');
-    if (gcDisconnect) gcDisconnect.addEventListener('click', disconnectGoogle);
   }
 
   function navigate(delta) {
@@ -220,24 +183,21 @@ window.Pages.calendar = (() => {
   }
 
   function eventChip(e, small) {
-    const meta = (state.typesMeta && state.typesMeta[e.type]) || TYPES[e.type] || { color: '#64748b' };
+    const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
     const color = meta.color || TYPES[e.type].color || '#64748b';
     return `<button class="cal-event ${small ? 'cal-event-sm' : ''}" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">${UI.escapeHtml(e.title)}</button>`;
   }
 
   function eventsOnDay(date) {
     const key = dateKey(date);
+    const day = startOfDay(date);
     return visibleEvents().filter((e) => {
-      let matches = false;
       if (e.type === 'goal') {
         const s = new Date(e.start);
         const end = new Date(e.end);
-        const day = startOfDay(date);
-        matches = day >= startOfDay(s) && day <= endOfDay(end);
-      } else {
-        matches = dateKey(e.start) === key || dateKey(e.end) === key;
+        return day >= startOfDay(s) && day <= endOfDay(end);
       }
-      return matches;
+      return dateKey(e.start) === key || dateKey(e.end) === key;
     });
   }
 
@@ -319,12 +279,11 @@ window.Pages.calendar = (() => {
 
   function renderDay() {
     const d = state.anchor;
-    const key = dateKey(d);
     const events = eventsOnDay(d);
     const list = events.length
       ? events.map((e) => {
-          const meta = (state.typesMeta && state.typesMeta[e.type]) || TYPES[e.type] || { color: '#64748b' };
-          const color = meta.color || '#64748b';
+          const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+          const color = meta.color || TYPES[e.type].color || '#64748b';
           return `
             <button class="cal-day-item" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">
               <span class="cal-day-time">${Format.time(e.start)}</span>
@@ -347,78 +306,13 @@ window.Pages.calendar = (() => {
     renderToolbar();
   }
 
-  // Hace que toda la vista (toolbar + grid + google) se recargue desde cero.
-  async function fullRefresh() {
-    if (!rootEl) return;
-    rootEl.innerHTML = '<div class="loading">Cargando calendario...</div>';
-    try {
-      await Promise.all([loadEvents(), loadGoogleStatus()]);
-      renderToolbar();
-      UI.toast('Calendario actualizado.', 'success');
-    } catch (error) {
-      renderToolbar();
-    }
-  }
-
-  // ---- Google Calendar ----
-  async function connectGoogle() {
-    try {
-      const data = await window.API.calendar.authUrl();
-      if (data && data.url) {
-        window.location.href = data.url;
-      } else {
-        UI.toast('No se pudo generar la URL de autorización.', 'error');
-      }
-    } catch (error) {
-      UI.toast((error && error.message) || 'No se pudo conectar con Google Calendar.', 'error');
-    }
-  }
-
-  async function disconnectGoogle() {
-    const ok = await UI.confirm('¿Desconectar tu Google Calendar? Se detendrá la sincronización automática.');
-    if (!ok) return;
-    try {
-      await window.API.calendar.disconnect();
-      state.gc = { configured: state.gc.configured, connected: false, syncEnabled: false, email: '', syncedAt: null };
-      renderToolbar();
-      UI.toast('Google Calendar desconectado.', 'success');
-    } catch (error) {
-      UI.toast((error && error.message) || 'Error al desconectar.', 'error');
-    }
-  }
-
-  async function toggleGoogleSync(enabled) {
-    try {
-      const data = await window.API.calendar.toggle({ enabled });
-      state.gc.syncEnabled = Boolean(data && data.syncEnabled);
-      renderToolbar();
-      UI.toast(state.gc.syncEnabled ? 'Sincronización automática activada.' : 'Sincronización automática desactivada.', 'success');
-    } catch (error) {
-      UI.toast((error && error.message) || 'Error al cambiar la sincronización.', 'error');
-    }
-  }
-
-  async function syncNow() {
-    const range = rangeForView();
-    UI.toast('Sincronizando con Google Calendar...', 'info');
-    try {
-      const data = await window.API.calendar.sync({ start: range.start, end: range.end });
-      const n = (data && data.synced) || 0;
-      if (n) await loadGoogleStatus();
-      renderToolbar();
-      UI.toast(`Sincronizados ${n} eventos a Google Calendar.`, 'success');
-    } catch (error) {
-      UI.toast((error && error.message) || 'Error al sincronizar.', 'error');
-    }
-  }
-
   // ---- Detalle de evento ----
   function showEventDetails(eventId) {
     const e = state.events.find((x) => x.id === eventId);
     if (!e) return;
-    const meta = (state.typesMeta && state.typesMeta[e.type]) || TYPES[e.type] || {};
+    const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
     const color = meta.color || '#5B2D8E';
-    const clientName = e.client && (e.client.name || e.client._id) ? e.client.name : null;
+    const clientName = e.client && e.client.name ? e.client.name : null;
     const propertyLine =
       e.property && (e.property.zone || e.property.city || e.property.type)
         ? [e.property.type, e.property.city, e.property.zone].filter(Boolean).join(' · ')
@@ -474,6 +368,7 @@ window.Pages.calendar = (() => {
       }
       const dateEl = e.target.closest('[data-date]');
       if (dateEl && (state.view === 'month' || state.view === 'week')) {
+        e.stopPropagation();
         const key = dateEl.getAttribute('data-date');
         const [y, m, d] = key.split('-').map(Number);
         state.anchor = new Date(y, m - 1, d);
@@ -483,31 +378,14 @@ window.Pages.calendar = (() => {
     });
   }
 
-  // ---- Query params (callback de Google / navegación profunda) ----
-  function handleQueryParams() {
-    const params = new URLSearchParams(window.location.search);
-    const gc = params.get('gc');
-    if (gc === 'connected') {
-      UI.toast('Google Calendar conectado correctamente.', 'success');
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (gc === 'denied') {
-      UI.toast('Se canceló la conexión con Google Calendar.', 'warning');
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (gc === 'error') {
-      UI.toast('Error al conectar Google Calendar.', 'error');
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (gc === 'session') {
-      UI.toast('Tu sesión expiró. Inicia sesión de nuevo para conectar Google Calendar.', 'error');
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }
-
   async function render(container) {
     rootEl = container;
-    handleQueryParams();
     rootEl.innerHTML = '<div class="loading">Cargando calendario...</div>';
-    await loadGoogleStatus();
-    await loadEvents();
+    try {
+      await loadEvents();
+    } catch (error) {
+      // El calendario sigue siendo utilizable aunque falle la carga.
+    }
     renderToolbar();
     bindViewDelegation();
   }

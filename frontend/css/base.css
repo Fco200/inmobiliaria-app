@@ -2638,3 +2638,33 @@ body.page-chat .assistant-panel {
   .cal-weekdayrow { overflow-x:auto; }
   .cal-view-toggle, .cal-header { width:100%; }
 }
+
+/* ---- Aviso de inactividad (cierre de sesión automático) ---- */
+.idle-overlay {
+  position: fixed; inset: 0; z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px 16px; background: rgba(10, 10, 26, 0.7);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.idle-modal {
+  background: var(--white, #fff); border: 1px solid var(--border, #e4e0ee);
+  border-radius: 16px; box-shadow: var(--shadow, 0 10px 40px rgba(0,0,0,.25));
+  padding: 28px 26px; max-width: 400px; width: 100%; text-align: center;
+  animation: idlePop .25s ease;
+}
+@keyframes idlePop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.idle-icon { font-size: 34px; margin-bottom: 8px; }
+.idle-modal h2 { margin: 0 0 10px; font-size: 20px; }
+.idle-modal p { margin: 0 0 10px; color: var(--text-muted, #6a6478); font-size: 14px; line-height: 1.45; }
+.idle-timer { font-size: 14px; }
+.idle-timer strong { color: var(--primary, #5B2D8E); font-size: 16px; }
+.idle-actions { display: flex; gap: 10px; margin-top: 18px; }
+.idle-actions .btn { flex: 1; }
+@media (max-width:560px) {
+  .idle-actions { flex-direction: column; }
+}
+[data-theme="dark"] .idle-modal {
+  background: #1b1d2e; border-color: #343654;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+}
+

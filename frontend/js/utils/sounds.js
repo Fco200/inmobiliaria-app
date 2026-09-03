@@ -149,6 +149,14 @@ window.Sounds = (() => {
     ]);
   }
 
+  // Cambio de módulo / navegación (clic sutil, dos tonos diferentes).
+  function navigate() {
+    return playSequence([
+      { t: 0, f: 520, d: 0.06, v: 0.12, type: 'sine' },
+      { t: 0.05, f: 660, d: 0.07, v: 0.12, type: 'sine' },
+    ]);
+  }
+
   // Vista previa de un tipo de sonido (para Configuración).
   function preview(kind) {
     const map = { notification, announcement, welcome, confirmation, sendMessage, receiveMessage, step };
@@ -172,6 +180,56 @@ window.Sounds = (() => {
     document.addEventListener('keydown', unlock, { capture: true });
   }
 
+  /**
+   * Reproduce un sonido de forma fiable en TODOS los dispositivos (PC y móvil).
+   *
+   * Los navegadores bloquean el audio hasta el primer gesto del usuario
+   * (autoplay policy). Si este método se llama antes de que el AudioContext
+   * esté desbloqueado (p. ej. el mensaje de bienvenida que se abre solo tras el
+   * login/recarga), el sonido se encola y se reproduce en cuanto el usuario
+   * toque/clic la página. Así el mensaje y su sonido siempre se perciben.
+   *
+   * fn debe ser una función que devuelva una Promise (p. ej. Sounds.welcome).
+   */
+  function playOnUnlock(fn) {
+    let played = false;
+    const play = () => {
+      if (played) return;
+      const audio = ensureCtx();
+      if (!audio || audio.state !== 'running') return;
+      played = true;
+      cleanup();
+      Promise.resolve(fn()).catch(() => {});
+    };
+
+    const cleanup = () => {
+      document.removeEventListener('pointerdown', play, { capture: true });
+      document.removeEventListener('touchstart', play, { capture: true });
+      document.removeEventListener('keydown', play, { capture: true });
+    };
+
+    // Intento inmediato (si el contexto ya está desbloqueado: gesto previo).
+    play();
+
+    // Si aún está bloqueado, esperar el primer gesto (click, toque o tecla).
+    document.addEventListener('pointerdown', play, { capture: true });
+    document.addEventListener('touchstart', play, { capture: true });
+    document.addEventListener('keydown', play, { capture: true });
+
+    // Respaldo: reintentar periodicamente (algunos móviles no disparan
+    // pointerdown a la primera, o el contexto tarda en activarse).
+    const timer = setInterval(() => {
+      const audio = ensureCtx();
+      if (audio && audio.state === 'running' && !played) {
+        play();
+      }
+    }, 500);
+    setTimeout(() => {
+      clearInterval(timer);
+      cleanup();
+    }, 12000);
+  }
+
   return {
     enabled,
     setEnabled,
@@ -182,7 +240,9 @@ window.Sounds = (() => {
     sendMessage,
     receiveMessage,
     step,
+    navigate,
     preview,
     init,
+    playOnUnlock,
   };
 })();

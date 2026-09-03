@@ -384,6 +384,17 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
+  // Reproduce un sonido sutil al cambiar de módulo (si el usuario tiene los
+  // sonidos activados). Se llama tras renderizar cada página.
+  function playModuleChangeSound() {
+    if (window.Sounds && window.Sounds.navigate) {
+      // playOnUnlock garantiza que suene en PC y móvil aunque el audio esté
+      // bloqueado por el navegador en una recarga.
+      if (window.Sounds.playOnUnlock) window.Sounds.playOnUnlock(window.Sounds.navigate);
+      else window.Sounds.navigate().catch(() => {});
+    }
+  }
+
   // Carga el módulo global de tiempo real (avisos en alerta modal + badges).
   // Se inyecta dinámicamente para no tocar cada HTML de la aplicación.
   function loadRealtime() {
@@ -427,8 +438,9 @@ window.AppShell = (() => {
   }
 
   // Carga el módulo de bienvenida (mensaje motivacional con animaciones).
-  // Para usuarios nuevos preceden a la guía; para los demás se muestra una vez
-  // por día por navegador.
+  // El mensaje y su sonido se muestran SIEMPRE al iniciar una sesión nueva (una
+  // vez por pestaña); la bandera se limpia en el login/logout para que cada
+  // ingreso vuelva a mostrarlo y a reproducir el sonido de bienvenida.
   function loadWelcome() {
     if (!window.ApiClient.isAuthenticated()) return;
     if (document.getElementById('welcome-loaded')) return;
@@ -440,24 +452,25 @@ window.AppShell = (() => {
     script.src = 'js/welcome.js';
     script.onload = () => {
       if (!window.Welcome) return;
-      const user = window.ApiClient.getStoredUser() || {};
-      const isNew = !user.hasCompletedOnboarding;
-      // Para nuevos, el welcome se muestra primero y al cerrarse dispara la guía.
-      // La bandera "visto hoy" es POR USUARIO y evita repetirlo al navegar entre
-      // páginas, pero no bloquea a un usuario nuevo en su primer ingreso.
-      if (isNew) {
-        const uid = user._id || user.id || user.username || 'anon';
-        if (!localStorage.getItem(`crm_welcome_seen_${uid}`)) {
-          window.Welcome.open({
-            onClose: () => {
-              if (window.Onboarding) window.Onboarding.maybeShow();
-              else loadOnboarding();
-            },
-          });
-        }
-      } else {
-        window.Welcome.maybeShow();
-      }
+      // El mensaje de bienvenida y su sonido se muestran SIEMPRE al iniciar una
+      // sesión nueva (una vez por pestaña). La bandera se limpia en login/logout,
+      // así que cada ingreso vuelve a mostrarlo y a reproducir su sonido.
+      const shownKey = 'crm_welcome_shown_session';
+      let alreadyShown = false;
+      try { alreadyShown = sessionStorage.getItem(shownKey) === '1'; } catch (e) {}
+      if (alreadyShown) return;
+      try { sessionStorage.setItem(shownKey, '1'); } catch (e) {}
+      // Welcome.open() ya reproduce el sonido de bienvenida junto al mensaje.
+      window.Welcome.open({
+        onClose: () => {
+          const user = window.ApiClient.getStoredUser() || {};
+          const isNew = !user.hasCompletedOnboarding;
+          if (isNew) {
+            if (window.Onboarding) window.Onboarding.maybeShow();
+            else loadOnboarding();
+          }
+        },
+      });
     };
     document.head.appendChild(script);
   }
@@ -547,6 +560,9 @@ window.AppShell = (() => {
     if (!ok) return;
     try { if (window.API && window.API.auth.logout && window.ApiClient.isAuthenticated()) await window.API.auth.logout(); } catch (e) {}
     window.ApiClient.clearToken();
+    // Limpia la bandera de bienvenida para que el mensaje y su sonido vuelvan
+    // a mostrarse en el próximo inicio de sesión.
+    try { sessionStorage.removeItem('crm_welcome_shown_session'); } catch (e) {}
     window.location.replace('index.html');
   }
 
@@ -573,8 +589,14 @@ window.AppShell = (() => {
     }
     if (page && typeof page.render === 'function') {
       content.innerHTML = '<div class="loading">Cargando...</div>';
-      try { await page.render(content); labelTableColumns(content); maybeShowAnnouncementBanner(); }
-      catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); }
+      try {
+        await page.render(content);
+        labelTableColumns(content);
+        maybeShowAnnouncementBanner();
+        playModuleChangeSound();
+      } catch (error) {
+        content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.');
+      }
       return;
     }
     // El módulo aún no se registró (el script de la página tardó en cargar o el
@@ -585,8 +607,16 @@ window.AppShell = (() => {
       const retryPage = currentPage();
       if (retryPage && typeof retryPage.render === 'function') {
         content.innerHTML = '<div class="loading">Cargando...</div>';
-        try { await retryPage.render(content); labelTableColumns(content); maybeShowAnnouncementBanner(); return; }
-        catch (error) { content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.'); return; }
+        try {
+          await retryPage.render(content);
+          labelTableColumns(content);
+          maybeShowAnnouncementBanner();
+          playModuleChangeSound();
+          return;
+        } catch (error) {
+          content.innerHTML = UI.errorAlert((error && error.message) || 'Error al cargar el módulo.');
+          return;
+        }
       }
     }
     if (!window.navigator.onLine) {
@@ -594,6 +624,98 @@ window.AppShell = (() => {
       return;
     }
     content.innerHTML = '<div class="empty-state"><p>Módulo no disponible. Haz un actualización forzada (Ctrl+Shift+R) para limpiar la caché.</p></div>';
+  }
+
+  // --- Cierre de sesión automático por inactividad (30 min) ---
+  // Se aplica a asesores, gerencia y administración. NO se aplica a soporte
+  // técnico (superadmin), que gestiona el panel de soporte y no debe cerrarse.
+  // Tras 30 minutos sin actividad se muestra "¿Sigues ahí?" con opciones
+  // "Continuar (me quedo)" / "Salir"; si no se responde en 60s, se cierra la
+  // sesión automáticamente.
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+  const IDLE_GRACE_MS = 60 * 1000;
+  let idleLastActive = Date.now();
+  let idleBaseTimer = null;
+  let idleGraceTimer = null;
+  let idlePromptTimer = null;
+  let idlePromptOpen = false;
+  let idleCountdown = 0;
+
+  function idleApplies() {
+    return currentUserRole() !== 'superadmin';
+  }
+
+  function idleActivity() {
+    if (idlePromptOpen) return;
+    idleLastActive = Date.now();
+    clearTimeout(idleBaseTimer);
+    clearTimeout(idleGraceTimer);
+    clearInterval(idlePromptTimer);
+    idleBaseTimer = setTimeout(openIdlePrompt, IDLE_TIMEOUT_MS);
+  }
+
+  function openIdlePrompt() {
+    if (!idleApplies() || idlePromptOpen) return;
+    idlePromptOpen = true;
+    idleCountdown = IDLE_GRACE_MS / 1000;
+    if (window.Sounds && window.Sounds.notification) window.Sounds.notification().catch(() => {});
+
+    const overlay = document.createElement('div');
+    overlay.className = 'idle-overlay';
+    overlay.id = 'idle-overlay';
+    overlay.innerHTML =
+      '<div class="idle-modal" role="dialog" aria-modal="true">' +
+        '<div class="idle-icon">&#128276;</div>' +
+        '<h2>¿Sigues ahí?</h2>' +
+        '<p>Has estado inactivo por 30 minutos. Por seguridad, tu sesión se cerrará automáticamente.</p>' +
+        '<p class="idle-timer">Cierre en <strong id="idle-count">60</strong> segundos</p>' +
+        '<div class="idle-actions">' +
+          '<button type="button" id="idle-continue" class="btn btn-primary">Continuar (me quedo)</button>' +
+          '<button type="button" id="idle-exit" class="btn btn-outline">Salir</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    const countEl = overlay.querySelector('#idle-count');
+    idlePromptTimer = setInterval(() => {
+      idleCountdown -= 1;
+      if (countEl) countEl.textContent = Math.max(0, idleCountdown);
+      if (idleCountdown <= 0) idleLogout();
+    }, 1000);
+
+    overlay.querySelector('#idle-continue').addEventListener('click', () => {
+      closeIdlePrompt();
+      idleActivity();
+    });
+    overlay.querySelector('#idle-exit').addEventListener('click', idleLogout);
+  }
+
+  function closeIdlePrompt() {
+    const overlay = document.getElementById('idle-overlay');
+    if (overlay) overlay.remove();
+    idlePromptOpen = false;
+    clearInterval(idlePromptTimer);
+  }
+
+  function idleLogout() {
+    closeIdlePrompt();
+    try { if (window.API && window.API.auth.logout && window.ApiClient.isAuthenticated()) window.API.auth.logout(); } catch (e) {}
+    window.ApiClient.clearToken();
+    // Limpia la bandera de bienvenida para que el mensaje y su sonido vuelvan
+    // a mostrarse en la próxima sesión.
+    try { sessionStorage.removeItem('crm_welcome_shown_session'); } catch (e) {}
+    window.location.replace('index.html');
+  }
+
+  function initIdleTimeout() {
+    if (!idleApplies()) return;
+    // La bandera de inactividad no debe persistir entre pestañas: se usa
+    // sessionStorage con marca de tiempo para que cada pestaña sea autónoma.
+    try { idleLastActive = Date.now(); } catch (e) {}
+    clearTimeout(idleBaseTimer);
+    idleBaseTimer = setTimeout(openIdlePrompt, IDLE_TIMEOUT_MS);
+    const events = ['pointerdown', 'pointermove', 'mousemove', 'keydown', 'touchstart', 'scroll', 'click', 'wheel'];
+    events.forEach((name) => document.addEventListener(name, idleActivity, { passive: true }));
   }
 
   function installErrorHandlers() {
@@ -639,6 +761,7 @@ window.AppShell = (() => {
     refreshAllBadges();
     setInterval(refreshAllBadges, 120000);
     initReminders();
+    initIdleTimeout();
 
     renderPage();
 

@@ -68,6 +68,9 @@ window.LoginPage = (() => {
     try {
       const result = await window.API.auth.login({ identifier, password, remember });
       window.ApiClient.setLogin(result.token, result.user);
+      // Limpia la bandera de bienvenida para que el mensaje y su sonido se
+      // muestren en este inicio de sesión.
+      try { sessionStorage.removeItem('crm_welcome_shown_session'); } catch (e) {}
       if (window.Sounds) {
         window.Sounds.init();
         window.Sounds.welcome().catch(() => {});
@@ -349,6 +352,7 @@ window.LoginPage = (() => {
       const result = await window.API.auth.google({ credential: response.credential, role, roleKey });
       window.ApiClient.setLogin(result.token, result.user);
       UI.toast('Registro con Google completado', 'success');
+      try { sessionStorage.removeItem('crm_welcome_shown_session'); } catch (e) {}
       if (window.Sounds) {
         window.Sounds.init();
         window.Sounds.welcome().catch(() => {});

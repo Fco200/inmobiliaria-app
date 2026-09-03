@@ -89,7 +89,12 @@ window.Welcome = (() => {
     markSeen(true);
 
     // Sonido de bienvenida al mostrar el mensaje motivacional.
-    if (window.Sounds) window.Sounds.welcome().catch(() => {});
+    // Se usa playOnUnlock para que se reproduzca de forma fiable en PC y móvil
+    // (autoplay policy): si el audio aún está bloqueado, suena en el primer gesto.
+    if (window.Sounds) {
+      if (window.Sounds.playOnUnlock) window.Sounds.playOnUnlock(window.Sounds.welcome);
+      else window.Sounds.welcome().catch(() => {});
+    }
 
     const onClose = (opts && opts.onClose) || null;
 

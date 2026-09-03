@@ -791,6 +791,31 @@
   color: #fff;
 }
 
+/* Promo de marca (FVO DIGITAL HMO) en la franja inferior del footer. */
+.footer-promo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: #aab8cd;
+  font-size: 13px;
+}
+.footer-promo a {
+  color: #7ee8a2;
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: 2px;
+  margin-right: 2px;
+}
+.footer-promo a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.footer-promo strong {
+  color: #fff;
+  font-weight: 700;
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 900px) {
   .footer-grid {

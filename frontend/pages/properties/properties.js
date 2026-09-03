@@ -249,6 +249,10 @@ title: 'Mis Propiedades',
         { key: 'maxPrice', label: 'Precio máximo', type: 'number', placeholder: 'Precio máx.', width: 130 },
       ],
       columns: [
+        { key: 'photos', label: 'Foto', render: (r) => {
+            const src = (r.photos && r.photos.length) ? window.AppConfig.resolveUrl(r.photos[0]) : '';
+            return src ? `<img src="${src.replace(/"/g, '&quot;')}" alt="" style="width:52px;height:40px;object-fit:cover;border-radius:6px;" loading="lazy">` : '<span class="text-muted">—</span>';
+          } },
         { key: 'type', label: 'Tipo', render: (r) => UI.badge(typeLabel(r.type), 'info') },
         { key: 'operationType', label: 'Operación', render: (r) => UI.escapeHtml((r.operationType || '').toUpperCase()) },
         { key: 'address', label: 'Ubicación', render: (r) => `${UI.escapeHtml(r.zone || '')} ${UI.escapeHtml(r.city || '')}${r.state ? `, ${UI.escapeHtml(r.state)}` : ''}`.trim() || '—' },
@@ -271,6 +275,7 @@ title: 'Mis Propiedades',
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
         { name: 'photos', label: 'Fotografías existentes (URLs separadas por coma)', type: 'text', full: true, value: (r) => (r && Array.isArray(r.photos) ? r.photos.join(', ') : '') },
         { name: 'photos_files', label: 'Subir fotografías desde el dispositivo', type: 'file', accept: 'image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif', multiple: true, full: true, hint: 'JPG, PNG, GIF, WebP, HEIC... (máx. 15 MB c/u). Se guardan en el servidor y quedan en la propiedad.' },
+        { name: 'isPublished', label: 'Publicar en el catálogo (visible en la landing)', type: 'checkbox', full: true, hint: 'Si no está marcado, la propiedad queda oculta hasta publicarla.' },
         { name: 'description', label: 'Descripción', type: 'textarea', full: true },
       ],
       formData(values) {

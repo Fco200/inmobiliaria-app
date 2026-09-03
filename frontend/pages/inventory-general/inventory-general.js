@@ -570,6 +570,11 @@ window.Pages['inventory-general'] = {
         const agentName = item.assignedAgent ? (item.assignedAgent.name || 'Usuario') : 'Sin asignar';
         return `
           <tr>
+            <td>
+              ${prop && prop.photos && prop.photos.length
+                ? `<img src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;" loading="lazy">`
+                : '<span class="text-muted">—</span>'}
+            </td>
             <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}</td>
             <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
             <td>${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
@@ -591,7 +596,7 @@ window.Pages['inventory-general'] = {
       wrap.innerHTML = `
         <table class="table">
           <thead><tr>
-            <th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
+            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>

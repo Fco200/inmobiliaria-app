@@ -280,20 +280,38 @@ window.CartaPresentacion = (() => {
     return `Hola ${name}, te comparto mi carta de presentación. Soy parte del equipo de ${AGENCY}. Puedes ver mi perfil y mi catálogo de propiedades aquí: ${catalogLink(user)} · Sitio oficial: ${SITE_LABEL}`;
   }
 
-  // Abre el selector de compartir de WhatsApp (no un chat con el asesor). En
-  // móvil usa el share nativo si está disponible.
-  function shareWhatsApp(user) {
+  // Compartir la carta de presentación. Comportamiento uniforme en todos los
+  // dispositivos, sin forzar un chat específico:
+  //  1) Si el navegador tiene Web Share API (móvil / Chrome desktop) se abre la
+  //     hoja de compartir del sistema: el usuario elige la app y el contacto.
+  //  2) Si el usuario lo cancela, o no hay Web Share, cae de forma segura al
+  //     selector de WhatsApp (sin número → NO es tu propio chat, es para elegir
+  //     el destinatario) y además copia el texto al portapapeles por si el
+  //     usuario prefiere pegarlo donde quiera.
+  async function shareWhatsApp(user) {
+    const name = (user && user.name) || 'Asesor INMOBLES';
     const text = whatsappText(user);
-    const payload = { title: `Carta de presentación — ${(user && user.name) || 'Asesor INMOBLES'}`, text, url: catalogLink(user) };
+    const url = catalogLink(user);
+    const full = `${text} ${url}`;
+    const payload = { title: `Carta de presentación — ${name}`, text, url };
+
     if (navigator.share) {
-      navigator.share(payload).catch(() => {
-        // Si el usuario cancela el share nativo, cae al selector de WhatsApp.
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + payload.url)}`, '_blank', 'noopener');
-      });
-      return;
+      try {
+        await navigator.share(payload);
+        return; // Compartido (o cancelado por el usuario): no abrir nada más.
+      } catch (error) {
+        // Usuario canceló la hoja de compartir → caer al selector de WhatsApp.
+      }
     }
-    // Sin Web Share API → selector de WhatsApp (sin número = compartir a quien elijas).
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + payload.url)}`, '_blank', 'noopener');
+
+    // Copia el texto al portapapeles y abre el selector de WhatsApp (sin número).
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(full);
+      }
+    } catch (error) { /* sin portapapeles: continuar igual */ }
+
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(full)}`, '_blank', 'noopener');
   }
 
   return {

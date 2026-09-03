@@ -411,6 +411,11 @@ window.Pages.inventory = {
         const prop = item.property;
         return `
           <tr>
+            <td>
+              ${prop && prop.photos && prop.photos.length
+                ? `<img src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;" loading="lazy">`
+                : '<span class="text-muted">—</span>'}
+            </td>
             <td>${UI.escapeHtml(propertyLabel(prop))}</td>
             <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
             <td>${prop ? Format.currency(prop.price) : '—'}</td>
@@ -433,7 +438,7 @@ window.Pages.inventory = {
       wrap.innerHTML = `
         <table class="table">
           <thead><tr>
-            <th>Ubicación</th><th>Tipo</th><th>Precio</th><th>Valor ticket</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
+            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Precio</th><th>Valor ticket</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>

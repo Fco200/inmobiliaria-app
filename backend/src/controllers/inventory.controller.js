@@ -261,6 +261,14 @@ const update = asyncHandler(async (req, res) => {
 
   Object.assign(inventory, req.body);
   await inventory.save();
+
+  // Mantener la sincronía con la propiedad: si cambió el estado de
+  // publicación aquí, se refleja en Property para que la property aparezca
+  // (o desaparezca) del catálogo público (landing).
+  if (typeof req.body.isPublished === 'boolean') {
+    await Property.findByIdAndUpdate(inventory.property, { isPublished: req.body.isPublished });
+  }
+
   await inventory.populate('property');
   await inventory.populate('assignedAgent');
 

@@ -10,29 +10,40 @@ window.LandingPage = (() => {
     return el ? el.value.trim() : '';
   }
 
+  // Imagen de portada de la propiedad pública (usa photos[0], el mismo formato
+  // que devuelve /public/properties).
+  function coverUrl(p) {
+    return (p.photos && p.photos.length)
+      ? window.AppConfig.resolveUrl(p.photos[0])
+      : '';
+  }
+
   function imgHtml(p) {
-    const cover = p.cover || (p.photos && p.photos.length ? p.photos[0] : null);
-    const link = PS.propertyLink(p.id);
-    if (!cover) {
+    const link = PS.propertyLink(p);
+    const src = coverUrl(p);
+    if (!src) {
       return `<a href="${link}" class="landing-card-img-link landing-card-img-placeholder">&#127968;</a>`;
     }
-    const src = window.AppConfig.resolveUrl(cover);
-    return `<a href="${link}"><div class="landing-card-img"><img src="${src}" alt="${UI.escapeHtml(p.title)}" loading="lazy"></div></a>`;
+    return `<a href="${link}"><div class="landing-card-img"><img src="${src}" alt="${UI.escapeHtml(PS.label(p))} en ${UI.escapeHtml((p.operationType || '').toLowerCase())}" loading="lazy"></div></a>`;
   }
 
   function featuredCard(p) {
-    const link = PS.propertyLink(p.id);
-    const wa = p.phone
-      ? `<a class="btn btn-wa btn-sm" href="${PS.whatsappLink(`Hola, me interesa la propiedad: ${p.title} (${p.place || ''})`, p.phone)}" target="_blank" rel="noopener">&#128172; WhatsApp</a>`
+    const link = PS.propertyLink(p);
+    const place = PS.placeText(p);
+    const op = PS.opText(p);
+    const asesor = PS.asesorOf(p);
+    const waPhone = (asesor && asesor.phone) || PS.state.whatsapp;
+    const wa = waPhone
+      ? `<a class="btn btn-wa btn-sm" href="${PS.whatsappLink(`Hola, me interesa la propiedad: ${PS.label(p)} en ${place} (${op}). ¿Pueden darme más información?`, waPhone)}" target="_blank" rel="noopener">&#128172; WhatsApp</a>`
       : '';
     return `
       <article class="card landing-card">
         ${imgHtml(p)}
         <div class="landing-card-body">
-          <div class="card-type">${PS.opText(p.operationType)}</div>
-          <h3 class="card-title-link"><a href="${link}">${UI.escapeHtml(p.title)}</a></h3>
-          <p class="text-muted">${PS.placeText(p)}</p>
-          <div class="landing-card-price">${PS.formatPrice(p.price, p.operationType)}</div>
+          <div class="card-type">${UI.escapeHtml(op)}</div>
+          <h3 class="card-title-link"><a href="${link}">${UI.escapeHtml(PS.label(p))} en ${UI.escapeHtml(op.toLowerCase())}</a></h3>
+          <p class="text-muted">${UI.escapeHtml(place)}</p>
+          <div class="landing-card-price">${Format.currency(p.price)}</div>
           <div class="landing-card-actions">
             <a class="btn btn-primary btn-sm" href="${link}">Ver detalle</a>
             ${wa}
@@ -42,18 +53,16 @@ window.LandingPage = (() => {
     `;
   }
 
-  async function loadCities() {
+  function loadCities(cities) {
     const select = document.getElementById('search-city');
     if (!select) return;
     try {
-      const result = await window.API.public.cities();
-      const cities = result.data || [];
       if (!cities || !cities.length) return;
       select.innerHTML =
         '<option value="">Todas las ciudades</option>' +
         cities.map((c) => `<option value="${UI.escapeHtml(c)}">${UI.escapeHtml(c)}</option>`).join('');
     } catch (error) {
-      /* catálogo desactivado o error: mantener opción por defecto */
+      /* mantener opción por defecto */
     }
   }
 
@@ -84,8 +93,10 @@ window.LandingPage = (() => {
         return;
       }
       el.innerHTML = list.map(featuredCard).join('');
+      return (result.meta && result.meta.cities) || [];
     } catch (error) {
       el.innerHTML = UI.errorAlert(error.message);
+      return [];
     }
   }
 
@@ -148,8 +159,8 @@ window.LandingPage = (() => {
     if (deepLinkRedirect()) return;
     await PS.initCommon();
     initSearch();
-    await loadCities();
-    await loadFeatured();
+    const cities = await loadFeatured();
+    loadCities(cities);
     await loadTeam();
     PS.initNewsletter();
     PS.initAssistant();

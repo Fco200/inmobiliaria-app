@@ -159,6 +159,14 @@ window.PublicSite = (() => {
 
     href('cta-wa-float', waUrl);
     href('cta-call-float', `tel:${phone}`);
+
+    // Promo de marca de Alberto (FVO DIGITAL HMO) al pie de la página pública.
+    // "¿Te interesa un proyecto como este? Llámame 6625374491 · FVO DIGITAL HMO. Soluciones y desarrollos"
+    const promoTel = document.getElementById('footer-promo-tel');
+    if (promoTel) {
+      promoTel.href = 'tel:+526625374491';
+      promoTel.textContent = 'Llámame 6625374491';
+    }
   }
 
   // ── Navegación: menú hamburguesa + anclas suaves ─────────────────────────

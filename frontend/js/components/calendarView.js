@@ -17,6 +17,7 @@ window.CalendarView = (() => {
     business: { label: 'Negocios', color: '#7c3aed' },
     goal: { label: 'Metas', color: '#059669' },
     prospecting: { label: 'Prospección', color: '#db2777' },
+    meeting: { label: 'Reuniones', color: '#d97706' },
   };
 
   const TYPE_TO_HREF = {
@@ -338,13 +339,14 @@ window.CalendarView = (() => {
       if (e.type !== 'goal') rows.push(`<tr><th>Tipo</th><td>${UI.escapeHtml((meta.label || e.type).toUpperCase())}</td></tr>`);
       if (e.status) rows.push(`<tr><th>Estado</th><td>${UI.escapeHtml(String(e.status).replace(/_/g, ' '))}</td></tr>`);
       if (e.stage) rows.push(`<tr><th>Etapa</th><td>${UI.escapeHtml(String(e.stage).replace(/_/g, ' '))}</td></tr>`);
+      if (e.creator && e.creator.name) rows.push(`<tr><th>Reunión de equipo</th><td>${UI.escapeHtml('Publicada por ' + e.creator.name)}</td></tr>`);
       if (clientName) rows.push(`<tr><th>Cliente</th><td>${UI.escapeHtml(clientName)}</td></tr>`);
       if (propertyLine) rows.push(`<tr><th>Propiedad</th><td>${UI.escapeHtml(propertyLine)}</td></tr>`);
       if (e.location) rows.push(`<tr><th>Lugar</th><td>${UI.escapeHtml(e.location)}</td></tr>`);
       if (e.priority) rows.push(`<tr><th>Prioridad</th><td>${UI.escapeHtml(e.priority)}</td></tr>`);
       if (e.description) rows.push(`<tr><th>Detalles</th><td>${UI.escapeHtml(e.description)}</td></tr>`);
 
-      const href = TYPE_TO_HREF[e.type] || 'home.html';
+      const href = TYPE_TO_HREF[e.type] || 'calendar.html';
       const footer = `
         <a class="btn btn-secondary" href="${href}">Abrir módulo</a>
         <button class="btn btn-primary" data-close-detail type="button">Cerrar</button>

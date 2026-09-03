@@ -178,6 +178,11 @@ window.Pages.profile = {
       ` : ''}
     `;
 
+    // Puebla el QR de la carta de presentación (genera dataURL de forma robusta).
+    if (window.CartaPresentacion && window.CartaPresentacion.populateQr) {
+      window.CartaPresentacion.populateQr(container, me);
+    }
+
     // Foto de perfil
     const photoFile = container.querySelector('#profile-photo-file');
     const photoStatus = container.querySelector('#profile-photo-status');

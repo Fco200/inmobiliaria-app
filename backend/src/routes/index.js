@@ -24,6 +24,7 @@ const soporteRoutes = require('./soporte.routes');
 const configRoutes = require('./config.routes');
 const userRequestRoutes = require('./userRequest.routes');
 const calendarRoutes = require('./calendar.routes');
+const meetingRoutes = require('./meeting.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -60,6 +61,7 @@ router.get('/', (req, res) => {
       '/api/config',
       '/api/user-requests',
       '/api/calendar',
+      '/api/meetings',
       '/api/health',
     ],
   });
@@ -95,5 +97,6 @@ router.use('/soporte', soporteRoutes);
 router.use('/config', configRoutes);
 router.use('/user-requests', userRequestRoutes);
 router.use('/calendar', calendarRoutes);
+router.use('/meetings', meetingRoutes);
 
 module.exports = router;

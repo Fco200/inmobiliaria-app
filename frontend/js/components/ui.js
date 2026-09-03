@@ -224,7 +224,15 @@ const UI = (() => {
           return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(optLabel)}</option>`;
         })
         .join('');
-      control = `<select class="form-control" id="${id}" name="${name}" ${req}>${opts}</select>`;
+      // Soporte genérico "Otro/otros": agrega la opción "especificar" y un campo
+      // de texto que aparece cuando se selecciona. Aplica a todos los selects.
+      const otrosId = `otros-${id}`;
+      control = `
+        <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros onchange="UI.toggleOtros(this)">${opts}
+          <option value="__ui_otros__">Otros (especificar)</option>
+        </select>
+        <input class="form-control" id="${otrosId}" name="__ui_otros_${name}" type="text" placeholder="Especifica..." style="display:none;margin-top:8px;">
+      `;
     } else if (type === 'checkbox') {
       const checked = value ? 'checked' : '';
       control = `
@@ -254,9 +262,33 @@ const UI = (() => {
     `;
   }
 
+  // Muestra/oculta el campo de texto "especificar" cuando un select tiene el
+  // valor genérico "Otros" (__ui_otros__) o un valor nativo "otro/otros/otra".
+  function toggleOtros(select) {
+    if (!select || !select.id) return;
+    const input = document.getElementById(`otros-${select.id}`);
+    if (!input) return;
+    const v = String(select.value || '');
+    const isOther = v === '__ui_otros__' || /^otr/i.test(v);
+    input.style.display = isOther ? 'block' : 'none';
+    if (!isOther) input.value = '';
+  }
+
+  // Aplica el estado "especificar" a los selects ya renderizados que tengan el
+  // valor "otros"; útil al abrir un formulario en modo edición.
+  function syncOtros(form) {
+    if (!form) return;
+    form.querySelectorAll('[data-ui-otros]').forEach((select) => toggleOtros(select));
+  }
+
   function collectForm(form) {
+    const others = {};
     const data = {};
     new FormData(form).forEach((value, key) => {
+      if (key.indexOf('__ui_otros_') === 0) {
+        others[key.slice('__ui_otros_'.length)] = value;
+        return;
+      }
       const input = form.querySelector(`[name="${key}"]`);
       if (!input) return;
       if (input.type === 'file') return;
@@ -269,6 +301,16 @@ const UI = (() => {
       } else {
         data[key] = value;
       }
+    });
+    // Si el usuario eligió "Otros" y escribió algo, se usa ese texto como valor.
+    Object.keys(others).forEach((name) => {
+      const text = others[name];
+      if (!text) return;
+      const select = form.querySelector(`select[name="${name}"]`);
+      if (!select) return;
+      const v = String(select.value || '');
+      const isOther = v === '__ui_otros__' || /^otr/i.test(v);
+      if (isOther) data[name] = text;
     });
     return data;
   }
@@ -344,6 +386,8 @@ const UI = (() => {
     errorAlert,
     field,
     collectForm,
+    toggleOtros,
+    syncOtros,
     progressBar,
     showImages,
     showActivityHistory,

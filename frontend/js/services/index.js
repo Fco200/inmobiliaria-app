@@ -165,6 +165,15 @@ window.API = {
     sync: (body) => ApiClient.post('/calendar/google/sync', body),
   },
 
+  // Reuniones de equipo publicadas por administración (visibles para todos).
+  meetings: {
+    list: (params) => ApiClient.get('/meetings', params),
+    get: (id) => ApiClient.get(`/meetings/${id}`),
+    create: (body) => ApiClient.post('/meetings', body),
+    update: (id, body) => ApiClient.put(`/meetings/${id}`, body),
+    remove: (id) => ApiClient.remove(`/meetings/${id}`),
+  },
+
   documents: {
     list: (params) => ApiClient.get('/documents', params),
     create: (body) => ApiClient.post('/documents', body),

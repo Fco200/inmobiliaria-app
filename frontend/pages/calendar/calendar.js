@@ -16,6 +16,7 @@ window.Pages.calendar = (() => {
     business: { label: 'Negocios', color: '#7c3aed' },
     goal: { label: 'Metas', color: '#059669' },
     prospecting: { label: 'Prospección', color: '#db2777' },
+    meeting: { label: 'Reuniones', color: '#d97706' },
   };
 
   let state = {
@@ -119,7 +120,10 @@ window.Pages.calendar = (() => {
     rootEl.innerHTML = `
       <div class="cal-page">
         <div class="cal-header">
-          <h2 style="margin:0;font-size:20px;">&#128467;&nbsp; Calendario</h2>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <h2 style="margin:0;font-size:20px;">&#128467;&nbsp; Calendario</h2>
+            ${isBossUser() ? `<button class="btn btn-primary btn-sm" type="button" data-new-meeting>&#128197;&nbsp; Nueva reunión</button>` : ''}
+          </div>
           <div class="cal-toolbar">
             <button class="btn btn-secondary btn-sm" type="button" data-nav="today">Hoy</button>
             <button class="btn btn-secondary btn-sm" type="button" data-nav="prev">&#9664;</button>
@@ -157,6 +161,96 @@ window.Pages.calendar = (() => {
         state.view = btn.getAttribute('data-view');
         refreshView();
       });
+    });
+
+    const newMeetingBtn = rootEl.querySelector('[data-new-meeting]');
+    if (newMeetingBtn) newMeetingBtn.addEventListener('click', openNewMeeting);
+  }
+
+  // ¿El usuario actual puede publicar reuniones de equipo (admin/gerencia)?
+  function isBossUser() {
+    try {
+      const u = window.ApiClient ? window.ApiClient.getStoredUser() : null;
+      if (!u || !u.role) return false;
+      const code = typeof u.role === 'string' ? u.role : (u.role && u.role.code);
+      return code === 'admin' || code === 'gerencia';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Modal para crear una reunión de equipo (visible para todos los asesores).
+  function openNewMeeting() {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const fmt = (d) => {
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
+    const body = `
+      <form id="meeting-form" autocomplete="off">
+        <div class="form-field">
+          <label>Título *</label>
+          <input class="form-control" name="title" required placeholder="Ej. Reunión de ventas semanal">
+        </div>
+        <div class="form-field">
+          <label>Descripción</label>
+          <textarea class="form-control" name="description" rows="3" placeholder="Detalles u orden del día"></textarea>
+        </div>
+        <div class="form-field">
+          <label>Ubicación</label>
+          <input class="form-control" name="location" placeholder="Ej. Sala de juntas / Video llamada / Oficina central">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-field">
+            <label>Inicio *</label>
+            <input class="form-control" type="datetime-local" name="start" value="${fmt(start)}" required>
+          </div>
+          <div class="form-field">
+            <label>Fin *</label>
+            <input class="form-control" type="datetime-local" name="end" value="${fmt(end)}" required>
+          </div>
+        </div>
+      </form>
+    `;
+    const footer = `
+      <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+      <button class="btn btn-primary" type="button" data-save>Publicar reunión</button>
+    `;
+
+    const modal = window.UI.openModal({ title: '&#128197;&nbsp; Nueva reunión de equipo', body, footer, size: 540 });
+    const overlay = modal.bodyEl.closest('#modal-overlay');
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => window.UI.closeModal());
+    const saveBtn = overlay.querySelector('[data-save]');
+    saveBtn.addEventListener('click', async () => {
+      const form = overlay.querySelector('#meeting-form');
+      const title = (form.querySelector('[name="title"]').value || '').trim();
+      const start = form.querySelector('[name="start"]').value;
+      const end = form.querySelector('[name="end"]').value;
+      if (!title || !start || !end) {
+        window.UI.toast('Completa el título y el rango de fechas.', 'error');
+        return;
+      }
+      saveBtn.disabled = true;
+      try {
+        await window.API.meetings.create({
+          title,
+          description: (form.querySelector('[name="description"]').value || '').trim(),
+          location: (form.querySelector('[name="location"]').value || '').trim(),
+          start: new Date(start).toISOString(),
+          end: new Date(end).toISOString(),
+        });
+        window.UI.closeModal();
+        window.UI.toast('Reunión publicada. Todos los asesores la verán en el calendario.', 'success');
+        await loadEvents();
+        renderToolbar();
+      } catch (error) {
+        saveBtn.disabled = false;
+        window.UI.toast(error && error.message ? error.message : 'No se pudo publicar la reunión.', 'error');
+      }
     });
   }
 
@@ -323,6 +417,7 @@ window.Pages.calendar = (() => {
     if (e.type !== 'goal') rows.push(`<tr><th>Tipo</th><td>${UI.escapeHtml((meta.label || e.type).toUpperCase())}</td></tr>`);
     if (e.status) rows.push(`<tr><th>Estado</th><td>${UI.escapeHtml(String(e.status).replace(/_/g, ' '))}</td></tr>`);
     if (e.stage) rows.push(`<tr><th>Etapa</th><td>${UI.escapeHtml(String(e.stage).replace(/_/g, ' '))}</td></tr>`);
+    if (e.creator && e.creator.name) rows.push(`<tr><th>Reunión de equipo</th><td>${UI.escapeHtml('Publicada por ' + e.creator.name)}</td></tr>`);
     if (clientName) rows.push(`<tr><th>Cliente</th><td>${UI.escapeHtml(clientName)}</td></tr>`);
     if (propertyLine) rows.push(`<tr><th>Propiedad</th><td>${UI.escapeHtml(propertyLine)}</td></tr>`);
     if (e.location) rows.push(`<tr><th>Lugar</th><td>${UI.escapeHtml(e.location)}</td></tr>`);
@@ -353,7 +448,7 @@ window.Pages.calendar = (() => {
     if (e.type === 'business') return 'businesses.html';
     if (e.type === 'goal') return 'goals.html';
     if (e.type === 'prospecting') return 'prospecting.html';
-    return 'home.html';
+    return 'calendar.html';
   }
 
   // Delegación de eventos dentro del contenedor de vista.

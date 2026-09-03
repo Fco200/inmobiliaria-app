@@ -15,7 +15,7 @@
 const https = require('https');
 const jwt = require('jsonwebtoken');
 
-const { Appointment, Task, Business, Goal, ProspectingActivity, Session } = require('../models');
+const { Appointment, Task, Business, Goal, ProspectingActivity, Meeting, Session } = require('../models');
 const User = require('../models/user.model');
 const { googleCalendarClientId, googleCalendarClientSecret, googleCalendarRedirectUri, clientUrl, jwtSecret } = require('../config/env');
 const { hashToken } = require('../services/session.service');
@@ -35,6 +35,7 @@ const TYPE_META = {
   business: { label: 'Negocio', color: '#7c3aed' },
   goal: { label: 'Meta', color: '#059669' },
   prospecting: { label: 'Prospección', color: '#db2777' },
+  meeting: { label: 'Reunión', color: '#d97706' },
 };
 
 // ---------------------------------------------------------------------------
@@ -332,6 +333,33 @@ async function gatherEvents(userId, from, to) {
       location: p.location || '',
       status: '',
       meta: TYPE_META.prospecting,
+    });
+  });
+
+  // --- Reuniones (meetings): publicadas por administración, visibles para
+  // TODOS los asesores (evento de equipo, sin scope por usuario).
+  const meetings = await Meeting.find({
+    start: { $lte: to },
+    end: { $gte: from },
+  }).populate('createdBy', 'name').lean();
+
+  meetings.forEach((m) => {
+    const s = parseISODate(m.start);
+    const e = parseISODate(m.end);
+    if (!s || !e) return;
+    events.push({
+      id: `meeting:${m._id}`,
+      type: 'meeting',
+      sourceId: String(m._id),
+      title: `Reunión: ${m.title}`,
+      summary: m.title,
+      description: m.description || '',
+      start: s,
+      end: e,
+      location: m.location || '',
+      status: m.status,
+      meta: TYPE_META.meeting,
+      creator: m.createdBy || null,
     });
   });
 

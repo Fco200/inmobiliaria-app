@@ -217,6 +217,9 @@ window.AsesorPage = (() => {
         </div>
       </div>
     `;
+    if (window.CartaPresentacion && window.CartaPresentacion.populateQr) {
+      window.CartaPresentacion.populateQr(box, a);
+    }
     const pdf = box.querySelector('[data-carta-pdf]');
     if (pdf) pdf.addEventListener('click', () => CartaPresentacion.openPdf(a));
     const wa = box.querySelector('[data-carta-wa]');

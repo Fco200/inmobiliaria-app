@@ -30,6 +30,12 @@ app.use(
         // para que el WebSocket de chat funcione en cualquier dominio de
         // producción (Render cambia el hostname entre deploys).
         'connect-src': ["'self'", 'http://localhost:5000', 'http://127.0.0.1:5000', 'ws://localhost:5000', 'wss://localhost:5000', 'https://accounts.google.com', 'https://cdn.socket.io', 'wss:', 'ws:'],
+        // Las imágenes permiten: 'self' (uploads en producción, mismo origen),
+        // data:/blob: (QR local y avatares), el backend local en desarrollo
+        // (Live Server sirve la página en otro origen → hay que permitir
+        // localhost:5000 o las fotos de perfil/propiedades no se muestran) y el
+        // respaldo externo del QR (api.qrserver.com).
+        'img-src': ["'self'", 'data:', 'blob:', 'http://localhost:5000', 'http://127.0.0.1:5000', 'http://localhost:5500', 'http://127.0.0.1:5500', 'https://api.qrserver.com'],
         // SDK de Google Identity Services para el botón "Registrarse con Google"
         // (script + iframe de One Tap).
         'script-src': ["'self'", 'https://accounts.google.com', 'https://cdn.socket.io'],
@@ -95,12 +101,15 @@ const uploadsDir = path.join(__dirname, '../uploads');
 const { fileAuth } = require('./middlewares/fileAuth');
 
 // Archivos subidos (INE, contratos, fotos): requieren sesión salvo las fotos
-// de propiedades publicadas (catálogo público). Se sirve con nosniff.
+// de propiedades publicadas (catálogo público). Se sirve con nosniff y sin
+// caché para que las fotos de perfil/propiedades SIEMPRE reflejen el archivo
+// actualizado (si el asesor cambia su foto, la nueva se muestra al instante).
 app.use(
   '/uploads',
   (req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.setHeader('Cache-Control', 'no-store');
     next();
   },
   fileAuth,

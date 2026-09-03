@@ -70,6 +70,11 @@ window.Pages.tasks = {
           .status(record._id, { status: sel.value })
           .then(() => {
             ctx.toast('Estado actualizado', 'success');
+            // Sonido de confirmación, y especial cuando se completa la tarea.
+            if (window.Sounds) {
+              if (sel.value === 'completada') window.Sounds.confirmation().catch(() => {});
+              else window.Sounds.step().catch(() => {});
+            }
             ctx.reload();
           })
           .catch((error) => ctx.toast(error.message, 'error'));

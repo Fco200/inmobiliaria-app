@@ -11,6 +11,7 @@ window.AppShell = (() => {
     { key: 'inventory-general', label: 'Inventario General', href: 'inventory-general.html', icon: '&#128203;' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;' },
     { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;' },
+    { key: 'calendar', label: 'Calendario', href: 'calendar.html', icon: '&#128467;' },
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;' },
     { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;' },
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;' },

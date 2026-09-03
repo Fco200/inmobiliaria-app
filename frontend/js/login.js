@@ -68,7 +68,10 @@ window.LoginPage = (() => {
     try {
       const result = await window.API.auth.login({ identifier, password, remember });
       window.ApiClient.setLogin(result.token, result.user);
-      if (window.Sounds) { window.Sounds.init(); window.Sounds.welcome(); }
+      if (window.Sounds) {
+        window.Sounds.init();
+        window.Sounds.welcome().catch(() => {});
+      }
       window.location.replace('home.html');
     } catch (error) {
       // El backend puede responder 503 durante mantenimiento; se traduce.
@@ -171,6 +174,7 @@ window.LoginPage = (() => {
             });
             UI.closeModal();
             UI.toast((result && result.message) || 'Solicitud enviada correctamente', 'success');
+            if (window.Sounds) window.Sounds.confirmation().catch(() => {});
           } catch (error) {
             okBtn.disabled = false;
             okBtn.classList.remove('loading');
@@ -345,7 +349,10 @@ window.LoginPage = (() => {
       const result = await window.API.auth.google({ credential: response.credential, role, roleKey });
       window.ApiClient.setLogin(result.token, result.user);
       UI.toast('Registro con Google completado', 'success');
-      if (window.Sounds) { window.Sounds.init(); window.Sounds.welcome(); }
+      if (window.Sounds) {
+        window.Sounds.init();
+        window.Sounds.welcome().catch(() => {});
+      }
       window.location.replace('home.html');
     } catch (error) {
       UI.toast(error.message || 'No se pudo completar el registro.', 'error');
@@ -395,6 +402,7 @@ window.LoginPage = (() => {
         const result = await window.API.soporte.login({ identifier: idVal, password: passVal });
         localStorage.setItem('soporte_token', result.token);
         localStorage.setItem('soporte_user', JSON.stringify(result.data.user));
+        if (window.Sounds) window.Sounds.confirmation().catch(() => {});
         window.location.replace('soporte.html');
       } catch (error) {
         showError(error.message || 'Credenciales de soporte incorrectas.');
@@ -586,6 +594,11 @@ window.LoginPage = (() => {
 
   function setup() {
     registerServiceWorker();
+
+    // Desbloquear AudioContext en el primer gesto del usuario (clic en
+    // "Ingresar", cualquier tecla, etc.) para que el sonido de bienvenida
+    // se reproduzca correctamente tras el login.
+    if (window.Sounds) window.Sounds.init();
 
     const year = document.getElementById('login-year');
     if (year) year.textContent = String(new Date().getFullYear());

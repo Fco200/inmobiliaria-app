@@ -304,6 +304,7 @@ window.Pages.documents = {
               await API.documents.create(body);
             }
             UI.toast(isEdit ? 'Cambios guardados' : 'Formato registrado', 'success');
+            if (window.Sounds) window.Sounds.confirmation().catch(() => {});
             UI.closeModal();
             load();
           } catch (error) {
@@ -699,6 +700,7 @@ window.Pages.documents = {
               // se difiere para que el navegador la tome.
               setTimeout(() => URL.revokeObjectURL(url), 1000);
               UI.toast('PDF descargado', 'success');
+              if (window.Sounds) window.Sounds.confirmation().catch(() => {});
             } catch (error) {
               UI.toast('Error al descargar: ' + error.message, 'error');
             }
@@ -815,6 +817,7 @@ window.Pages.documents = {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
 
               UI.toast('PDF generado y descargado exitosamente', 'success');
+              if (window.Sounds) window.Sounds.confirmation().catch(() => {});
               UI.closeModal();
               load();
             } catch (error) {

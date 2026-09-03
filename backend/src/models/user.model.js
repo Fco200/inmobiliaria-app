@@ -47,6 +47,16 @@ const userSchema = new mongoose.Schema(
     // Bloqueo temporal por intentos fallidos de inicio de sesión.
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockUntil: { type: Date, default: null, select: false },
+    // Tokens OAuth de Google Calendar para sincronizar citas/eventos.
+    googleCalendar: {
+      accessToken: { type: String, default: null, select: false },
+      refreshToken: { type: String, default: null, select: false },
+      scope: { type: String, default: '' },
+      email: { type: String, default: '' },
+      syncEnabled: { type: Boolean, default: false },
+      syncedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+    },
   },
   {
     timestamps: true,

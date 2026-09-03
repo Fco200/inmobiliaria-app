@@ -685,6 +685,10 @@ window.Pages.settings = {
             <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="welcome">&#127911;&nbsp; Probar bienvenida</button>
             <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="notification">&#128276;&nbsp; Probar notificación</button>
             <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="announcement">&#128227;&nbsp; Probar aviso</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="confirmation">&#10004;&nbsp; Probar confirmación</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="sendMessage">&#128172;&nbsp; Probar envío chat</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="receiveMessage">&#128172;&nbsp; Probar recepción chat</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-preview-sound="step">&#9679;&nbsp; Probar paso (guía)</button>
           </div>
         </div>
 
@@ -756,7 +760,7 @@ window.Pages.settings = {
         btn.addEventListener('click', () => {
           if (window.Sounds) {
             window.Sounds.init();
-            window.Sounds.preview(btn.dataset.previewSound);
+            window.Sounds.preview(btn.dataset.previewSound).catch(() => {});
           }
         });
       });

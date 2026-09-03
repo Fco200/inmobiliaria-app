@@ -129,6 +129,13 @@ window.Pages.chat = {
           renderMessages();
           if (window.API && API.chats.markRead) API.chats.markRead(data.chatId).catch(() => {});
         }
+        // Sonido de mensaje recibido solo si es de otro usuario.
+        if (msg && window.Sounds) {
+          const senderId = msg.sender && typeof msg.sender === 'object' ? (msg.sender._id || msg.sender.id) : msg.sender;
+          if (!senderId || String(senderId) !== String(userId)) {
+            window.Sounds.receiveMessage().catch(() => {});
+          }
+        }
         loadChats();
       };
       socket.on('new-message', onMessage);
@@ -329,6 +336,7 @@ window.Pages.chat = {
           await API.chats.sendMessage(currentChat._id, { message: text });
         }
         msgInput.value = '';
+        if (window.Sounds) window.Sounds.sendMessage().catch(() => {});
       } catch (e) {
         UI.toast('Error al enviar mensaje', 'error');
       }

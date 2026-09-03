@@ -23,6 +23,7 @@ const formatoRoutes = require('./formato.routes');
 const soporteRoutes = require('./soporte.routes');
 const configRoutes = require('./config.routes');
 const userRequestRoutes = require('./userRequest.routes');
+const calendarRoutes = require('./calendar.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -58,6 +59,7 @@ router.get('/', (req, res) => {
       '/api/soporte',
       '/api/config',
       '/api/user-requests',
+      '/api/calendar',
       '/api/health',
     ],
   });
@@ -92,5 +94,6 @@ router.use('/formatos', formatoRoutes);
 router.use('/soporte', soporteRoutes);
 router.use('/config', configRoutes);
 router.use('/user-requests', userRequestRoutes);
+router.use('/calendar', calendarRoutes);
 
 module.exports = router;

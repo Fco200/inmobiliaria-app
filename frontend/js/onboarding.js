@@ -85,6 +85,9 @@ window.Onboarding = (() => {
     if (active) return;
     active = true;
 
+    // Sonido de guía al abrir el onboarding.
+    if (window.Sounds) window.Sounds.welcome().catch(() => {});
+
     const isFirst = !!(opts && opts.firstLogin) || isNewUser();
 
     const footer = `
@@ -115,6 +118,8 @@ window.Onboarding = (() => {
 
     const finish = async () => {
       markShownThisSession();
+      // Sonido de confirmación al finalizar la guía.
+      if (window.Sounds) window.Sounds.confirmation().catch(() => {});
       if (isNewUser() && window.ApiClient && window.API && window.API.auth && window.API.auth.completeOnboarding) {
         try {
           await window.API.auth.completeOnboarding();
@@ -135,10 +140,10 @@ window.Onboarding = (() => {
 
     overlay.querySelector('[data-skip]').addEventListener('click', close);
     refs.btnPrev.addEventListener('click', () => {
-      if (step > 0) { step -= 1; renderStep(step, refs); }
+      if (step > 0) { step -= 1; renderStep(step, refs); if (window.Sounds) window.Sounds.step().catch(() => {}); }
     });
     refs.btnNext.addEventListener('click', () => {
-      if (step < STEPS.length - 1) { step += 1; renderStep(step, refs); }
+      if (step < STEPS.length - 1) { step += 1; renderStep(step, refs); if (window.Sounds) window.Sounds.step().catch(() => {}); }
       else { close(); }
     });
 

@@ -25,6 +25,10 @@ const env = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   jwtRememberExpiresIn: process.env.JWT_REMEMBER_EXPIRES_IN || '30d',
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  // Credenciales OAuth para Google Calendar (integración de calendario).
+  googleCalendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '',
+  googleCalendarClientSecret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET || '',
+  googleCalendarRedirectUri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || '',
   // Lista separada por comas de orígenes adicionales con acceso a la API
   // (p. ej. Live Server). El frontend servido por el propio backend no
   // necesita CORS. Vacío = solo mismo origen.

@@ -269,6 +269,7 @@ ${rowXml}
         try {
           await config.service.remove(record._id);
           UI.toast('Registro eliminado', 'success');
+          if (window.Sounds) window.Sounds.confirmation().catch(() => {});
           load();
         } catch (error) {
           UI.toast(error.message, 'error');
@@ -351,6 +352,7 @@ ${rowXml}
               await config.service.create(body);
               UI.toast('Registro creado', 'success');
             }
+            if (window.Sounds) window.Sounds.confirmation().catch(() => {});
             UI.closeModal();
             load();
           } catch (error) {

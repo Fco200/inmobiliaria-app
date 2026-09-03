@@ -28,6 +28,7 @@ function buildCrud(model, {
   searchFields = [],
   beforeCreate,
   beforeUpdate,
+  afterCreate,
   ownerField = null,
   ownerMatch = null,
   extraFilters = null,
@@ -127,6 +128,10 @@ function buildCrud(model, {
       forceOwner(req, body);
       if (beforeCreate) body = (await beforeCreate(body, req)) || body;
       const doc = await model.create(body);
+      if (afterCreate) {
+        // Hook no bloqueante: nunca debe impedir la creación ni romper la petición.
+        Promise.resolve(afterCreate(doc, req)).catch(() => {});
+      }
       res.status(201).json({ success: true, data: doc });
     }),
 

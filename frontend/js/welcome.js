@@ -88,6 +88,9 @@ window.Welcome = (() => {
 
     markSeen(true);
 
+    // Sonido de bienvenida al mostrar el mensaje motivacional.
+    if (window.Sounds) window.Sounds.welcome().catch(() => {});
+
     const onClose = (opts && opts.onClose) || null;
 
     const overlay = document.createElement('div');

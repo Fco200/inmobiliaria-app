@@ -153,6 +153,18 @@ window.API = {
     summary: (params) => ApiClient.get('/prospecting/summary', params),
   },
 
+  calendar: {
+    // Eventos agregados (citas+tareas+negocios+metas+prospección) en un rango.
+    events: (params) => ApiClient.get('/calendar/events', params),
+    // Estado de la integración con Google Calendar.
+    status: () => ApiClient.get('/calendar/status'),
+    // URL de autorización OAuth de Google.
+    authUrl: () => ApiClient.get('/calendar/google/auth-url'),
+    disconnect: () => ApiClient.post('/calendar/google/disconnect'),
+    toggle: (body) => ApiClient.post('/calendar/google/toggle', body),
+    sync: (body) => ApiClient.post('/calendar/google/sync', body),
+  },
+
   documents: {
     list: (params) => ApiClient.get('/documents', params),
     create: (body) => ApiClient.post('/documents', body),

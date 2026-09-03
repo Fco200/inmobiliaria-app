@@ -4,14 +4,6 @@ window.Pages.home = {
   title: 'Inicio',
 
   async render(container) {
-    // Bienvenida con sonido: se reproduce una sola vez por sesión de login.
-    try {
-      if (window.Sounds && !sessionStorage.getItem('crm_sounds_welcomed')) {
-        sessionStorage.setItem('crm_sounds_welcomed', '1');
-        window.Sounds.welcome();
-      }
-    } catch (error) { /* sin almacenamiento */ }
-
     const user = window.ApiClient.getStoredUser();
     const name = (user && (user.name || user.username)) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';
@@ -67,6 +59,7 @@ window.Pages.home = {
       { href: 'clients.html', icon: '&#10133;', label: 'Nuevo cliente' },
       { href: 'properties.html', icon: '&#127968;', label: 'Nueva propiedad' },
       { href: 'appointments.html', icon: '&#128197;', label: 'Nueva cita' },
+      { href: 'calendar.html', icon: '&#128467;', label: 'Calendario' },
       { href: 'tasks.html', icon: '&#9745;', label: 'Nueva tarea' },
       { href: 'businesses.html', icon: '&#128179;', label: 'Registrar negocio' },
       { href: 'goals.html', icon: '&#127919;', label: 'Nueva meta' },
@@ -78,6 +71,7 @@ window.Pages.home = {
       { key: 'properties', label: 'Mis Propiedades', desc: 'Cartera de inmuebles', href: 'properties.html', icon: '&#127968;' },
       { key: 'businesses', label: 'Negocios', desc: 'Operaciones y pipeline', href: 'businesses.html', icon: '&#128179;' },
       { key: 'appointments', label: 'Citas', desc: 'Agenda y visitas', href: 'appointments.html', icon: '&#128197;' },
+      { key: 'calendar', label: 'Calendario', desc: 'Vista mes, semana y día', href: 'calendar.html', icon: '&#128467;' },
       { key: 'tasks', label: 'Tareas', desc: 'Pendientes del día', href: 'tasks.html', icon: '&#9745;' },
       { key: 'goals', label: 'Metas', desc: 'Objetivos y avance', href: 'goals.html', icon: '&#127919;' },
       { key: 'expenses', label: 'Gastos', desc: 'Control de egresos', href: 'expenses.html', icon: '&#128184;' },

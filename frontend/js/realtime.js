@@ -70,13 +70,66 @@ window.Realtime = (() => {
     if (window.App && window.App.refreshNotificationBadge) window.App.refreshNotificationBadge();
   }
 
+  // Notificación visual (toast clicable en esquina) para un mensaje de chat
+  // entrante de otro usuario. Muestra remitente + previsualización del texto y
+  // refresca el contador de la burbuja del chat de inmediato. Evita notificar
+  // los mensajes que envió el propio usuario.
+  function showChatMessage(data) {
+    if (!data || typeof UI === 'undefined') return;
+    const msg = data.message || {};
+    const sender = msg.sender || {};
+    const senderId = sender && typeof sender === 'object' ? (sender._id || sender.id) : sender;
+    const me = currentUserId();
+    if (me && senderId && String(senderId) === String(me)) return;
+
+    // El chat abierto en primer plano ya muestra el mensaje en vivo; no
+    // duplicar la notificación ni el contador ahí (se marca como leído).
+    if (window.location.pathname.indexOf('chat.html') !== -1) return;
+
+    const senderName = (sender && (sender.name || sender.username)) || msg.emisorNombre || 'Mensaje';
+    const text = String(msg.message || '');
+
+    // Toast dedicado de chat: clicable para abrir el módulo de chat directo.
+    let holder = document.getElementById('toast-holder');
+    if (!holder) {
+      holder = document.createElement('div');
+      holder.id = 'toast-holder';
+      holder.style.cssText =
+        'position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:1000;display:flex;flex-direction:column;gap:8px;';
+      document.body.appendChild(holder);
+    }
+    const el = document.createElement('div');
+    el.style.cssText =
+      'padding:12px 16px;border-radius:10px;color:#fff;font-size:13px;' +
+      'box-shadow:0 6px 18px rgba(0,0,0,0.25);min-width:220px;max-width:340px;cursor:pointer;' +
+      'background:linear-gradient(135deg,#5B2D8E,#7B3FBF);animation:toastSlideIn 0.3s ease-out;';
+    el.innerHTML = `
+      <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;">&#128172; ${UI.escapeHtml(senderName)}</div>
+      <div style="margin-top:2px;color:rgba(255,255,255,0.92);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">${UI.escapeHtml(text)}</div>
+    `;
+    el.title = `Mensaje de ${senderName} - haz clic para abrir el chat`;
+    el.addEventListener('click', () => { window.location.href = 'chat.html'; });
+    holder.appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+      setTimeout(() => el.remove(), 300);
+    }, 4500);
+
+    // Sonido de mensaje recibido (solo mensajes de otros usuarios).
+    if (typeof Sounds !== 'undefined') Sounds.receiveMessage().catch(() => {});
+
+    // Actualiza el contador no leído de la burbuja del chat al instante.
+    if (window.App && window.App.refreshChatBadge) window.App.refreshChatBadge();
+  }
+
+
   // Muestra la alerta modal centrada de un aviso del equipo.
   function showAlert(announcement) {
     // NOTA: UI y Format son const globales de "clásicos" <script>: NO existen
     // como window.UI / window.Format. Se referencia el global lexical directo.
     if (!announcement || !announcement._id || typeof UI === 'undefined') return;
     if (seenIds().includes(announcement._id)) return;
-    if (typeof Sounds !== 'undefined') Sounds.announcement();
+    if (typeof Sounds !== 'undefined') Sounds.announcement().catch(() => {});
     // Quien publica el aviso ya lo conoce; no se le vuelve a mostrar.
     const author = announcement.author || {};
     const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
@@ -190,7 +243,7 @@ window.Realtime = (() => {
   function showNotification(item) {
     if (!item || !item._id || typeof UI === 'undefined') return;
     if (seenNotifIds().includes(item._id)) return;
-    if (typeof Sounds !== 'undefined') Sounds.notification();
+    if (typeof Sounds !== 'undefined') Sounds.notification().catch(() => {});
 
     markNotifSeen(item._id);
 
@@ -280,7 +333,9 @@ window.Realtime = (() => {
       showNotification(item);
       refreshBadges();
     });
-    const onChatActivity = () => {
+    const onChatActivity = (data) => {
+      // Notificación visual de mensaje entrante (fuera del módulo de chat).
+      showChatMessage(data);
       if (window.App && window.App.refreshChatBadge) window.App.refreshChatBadge();
     };
     socket.on('new-message', onChatActivity);
@@ -345,11 +400,19 @@ window.Realtime = (() => {
         }
       }).catch(() => {});
     };
+    // Respaldo de chat: sin socket, refresca el contador no leído para que la
+    // burbuja del chat se actualice aunque se pierda la conexión en vivo.
+    const checkChat = () => {
+      if (socket && socket.connected) return;
+      if (window.App && window.App.refreshChatBadge) window.App.refreshChatBadge();
+    };
     checkAnnouncements();
     checkNotifications();
+    checkChat();
     pollTimer = setInterval(() => {
       checkAnnouncements();
       checkNotifications();
+      checkChat();
     }, 30000);
   }
 

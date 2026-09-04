@@ -1,6 +1,19 @@
 'use strict';
 
 require('dotenv').config();
+
+// Render no siempre tiene ruta de salida por IPv6: forzamos que las conexiones
+// salientes (p. ej. SMTP de Gmail) resuelvan a IPv4 primero, evitando
+// "connect ENETUNREACH <ipv6>:587".
+// Render no siempre tiene ruta de salida por IPv6: forzamos que las conexiones
+// salientes (p. ej. SMTP de Gmail) resuelvan a IPv4 primero, evitando
+// "connect ENETUNREACH <ipv6>:587".
+try {
+  require('node:dns').setDefaultResultOrder('ipv4first');
+} catch (e) {
+  console.warn('[DNS] No se pudo forzar IPv4, continuando...');
+}
+
 const https = require('https');
 const app = require('./src/app');
 const connectDB = require('./src/config/db');

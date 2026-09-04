@@ -222,13 +222,30 @@ window.PublicSite = (() => {
     const form = document.getElementById('newsletter-form');
     const msg = document.getElementById('newsletter-msg');
     if (!form) return;
+    const emailInput = document.getElementById('newsletter-email');
+    // Valida la estructura de un correo: algo@dominio.ext
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (emailInput) {
+      emailInput.setAttribute('type', 'email');
+      const liveCheck = () => {
+        if (!msg) return;
+        const v = emailInput.value.trim();
+        if (v && !EMAIL_RE.test(v)) {
+          msg.textContent = 'Escribe un correo válido, por ejemplo: nombre@correo.com';
+          msg.classList.remove('ok');
+          msg.classList.add('err');
+        } else if (v) {
+          msg.textContent = '';
+          msg.classList.remove('ok', 'err');
+        }
+      };
+      emailInput.addEventListener('input', liveCheck);
+      emailInput.addEventListener('blur', liveCheck);
+    }
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('newsletter-email');
-      if (!email || !email.value.trim()) return;
-      const btn = form.querySelector('button[type="submit"]');
-      btn.disabled = true;
-      btn.classList.add('loading');
+      const email = emailInput;
+      const value = (email && email.value.trim()) || '';
       const show = (text, kind) => {
         if (msg) {
           msg.textContent = text;
@@ -236,15 +253,32 @@ window.PublicSite = (() => {
           if (kind) msg.classList.add(kind);
         }
       };
+      if (!value) {
+        show('Escribe tu correo electrónico.', 'err');
+        if (email) email.focus();
+        return;
+      }
+      if (!EMAIL_RE.test(value)) {
+        show('Ese correo no parece válido. Verifica la estructura, p. ej. nombre@correo.com', 'err');
+        if (email) email.focus();
+        return;
+      }
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('loading');
+      }
       try {
-        const result = await window.API.public.newsletterSubscribe({ email: email.value.trim() });
+        const result = await window.API.public.newsletterSubscribe({ email: value });
         show(result.message || '¡Gracias por suscribirte!', 'ok');
         form.reset();
       } catch (error) {
         show(error.message || 'No se pudo suscribir. Intenta de nuevo.', 'err');
       } finally {
-        btn.disabled = false;
-        btn.classList.remove('loading');
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('loading');
+        }
       }
     });
   }

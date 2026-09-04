@@ -5,8 +5,9 @@ const fs = require('fs');
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
-const { Property, Inventory, Client, Notification } = require('../models');
+const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
+const { sendMail, mailNewProperty } = require('../services/mail.service');
 
 const propertyCrud = buildCrud(Property, {
   populate: ['owner', 'responsibleUser'],
@@ -74,6 +75,27 @@ async function notifyInterestedClients(property) {
   }
 }
 
+// Avisa por correo a todos los suscriptores del newsletter cuando se publica
+// una propiedad nueva. El envío no bloquea la operación si falla.
+async function notifyNewsletter(property) {
+  if (!property || !property.isPublished) return 0;
+  try {
+    const subs = await Newsletter.find({ status: 'suscrito' }).select('email').lean();
+    let sent = 0;
+    for (const sub of subs) {
+      const ok = await sendMail({ ...mailNewProperty(property), to: sub.email });
+      if (ok) sent += 1;
+    }
+    if (subs.length) {
+      console.log(`[MAIL] Notificación de propiedad nueva enviada a ${sent}/${subs.length} suscriptores.`);
+    }
+    return sent;
+  } catch (error) {
+    console.error('[MAIL] Error al notificar a suscriptores del newsletter:', error.message);
+    return 0;
+  }
+}
+
 const create = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (!isBoss(req) || !body.responsibleUser) body.responsibleUser = req.user._id;
@@ -93,6 +115,7 @@ const create = asyncHandler(async (req, res) => {
     message: `Se registró la propiedad (${property.type} en ${property.zone || property.city || 'sin ubicación'})`,
   });
   await notifyInterestedClients(property);
+  await notifyNewsletter(property);
   res.status(201).json({ success: true, data: property });
 });
 
@@ -105,6 +128,7 @@ const update = asyncHandler(async (req, res) => {
 
   const previousStatus = property.status;
   const previousPrice = Number(property.price) || 0;
+  const previousPublished = Boolean(property.isPublished);
 
   Object.assign(property, req.body);
 
@@ -117,6 +141,11 @@ const update = asyncHandler(async (req, res) => {
   }
 
   await property.save();
+
+  const nowPublished = Boolean(property.isPublished);
+  if (nowPublished && !previousPublished) {
+    await notifyNewsletter(property);
+  }
 
   if (req.body.status && req.body.status !== previousStatus) {
     await logActivity({

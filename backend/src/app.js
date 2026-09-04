@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
@@ -12,6 +13,7 @@ const notFound = require('./middlewares/notFound');
 const errorHandler = require('./middlewares/errorHandler');
 const { maintenance, maintenancePage } = require('./middlewares/maintenance');
 const { clientUrl, isProduction } = require('./config/env');
+const { User } = require('./models');
 
 const app = express();
 
@@ -84,6 +86,59 @@ app.use(
 );
 
 const frontendDir = path.join(__dirname, '../../frontend');
+
+// Vista previa ("card") al compartir en WhatsApp/Facebook: las meta tags OG de
+// una página estática no pueden cambiar por asesor, así que servimos las
+// páginas públicas del catálogo inyectando og:image con la foto del asesor
+// indicado por ?asesorId= (foto pública de /uploads). Si no hay asesor, se usa
+// el logo del sitio. Los browsers ignoran estas metas; el scraper ya las lee.
+const PAGE_OG_SPLIT = '</head>';
+const PREVIEW_PAGES = ['propiedades.html', 'landing.html'];
+
+function injectOgTags(html, meta) {
+  const tags = [
+    '<!-- OG público -->',
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:title" content="${meta.title}">`,
+    `<meta property="og:description" content="${meta.description}">`,
+    `<meta property="og:image" content="${meta.image}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:image" content="${meta.image}">`,
+  ].join('\n    ');
+  return html.replace(PAGE_OG_SPLIT, `\n    ${tags}\n  ${PAGE_OG_SPLIT}`);
+}
+
+PREVIEW_PAGES.forEach((page) => {
+  app.get(`/${page}`, async (req, res, next) => {
+    try {
+      const asesorId = String(req.query.asesorId || '').trim();
+      const photoPath = asesorId
+        ? await (async () => {
+            const user = await User.findById(asesorId).select('photo name').lean();
+            return (user && user.photo) ? user.photo : '';
+          })()
+        : '';
+      const base = `${req.protocol}://${req.get('host')}`;
+      const image = photoPath
+        ? base + String(photoPath).replace(/^\//, '')
+        : base + '/logoinmobles.png';
+
+      const filePath = path.join(frontendDir, page);
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const html = injectOgTags(raw, {
+        title: photoPath ? 'Carta de presentación · INMOBLES' : 'INMOBLES · Catálogo inmobiliario',
+        description: photoPath
+          ? 'Conoce el catálogo de propiedades de este asesor INMOBLES.'
+          : 'Profesionales en negocios inmobiliarios.',
+        image,
+      });
+      res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(html);
+    } catch (error) {
+      // No se pudo generar la vista previa: deja que el estático la sirva.
+      next();
+    }
+  });
+});
 
 // En modo mantenimiento se muestra la pantalla amigable para las navegaciones
 // de páginas (no bloquear recursos estáticos ni las páginas públicas/panel de

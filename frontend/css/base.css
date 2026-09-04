@@ -864,11 +864,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* Card del login - compacto */
 .login-card {
   width: 100%;
-  max-width: 360px;
+  max-width: 340px;
   background: rgba(255, 255, 255, 0.98);
   border-radius: 16px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.06);
-  padding: 32px 28px 24px;
+  padding: 20px 24px 16px;
   position: relative;
   z-index: 1;
   text-align: center;
@@ -876,11 +876,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* Logo */
 .login-logo-wrap {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .login-logo-img {
-  height: 72px;
+  height: 54px;
   width: auto;
   object-fit: contain;
   border-radius: 14px;
@@ -888,7 +888,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 .login-logo-sub {
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -901,7 +901,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 14px auto 0;
+  margin: 6px auto 0;
   width: fit-content;
 }
 .login-collab-line {
@@ -925,8 +925,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   background: rgba(22, 163, 74, 0.07);
   border: 1px solid rgba(22, 163, 74, 0.18);
   border-radius: 20px;
-  padding: 4px 12px;
-  margin-bottom: 20px;
+  padding: 3px 12px;
+  margin-bottom: 12px;
 }
 
 .status-dot {
@@ -944,15 +944,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 .login-form .form-group {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .login-form label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .login-row {
@@ -960,7 +960,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .login-forgot-btn {
@@ -987,7 +987,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 10px;
   font-size: 12px;
 }.login-links a {
   color: var(--primary);
@@ -998,9 +998,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* Solicitud de nuevo usuario (el visitante pide cuenta) */
 .login-request {
-  margin-top: 16px;
+  margin-top: 10px;
   border-top: 1px dashed var(--border);
-  padding-top: 14px;
+  padding-top: 10px;
 }
 .login-request-sep {
   display: block;
@@ -1029,8 +1029,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* Marca de agua */
 .login-watermark {
-  margin-top: 20px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 

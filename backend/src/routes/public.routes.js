@@ -15,6 +15,7 @@ router.get('/asesores/:id', idParam, publicController.getAsesor);
 router.get('/propiedades', publicController.list);
 router.post('/newsletter', publicController.subscribeNewsletter);
 router.post('/assistant', publicController.ask);
+router.post('/appointments', publicController.createAppointment);
 
 // Suscriptores del newsletter (solo administración/gerencia).
 router.get('/newsletter', protect, authorize('admin', 'gerencia'), publicController.listNewsletter);

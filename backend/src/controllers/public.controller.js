@@ -1,7 +1,8 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Property, Inventory, User, Role, Newsletter } = require('../models');
+const { Property, Inventory, User, Role, Newsletter, Client, Appointment } = require('../models');
+const { sendMail, mailWelcome } = require('../services/mail.service');
 
 const PUBLIC_FIELDS =
   '_id type operationType price ticketValue address zone city state description characteristics photos status createdAt';
@@ -192,17 +193,31 @@ const subscribeNewsletter = asyncHandler(async (req, res) => {
   if (!clean || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(clean)) {
     return res.status(400).json({ success: false, message: 'Ingresa un correo electrónico válido.' });
   }
-  const existing = await Newsletter.findOne({ email: clean });
-  if (existing) {
-    if (existing.status === 'dado_baja') {
-      existing.status = 'suscrito';
-      if (name) existing.name = String(name).trim();
-      await existing.save();
+
+  const resume = async () => {
+    const owner = await Newsletter.findOne({ email: clean });
+    if (owner) {
+      if (owner.status === 'dado_baja') {
+        owner.status = 'suscrito';
+        if (name) owner.name = String(name).trim();
+        await owner.save();
+      }
+      return { created: false, owner };
     }
-    return res.json({ success: true, message: 'Ya estás suscrito a nuestras promociones. ¡Gracias!' });
+    const created = await Newsletter.create({ email: clean, name: String(name || '').trim(), source: 'landing' });
+    return { created: true, owner: created };
+  };
+
+  const { created, owner } = await resume();
+
+  // Correo de bienvenida (no bloquea la respuesta si falla).
+  sendMail(mailWelcome(clean, owner && owner.name)).catch(() => {});
+
+  if (!created) {
+    // Ya estaba suscrito (o se reactivó): avisamos por si iban de nuevo.
+    return res.json({ success: true, message: 'Ya estás suscrito a nuestras promociones. ¡Te enviamos un correo de bienvenida!' });
   }
-  await Newsletter.create({ email: clean, name: String(name || '').trim(), source: 'landing' });
-  res.status(201).json({ success: true, message: '¡Suscripción exitosa! Recibirás nuestras promociones.' });
+  res.status(201).json({ success: true, message: '¡Suscripción exitosa! Te enviamos un correo de bienvenida.' });
 });
 
 // Lista de suscriptores (solo admin/gerencia/soporte) para el panel.
@@ -300,4 +315,78 @@ const ask = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list, get, listAsesores, getAsesor, subscribeNewsletter, listNewsletter, ask };
+// Agendar una cita sobre una propiedad pública, SIN necesidad de iniciar sesión.
+// Cualquier visitante puede pedir una visita: solo necesita nombre y fecha.
+// El sistema asigna automáticamente al asesor responsable de la propiedad.
+const createAppointment = asyncHandler(async (req, res) => {
+  const { name, phone, date, type, notes, property } = req.body || {};
+
+  const propId = String(property || '');
+  const propertyRecord = propId
+    ? await Property.findOne({ _id: propId, isPublished: true, status: { $ne: 'inactiva' } }).select('responsibleUser type zone city address')
+    : null;
+  if (!propertyRecord) {
+    return res.status(400).json({ success: false, message: 'La propiedad no está disponible para agendar una visita.' });
+  }
+
+  const cleanName = String(name || '').trim();
+  if (!cleanName) {
+    return res.status(400).json({ success: false, message: 'Escribe tu nombre para agendar la cita.' });
+  }
+  if (!date || isNaN(new Date(date).getTime())) {
+    return res.status(400).json({ success: false, message: 'Indica una fecha y hora válidas.' });
+  }
+
+  // Asesor responsable: el de la propiedad; si no hay, el primer asesor/gerencia activo.
+  let responsibleUser = propertyRecord.responsibleUser || null;
+  if (!responsibleUser) {
+    const roles = await Role.find({ code: { $in: ['asesor', 'gerencia', 'admin'] }, status: 'activo' }).select('_id').lean();
+    const roleIds = roles.map((r) => r._id);
+    const fallback = await User.findOne({ role: { $in: roleIds }, status: 'activo' }).sort({ createdAt: 1 }).select('_id');
+    responsibleUser = fallback ? fallback._id : null;
+  }
+  if (!responsibleUser) {
+    return res.status(500).json({ success: false, message: 'No hay un asesor disponible para esta cita.' });
+  }
+
+  // Reutiliza o crea el cliente con los datos del interesado (sin entrar al CRM).
+  const cleanPhone = String(phone || '').replace(/\D/g, '');
+  let client = null;
+  if (cleanName) {
+    client = cleanPhone
+      ? await Client.findOne({ name: cleanName, phone: cleanPhone, responsibleUser })
+      : await Client.findOne({ name: cleanName, responsibleUser });
+    if (!client) {
+      client = await Client.create({
+        type: 'comprar',
+        name: cleanName,
+        phone: cleanPhone,
+        responsibleUser,
+        contactMedium: 'sitio_web',
+        funnelStage: 'cita',
+      });
+    }
+  }
+
+  const cleanType = ['visita_propiedad', 'oficina', 'firma', 'avaluo', 'seguimiento', 'otro'].includes(type)
+    ? type
+    : 'visita_propiedad';
+
+  const appointment = await Appointment.create({
+    client: client ? client._id : null,
+    user: responsibleUser,
+    property: propertyRecord._id,
+    date: new Date(date),
+    type: cleanType,
+    notes: String(notes || '').trim(),
+    status: 'pendiente',
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Cita registrada. Un asesor te contactará para confirmarla.',
+    data: { id: appointment._id },
+  });
+});
+
+module.exports = { list, get, listAsesores, getAsesor, subscribeNewsletter, listNewsletter, ask, createAppointment };

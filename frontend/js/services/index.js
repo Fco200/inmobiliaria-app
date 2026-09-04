@@ -143,6 +143,8 @@ window.API = {
     asesorProperties: (params) => ApiClient.get('/public/propiedades', params),
     newsletterSubscribe: (body) => ApiClient.post('/public/newsletter', body),
     assistant: (body) => ApiClient.post('/public/assistant', body),
+    // Cualquier visitante puede agendar una cita sobre una propiedad (sin login).
+    createAppointment: (body) => ApiClient.post('/public/appointments', body),
   },
 
   prospecting: {

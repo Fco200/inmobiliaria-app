@@ -35,6 +35,15 @@ const env = {
   clientUrl: process.env.CLIENT_URL || '',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@inmobiliaria.com',
   adminPassword: process.env.ADMIN_PASSWORD || 'CambiaEsto2026!',
+  // Correo saliente (newsletter, bienvenidas y avisos). Si no hay SMTP
+  // configurado el servicio opera en modo "dry-run": registra el correo en la
+  // consola sin enviarlo, para no romper la app en desarrollo.
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: parseInt(process.env.SMTP_PORT, 10) || 587,
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpSecure: String(process.env.SMTP_SECURE).toLowerCase() === 'true',
+  mailFrom: process.env.MAIL_FROM || 'INMOBLES <no-responder@inmobles.com>',
   loginMaxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS, 10) || 5,
   loginLockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES, 10) || 15,
   supportEmail: process.env.SUPPORT_EMAIL || 'soporte@inmobiliaria.com',

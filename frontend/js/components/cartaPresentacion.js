@@ -40,6 +40,33 @@ window.CartaPresentacion = (() => {
     return String(phone || '').replace(/\D/g, '');
   }
 
+  // Descarga una imagen (con el token de sesión si aplica) y la convierte a
+  // dataURL (base64). Así la foto queda incrustada en la carta que se imprime /
+  // exporta a PDF y no depende de la red ni del token en el momento de imprimir.
+  function photoToDataUrl(path) {
+    return new Promise((resolve) => {
+      if (!path) return resolve('');
+      const src = resolver(path);
+      if (!src) return resolve('');
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch (error) {
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }
+
   // Enlace público que muestra el catálogo del asesor en la landing.
   function catalogLink(user) {
     const base = window.AppConfig && window.AppConfig.BASE_URL
@@ -113,11 +140,12 @@ window.CartaPresentacion = (() => {
     document.head.appendChild(style);
   }
 
-  // HTML de la ficha. options: { print } para preparar rutas absolutas.
+  // HTML de la ficha. options: { print } para preparar rutas absolutas y
+  // { photoData } para incrustar la foto como dataURL (ideal para imprimir/PDF).
   function buildCarta(user, opts = {}) {
-    const photoResolved = resolver(user && user.photo);
+    const photoResolved = (opts.photoData) ? opts.photoData : resolver(user && user.photo);
     const logo = opts.print ? absoluteUrl('logoinmobles.png') : resolver('logoinmobles.png');
-    const photo = opts.print && photoResolved ? absoluteUrl(photoResolved) : photoResolved;
+    const photo = opts.print && photoResolved.slice(0, 5) !== 'data:' ? absoluteUrl(photoResolved) : photoResolved;
     const name = (user && user.name) || 'Asesor inmobiliario';
     const position = (user && user.position) || 'Asesor inmobiliario';
     const email = (user && user.email) || '';
@@ -232,9 +260,14 @@ window.CartaPresentacion = (() => {
   // Abre la vista en pantalla completa de la carta con opciones de imprimir/PDF
   // y cerrar. La impresión se hace en la misma página (sin popup) y siempre se
   // puede salir con el botón "Cerrar" (funciona en PC y móvil).
-  function openPdf(user) {
+  async function openPdf(user) {
     injectCss();
-    const content = buildCarta(user, { print: true, skipQr: true });
+    // Precarga la foto como dataURL para que quede incrustada en la impresión/PDF.
+    let photoData = '';
+    if (user && user.photo) {
+      photoData = await photoToDataUrl(user.photo);
+    }
+    const content = buildCarta(user, { print: true, skipQr: true, photoData });
 
     const overlay = document.createElement('div');
     overlay.className = 'ccarta-overlay';
@@ -274,10 +307,10 @@ window.CartaPresentacion = (() => {
     window.addEventListener('afterprint', endPrinting);
   }
 
-  // Arma el texto de WhatsApp con el enlace al catálogo del asesor.
+  // Arma el texto de WhatsApp con el enlace al catálogo del asesor. No incluye
+  // el nombre del asesor para que no parezca que se le escribe a él.
   function whatsappText(user) {
-    const name = (user && user.name) || 'Asesor INMOBLES';
-    return `Hola ${name}, te comparto mi carta de presentación. Soy parte del equipo de ${AGENCY}. Puedes ver mi perfil y mi catálogo de propiedades aquí: ${catalogLink(user)} · Sitio oficial: ${SITE_LABEL}`;
+    return `Te comparto la carta de presentación de ${AGENCY}. Ve el catálogo de propiedades aquí: ${catalogLink(user)} · Sitio oficial: ${SITE_LABEL}`;
   }
 
   // Compartir la carta de presentación. Comportamiento uniforme en todos los

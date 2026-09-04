@@ -202,9 +202,10 @@ window.PropiedadesPage = (() => {
               <label style="font-size:13px;">Fecha<input class="form-control" id="prop-date-date" type="date" /></label>
               <label style="font-size:13px;">Hora<input class="form-control" id="prop-date-time" type="time" /></label>
             </div>
-            <button class="btn btn-wa btn-sm" type="button" id="prop-confirm-visit" style="margin-top:12px;" ${ownWa ? '' : 'disabled title="No hay WhatsApp disponible"'}>
-              &#128198;&nbsp; Confirmar visita por WhatsApp
+            <button class="btn btn-wa btn-sm" type="button" id="prop-confirm-visit" style="margin-top:12px;">
+              &#128198;&nbsp; Agendar visita
             </button>
+            <p class="text-muted" id="prop-visit-hint" style="font-size:12px;margin:8px 0 0;">Al confirmar se registra tu cita y, si hay número de WhatsApp, te enviamos el aviso.</p>
           </div>
 
           <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
@@ -235,7 +236,7 @@ window.PropiedadesPage = (() => {
     });
 
     const confirmVisit = document.getElementById('prop-confirm-visit');
-    if (confirmVisit && ownWa) {
+    if (confirmVisit) {
       confirmVisit.addEventListener('click', () => {
         const name = (document.getElementById('prop-date-name').value || '').trim();
         const date = document.getElementById('prop-date-date').value;
@@ -246,7 +247,23 @@ window.PropiedadesPage = (() => {
         }
         const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
         const msg = `Hola, quiero AGENDAR una visita para ver: ${type} en ${place} (${op}).\n\nMi nombre: ${name}\nFecha y hora: ${when}\nPrecio publicado: ${Format.currency(record.price)}\n\n¿Está disponible?`;
-        window.open(PS.whatsappLink(msg, waPhone), '_blank', 'noopener');
+
+        // Registra la cita en el sistema (cualquier visitante, sin necesidad de usuario)
+        // y, si hay número de WhatsApp del asesor, abre WhatsApp para confirmar.
+        API.public.createAppointment({
+          property: record._id,
+          name,
+          date: `${date}T${time}:00`,
+          type: 'visita_propiedad',
+          notes: 'Solicitud desde el catálogo público (página de propiedades).',
+        })
+          .then((res) => {
+            UI.toast('Cita registrada. Un asesor te contactará para confirmarla.', 'success');
+            if (ownWa) window.open(PS.whatsappLink(msg, waPhone), '_blank', 'noopener');
+          })
+          .catch((error) => {
+            UI.toast((error && error.message) || 'No se pudo registrar la cita.', 'error');
+          });
       });
     }
 

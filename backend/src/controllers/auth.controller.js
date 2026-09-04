@@ -175,6 +175,13 @@ const updateMe = asyncHandler(async (req, res) => {
     if (rest[field] !== undefined) updates[field] = rest[field];
   });
 
+  // La foto no debe borrarse si llega vacía: se conserva la actual salvo que el
+  // usuario envíe una URL nueva. Así las actualizaciones de otros campos nunca
+  // eliminan la foto de perfil.
+  if (rest.photo !== undefined && (rest.photo === null || String(rest.photo).trim() === '')) {
+    delete updates.photo;
+  }
+
   if (password) updates.password = password;
 
   if (updates.email) {

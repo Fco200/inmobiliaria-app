@@ -340,6 +340,12 @@ ${rowXml}
         }
         if (form) form.addEventListener('submit', async (e) => {
           e.preventDefault();
+          // Valida los campos requeridos (HTML5) pese a que el form tenga
+          // 'novalidate', para que ningún dato obligatorio quede vacío.
+          if (form.reportValidity && !form.checkValidity()) {
+            form.reportValidity();
+            return;
+          }
           const submitBtn = form.querySelector('[type="submit"]');
           if (submitBtn && submitBtn.disabled) return;
           if (submitBtn) submitBtn.disabled = true;

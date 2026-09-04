@@ -10,10 +10,13 @@ window.Pages.profile = {
 
     let me = null;
     let goals = [];
+    let team = [];
     try {
       me = await API.auth.me();
       const g = await API.goals.list({ user: me._id, limit: 10 }).catch(() => ({ data: [] }));
       goals = (g.data || []).filter((x) => x.status === 'activa').slice(0, 3);
+      team = await API.users.list({ limit: 500 }).catch(() => []);
+      team = Array.isArray(team) ? team : (team.data || []);
     } catch (error) {
       container.innerHTML = UI.errorAlert(error.message);
       return;
@@ -22,6 +25,35 @@ window.Pages.profile = {
     const roleCode = me.role ? (me.role.code || me.role) : '';
     const roleName = me.role ? (me.role.name || me.role.code || me.role) : 'Sin rol';
     const isAdmin = ['admin', 'gerencia'].includes(roleCode);
+    const myId = me._id || me.id;
+
+    const roleOf = (u) => {
+      if (!u || !u.role) return '';
+      if (typeof u.role === 'object' && u.role !== null) return u.role.code || u.role.name || '';
+      return String(u.role);
+    };
+
+    const teamColleagues = team
+      .filter((u) => u && u.name && myId && String(u._id) !== String(myId) && String(u.status || 'activo').toLowerCase() !== 'inactivo')
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'))
+      .slice(0, 6);
+
+    const teamCards = teamColleagues.length
+      ? teamColleagues.map((u) => `
+          <div class="directorio-card" data-colleague="${u._id}" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;cursor:pointer;">
+            <div style="width:46px;height:46px;border-radius:50%;overflow:hidden;border:2px solid #b9912f;background:#f3eee2;flex-shrink:0;">
+              ${u.photo
+                ? `<img src="${window.AppConfig.resolveUrl(u.photo)}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+                : `<span style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;background:linear-gradient(135deg,#b9912f,#8a6a1f);">${UI.escapeHtml(String(u.name).charAt(0).toUpperCase())}</span>`}
+            </div>
+            <div style="flex:1;min-width:0;">
+              <strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${UI.escapeHtml(u.name)}</strong>
+              <small style="color:var(--text-muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${UI.escapeHtml(u.position || 'Asesor inmobiliario')}</small>
+            </div>
+            <button class="btn btn-wa btn-sm" type="button" data-share-carta="${u._id}" title="Compartir su carta de presentación">&#128172;</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-view-carta="${u._id}" title="Ver carta de presentación">&#128424;</button>
+          </div>`).join('')
+      : '<p class="text-muted" style="margin:0;">No hay otros perfiles en el equipo.</p>';
 
     const avatar = me.photo
       ? `<img src="${window.AppConfig.resolveUrl(me.photo)}" alt="Foto de perfil" class="profile-cover-avatar">`
@@ -170,6 +202,18 @@ window.Pages.profile = {
         </div>
       </div>
 
+      <div class="card" style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0 0 6px;display:flex;align-items:center;gap:8px;">&#128101; Compartir la carta de otro asesor</h3>
+            <p class="text-muted" style="margin:0;font-size:13px;">
+              Comparte o descarga la carta de presentación de un colega. También puedes abrir el <a href="directorio.html">directorio completo del equipo</a>.
+            </p>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">${teamCards}</div>
+      </div>
+
       ${goals.length ? `
       <div class="card profile-goal-card" style="margin-top:16px;">
         <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#127919; Tu meta en curso</h3>
@@ -217,6 +261,11 @@ window.Pages.profile = {
       profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const values = UI.collectForm(e.target);
+        // Nunca enviar la foto vacía: si el campo quedó sin valor, se conserva la
+        // foto actual del perfil para que una actualización de otros campos no la borre.
+        if ((!values.photo || String(values.photo).trim() === '') && me.photo) {
+          values.photo = me.photo;
+        }
         if (!values.password) delete values.password;
         try {
           const result = await API.auth.updateMe(values);
@@ -234,5 +283,25 @@ window.Pages.profile = {
     if (pdfBtn) pdfBtn.addEventListener('click', () => CartaPresentacion.openPdf(me));
     const waBtn = container.querySelector('[data-carta-wa]');
     if (waBtn) waBtn.addEventListener('click', () => CartaPresentacion.shareWhatsApp(me));
+
+    // Compartir / descargar la carta de presentación de otro asesor del equipo.
+    const colleague = (id) => team.find((u) => u && String(u._id) === String(id));
+    container.querySelectorAll('[data-share-carta]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const u = colleague(btn.dataset.shareCarta);
+        if (u) CartaPresentacion.shareWhatsApp(u);
+      });
+    });
+    container.querySelectorAll('[data-view-carta]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const u = colleague(btn.dataset.viewCarta);
+        if (u) CartaPresentacion.openPdf(u);
+      });
+    });
+    container.querySelectorAll('[data-colleague]').forEach((card) => {
+      card.addEventListener('click', () => { window.location.href = 'directorio.html'; });
+    });
   },
 };

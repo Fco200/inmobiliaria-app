@@ -610,6 +610,9 @@ html, body {
 }
 .btn-wa:hover { background: #1eb958; border-color: #1eb958; color: #fff; }
 
+/* Color de acento para marcadores obligatorios (asterisco) */
+.text-danger { color: #dc2626; }
+
 /* Resultado de la calculadora de negocio */
 .calc-result {
   background: var(--bg-card, #fff);

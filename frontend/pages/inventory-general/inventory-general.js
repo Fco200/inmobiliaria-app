@@ -431,9 +431,9 @@ window.Pages['inventory-general'] = {
             <textarea class="form-control" data-description rows="3" placeholder="Detalles del inmueble"></textarea>
           </div>
           <div class="form-group">
-            <label>Fotos (hasta 10, opcional)</label>
-            <input class="form-control" type="file" accept="image/*" multiple data-photos>
-            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Se subirán después de crear la propiedad.</p>
+            <label>Fotos <span class="text-danger">*</span></label>
+            <input class="form-control" type="file" accept="image/*" multiple data-photos required>
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Obligatorio: al menos una fotografía. Se subirán al crear la propiedad.</p>
           </div>
           ${isBoss ? `
           <div class="form-group" style="display:flex;align-items:center;gap:8px;">
@@ -452,6 +452,8 @@ window.Pages['inventory-general'] = {
         const type = overlay.querySelector('[data-type]').value;
         const operationType = overlay.querySelector('[data-operation]').value;
         if (!type || !operationType) return UI.toast('Selecciona el tipo y la operación', 'warning');
+        const photosInput = overlay.querySelector('[data-photos]');
+        if (!photosInput || !photosInput.files || !photosInput.files.length) return UI.toast('Agrega al menos una fotografía', 'warning');
         const btn = overlay.querySelector('[data-ok]');
         btn.disabled = true;
         btn.textContent = 'Subiendo...';
@@ -472,7 +474,6 @@ window.Pages['inventory-general'] = {
             isPublished: publishEl ? publishEl.checked : false,
           });
 
-          const photosInput = overlay.querySelector('[data-photos]');
           const propId = created && created.data && created.data.property ? created.data.property._id : null;
           if (photosInput && photosInput.files && photosInput.files.length && propId) {
             try {
@@ -487,7 +488,7 @@ window.Pages['inventory-general'] = {
           load();
         } catch (error) {
           btn.disabled = false;
-          btn.textContent = 'Subir propiedad';
+          btn.textContent = isBoss ? 'Subir propiedad' : 'Subir mi propiedad';
           UI.toast(error.message, 'error');
         }
       });

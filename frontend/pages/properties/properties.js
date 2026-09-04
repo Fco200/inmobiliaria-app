@@ -272,23 +272,34 @@ title: 'Mis Propiedades',
       service: {
         list: (params) => API.properties.list(params),
         // Al CREAR: sube las fotos primero (obtiene URLs) y las guarda en la
-        // propiedad en el mismo registro.
+        // propiedad en el mismo registro. Al menos una foto es obligatoria.
         create: async (body) => {
           const files = readPendingPhotoFiles();
+          const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
+          if (!files.length && !existing.length) {
+            throw new Error('La propiedad debe incluir al menos una fotografía.');
+          }
           if (files.length) {
             UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
             const { urls, failed } = await uploadPhotoUrls(files);
             if (urls.length) body.photos = [...(body.photos || []), ...urls];
             if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
+            if (!(body.photos || []).filter(Boolean).length) {
+              throw new Error('No se pudo subir ninguna fotografía. Intenta con imágenes JPG o PNG.');
+            }
           }
           const created = await API.properties.create(body);
           return created.data !== undefined ? created.data : created;
         },
         // Al EDITAR: guarda la propiedad y después sube las fotos nuevas con el
         // endpoint dedicado, para que se registren aunque el archivo falle.
-        update: async (id, body) => {
+        update: async (id, body, record) => {
           delete body.photos_files;
           const files = readPendingPhotoFiles();
+          const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
+          if (!files.length && !existing.length) {
+            throw new Error('La propiedad debe incluir al menos una fotografía.');
+          }
           const saved = await API.properties.update(id, body);
           if (files.length) {
             const ok = await uploadPropertyPhotos(id, files);

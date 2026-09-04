@@ -24,16 +24,18 @@ window.CartaPresentacion = (() => {
   }
 
   // URL absoluta y con token de sesión (cargable en cualquier contexto, incluso
-  // fuera de la página, p. ej. en el overlay de impresión).
+  // fuera de la página, p. ej. en el overlay de impresión). Si ya es absoluta
+  // (resuelta con resolver()/token) se devuelve tal cual; si es relativa se
+  // resuelve contra el backend declarando el origen.
   function absoluteUrl(path) {
     const base = window.AppConfig && window.AppConfig.BASE_URL
       ? window.AppConfig.BASE_URL
       : (document.location.origin && document.location.origin !== 'null' ? document.location.origin : '');
     if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
     const clean = String(path).replace(/^\//, '');
-    let full = `${base}/${clean}`;
-    if (window.AppConfig) full = window.AppConfig.resolveUrl(`/${clean}`);
-    return full;
+    if (window.AppConfig) return window.AppConfig.resolveUrl(`/${clean}`);
+    return `${base}/${clean}`;
   }
 
   function digits(phone) {
@@ -43,11 +45,20 @@ window.CartaPresentacion = (() => {
   // Descarga una imagen (con el token de sesión si aplica) y la convierte a
   // dataURL (base64). Así la foto queda incrustada en la carta que se imprime /
   // exporta a PDF y no depende de la red ni del token en el momento de imprimir.
+  // Se intenta por dos vías a la vez y gana la primera: <img> con crossOrigin
+  // (canvas) y fetch→blob→FileReader. Si ninguna puede leer los bytes (p. ej.
+  // CORS bloqueado), se cae al <img> normal (src) y el navegador la muestra en
+  // pantalla aunque no quede incrustada en el PDF.
   function photoToDataUrl(path) {
     return new Promise((resolve) => {
       if (!path) return resolve('');
       const src = resolver(path);
       if (!src) return resolve('');
+
+      let settled = false;
+      const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+
+      // Vía 1: <img> con CORS + canvas (requiere Access-Control-Allow-Origin).
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
@@ -57,13 +68,31 @@ window.CartaPresentacion = (() => {
           canvas.height = img.naturalHeight || img.height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
+          done(canvas.toDataURL('image/jpeg', 0.85));
         } catch (error) {
-          resolve(src);
+          /* canvas contaminado: dejar que gane la vía 2 o el fallback */
         }
       };
-      img.onerror = () => resolve(src);
+      img.onerror = () => { /* dejar que gane la vía 2 o el fallback */ };
       img.src = src;
+
+      // Vía 2: fetch → blob → dataURL (misma autenticación que la API).
+      fetch(src, { credentials: 'include', mode: 'cors' })
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error('http ' + r.status))))
+        .then(
+          (blob) =>
+            new Promise((res2, rej2) => {
+              const reader = new FileReader();
+              reader.onload = () => res2(reader.result);
+              reader.onerror = () => rej2(new Error('reader'));
+              reader.readAsDataURL(blob);
+            })
+        )
+        .then((dataUrl) => done(dataUrl))
+        .catch(() => { done(src); });
+
+      // Respaldo por si ambas vías quedan colgadas (p. ej. petición muy lenta).
+      setTimeout(() => done(src), 4000);
     });
   }
 

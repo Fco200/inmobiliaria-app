@@ -260,6 +260,9 @@ const uploadPhotos = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Solo se permiten imágenes' });
   }
 
+  // Sube las fotos al almacenamiento en la nube (R2) si está configurado.
+  await require('../services/storage.service').persistFiles(files);
+
   const urls = files.map((f) => `/uploads/${f.filename}`);
   property.photos = [...(property.photos || []), ...urls];
   await property.save();

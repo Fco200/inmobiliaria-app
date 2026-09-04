@@ -43,7 +43,7 @@ HTML/CSS/JS → API REST → Node.js/Express → MongoDB
 ## Puesta en marcha
 
 1. Crear un clúster gratuito en MongoDB Atlas y obtener la cadena de conexión.
-2. Copiar `backend/.env.example` a `backend/.env` y completar:
+2. Revisar `backend/.env` (un único archivo de configuración) y completar:
    - `MONGODB_URI` (cadena de Atlas)
    - `JWT_SECRET` (secreto largo y aleatorio)
 3. Instalar dependencias y arrancar:

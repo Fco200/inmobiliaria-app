@@ -124,6 +124,10 @@ const upload = [
       return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
     }
 
+    // Sube el archivo al almacenamiento en la nube (R2) si está configurado;
+    // en modo local no hace nada (el archivo ya quedó en /uploads).
+    await require('../services/storage.service').persistFile(req.file);
+
     const data = {
       fileName: req.file.filename,
       originalName: req.file.originalname,

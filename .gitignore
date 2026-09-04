@@ -22,3 +22,7 @@ Thumbs.db
 # Producción
 dist/
 build/
+
+# Archivos subidos en tiempo de ejecución (fotos, documentos). Se guardan en la
+# nube (R2) cuando está configurado; no deben entrar al repositorio.
+backend/uploads/

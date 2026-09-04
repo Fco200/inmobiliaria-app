@@ -152,13 +152,15 @@ app.use(
   })
 );
 
-const uploadsDir = path.join(__dirname, '../uploads');
 const { fileAuth } = require('./middlewares/fileAuth');
+const storage = require('./services/storage.service');
 
 // Archivos subidos (INE, contratos, fotos): requieren sesión salvo las fotos
 // de propiedades publicadas (catálogo público). Se sirve con nosniff y sin
 // caché para que las fotos de perfil/propiedades SIEMPRE reflejen el archivo
 // actualizado (si el asesor cambia su foto, la nueva se muestra al instante).
+// Cuando el almacenamiento en la nube (R2) está configurado, los archivos se
+// sirven desde el bucket en streaming; si no, desde el disco local.
 app.use(
   '/uploads',
   (req, res, next) => {
@@ -168,7 +170,7 @@ app.use(
     next();
   },
   fileAuth,
-  express.static(uploadsDir)
+  storage.serveStatic()
 );
 
 app.use('/api', maintenance, apiRoutes);

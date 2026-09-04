@@ -581,13 +581,17 @@ const generarPDF = async (req, res) => {
     const safeNombre = String(config.nombre || 'formato').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'formato';
     const fileName = `${safeNombre}_${Date.now()}.pdf`;
 
-    // Guardar el archivo generado en uploads y registrar el formato en la BD
-    // para tener un historial (usuario, plantilla, datos, fecha, ruta).
+    // Guardar el archivo generado en el almacenamiento (/uploads) y registrar el
+    // formato en la BD para tener un historial (usuario, plantilla, datos, fecha,
+    // ruta). Si R2 está configurado el PDF se sube al bucket; si no, queda en
+    // disco local.
     let fileUrl = null;
     try {
       if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
       const diskPath = path.join(UPLOADS_DIR, fileName);
       fs.writeFileSync(diskPath, Buffer.from(modifiedPdfBytes));
+      await require('../services/storage.service').putBuffer(fileName, Buffer.from(modifiedPdfBytes), 'application/pdf');
+      try { fs.unlinkSync(diskPath); } catch (e) { /* el PDF ya quedó en la nube */ }
       fileUrl = `/uploads/${fileName}`;
 
       await Document.create({

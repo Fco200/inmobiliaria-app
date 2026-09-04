@@ -6,6 +6,7 @@ const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
 const { port, nodeEnv, jwtSecret } = require('./src/config/env');
+const { hasSmtp, resetTransporter } = require('./src/services/mail.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const maintenanceJob = require('./src/jobs/maintenance.job');
 const { Server } = require('socket.io');
@@ -16,6 +17,13 @@ const { setIo } = require('./src/services/notification.service');
 const logger = require('./src/services/logger.service');
 
 async function start() {
+  // Diagnóstico de correo: si no hay SMTP, todo se queda en "dry-run" (no envía).
+  if (hasSmtp()) {
+    console.log('[MAIL] SMTP configurado: envío REAL activado.');
+  } else {
+    console.warn('[MAIL] SIN SMTP configurado: MODO DRY-RUN. Revisa SMTP_HOST/USER/PASS en las variables de entorno.');
+  }
+
   const connection = await connectDB();
 
   if (connection) {

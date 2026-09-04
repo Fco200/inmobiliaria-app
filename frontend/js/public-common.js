@@ -161,11 +161,11 @@ window.PublicSite = (() => {
     href('cta-call-float', `tel:${phone}`);
 
     // Promo de marca de Alberto (FVO DIGITAL HMO) al pie de la página pública.
-    // "¿Te interesa un proyecto como este? Llámame 6625374491 · FVO DIGITAL HMO. Soluciones y desarrollos"
+    // "¿Te interesa un proyecto como este? Llámame 6623188580 · FVO DIGITAL HMO. Soluciones y desarrollos"
     const promoTel = document.getElementById('footer-promo-tel');
     if (promoTel) {
-      promoTel.href = 'tel:+526625374491';
-      promoTel.textContent = 'Llámame 6625374491';
+      promoTel.href = 'tel:+526623188580';
+      promoTel.textContent = 'Llámame 6623188580';
     }
   }
 

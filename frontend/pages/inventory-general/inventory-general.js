@@ -585,8 +585,8 @@ window.Pages['inventory-general'] = {
               <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
               ${!isBoss ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>` : ''}
               ${!isBoss ? `<button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>` : ''}
-              ${!item.isPublished ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Publicar</button>` : ''}
-              ${item.isPublished ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Despublicar</button>` : ''}
+              ${!item.isPublished && isBoss ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Publicar</button>` : ''}
+              ${item.isPublished && isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Despublicar</button>` : ''}
               ${isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="assign" style="margin-left:6px;">Asignar</button>` : ''}
               ${isBoss ? `<button class="btn btn-danger btn-sm" data-action data-index="${index}" data-kind="remove" style="margin-left:6px;">Quitar</button>` : ''}
             </td>

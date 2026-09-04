@@ -560,7 +560,7 @@ window.LoginPage = (() => {
 
     btn.addEventListener('click', async () => {
       const ok = UI.confirm
-        ? await UI.confirm('Esto eliminará los datos guardados en este dispositivo (preferencias y caché) y volverá a cargar la aplicación. ¿Continuar?')
+        ? await UI.confirm('Actualizar Nueva Version Aplicación, esto eliminará los datos guardados en este dispositivo (preferencias y caché) y volverá a cargar la aplicación. ¿Continuar?')
         : true;
       if (!ok) return;
 

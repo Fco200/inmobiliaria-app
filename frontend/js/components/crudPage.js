@@ -332,7 +332,7 @@ ${rowXml}
         const form = bodyEl.querySelector('#crud-form');
         if (config.onFormMount) config.onFormMount(form, record, bodyEl);
         if (opts.mount) opts.mount(form, record, bodyEl);
-        if (window.UI && window.UI.syncOtros) window.UI.syncOtros(form);
+        if (typeof UI !== 'undefined' && UI.syncOtros) UI.syncOtros(form);
         const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
         if (overlay) {
           const cancelBtn = overlay.querySelector('[data-cancel]');

@@ -199,6 +199,12 @@ const togglePublish = asyncHandler(async (req, res) => {
   }
 
   const isPublished = req.body.isPublished === true;
+
+  // Solo admin/gerencia pueden despublicar propiedades del inventario general.
+  if (!isPublished && !isBoss(req)) {
+    return res.status(403).json({ success: false, message: 'Solo un administrador puede despublicar propiedades del inventario general.' });
+  }
+
   property.isPublished = isPublished;
   await property.save();
 

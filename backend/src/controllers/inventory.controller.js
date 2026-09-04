@@ -300,6 +300,12 @@ const togglePublish = asyncHandler(async (req, res) => {
   if (!inventory) return res.status(404).json({ success: false, message: 'Registro no encontrado' });
 
   const isPublished = req.body.isPublished === true;
+
+  // Solo admin/gerencia pueden despublicar propiedades del inventario general.
+  if (!isPublished && !isBoss(req.user)) {
+    return res.status(403).json({ success: false, message: 'Solo un administrador puede despublicar propiedades del inventario general.' });
+  }
+
   inventory.isPublished = isPublished;
   if (isPublished) inventory.publishedAt = new Date();
   else inventory.unpublishedAt = new Date();

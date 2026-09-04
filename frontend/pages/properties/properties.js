@@ -6,6 +6,10 @@ window.Pages.properties = {
   title: 'Mis Propiedades',
 
   async render(container) {
+    const stored = window.ApiClient ? window.ApiClient.getStoredUser() : null;
+    const role = stored && stored.role ? (stored.role.code || stored.role) : '';
+    const isBossUser = role === 'admin' || role === 'gerencia' || role === 'superadmin';
+
     const statMini = (label, value) => `
       <div class="stat-card" style="padding:10px;">
         <div class="stat-label">${UI.escapeHtml(label)}</div>
@@ -216,16 +220,46 @@ window.Pages.properties = {
       const input = document.getElementById('fld-photos_files');
       return input && input.files ? Array.from(input.files) : [];
     };
-    const uploadPhotos = async (body) => {
-      const files = readPendingPhotoFiles();
-      if (!files.length) return;
-      UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
+
+    // Sube las fotos del input una por una vía /documents/upload y devuelve las
+    // URLs ya subidas. Tolera fallos por archivo (p. ej. HEIC no reconocido o
+    // imagen pesada en el celular) sin descartar las que sí funcionan.
+    const uploadPhotoUrls = async (files) => {
       const urls = [];
+      let failed = 0;
       for (const file of files) {
-        const res = await API.documents.upload(file);
-        urls.push(res.fileUrl);
+        try {
+          const res = await API.documents.upload(file);
+          if (res && res.fileUrl) urls.push(res.fileUrl);
+          else failed += 1;
+        } catch (error) {
+          failed += 1;
+          console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
+        }
       }
-      body.photos = [...(body.photos || []), ...urls];
+      return { urls, failed };
+    };
+
+    // Sube fotos de una propiedad YA creada/guardada usando el endpoint
+    // dedicado multipart (campo "photos"). Se envía UNA por llamada para que
+    // un archivo rechazado (p. ej. HEIC no reconocido o imagen muy pesada) no
+    // tumbe al resto.
+    const uploadPropertyPhotos = async (propId, files) => {
+      if (!files.length) return 0;
+      UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
+      let ok = 0;
+      let failed = 0;
+      for (const file of Array.from(files)) {
+        try {
+          await API.properties.uploadPhotos(propId, [file]);
+          ok += 1;
+        } catch (error) {
+          failed += 1;
+          console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
+        }
+      }
+      if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
+      return ok;
     };
 
     // Referencia al formulario de edición que usa crudPage; openDetail lo
@@ -237,8 +271,34 @@ title: 'Mis Propiedades',
       newLabel: 'Nueva propiedad',
       service: {
         list: (params) => API.properties.list(params),
-        create: async (body) => { await uploadPhotos(body); return API.properties.create(body); },
-        update: async (id, body) => { await uploadPhotos(body); return API.properties.update(id, body); },
+        // Al CREAR: sube las fotos primero (obtiene URLs) y las guarda en la
+        // propiedad en el mismo registro.
+        create: async (body) => {
+          const files = readPendingPhotoFiles();
+          if (files.length) {
+            UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
+            const { urls, failed } = await uploadPhotoUrls(files);
+            if (urls.length) body.photos = [...(body.photos || []), ...urls];
+            if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
+          }
+          const created = await API.properties.create(body);
+          return created.data !== undefined ? created.data : created;
+        },
+        // Al EDITAR: guarda la propiedad y después sube las fotos nuevas con el
+        // endpoint dedicado, para que se registren aunque el archivo falle.
+        update: async (id, body) => {
+          delete body.photos_files;
+          const files = readPendingPhotoFiles();
+          const saved = await API.properties.update(id, body);
+          if (files.length) {
+            const ok = await uploadPropertyPhotos(id, files);
+            if (ok > 0) {
+              try { const fresh = await API.properties.get(id); return fresh.data !== undefined ? fresh.data : fresh; }
+              catch (e) { /* el guardado inicial ya aplicó */ }
+            }
+          }
+          return saved.data !== undefined ? saved.data : saved;
+        },
         remove: (id) => API.properties.remove(id),
       },
       statusOptions: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'],
@@ -277,7 +337,7 @@ title: 'Mis Propiedades',
         { name: 'photos_files', label: 'Subir fotografías desde el dispositivo', type: 'file', accept: 'image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif', multiple: true, full: true, hint: 'JPG, PNG, GIF, WebP, HEIC... (máx. 15 MB c/u). Se guardan en el servidor y quedan en la propiedad.' },
         { name: 'isPublished', label: 'Publicar en el catálogo (visible en la landing)', type: 'checkbox', full: true, hint: 'Si no está marcado, la propiedad queda oculta hasta publicarla.' },
         { name: 'description', label: 'Descripción', type: 'textarea', full: true },
-      ],
+      ].filter((f) => f.name !== 'isPublished' || isBossUser),
       formData(values) {
         const body = { ...values };
         const urlText = typeof values.photos === 'string' ? values.photos.trim() : '';
@@ -291,7 +351,7 @@ title: 'Mis Propiedades',
           out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos="1" data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
         }
         const pub = record.isPublished
-          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
+          ? (isBossUser ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>` : '')
           : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
         return out + pub +
           `<button class="btn btn-secondary btn-sm" data-extra data-property-history="1" data-record="${record._id}" style="margin-left:6px;">Historial</button>` +

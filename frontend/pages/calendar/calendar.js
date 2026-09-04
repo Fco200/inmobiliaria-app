@@ -25,7 +25,7 @@ window.Pages.calendar = (() => {
     events: [],
     typesMeta: {},
     loaded: false,
-    filters: { appointment: true, task: true, business: true, goal: true, prospecting: true },
+    filters: { appointment: true, task: true, business: true, goal: true, prospecting: true, meeting: true },
   };
 
   let rootEl = null;
@@ -221,9 +221,9 @@ window.Pages.calendar = (() => {
       <button class="btn btn-primary" type="button" data-save>Publicar reunión</button>
     `;
 
-    const modal = window.UI.openModal({ title: '&#128197;&nbsp; Nueva reunión de equipo', body, footer, size: 540 });
+    const modal = UI.openModal({ title: '&#128197;&nbsp; Nueva reunión de equipo', body, footer, size: 540 });
     const overlay = modal.bodyEl.closest('#modal-overlay');
-    overlay.querySelector('[data-cancel]').addEventListener('click', () => window.UI.closeModal());
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
     const saveBtn = overlay.querySelector('[data-save]');
     saveBtn.addEventListener('click', async () => {
       const form = overlay.querySelector('#meeting-form');
@@ -231,7 +231,7 @@ window.Pages.calendar = (() => {
       const start = form.querySelector('[name="start"]').value;
       const end = form.querySelector('[name="end"]').value;
       if (!title || !start || !end) {
-        window.UI.toast('Completa el título y el rango de fechas.', 'error');
+        UI.toast('Completa el título y el rango de fechas.', 'error');
         return;
       }
       saveBtn.disabled = true;
@@ -243,13 +243,13 @@ window.Pages.calendar = (() => {
           start: new Date(start).toISOString(),
           end: new Date(end).toISOString(),
         });
-        window.UI.closeModal();
-        window.UI.toast('Reunión publicada. Todos los asesores la verán en el calendario.', 'success');
+        UI.closeModal();
+        UI.toast('Reunión publicada. Todos los asesores la verán en el calendario.', 'success');
         await loadEvents();
         renderToolbar();
       } catch (error) {
         saveBtn.disabled = false;
-        window.UI.toast(error && error.message ? error.message : 'No se pudo publicar la reunión.', 'error');
+        UI.toast(error && error.message ? error.message : 'No se pudo publicar la reunión.', 'error');
       }
     });
   }

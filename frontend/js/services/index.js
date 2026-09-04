@@ -63,6 +63,7 @@ window.API = {
 
   properties: {
     list: (params) => ApiClient.get('/properties', params),
+    get: (id) => ApiClient.get(`/properties/${id}`),
     create: (body) => ApiClient.post('/properties', body),
     update: (id, body) => ApiClient.put(`/properties/${id}`, body),
     remove: (id) => ApiClient.remove(`/properties/${id}`),

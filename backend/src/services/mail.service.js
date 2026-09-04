@@ -144,7 +144,5 @@ module.exports = {
   resetTransporter,
   mailWelcome,
   mailNewProperty,
-  get hasSmtp() {
-    return hasSmtp();
-  },
+  hasSmtp,
 };

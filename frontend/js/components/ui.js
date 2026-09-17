@@ -38,12 +38,12 @@ const UI = (() => {
     const overlay = document.createElement('div');
     overlay.id = 'modal-overlay';
     overlay.style.cssText =
-      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;' +
+      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:40px 16px;overflow:auto;' +
       '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);animation:modalFadeIn 0.25s ease-out;';
     const dialog = document.createElement('div');
     dialog.style.cssText =
       `background:var(--white);border-radius:10px;width:100%;max-width:${size || 640}px;box-shadow:0 10px 40px rgba(0,0,0,0.25);` +
-      'animation:modalScaleIn 0.3s cubic-bezier(0.16,1,0.3,1);';
+      'margin:auto;animation:modalScaleIn 0.3s cubic-bezier(0.16,1,0.3,1);';
     dialog.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
         <h3 style="margin:0;font-size:16px;">${title}</h3>
@@ -57,6 +57,9 @@ const UI = (() => {
       if (e.target === overlay || e.target.closest('[data-close]')) closeModal();
     });
     document.body.appendChild(overlay);
+    // Revela los campos "Otros (especificar)" de selects cuyo valor ya es
+    // "Otro/__ui_otros__" al abrir el formulario (por ejemplo en modo edición).
+    syncOtros(dialog);
     if (onMount) onMount(dialog.querySelector('[data-body]'));
     return {
       close: closeModal,
@@ -228,7 +231,7 @@ const UI = (() => {
       // de texto que aparece cuando se selecciona. Aplica a todos los selects.
       const otrosId = `otros-${id}`;
       control = `
-        <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros onchange="UI.toggleOtros(this)">${opts}
+        <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros>${opts}
           <option value="__ui_otros__">Otros (especificar)</option>
         </select>
         <input class="form-control" id="${otrosId}" name="__ui_otros_${name}" type="text" placeholder="Especifica..." style="display:none;margin-top:8px;">
@@ -392,4 +395,17 @@ const UI = (() => {
     showImages,
     showActivityHistory,
   };
+
+  // Delegación global: muestra/oculta el campo "especificar" de CADA select
+  // con data-ui-otros, sin depender de atributos onchange inline.
+  document.addEventListener('change', (event) => {
+    const target = event.target;
+    if (target && target.hasAttribute && target.hasAttribute('data-ui-otros')) {
+      toggleOtros(target);
+    }
+  });
 })();
+
+// Expone el objeto UI en window también para manejadores legacy y código que
+// lee window.UI (public-common, etc.).
+window.UI = UI;

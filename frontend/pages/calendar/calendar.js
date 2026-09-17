@@ -406,7 +406,7 @@ window.Pages.calendar = (() => {
     if (!e) return;
     const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
     const color = meta.color || '#5B2D8E';
-    const clientName = e.client && e.client.name ? e.client.name : null;
+    const clientName = e.client && (e.client.nombre || e.client.name) ? (e.client.nombre || e.client.name) : null;
     const propertyLine =
       e.property && (e.property.zone || e.property.city || e.property.type)
         ? [e.property.type, e.property.city, e.property.zone].filter(Boolean).join(' · ')

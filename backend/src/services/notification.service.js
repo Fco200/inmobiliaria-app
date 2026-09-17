@@ -200,7 +200,7 @@ async function generateForUser(userId) {
   }
 
   const newProspects = await Client.find({
-    responsibleUser: userId,
+    asesorAsignado: userId,
     status: 'activo',
     createdAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
   });

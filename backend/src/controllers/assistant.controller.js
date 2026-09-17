@@ -132,6 +132,9 @@ const ask = asyncHandler(async (req, res) => {
   const uid = req.user._id;
   const all = isBoss;
   const countFilter = all ? {} : { responsibleUser: uid };
+  // Filtro de cartera para CLIENTES: usa el asesor canónico. No toca
+  // `countFilter` porque ese lo comparten las propiedades (responsibleUser).
+  const clientFilter = all ? {} : { asesorAsignado: uid };
   const name = req.user.name || req.user.username || '';
 
   // ---------- Saludo ----------
@@ -192,7 +195,7 @@ const ask = asyncHandler(async (req, res) => {
 
   // ---------- Clientes ----------
   if (has(text, 'cliente', 'prospecto', 'embudo', 'comprador', 'vendedor')) {
-    const clients = await Client.find(countFilter).select('funnelStage status').lean();
+    const clients = await Client.find(clientFilter).select('funnelStage status').lean();
     const stages = {};
     clients.forEach((c) => { const s = c.funnelStage || 'prospecto'; stages[s] = (stages[s] || 0) + 1; });
     const order = ['prospecto', 'contacto', 'cita', 'negociacion', 'promesa', 'cierre'];
@@ -206,10 +209,10 @@ const ask = asyncHandler(async (req, res) => {
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const [today, upcoming] = await Promise.all([
       Appointment.countDocuments({ user: uid, status: { $in: ['pendiente', 'confirmada'] }, date: { $gte: startOfDay, $lt: new Date(startOfDay.getTime() + 86400000) } }),
-      Appointment.find({ user: uid, status: { $in: ['pendiente', 'confirmada'] }, date: { $gte: now } }).populate('client', 'name').sort({ date: 1 }).limit(3).lean(),
+Appointment.find({ user: uid, status: { $in: ['pendiente', 'confirmada'] }, date: { $gte: now } }).populate('client', 'nombre name').sort({ date: 1 }).limit(3).lean(),
     ]);
     const next = upcoming.length
-      ? upcoming.map((a) => `• ${new Date(a.date).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} — ${a.client ? a.client.name : 'Sin cliente'}`).join('\n')
+      ? upcoming.map((a) => `• ${new Date(a.date).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} — ${a.client ? (a.client.nombre || a.client.name) : 'Sin cliente'}`).join('\n')
       : 'No tienes citas próximas programadas.';
     return res.json({ success: true, data: { answer: `Hoy tienes ${today} cita${today === 1 ? '' : 's'}.\n\nPróximas citas:\n${next}` } });
   }

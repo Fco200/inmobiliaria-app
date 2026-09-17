@@ -2671,3 +2671,58 @@ body.page-chat .assistant-panel {
   box-shadow: 0 10px 40px rgba(0,0,0,.5);
 }
 
+/* ── Módulo de Clientes (tarjetas de cartera) ─────────────────────────── */
+.clients-toolbar {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+}
+.clients-toolbar .form-control { min-width: 0; }
+.clients-toolbar #clients-search { max-width: 360px; }
+.clients-toolbar #clients-stage-filter { max-width: 220px; }
+.client-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.client-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  box-shadow: var(--shadow);
+}
+.client-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.client-card-title { min-width: 0; }
+.client-card-title strong { font-size: 15px; line-height: 1.25; display: block; word-break: break-word; }
+.client-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.stage-badge {
+  display: inline-block; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; white-space: nowrap; letter-spacing: .2px;
+}
+.client-card-line { font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.client-card-media { font-weight: 600; color: var(--primary); font-size: 12.5px; }
+.client-card-extra { font-size: 12px; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.client-card-profile { display: flex; gap: 8px 14px; flex-wrap: wrap; font-size: 12.5px; }
+.client-card-profile span { background: var(--primary-light); border-radius: 6px; padding: 3px 8px; }
+.client-card-profile small { display: block; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+.client-card-notes {
+  font-size: 12.5px; color: var(--text-muted); background: var(--primary-light);
+  border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word;
+}
+.client-card-actions {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  border-top: 1px dashed var(--border); padding-top: 10px;
+}
+.client-card-actions .icon-btn { margin-left: auto; }
+.clients-empty { grid-column: 1 / -1; text-align: center; padding: 48px 0; }
+.clients-empty p { margin: 0; }
+@media (max-width: 720px) {
+  .clients-toolbar { grid-template-columns: 1fr; }
+  .clients-toolbar #clients-search,
+  .clients-toolbar #clients-stage-filter { max-width: none; }
+}
+[data-theme="dark"] .client-card { background: var(--white); }
+[data-theme="dark"] .clients-toolbar #clients-stage-filter,
+[data-theme="dark"] .clients-toolbar #clients-search { background: #14122b; color: var(--text); }
+

@@ -2,124 +2,162 @@
 
 const mongoose = require('mongoose');
 
-const clientSchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const ETAPAS = ['PROSPECTO', 'PERFILADO', 'SEGUIMIENTO', 'CITA', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+
+const clientSchema = new Schema(
   {
-    type: {
+    // ── Campos canónicos (NUEVA fuente de verdad) ───────────────────────
+    // Los getters de abajo transforman los campos viejos sobre la marcha
+    // para que los demás módulos sigan leyendo sin romperse.
+    nombre: {
       type: String,
-      enum: ['vender', 'comprar', 'rentar', 'alquilar'],
-      default: 'comprar',
-    },
-    name: {
-      type: String,
-      required: [true, 'El nombre del cliente es obligatorio'],
       trim: true,
+      // Un cliente viejo (con solo `name`) sigue siendo editable; pero un
+      // registro NUEVO siempre debe tener nombre. Falla solo si no hay
+      // nombre canónico ni nombre legado.
+      required: [
+        function validateNombre() { return Boolean((this.nombre && String(this.nombre).trim()) || (this._doc && this._doc.name && String(this._doc.name).trim()) || (this.name && String(this.name).trim())); },
+        'El nombre del cliente es obligatorio',
+      ],
     },
-    phone: { type: String, trim: true, default: '' },
+    telefono: { type: String, trim: true, default: '' },
     email: { type: String, trim: true, lowercase: true, default: '' },
-    contactMedium: {
+    medio: {
       type: String,
-      enum: ['redes', 'referido', 'lona', 'tarjeta', 'sitio_web'],
-      default: 'redes',
+      enum: ['WhatsApp', 'Facebook', 'Llamada', 'Portal Inmobiliario', 'Lona/Rótulo', 'Recomendación', 'Otro'],
+      default: 'WhatsApp',
     },
-    responsibleUser: {
-      type: mongoose.Schema.Types.ObjectId,
+    fechaRegistro: { type: Date, default: Date.now },
+    servicio: {
+      type: String,
+      enum: ['Comprar', 'Vender', 'Rentar', 'Otro'],
+      default: 'Comprar',
+    },
+    queBusca: { type: String, trim: true, default: '' },
+    zona: { type: String, trim: true, default: '' },
+    formaPago: {
+      type: String,
+      enum: ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'],
+      default: 'Contado',
+    },
+    capacidad: { type: Number, min: 0, default: 0 },
+    vigencia: { type: String, trim: true, default: '' },
+    etapaActual: { type: String, enum: ETAPAS, default: 'PROSPECTO' },
+    ultVez: { type: Date, default: Date.now },
+    totalLlamadas: { type: Number, min: 0, default: 0 },
+    notasGenerales: { type: String, trim: true, default: '' },
+    asesorAsignado: {
+      type: Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'El usuario responsable es obligatorio'],
+      default: null,
     },
-    metodoPago: {
-      type: String,
-      enum: ['infonavit', 'credito_bancario', 'efectivo', 'credito_hipotecario', 'otro'],
-      default: 'efectivo',
+    negocioId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Business',
+      default: null,
     },
-    notes: { type: String, trim: true, default: '' },
+    historialEtapas: [
+      {
+        etapaAnterior: { type: String, enum: ETAPAS.concat(['']), default: null },
+        etapaNueva: { type: String, enum: ETAPAS, required: true },
+        nota: { type: String, trim: true, default: '' },
+        usuario: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+        fecha: { type: Date, default: Date.now },
+      },
+    ],
+
+    // ── Estado del embudo y del expediente ──────────────────────────────
     status: {
       type: String,
       enum: ['activo', 'inactivo', 'concluido'],
       default: 'activo',
     },
     funnelStage: {
+      // Incluye los valores legados ('promesa', 'cierre') para que los
+      // clientes existentes puedan guardarse sin romper la validación.
       type: String,
-      enum: ['prospecto', 'cita', 'negociacion', 'promesa', 'cierre'],
+      enum: ['prospecto', 'perfilado', 'contacto', 'cita', 'negociacion', 'postventa', 'descartado', 'promesa', 'cierre'],
       default: 'prospecto',
     },
-    joinedAt: { type: Date, default: Date.now },
 
-    sellerInfo: {
-      operationType: {
-        type: String,
-        enum: ['venta', 'renta'],
-        default: null,
+    // ── Campos LEGADOS (se conservan como campos reales opcionales para no
+    //    perder datos existentes. Los getters de abajo los transforman en
+    //    lectura según el campo canónico equivalente) ─────────────────────
+    type: {
+      type: String,
+      enum: ['comprar', 'vender', 'rentar', 'alquilar'],
+      default: 'comprar',
+      // Nuevo: mapeo por servicio (SOLO si el campo canónico existe de verdad
+      // en el documento, no si quedó como default). Viejo: valor almacenado.
+      get(v) {
+        const s = this._doc && this._doc.servicio;
+        if (s) {
+          const map = { Comprar: 'comprador', Vender: 'vendedor', Rentar: 'rentar' };
+          return map[s] || 'comprador';
+        }
+        return v || 'comprar';
       },
-      property: { type: String, trim: true, default: '' },
-      propertyType: {
-        type: String,
-        enum: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'],
-        default: null,
-      },
-      location: { type: String, trim: true, default: '' },
-      hasMortgage: { type: Boolean, default: false },
-      mortgageInstitution: { type: String, trim: true, default: '' },
-      debt: { type: Number, min: 0, default: 0 },
-      requestedPrice: { type: Number, min: 0, default: 0 },
-      observations: { type: String, trim: true, default: '' },
     },
-
+    contactMedium: {
+      type: String,
+      enum: ['redes', 'referido', 'lona', 'tarjeta', 'sitio_web'],
+      default: 'redes',
+      get(v) {
+        const m = this._doc && this._doc.medio;
+        return m || v || 'redes';
+      },
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: '',
+      get(v) {
+        return this.notasGenerales || v || '';
+      },
+    },
+    responsibleUser: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      get(v) {
+        return this.asesorAsignado || v || null;
+      },
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now,
+      get(v) {
+        return this.fechaRegistro || v || null;
+      },
+    },
+    metodoPago: {
+      type: String,
+      enum: ['infonavit', 'credito_bancario', 'efectivo', 'credito_hipotecario', 'otro'],
+      default: 'efectivo',
+    },
     buyerInfo: {
-      desiredZone: { type: String, trim: true, default: '' },
-      budget: { type: Number, min: 0, default: 0 },
-      paymentMethod: { type: String, trim: true, default: '' },
-      propertyType: {
-        type: String,
-        enum: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'],
-        default: null,
+      // Se conserva como Mixed para no perder los subcampos que ya existían
+      // (créditos, enganche, bancos, etc.). El getter fusiona los campos
+      // canónicos encima de los datos legados en las LECTURAS.
+      type: Object,
+      default: null,
+      get(v) {
+        const raw = this._doc || {};
+        const canonical = {};
+        if (raw.capacidad) canonical.budget = raw.capacidad;
+        if (raw.zona) canonical.desiredZone = raw.zona;
+        if (raw.queBusca) canonical.desiredFeatures = raw.queBusca;
+        if (raw.formaPago) canonical.paymentMethod = raw.formaPago;
+        if (!Object.keys(canonical).length) return v || null;
+        return { ...(v && typeof v === 'object' ? v : {}), ...canonical };
       },
-      desiredFeatures: { type: String, trim: true, default: '' },
-      observations: { type: String, trim: true, default: '' },
-
-      // ── Financiamiento (créditos usados en México) ─────────────────────
-      // ¿Combina dos créditos? (ej. INFONAVIT + FOVISSSTE es muy común).
-      mergeCredits: { type: Boolean, default: false },
-      // Semáforo del financiamiento del comprador.
-      creditStatus: {
-        type: String,
-        enum: ['sin_aplica', 'solicitado', 'pre_aprobado', 'aprobado', 'en_escrituracion'],
-        default: 'sin_aplica',
-      },
-      // Banco del crédito bancario /hipotecario (BBVA, Banorte, ...).
-      bank: { type: String, trim: true, default: '' },
-      // Enlace salarial: modalidad del financiamiento.
-      salaryConnection: {
-        type: String,
-        enum: ['independiente', 'relacion_laboral', 'rfc_moral', 'otro'],
-        default: 'independiente',
-      },
-      // Enganche que pagará el comprador.
-      downPayment: { type: Number, min: 0, default: 0 },
-      // Subcuenta de vivienda / subsidios (INFONAVIT/FOVISSSTE).
-      subsidy: { type: Number, min: 0, default: 0 },
-      // Recursos propios adicionales (apoyo familiar, etc.).
-      ownResources: { type: Number, min: 0, default: 0 },
-      // Total de financiamiento con el que pagará (se calcula automático:
-      // suma de créditos + subcuenta/subsidio + recursos propios).
-      totalFunding: { type: Number, min: 0, default: 0 },
-      // Créditos aplicables al comprador (se puede combinar más de uno).
-      credits: [{
-        tipo: {
-          type: String,
-          enum: ['infonavit', 'fovissste', 'infonavit_fovissste', 'cofinavit', 'apoyo_infonavit', 'credito_bancario', 'credito_hipotecario', 'contado', 'otro'],
-          default: 'otro',
-        },
-        monto: { type: Number, min: 0, default: 0 },
-        institucion: { type: String, trim: true, default: '' },
-        estatus: {
-          type: String,
-          enum: ['pendiente', 'solicitado', 'pre_aprobado', 'aprobado', 'otorgado'],
-          default: 'pendiente',
-        },
-        observaciones: { type: String, trim: true, default: '' },
-      }],
     },
-
+    sellerInfo: {
+      type: Object,
+      default: null,
+    },
     documentos: [{
       nombre: { type: String, trim: true },
       url: { type: String, trim: true },
@@ -129,12 +167,27 @@ const clientSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true, transform(doc, ret) { delete ret.__v; return ret; } },
+    toJSON: {
+      getters: true,
+      virtuals: true,
+      transform(doc, ret) { delete ret.__v; return ret; },
+    },
   }
 );
 
-clientSchema.index({ name: 'text' });
-clientSchema.index({ responsibleUser: 1, status: 1 });
+// Virtuals de compatibilidad SOLO lectura para los campos que ya no viven
+// como rutas reales (name/phone). El resto usa getters de path (ver arriba),
+// porque mongoose no permite un virtual y una ruta con el mismo nombre.
+clientSchema.virtual('name').get(function getName() {
+  return this.nombre || (this._doc && this._doc.name) || '';
+});
+clientSchema.virtual('phone').get(function getPhone() {
+  return this.telefono || (this._doc && this._doc.phone) || '';
+});
+
+clientSchema.index({ asesorAsignado: 1, status: 1 });
+clientSchema.index({ nombre: 'text' });
+clientSchema.index({ negocioId: 1 });
 clientSchema.index({ email: 1 });
 
 module.exports = mongoose.model('Client', clientSchema);

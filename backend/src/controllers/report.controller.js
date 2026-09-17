@@ -20,8 +20,8 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
 
   const [prospects, contacts, appointments, tasks, activeBusinesses, concludedBusinesses, cancelledBusinesses, expenses, goals] =
     await Promise.all([
-      Client.countDocuments({ ...period, responsibleUser: userId, status: 'activo' }),
-      Client.countDocuments({ responsibleUser: userId, funnelStage: { $in: ['contacto', 'cita', 'negociacion', 'promesa'] } }),
+      Client.countDocuments({ ...period, asesorAsignado: userId, status: 'activo' }),
+      Client.countDocuments({ asesorAsignado: userId, funnelStage: { $in: ['contacto', 'cita', 'negociacion', 'promesa'] } }),
       Appointment.countDocuments({ ...period, user: userId }),
       Task.countDocuments({ assignedTo: userId }),
       Business.countDocuments({ mainAdvisor: userId, status: 'activo' }),

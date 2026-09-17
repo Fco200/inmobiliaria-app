@@ -13,14 +13,14 @@ const upcoming = asyncHandler(async (req, res) => {
       status: { $in: ['pendiente', 'en_proceso'] },
       date: { $gte: now, $lte: end },
     })
-      .populate('client', 'name phone')
+      .populate('client', 'nombre name telefono phone')
       .sort({ date: 1 }),
     Appointment.find({
       user: req.user._id,
       status: { $in: ['pendiente', 'confirmada'] },
       date: { $gte: now, $lte: end },
     })
-      .populate('client', 'name phone')
+      .populate('client', 'nombre name telefono phone')
       .sort({ date: 1 }),
   ]);
 

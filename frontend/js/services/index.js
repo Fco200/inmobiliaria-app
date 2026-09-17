@@ -59,6 +59,9 @@ window.API = {
     create: (body) => ApiClient.post('/clients', body),
     update: (id, body) => ApiClient.put(`/clients/${id}`, body),
     remove: (id) => ApiClient.remove(`/clients/${id}`),
+    changeEtapa: (id, body) => ApiClient.post(`/clients/${id}/cambiar-etapa`, body),
+    registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
+    historial: (id) => ApiClient.get(`/clients/${id}/historial`),
   },
 
   properties: {

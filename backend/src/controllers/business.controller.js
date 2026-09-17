@@ -248,4 +248,4 @@ const history = asyncHandler(async (req, res) => {
   res.json({ success: true, data: stages });
 });
 
-module.exports = { list, get, create, update, remove, changeStage, history, stagesFor, STAGE_LABELS, STAGES_BY_PROCESS };
+module.exports = { list, get, create, update, remove, changeStage, history, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };

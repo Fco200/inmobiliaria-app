@@ -24,7 +24,7 @@ const list = asyncHandler(async (req, res) => {
     Interaction.countDocuments(filter),
     Interaction.find(filter)
       .populate('user', 'name photo')
-      .populate('client', 'name')
+      .populate('client', 'nombre name')
       .skip((page - 1) * limit)
       .limit(limit)
       .sort({ createdAt: -1 }),
@@ -50,7 +50,7 @@ const create = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
   }
   if (!isBoss(req)) {
-    const ownerId = String((clientDoc.responsibleUser && clientDoc.responsibleUser._id) || clientDoc.responsibleUser || '');
+    const ownerId = String((clientDoc.asesorAsignado || clientDoc.responsibleUser) || '');
     if (ownerId !== String(req.user._id)) {
       return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
     }
@@ -65,7 +65,7 @@ const create = asyncHandler(async (req, res) => {
   });
 
   await interaction.populate('user', 'name photo');
-  await interaction.populate('client', 'name');
+  await interaction.populate('client', 'nombre name');
 
   res.status(201).json({ success: true, data: interaction });
 });

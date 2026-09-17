@@ -353,17 +353,39 @@ const createAppointment = asyncHandler(async (req, res) => {
   const cleanPhone = String(phone || '').replace(/\D/g, '');
   let client = null;
   if (cleanName) {
+    // Dedupe por nombre y teléfono cubriendo clientes legados (name/phone) y
+    // canónicos (nombre/telefono).
     client = cleanPhone
-      ? await Client.findOne({ name: cleanName, phone: cleanPhone, responsibleUser })
-      : await Client.findOne({ name: cleanName, responsibleUser });
+      ? await Client.findOne({
+          $and: [
+            { $or: [{ nombre: cleanName }, { name: cleanName }] },
+            { $or: [{ telefono: cleanPhone }, { phone: cleanPhone }] },
+          ],
+          $or: [{ asesorAsignado: responsibleUser }, { responsibleUser }],
+        })
+      : await Client.findOne({
+          $and: [
+            { $or: [{ nombre: cleanName }, { name: cleanName }] },
+          ],
+          $or: [{ asesorAsignado: responsibleUser }, { responsibleUser }],
+        });
     if (!client) {
       client = await Client.create({
-        type: 'comprar',
-        name: cleanName,
-        phone: cleanPhone,
-        responsibleUser,
-        contactMedium: 'sitio_web',
+        servicio: 'Comprar',
+        nombre: cleanName,
+        telefono: cleanPhone,
+        asesorAsignado: responsibleUser,
+        medio: 'Portal Inmobiliario',
+        etapaActual: 'CITA',
         funnelStage: 'cita',
+        ultVez: new Date(),
+        historialEtapas: [{
+          etapaAnterior: null,
+          etapaNueva: 'CITA',
+          nota: 'Cliente registrado desde la landing page al agendar cita',
+          usuario: responsibleUser,
+          fecha: new Date(),
+        }],
       });
     }
   }

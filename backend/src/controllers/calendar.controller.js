@@ -195,7 +195,7 @@ async function gatherEvents(userId, from, to) {
     user: userId,
     date: { $gte: from, $lte: to },
   })
-    .populate('client', 'name')
+    .populate('client', 'nombre name')
     .populate('property', 'zone city type')
     .lean();
 
@@ -208,7 +208,7 @@ async function gatherEvents(userId, from, to) {
       title: ['visita_propiedad', 'oficina', 'firma', 'avaluo', 'seguimiento', 'otro'].includes(a.type)
         ? `Cita ${a.type.replace(/_/g, ' ')}`
         : 'Cita',
-      summary: `Cita: ${a.client && a.client.name ? a.client.name : 'Sin cliente'}`,
+      summary: `Cita: ${a.client && (a.client.nombre || a.client.name) ? (a.client.nombre || a.client.name) : 'Sin cliente'}`,
       description: a.notes || '',
       start: a.date,
       end,
@@ -225,8 +225,8 @@ async function gatherEvents(userId, from, to) {
     assignedTo: userId,
     date: { $gte: from, $lte: to },
   })
-    .populate('client', 'name')
-    .lean();
+.populate('client', 'nombre name')
+    .lean()
   tasks.forEach((t) => {
     const end = new Date(t.date.getTime() + 60 * 60 * 1000);
     events.push({
@@ -253,7 +253,7 @@ async function gatherEvents(userId, from, to) {
       { mainAdvisor: userId },
       { partnerAdvisor: userId },
     ],
-  }).populate('buyerClient', 'name').lean();
+  }).populate('buyerClient', 'nombre name').lean();
 
   businesses.forEach((b) => {
     const candidates = [];

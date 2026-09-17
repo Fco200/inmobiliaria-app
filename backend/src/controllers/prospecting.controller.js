@@ -99,8 +99,8 @@ const summary = asyncHandler(async (req, res) => {
     Client.aggregate([
       {
         $match: {
-          ...(filter.user ? { responsibleUser: filter.user } : {}),
-          ...(filter.date ? { joinedAt: filter.date } : {}),
+          ...(filter.user ? { asesorAsignado: filter.user } : {}),
+          ...(filter.date ? { fechaRegistro: filter.date } : {}),
         },
       },
       { $group: { _id: '$funnelStage', count: { $sum: 1 } } },

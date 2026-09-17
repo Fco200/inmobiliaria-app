@@ -38,20 +38,27 @@ async function notifyInterestedClients(property) {
 
   try {
     const price = Number(property.price) || 0;
+    // Coincidencia por campos legados (type) y canónicos (servicio):
+    // los clientes nuevos solo tienen `servicio`, los viejos solo `type`.
+    const venta = property.operationType === 'venta';
+    const servicioMatch = venta ? ['Comprar'] : ['Rentar'];
     const clients = await Client.find({
       status: { $in: ['activo'] },
-      type: { $in: intentions },
-      responsibleUser: { $ne: null },
+      $and: [
+        { $or: [{ type: { $in: intentions } }, { servicio: { $in: servicioMatch } }] },
+        { $or: [{ asesorAsignado: { $ne: null } }, { responsibleUser: { $ne: null } }] },
+      ],
     });
 
     let notified = 0;
     for (const client of clients) {
+      const targetUser = client.asesorAsignado || client.responsibleUser;
       const budget = client.buyerInfo && client.buyerInfo.budget ? Number(client.buyerInfo.budget) : 0;
       if (budget > 0 && price > budget * 1.15) continue; // supera el presupuesto (15% de holgura)
 
       const key = `prop-${property._id}-${client._id}`;
       const existing = await Notification.findOne({
-        user: client.responsibleUser,
+        user: targetUser,
         type: 'nueva_propiedad',
         'data.key': key,
       });
@@ -60,7 +67,7 @@ async function notifyInterestedClients(property) {
       const place = [property.zone, property.city].filter(Boolean).join(', ') || 'sin ubicación';
       const priceText = price ? `$${price.toLocaleString('es-MX')}` : 'a definir';
       await Notification.create({
-        user: client.responsibleUser,
+        user: targetUser,
         type: 'nueva_propiedad',
         title: 'Nueva propiedad para tu cliente',
         message: `Se publicó una ${property.type} en ${place} por ${priceText}. Coincide con los intereses de ${client.name}.`,

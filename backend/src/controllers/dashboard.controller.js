@@ -15,7 +15,7 @@ const summary = asyncHandler(async (req, res) => {
 
   const [clients, properties, businessesActive, businessesConcluded, businessesCancelled, businessesNegotiation, businessesPromesa, appointmentsUpcoming, tasksPending, unread, expensesThisMonth, activeGoals, pipelineAgg, thisMonthAgg] =
     await Promise.all([
-      Client.countDocuments(isAdminOrGerencia ? {} : { responsibleUser: user._id }),
+      Client.countDocuments(isAdminOrGerencia ? {} : { asesorAsignado: user._id }),
       Property.countDocuments(isAdminOrGerencia ? {} : { responsibleUser: user._id }),
       Business.countDocuments({ ...myFilter, status: 'activo' }),
       Business.countDocuments({ ...myFilter, status: 'concluido' }),
@@ -65,7 +65,7 @@ const summary = asyncHandler(async (req, res) => {
   const [funnel, prospectingAgg] = await Promise.all([
     Client.aggregate([
       {
-        $match: isAdminOrGerencia ? {} : { responsibleUser: user._id },
+        $match: isAdminOrGerencia ? {} : { asesorAsignado: user._id },
       },
       { $group: { _id: '$funnelStage', count: { $sum: 1 } } },
     ]),
@@ -135,7 +135,7 @@ const userReport = asyncHandler(async (req, res) => {
 
   const [clients, activeBusinesses, concludedBusinesses, cancelledBusinesses, tasks, goals, tickets, expenses, funnelAgg] =
     await Promise.all([
-      Client.countDocuments({ responsibleUser: target }),
+      Client.countDocuments({ asesorAsignado: target }),
       Business.countDocuments({ mainAdvisor: target, status: 'activo' }),
       Business.countDocuments({ mainAdvisor: target, status: 'concluido' }),
       Business.countDocuments({ mainAdvisor: target, status: 'cancelado' }),
@@ -150,14 +150,14 @@ const userReport = asyncHandler(async (req, res) => {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       Client.aggregate([
-        { $match: { responsibleUser: target } },
+        { $match: { asesorAsignado: target } },
         { $group: { _id: '$funnelStage', count: { $sum: 1 } } },
       ]),
     ]);
 
   const [appointments, prospects, negotiations, closuresAgg] = await Promise.all([
     Appointment.countDocuments({ user: target }),
-    Client.countDocuments({ responsibleUser: target, status: 'activo' }),
+    Client.countDocuments({ asesorAsignado: target, status: 'activo' }),
     Business.countDocuments({ mainAdvisor: target, currentStage: { $in: ['negociacion', 'promesa'] } }),
     Business.aggregate([
       { $match: { mainAdvisor: target, status: 'concluido' } },

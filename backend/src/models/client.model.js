@@ -26,7 +26,7 @@ const clientSchema = new Schema(
     email: { type: String, trim: true, lowercase: true, default: '' },
     medio: {
       type: String,
-      enum: ['WhatsApp', 'Facebook', 'Llamada', 'Portal Inmobiliario', 'Lona/Rótulo', 'Recomendación', 'Otro'],
+      enum: ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'],
       default: 'WhatsApp',
     },
     fechaRegistro: { type: Date, default: Date.now },
@@ -37,11 +37,8 @@ const clientSchema = new Schema(
     },
     queBusca: { type: String, trim: true, default: '' },
     zona: { type: String, trim: true, default: '' },
-    formaPago: {
-      type: String,
-      enum: ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'],
-      default: 'Contado',
-    },
+    // Texto libre por diseño: Efectivo, Infonavit, Fovissste, Bancario, etc.
+    formaPago: { type: String, trim: true, default: 'Contado' },
     capacidad: { type: Number, min: 0, default: 0 },
     vigencia: { type: String, trim: true, default: '' },
     etapaActual: { type: String, enum: ETAPAS, default: 'PROSPECTO' },
@@ -58,11 +55,16 @@ const clientSchema = new Schema(
       ref: 'Business',
       default: null,
     },
+    ultimaCitaId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Appointment',
+      default: null,
+    },
     historialEtapas: [
       {
         etapaAnterior: { type: String, enum: ETAPAS.concat(['']), default: null },
         etapaNueva: { type: String, enum: ETAPAS, required: true },
-        nota: { type: String, trim: true, default: '' },
+        nota: { type: String, trim: true, required: true },
         usuario: { type: Schema.Types.ObjectId, ref: 'User', default: null },
         fecha: { type: Date, default: Date.now },
       },

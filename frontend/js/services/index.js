@@ -62,6 +62,7 @@ window.API = {
     changeEtapa: (id, body) => ApiClient.post(`/clients/${id}/cambiar-etapa`, body),
     registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
     historial: (id) => ApiClient.get(`/clients/${id}/historial`),
+    conteoEtapas: () => ApiClient.get('/clients/conteo-etapas'),
   },
 
   properties: {

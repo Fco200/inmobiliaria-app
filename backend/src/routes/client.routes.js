@@ -17,6 +17,8 @@ router.use(protect);
 router.get('/', clientController.list);
 router.post('/', clientRules, clientController.create);
 
+router.get('/conteo-etapas', clientController.conteoEtapas);
+
 router.get('/:id/historial', clientIdParam, clientController.historial);
 router.post('/:id/cambiar-etapa', clientIdParam, stageRules, clientController.cambiarEtapa);
 router.post('/:id/registrar-llamada', clientIdParam, clientController.registrarLlamada);

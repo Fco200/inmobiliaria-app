@@ -4,9 +4,8 @@ const { body, param } = require('express-validator');
 const validate = require('../middlewares/validate');
 
 const ETAPAS = ['PROSPECTO', 'PERFILADO', 'SEGUIMIENTO', 'CITA', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
-const MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal Inmobiliario', 'Lona/Rótulo', 'Recomendación', 'Otro'];
+const MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
 const SERVICIOS = ['Comprar', 'Vender', 'Rentar', 'Otro'];
-const FORMAS_PAGO = ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'];
 
 // Creación de clientes: el nombre es obligatorio.
 const clientRules = [
@@ -16,7 +15,7 @@ const clientRules = [
   body('medio').optional().isIn(MEDIOS).withMessage('Medio de contacto no válido'),
   body('servicio').optional().isIn(SERVICIOS).withMessage('Servicio no válido'),
   body('etapaActual').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
-  body('formaPago').optional().isIn(FORMAS_PAGO).withMessage('Forma de pago no válida'),
+  body('formaPago').optional().isString().withMessage('Forma de pago no válida'),
   body('vigencia').optional().isString().withMessage('Vigencia no válida'),
   body('asesorAsignado').optional().isMongoId().withMessage('Asesor no válido'),
   body('capacidad').optional().isNumeric().withMessage('Capacidad de pago no válida'),
@@ -30,16 +29,18 @@ const clientUpdateRules = [
   body('medio').optional().isIn(MEDIOS).withMessage('Medio de contacto no válido'),
   body('servicio').optional().isIn(SERVICIOS).withMessage('Servicio no válido'),
   body('etapaActual').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
-  body('formaPago').optional().isIn(FORMAS_PAGO).withMessage('Forma de pago no válida'),
+  body('formaPago').optional().isString().withMessage('Forma de pago no válida'),
   body('vigencia').optional().isString().withMessage('Vigencia no válida'),
   body('asesorAsignado').optional().isMongoId().withMessage('Asesor no válido'),
   body('capacidad').optional().isNumeric().withMessage('Capacidad de pago no válida'),
 ];
 
-// Cambio de etapa: etapa válida + nota obligatoria.
+// Cambio de etapa: etapa válida (etapaNueva o etapa) + nota obligatoria + datos del perfil opcionales.
 const stageRules = [
-  body('etapa').isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('etapaNueva').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('etapa').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
   body('nota').trim().notEmpty().withMessage('La nota es obligatoria'),
+  body('datosEtapa').optional().isObject().withMessage('datosEtapa debe ser un objeto'),
 ];
 
 const clientIdParam = [param('id').isMongoId().withMessage('Identificador no válido')];

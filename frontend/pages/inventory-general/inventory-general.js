@@ -242,13 +242,16 @@ window.Pages['inventory-general'] = {
         if (!client) return UI.toast('Selecciona un cliente', 'warning');
         if (!date) return UI.toast('Indica la fecha y hora', 'warning');
         try {
+          const typeEl = overlay.querySelector('[data-type]');
+          const notesEl = overlay.querySelector('[data-notes]');
+          const specify = UI.otrosText ? UI.otrosText(typeEl) : '';
           await API.appointments.create({
             user: stored && stored._id,
             client,
             property: prop._id,
             date: new Date(date).toISOString(),
-            type: overlay.querySelector('[data-type]').value,
-            notes: overlay.querySelector('[data-notes]').value,
+            type: typeEl.value,
+            notes: [notesEl.value, specify].filter(Boolean).join(' — '),
           });
           UI.toast('Cita agendada', 'success');
           UI.closeModal();
@@ -449,7 +452,8 @@ window.Pages['inventory-general'] = {
       if (!overlay) return;
       overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
       overlay.querySelector('[data-ok]').addEventListener('click', async () => {
-        const type = overlay.querySelector('[data-type]').value;
+        const typeEl = overlay.querySelector('[data-type]');
+        const type = typeEl.value;
         const operationType = overlay.querySelector('[data-operation]').value;
         if (!type || !operationType) return UI.toast('Selecciona el tipo y la operación', 'warning');
         const photosInput = overlay.querySelector('[data-photos]');
@@ -470,7 +474,10 @@ window.Pages['inventory-general'] = {
             state: overlay.querySelector('[data-state]').value.trim(),
             price: Number(overlay.querySelector('[data-price]').value) || 0,
             ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
-            description: overlay.querySelector('[data-description]').value.trim(),
+            description: [
+              overlay.querySelector('[data-description]').value.trim(),
+              UI.otrosText ? UI.otrosText(typeEl) : '',
+            ].filter(Boolean).join(' — '),
             isPublished: publishEl ? publishEl.checked : false,
           });
 

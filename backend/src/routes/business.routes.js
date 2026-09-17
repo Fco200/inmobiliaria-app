@@ -10,6 +10,7 @@ const router = Router();
 router.use(protect);
 
 router.get('/', businessController.list);
+router.get('/stages', businessController.stages);
 router.post('/', businessRules, businessController.create);
 router.get('/:id', businessIdParam, businessController.get);
 router.put('/:id', businessIdParam, businessUpdateRules, businessController.update);

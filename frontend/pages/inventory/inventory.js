@@ -186,13 +186,16 @@ window.Pages.inventory = {
         if (!client) return UI.toast('Selecciona un cliente', 'warning');
         if (!date) return UI.toast('Indica la fecha y hora', 'warning');
         try {
+          const typeEl = overlay.querySelector('[data-type]');
+          const notesEl = overlay.querySelector('[data-notes]');
+          const specify = UI.otrosText ? UI.otrosText(typeEl) : '';
           await API.appointments.create({
             user: myId,
             client,
             property: prop._id,
             date: new Date(date).toISOString(),
-            type: overlay.querySelector('[data-type]').value,
-            notes: overlay.querySelector('[data-notes]').value,
+            type: typeEl.value,
+            notes: [notesEl.value, specify].filter(Boolean).join(' — '),
           });
           UI.toast('Cita agendada', 'success');
           UI.closeModal();

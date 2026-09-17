@@ -6,23 +6,50 @@ window.Pages.businesses = {
   title: 'Negocios',
 
   async render(container) {
-    let buyers = [];
-    let sellers = [];
+    // Etapas de respaldo (idénticas al backend) por si el endpoint no responde.
+    const FALLBACK_BUYER = [
+      'nuevo', 'prospecto', 'contactado', 'perfilado', 'cita', 'negociacion',
+      'contrato', 'integracion', 'avaluo', 'revision', 'notarias', 'firma',
+      'pago', 'entrega', 'postventa', 'concluido',
+    ];
+    const FALLBACK_SELLER = [
+      'nuevo', 'prospecto', 'contactado', 'revision', 'cita', 'captacion',
+      'integracion_expedientes', 'negociacion', 'promesa', 'avaluo', 'concluido',
+    ];
+
+    // Las etapas reales las expone el backend (GET /businesses/stages); así el
+    // embudo, el select de cambio de etapa y las etiquetas nunca se desincronizan.
+    let stageMeta = {
+      byProcess: { comprador: FALLBACK_BUYER.slice(), vendedor: FALLBACK_SELLER.slice() },
+      labels: {},
+    };
+    try {
+      const stagesRes = await API.businesses.stages();
+      const data = (stagesRes && stagesRes.data) || stagesRes || {};
+      if (data.byProcess && data.byProcess.comprador) {
+        stageMeta = {
+          byProcess: {
+            comprador: data.byProcess.comprador,
+            vendedor: (data.byProcess.vendedor || FALLBACK_SELLER.slice()),
+          },
+          labels: data.labels || {},
+        };
+      }
+    } catch (error) {
+      // respaldo: las listas por defecto arriba
+    }
+
     let properties = [];
     let users = [];
     let clients = [];
     let me = null;
     try {
-      const [b, s, p, u, c, m] = await Promise.all([
-        API.clients.list({ limit: 100, type: 'comprador' }).catch(() => ({ data: [] })),
-        API.clients.list({ limit: 100, type: 'vendedor' }).catch(() => ({ data: [] })),
+      const [p, u, c, m] = await Promise.all([
         API.properties.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.auth.me().catch(() => null),
       ]);
-      buyers = b.data;
-      sellers = s.data;
       properties = p.data;
       users = u.data;
       clients = c.data;
@@ -31,38 +58,43 @@ window.Pages.businesses = {
       // sin opciones
     }
 
-    const BUYER_STAGES = [
-      'nuevo', 'prospecto', 'contactado', 'perfilado', 'cita', 'contrato',
-      'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago',
-      'entrega', 'postventa', 'concluido', 'cancelado',
-    ];
-    const SELLER_STAGES = [
-      'nuevo', 'prospecto', 'contactado', 'revision', 'cita', 'captacion',
-      'integracion_expedientes', 'promesa', 'avaluo', 'concluido', 'cancelado',
-    ];
-    const stagesFor = (processType) => (processType === 'vendedor' ? SELLER_STAGES : BUYER_STAGES);
-    const stageLabel = (s) => String(s || '').replace(/_/g, ' ');
+    // Un mismo catálogo de clientes se parte por tipo (comprador/vendedor):
+    // el cliente sí distingue "Comprar"/"Vender" (campo servicio / type).
+    const isBuyerClient = (x) => x && ((x.type === 'comprador') || /Comprar/i.test(x.servicio || ''));
+    const isSellerClient = (x) => x && ((x.type === 'vendedor') || /Vender/i.test(x.servicio || ''));
+    const buyers = clients.filter(isBuyerClient);
+    const sellers = clients.filter(isSellerClient);
 
-    const BUYER_COLUMNS = [
-      { stage: 'perfilado', label: 'Perfilado', color: '#64748b' },
-      { stage: 'cita', label: 'Citas', color: '#0ea5e9' },
-      { stage: 'contrato', label: 'Contrato', color: '#8b5cf6' },
-      { stage: 'integracion', label: 'Integración', color: '#0d9488' },
-      { stage: 'avaluo', label: 'Avalúo', color: '#b45309' },
-      { stage: 'revision', label: 'Revisión', color: '#2563eb' },
-      { stage: 'notarias', label: 'Notarías', color: '#db2777' },
-      { stage: 'firma', label: 'Firma', color: '#ea580c' },
-      { stage: 'pago', label: 'Pago', color: '#7c3aed' },
-      { stage: 'entrega', label: 'Entrega', color: '#0891b2' },
-    ];
-    const SELLER_COLUMNS = [
-      { stage: 'revision', label: 'Revisión', color: '#2563eb' },
-      { stage: 'cita', label: 'Citas', color: '#0ea5e9' },
-      { stage: 'captacion', label: 'Captación', color: '#8b5cf6' },
-      { stage: 'integracion_expedientes', label: 'Integración expedientes', color: '#0d9488' },
-      { stage: 'promesa', label: 'Promesa', color: '#9333ea' },
-      { stage: 'avaluo', label: 'Avalúo', color: '#b45309' },
-    ];
+    const stagesFor = (processType) => stageMeta.byProcess[processType] || stageMeta.byProcess.comprador;
+    const stageLabel = (code) => stageMeta.labels[code] || String(code || '').replace(/_/g, ' ');
+
+    const allStageOptions = Array.from(
+      new Set([...stageMeta.byProcess.comprador, ...stageMeta.byProcess.vendedor])
+    ).map((s) => ({ value: s, label: stageLabel(s) }));
+
+    const STAGE_COLORS = {
+      nuevo: '#64748b',
+      prospecto: '#64748b',
+      contactado: '#64748b',
+      perfilado: '#0ea5e9',
+      cita: '#0ea5e9',
+      negociacion: '#f59e0b',
+      contrato: '#8b5cf6',
+      integracion: '#0d9488',
+      avaluo: '#b45309',
+      revision: '#2563eb',
+      notarias: '#db2777',
+      firma: '#ea580c',
+      pago: '#7c3aed',
+      entrega: '#0891b2',
+      postventa: '#14b8a6',
+      captacion: '#8b5cf6',
+      integracion_expedientes: '#0d9488',
+      promesa: '#9333ea',
+      concluido: '#1f9d55',
+      cancelado: '#dc2626',
+    };
+    const colorFor = (stage) => STAGE_COLORS[stage] || '#64748b';
 
     const userOptions = users.length
       ? users.map((x) => ({ value: x._id, label: x.name }))
@@ -88,6 +120,15 @@ window.Pages.businesses = {
 
     const contentEl = container.querySelector('#biz-content');
 
+    // Delegación persistente para "Etapas" (historial) del listado: se registra
+    // una sola vez, aunque la vista tabla se reconstruya varias veces.
+    contentEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-history]');
+      if (!btn) return;
+      const recordId = getRecordIdFromRow(btn);
+      if (recordId) showHistory(recordId);
+    });
+
     container.querySelectorAll('[data-view]').forEach((tab) => {
       tab.addEventListener('click', () => {
         state.view = tab.dataset.view;
@@ -98,6 +139,15 @@ window.Pages.businesses = {
 
     container.querySelector('[data-new]').addEventListener('click', () => openNew());
 
+    function columnsFor(processType) {
+      const columns = stagesFor(processType)
+        .filter((s) => s !== 'concluido' && s !== 'cancelado')
+        .map((s) => ({ stage: s, label: stageLabel(s), color: colorFor(s) }));
+      columns.push({ stage: 'concluido', label: stageLabel('concluido'), color: '#1f9d55' });
+      columns.push({ stage: 'cancelado', label: stageLabel('cancelado'), color: '#dc2626' });
+      return columns;
+    }
+
     function renderView() {
       if (state.view === 'kanban') {
         renderKanban();
@@ -106,11 +156,50 @@ window.Pages.businesses = {
       }
     }
 
+    // ============ INDICADORES ============
+
+    async function renderSummary(summaryEl) {
+      if (!summaryEl) return;
+      try {
+        const [totalR, activeR, doneR, cancelledR, negR] = await Promise.all([
+          API.businesses.list({ limit: 1 }),
+          API.businesses.list({ limit: 1, status: 'activo' }),
+          API.businesses.list({ limit: 1, status: 'concluido' }),
+          API.businesses.list({ limit: 1, status: 'cancelado' }),
+          API.businesses.list({ limit: 1, currentStage: 'negociacion' }),
+        ]);
+        const total = (totalR.meta && totalR.meta.total) || 0;
+        const activos = (activeR.meta && activeR.meta.total) || 0;
+        const concluidos = (doneR.meta && doneR.meta.total) || 0;
+        const cancelados = (cancelledR.meta && cancelledR.meta.total) || 0;
+        const enNeg = (negR.meta && negR.meta.total) || 0;
+        const kpi = (title, value, tone, icon) => `
+          <div class="kpi-card tone-${tone}">
+            <div class="kpi-icon">${icon}</div>
+            <div class="kpi-body">
+              <small>${title}</small>
+              <strong>${value}</strong>
+            </div>
+          </div>`;
+        summaryEl.innerHTML = `<div class="kpi-grid" style="margin-bottom:16px;">${[
+          kpi('Total de negocios', total, 'blue', '&#128179;'),
+          kpi('Activos', activos, 'green', '&#10004;'),
+          kpi('En negociación', enNeg, 'amber', '&#129309;'),
+          kpi('Concluidos', concluidos, 'teal', '&#127919;'),
+          kpi('Cancelados', cancelados, 'red', '&#10060;'),
+        ].join('')}</div>`;
+      } catch (error) {
+        // los indicadores son informativos; la vista principal no debe romperse
+      }
+    }
+
     // ============ VISTA TABLA (CRUD) ============
 
     function renderTable() {
-      contentEl.innerHTML = '';
-      crudPage(contentEl, {
+      contentEl.innerHTML = '<div id="biz-summary"></div><div id="biz-list"></div>';
+      const summaryEl = contentEl.querySelector('#biz-summary');
+      const listEl = contentEl.querySelector('#biz-list');
+      crudPage(listEl, {
         title: 'Negocios',
         newLabel: 'Nuevo negocio',
         service: {
@@ -123,6 +212,18 @@ window.Pages.businesses = {
           { value: 'activo', label: 'Activo' },
           { value: 'concluido', label: 'Concluido' },
           { value: 'cancelado', label: 'Cancelado' },
+        ],
+        filters: [
+          {
+            key: 'processType',
+            label: 'Proceso',
+            placeholder: 'Todos los procesos',
+            options: [
+              { value: 'comprador', label: 'Comprador' },
+              { value: 'vendedor', label: 'Vendedor' },
+            ],
+          },
+          { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
         ],
         columns: [
           { key: 'name', label: 'Negocio', render: (r) => `<strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
@@ -194,13 +295,7 @@ window.Pages.businesses = {
         onRemove: true,
       });
 
-      contentEl.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-history]');
-        if (!btn) return;
-        const recordId = getRecordIdFromRow(btn);
-        if (!recordId) return;
-        showHistory(recordId);
-      });
+      renderSummary(summaryEl);
     }
 
     function getRecordIdFromRow(btn) {
@@ -238,17 +333,9 @@ window.Pages.businesses = {
 
     // ============ VISTA KANBAN (NEGOCIACIONES) ============
 
-    function columnsFor() {
-      const base = state.processType === 'vendedor' ? SELLER_COLUMNS : BUYER_COLUMNS;
-      return [
-        ...base,
-        { stage: 'concluido', label: 'Concluido', color: '#1f9d55' },
-        { stage: 'cancelado', label: 'Cancelado', color: '#dc2626' },
-      ];
-    }
-
     async function renderKanban() {
       contentEl.innerHTML = `
+        <div id="biz-summary"></div>
         <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <div class="process-tabs" role="tablist" aria-label="Proceso de venta">
             <button class="process-tab ${state.processType === 'comprador' ? 'active' : ''}" type="button" data-process="comprador">Comprador</button>
@@ -257,6 +344,8 @@ window.Pages.businesses = {
         </div>
         <div id="neg-board"><div class="loading">Cargando negociaciones...</div></div>
       `;
+
+      renderSummary(contentEl.querySelector('#biz-summary'));
 
       contentEl.querySelectorAll('.process-tab').forEach((tab) => {
         tab.addEventListener('click', () => {
@@ -269,22 +358,36 @@ window.Pages.businesses = {
       loadBoard();
     }
 
+    async function fetchAllBusinesses(params) {
+      const all = [];
+      let page = 1;
+      for (;;) {
+        const res = await API.businesses.list({ ...params, page, limit: 100 });
+        all.push(...(res.data || []));
+        if (!res.meta || !res.meta.pages || page >= res.meta.pages) break;
+        page += 1;
+      }
+      return all;
+    }
+
     async function loadBoard() {
       const boardEl = contentEl.querySelector('#neg-board');
       if (!boardEl) return;
       boardEl.innerHTML = '<div class="loading">Cargando negociaciones...</div>';
       try {
-        const result = await API.businesses.list({ limit: 200, status: 'activo' });
-        const active = result.data || [];
-        const doneResult = await API.businesses.list({ limit: 200, status: 'concluido' });
-        const cancelledResult = await API.businesses.list({ limit: 200, status: 'cancelado' });
-        const all = [...active, ...doneResult.data, ...cancelledResult.data];
+        const [active, doneResult, cancelledResult] = await Promise.all([
+          fetchAllBusinesses({ status: 'activo' }),
+          fetchAllBusinesses({ status: 'concluido' }),
+          fetchAllBusinesses({ status: 'cancelado' }),
+        ]);
+        const all = [...active, ...doneResult, ...cancelledResult];
 
-        const columns = columnsFor();
+        const columns = columnsFor(state.processType);
         const byStage = {};
         columns.forEach((c) => { byStage[c.stage] = []; });
         const extras = [];
         all.forEach((b) => {
+          if (b.processType && b.processType !== state.processType) return;
           const stage = b.currentStage;
           if (byStage[stage]) byStage[stage].push(b);
           else extras.push(b);
@@ -296,7 +399,7 @@ window.Pages.businesses = {
               const items = byStage[col.stage] || [];
               return `
                 <div class="kanban-col">
-                  <h4><span>${col.label}</span><span style="color:${col.color};">${items.length}</span></h4>
+                  <h4><span>${UI.escapeHtml(col.label)}</span><span style="color:${col.color};">${items.length}</span></h4>
                   ${items.map((b) => `
                     <div class="kanban-card" data-card="${b._id}">
                       <strong>${UI.escapeHtml(b.name)}</strong>
@@ -400,7 +503,10 @@ window.Pages.businesses = {
             },
           };
           try {
-            if ((stage && stage !== business.currentStage) || (processType && processType !== business.processType)) {
+            // Solo se avanza/regresa de etapa cuando realmente cambió; la
+            // actualización del proceso se resuelve en el update.
+            const hasProcessChange = Boolean(processType && processType !== business.processType);
+            if (!hasProcessChange && stage && stage !== business.currentStage) {
               await API.businesses.stage(business._id, { stage });
             }
             await API.businesses.update(business._id, body);

@@ -13,6 +13,7 @@ const BUYER_STAGES = [
   'contactado',
   'perfilado',
   'cita',
+  'negociacion',
   'contrato',
   'integracion',
   'avaluo',
@@ -34,6 +35,7 @@ const SELLER_STAGES = [
   'cita',
   'captacion',
   'integracion_expedientes',
+  'negociacion',
   'promesa',
   'avaluo',
   'concluido',
@@ -73,9 +75,25 @@ function stagesFor(processType) {
   return STAGES_BY_PROCESS[processType] || BUYER_STAGES;
 }
 
+// Expone las etapas disponibles por tipo de proceso (comprador/vendedor) junto
+// con sus etiquetas y el orden global. Lo usa el frontend para renderizar el
+// embudo sin duplicar la lógica.
+const stages = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      byProcess: STAGES_BY_PROCESS,
+      order: STAGE_ORDER,
+      labels: STAGE_LABELS,
+    },
+  });
+});
+
 const businessCrud = buildCrud(Business, {
   populate: ['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'ticket'],
   searchFields: ['name'],
+  // Filtros por etapa y tipo de proceso (?currentStage= / ?processType=).
+  extraFilters: { currentStage: 'currentStage', processType: 'processType' },
   // Un negocio pertenece al asesor principal o al socio que participa.
   ownerMatch: (userId) => ({ $or: [{ mainAdvisor: userId }, { partnerAdvisor: userId }] }),
 });
@@ -99,6 +117,11 @@ const create = asyncHandler(async (req, res) => {
       body.partnerAdvisor = undefined;
     }
   }
+  // Los jefes pueden crear negocios sin elegir asesor: se asigna por defecto
+  // el usuario que los creó (el esquema exige mainAdvisor).
+  if (!body.mainAdvisor) {
+    body.mainAdvisor = req.user._id;
+  }
   const business = await Business.create(body);
 
   await BusinessStage.create({
@@ -117,6 +140,8 @@ const create = asyncHandler(async (req, res) => {
     action: 'creacion',
     message: `Se creó el negocio ${business.name}`,
   });
+
+  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor']);
 
   res.status(201).json({ success: true, data: business });
 });
@@ -157,6 +182,8 @@ const update = asyncHandler(async (req, res) => {
     action: 'actualizacion',
     message: `Se actualizó el negocio ${business.name}`,
   });
+
+  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'ticket']);
 
   res.json({ success: true, data: business });
 });
@@ -248,4 +275,4 @@ const history = asyncHandler(async (req, res) => {
   res.json({ success: true, data: stages });
 });
 
-module.exports = { list, get, create, update, remove, changeStage, history, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };
+module.exports = { list, get, create, update, remove, changeStage, history, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };

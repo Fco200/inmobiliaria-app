@@ -94,6 +94,7 @@ window.API = {
 
   businesses: {
     list: (params) => ApiClient.get('/businesses', params),
+    stages: () => ApiClient.get('/businesses/stages'),
     create: (body) => ApiClient.post('/businesses', body),
     update: (id, body) => ApiClient.put(`/businesses/${id}`, body),
     remove: (id) => ApiClient.remove(`/businesses/${id}`),

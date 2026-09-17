@@ -265,23 +265,65 @@ const UI = (() => {
     `;
   }
 
+  // Detecta si el valor de un <select> representa la opción "Otros": el valor
+  // genérico "Otro" de UI.field (__ui_otros__) o un valor nativo "otro/otros".
+  function isOtherValue(value) {
+    return value === '__ui_otros__' || /^otr/i.test(String(value == null ? '' : value));
+  }
+
+  // Obtiene el input "especificar" de un select. Si `create` es true y no
+  // existe, lo crea justo después del select siguiendo la convención de
+  // UI.field (id `otros-<selectId>` y name `__ui_otros_<selectName>`). De este
+  // modo también funciona en selects escritos a mano sin data-ui-otros.
+  function otrosInput(select, create) {
+    if (!select) return null;
+    if (!select.id) {
+      if (!create) return null;
+      otrosInput.seq = (otrosInput.seq || 0) + 1;
+      select.id = `ui-select-${otrosInput.seq}`;
+    }
+    let input = document.getElementById(`otros-${select.id}`);
+    if (input || !create) return input;
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control';
+    input.id = `otros-${select.id}`;
+    input.placeholder = 'Especifica...';
+    input.style.cssText = 'display:none;margin-top:8px;';
+    if (select.name) input.name = `__ui_otros_${select.name}`;
+    select.insertAdjacentElement('afterend', input);
+    return input;
+  }
+
   // Muestra/oculta el campo de texto "especificar" cuando un select tiene el
   // valor genérico "Otros" (__ui_otros__) o un valor nativo "otro/otros/otra".
   function toggleOtros(select) {
-    if (!select || !select.id) return;
-    const input = document.getElementById(`otros-${select.id}`);
+    if (!select) return;
+    const isOther = isOtherValue(select.value);
+    // Solo se auto-crea el input dentro de un formulario modal (no en los
+    // selects de filtros/barras de herramientas, que no son formularios).
+    const canCreate = isOther && !!(select.closest && select.closest('#modal-overlay'));
+    const input = otrosInput(select, canCreate);
     if (!input) return;
-    const v = String(select.value || '');
-    const isOther = v === '__ui_otros__' || /^otr/i.test(v);
     input.style.display = isOther ? 'block' : 'none';
     if (!isOther) input.value = '';
   }
 
-  // Aplica el estado "especificar" a los selects ya renderizados que tengan el
-  // valor "otros"; útil al abrir un formulario en modo edición.
-  function syncOtros(form) {
-    if (!form) return;
-    form.querySelectorAll('[data-ui-otros]').forEach((select) => toggleOtros(select));
+  // Aplica el estado "especificar" a TODOS los selects de `root` (por defecto
+  // el documento), ya provengan de UI.field o estén escritos a mano. Útil al
+  // abrir un formulario con un select que ya viene en "Otro" (modo edición).
+  function syncOtros(root) {
+    const scope = root || document;
+    scope.querySelectorAll('select').forEach((select) => toggleOtros(select));
+  }
+
+  // Devuelve el texto escrito en la casilla "especificar" de un select, o ''
+  // si el select no está en "Otros". Para consumidores que leen el valor
+  // directamente (formularios con selects escritos a mano).
+  function otrosText(select) {
+    if (!select || !isOtherValue(select.value)) return '';
+    const input = otrosInput(select, false);
+    return input ? String(input.value || '').trim() : '';
   }
 
   function collectForm(form) {
@@ -306,14 +348,17 @@ const UI = (() => {
       }
     });
     // Si el usuario eligió "Otros" y escribió algo, se usa ese texto como valor.
+    // Si eligió el genérico "Otros (especificar)" pero no escribió nada, se
+    // evita enviar el valor centinela __ui_otros__ al servidor.
     Object.keys(others).forEach((name) => {
-      const text = others[name];
-      if (!text) return;
       const select = form.querySelector(`select[name="${name}"]`);
-      if (!select) return;
-      const v = String(select.value || '');
-      const isOther = v === '__ui_otros__' || /^otr/i.test(v);
-      if (isOther) data[name] = text;
+      if (!select || !isOtherValue(select.value)) return;
+      const text = String(others[name] || '').trim();
+      if (text) {
+        data[name] = text;
+      } else if (select.value === '__ui_otros__') {
+        data[name] = null;
+      }
     });
     return data;
   }
@@ -377,6 +422,14 @@ const UI = (() => {
     }
   }
 
+  // Delegación global (debe registrarse ANTES del return para ejecutarse):
+  // muestra/oculta el campo "especificar" de CUALQUIER select —tenga o no
+  // data-ui-otros— sin depender de atributos onchange inline.
+  document.addEventListener('change', (event) => {
+    const target = event.target;
+    if (target && target.tagName === 'SELECT') toggleOtros(target);
+  });
+
   return {
     escapeHtml,
     toast,
@@ -391,19 +444,11 @@ const UI = (() => {
     collectForm,
     toggleOtros,
     syncOtros,
+    otrosText,
     progressBar,
     showImages,
     showActivityHistory,
   };
-
-  // Delegación global: muestra/oculta el campo "especificar" de CADA select
-  // con data-ui-otros, sin depender de atributos onchange inline.
-  document.addEventListener('change', (event) => {
-    const target = event.target;
-    if (target && target.hasAttribute && target.hasAttribute('data-ui-otros')) {
-      toggleOtros(target);
-    }
-  });
 })();
 
 // Expone el objeto UI en window también para manejadores legacy y código que

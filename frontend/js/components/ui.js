@@ -300,9 +300,12 @@ const UI = (() => {
   function toggleOtros(select) {
     if (!select) return;
     const isOther = isOtherValue(select.value);
-    // Solo se auto-crea el input dentro de un formulario modal (no en los
-    // selects de filtros/barras de herramientas, que no son formularios).
-    const canCreate = isOther && !!(select.closest && select.closest('#modal-overlay'));
+    // Se auto-crea el input dentro de un formulario: modal o <form> inline.
+    // Los selects de filtros/barras sin <form> no generan casillas espurias.
+    const canCreate = isOther && !!(
+      select.closest &&
+      (select.closest('#modal-overlay') || select.closest('form'))
+    );
     const input = otrosInput(select, canCreate);
     if (!input) return;
     input.style.display = isOther ? 'block' : 'none';
@@ -424,11 +427,14 @@ const UI = (() => {
 
   // Delegación global (debe registrarse ANTES del return para ejecutarse):
   // muestra/oculta el campo "especificar" de CUALQUIER select —tenga o no
-  // data-ui-otros— sin depender de atributos onchange inline.
-  document.addEventListener('change', (event) => {
+  // data-ui-otros— sin depender de atributos onchange inline. Escucha change
+  // e input para cubrir también navegadores/selects móviles.
+  const delegateOtros = (event) => {
     const target = event.target;
     if (target && target.tagName === 'SELECT') toggleOtros(target);
-  });
+  };
+  document.addEventListener('change', delegateOtros);
+  document.addEventListener('input', delegateOtros);
 
   return {
     escapeHtml,

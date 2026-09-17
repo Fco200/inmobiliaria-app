@@ -9,8 +9,8 @@
 //  - API, uploads y cualquier no-GET: nunca se tocan.
 //  - NUNCA se responde index.html como fallback para peticiones de assets: eso
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
-const CACHE_NAME = 'crm-inmob-v26';
-const VERSION = '1.6';
+const CACHE_NAME = 'crm-inmob-v27';
+const VERSION = '1.7';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

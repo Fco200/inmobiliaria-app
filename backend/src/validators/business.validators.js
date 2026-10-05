@@ -7,7 +7,7 @@ const STAGES = [
   'nuevo',
   'prospecto',
   'contactado',
-  'perfilado',
+  'seguimiento',
   'cita',
   'captacion',
   'integracion_expedientes',

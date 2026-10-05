@@ -231,7 +231,13 @@ window.Pages.clients = {
     async function loadCounts() {
       try {
         const result = await API.clients.conteoEtapas();
-        state.counts = (result && typeof result === 'object' && !Array.isArray(result)) ? result : {};
+        // El endpoint responde { success, data: counts } y `unwrap()` ya devuelve
+        // ese objeto plano. Se acepta también la forma envuelta para que un
+        // cambio en el cliente HTTP nunca deje el embudo entero en cero.
+        const counts = result && typeof result === 'object' && !Array.isArray(result)
+          ? (result.data && typeof result.data === 'object' && !Array.isArray(result.data) ? result.data : result)
+          : {};
+        state.counts = counts;
       } catch (error) {
         state.counts = {};
       }
@@ -248,12 +254,6 @@ window.Pages.clients = {
     if (searchEl) searchEl.addEventListener('input', () => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => { state.q = searchEl.value.trim(); state.page = 1; load(); }, 350);
-    });
-    if (filterEl) filterEl.addEventListener('change', () => {
-      state.etapaActual = filterEl.value;
-      state.page = 1;
-      renderPipelineActive();
-      load();
     });
     if (addBtn) addBtn.addEventListener('click', () => openQuickCreate());
     if (pipelineEl) pipelineEl.addEventListener('click', (e) => {

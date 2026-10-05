@@ -60,7 +60,7 @@ const businessSchema = new mongoose.Schema(
         'nuevo',
         'prospecto',
         'contactado',
-        'perfilado',
+        'seguimiento',
         'cita',
         'captacion',
         'integracion_expedientes',
@@ -136,5 +136,34 @@ businessSchema.index({ currentStage: 1 });
 businessSchema.index({ property: 1 });
 businessSchema.index({ buyerClient: 1, sellerClient: 1 });
 businessSchema.index({ valueOperation: 1 });
+
+// Un cliente no puede tener dos negociosactivos a la vez, porque
+// `Cliente.negocioId` es una referencia única: si un asesor abriera dos negocios
+// para el mismo comprador (o el mismo vendedor) la insignia "Negocio vinculado"
+// apuntaría solo al último y el historial quedaría partido en dos.
+//
+// El índice es PARCIAL a propósito:
+//   · solo aplica a `status: 'activo'`, así que un negocio concluido o cancelado
+//     no bloquea la apertura de otro nuevo para el mismo cliente (puede volver
+//     a comprar/rentar en otro mes sin quedarse sin expediente);
+//   · `$type: 'objectId'` deja fuera los negocios sin cliente (null), porque en
+//     un índice unique todos los null colisionarían entre sí.
+//
+// Este es el seguro a nivel de base de datos contra dos clics simultáneos. Los
+// avisos amigables los pone business.controller antes de insertar.
+businessSchema.index(
+  { buyerClient: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { buyerClient: { $type: 'objectId' }, status: 'activo' },
+  }
+);
+businessSchema.index(
+  { sellerClient: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sellerClient: { $type: 'objectId' }, status: 'activo' },
+  }
+);
 
 module.exports = mongoose.model('Business', businessSchema);

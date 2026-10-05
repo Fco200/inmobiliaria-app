@@ -9,7 +9,7 @@ window.Pages.negotiations = {
     const stageLabel = (s) => String(s || '').replace(/_/g, ' ');
 
     const BUYER_COLUMNS = [
-      { stage: 'perfilado', label: 'Perfilado', color: '#64748b' },
+      { stage: 'seguimiento', label: 'Seguimiento', color: '#64748b' },
       { stage: 'cita', label: 'Citas', color: '#0ea5e9' },
       { stage: 'contrato', label: 'Contrato', color: '#8b5cf6' },
       { stage: 'integracion', label: 'Integración', color: '#0d9488' },
@@ -31,13 +31,13 @@ window.Pages.negotiations = {
     ];
 
     const BUYER_STAGES = [
-      'nuevo', 'prospecto', 'contactado', 'perfilado', 'cita', 'contrato',
+      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'cita', 'contrato',
       'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago',
       'entrega', 'postventa', 'concluido', 'cancelado',
     ];
     const SELLER_STAGES = [
-      'nuevo', 'prospecto', 'contactado', 'revision', 'cita', 'captacion',
-      'integracion_expedientes', 'promesa', 'avaluo', 'concluido', 'cancelado',
+      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'revision', 'cita',
+      'captacion', 'integracion_expedientes', 'promesa', 'avaluo', 'concluido', 'cancelado',
     ];
     const stagesFor = (processType) => (processType === 'vendedor' ? SELLER_STAGES : BUYER_STAGES);
 

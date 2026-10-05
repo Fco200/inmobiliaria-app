@@ -15,7 +15,7 @@ const businessStageSchema = new mongoose.Schema(
         'nuevo',
         'prospecto',
         'contactado',
-        'perfilado',
+        'seguimiento',
         'cita',
         'captacion',
         'integracion_expedientes',

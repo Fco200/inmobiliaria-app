@@ -4,16 +4,21 @@
 // Estrategia:
 //  - Navegaciones (páginas HTML): network-first con respaldo a la copia en
 //    caché; así los cambios de versión llegan al abrir la app (crítico en iOS).
-//  - Estáticos (JS/CSS/imágenes): cache-first con actualización en segundo
-//    plano (stale-while-revalidate): respuesta inmediata y refresco silencioso.
+//  - CÓDIGO (JS/CSS): network-first con respaldo a la copia en caché. Antes se
+//    servían cache-first y eso dejaba el bundle VIEJO pegado en el navegador:
+//    una corrección publicada seguía lanzando el error viejo (por ejemplo
+//    "filterEl is not defined" al abrir Clientes) hasta que el usuario hacia una
+//    recarga forzada. Con network-first el código corregido llega siempre en la
+//    primera carga y, si no hay red, se usa la última copia conocida.
+//  - IMÁGENES y otros estáticos pesados: cache-first con refresco silencioso
+//    (stale-while-revalidate) para no repetir descargas ni payloads.
 //  - API, uploads y cualquier no-GET: nunca se tocan.
 //  - NUNCA se responde index.html como fallback para peticiones de assets: eso
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
-// El nombre de la caché DEBE subirse en cada publicación: los estáticos se
-// sirven cache-first, así que sin cambiar este valor el navegador sigue
-// entregando el JS/CSS viejo aunque el servidor ya tenga los archivos nuevos.
-const CACHE_NAME = 'crm-inmob-v28';
-const VERSION = '1.8';
+// El nombre de la caché DEBE subirse en cada publicación: sin cambiarlo, las
+// copias viejas siguen en disco y ocupan cuota.
+const CACHE_NAME = 'crm-inmob-v30';
+const VERSION = '2.0';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -48,8 +53,13 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/uploads/')) return;
   if (event.request.method !== 'GET') return;
 
+  const request = event.request;
   const isNavigation = event.request.mode === 'navigate';
-  const request = isNavigation ? event.request : event.request;
+
+  // Clasifica el recurso: el CÓDIGO va network-first (para que una corrección
+  // publicada nunca se quede pegada en el navegador) y el resto cache-first.
+  const CODE_RE = /\.(?:js|mjs|css)$/i;
+  const isCode = CODE_RE.test(url.pathname);
 
   // Navegación: red primero; si no hay red, usar la copia cacheada (o libreta).
   if (isNavigation) {
@@ -69,8 +79,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Estáticos: devolver inmediatamente lo que haya en caché, y por detrás
-  // actualizarlo con la red (la próxima visita ya tendrá la versión nueva).
+  // Código (JS/CSS): red primero y, en paralelo, refrescar la copia en caché.
+  // Si la red falla se entrega la última versión conocida (arranque sin conexión).
+  if (isCode) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => {
+            if (cached) return cached;
+            // Nunca se devuelve index.html para un JS/CSS: el navegador lo
+            // aceptaría y la app reventaría con errores de sintaxis.
+            return new Response('', { status: 504, statusText: 'Offline y sin copia en caché' });
+          })
+        )
+    );
+    return;
+  }
+
+  // Estáticos pesados (imágenes, fuentes, pdf): devolver de inmediato lo que haya
+  // en caché y, por detrás, actualizarlo con la red.
   event.respondWith(
     caches.match(request).then((cached) => {
       const fetchAndCache = () =>

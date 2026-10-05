@@ -10,6 +10,18 @@ async function connectDB() {
       serverSelectionTimeoutMS: 5000,
     });
     console.log(`MongoDB conectado: ${conn.connection.host}`);
+
+    // Los índices se construyen solos al conectar. Si alguno falla, mongoose solo
+    // emite un evento 'index' en el modelo y el arranque continúa en silencio,
+    // lo que dejaría la base sin una garantía importante. Con este aviso sí se
+    // ve: el caso típico es el índice único de negocios, que necesita haber
+    // corrido antes `npm run migrate:negocios` si quedaran clientes repetidos.
+    mongoose.modelNames().forEach((nombre) => {
+      mongoose.model(nombre).on('index', (err) => {
+        console.error(`No se pudo crear un índice de ${nombre}: ${err.message}`);
+      });
+    });
+
     return conn;
   } catch (error) {
     if (isProduction) {

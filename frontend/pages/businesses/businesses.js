@@ -8,13 +8,14 @@ window.Pages.businesses = {
   async render(container) {
     // Etapas de respaldo (idénticas al backend) por si el endpoint no responde.
     const FALLBACK_BUYER = [
-      'nuevo', 'prospecto', 'contactado', 'perfilado', 'cita', 'negociacion',
+      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'cita', 'negociacion',
       'contrato', 'integracion', 'avaluo', 'revision', 'notarias', 'firma',
       'pago', 'entrega', 'postventa', 'concluido',
     ];
     const FALLBACK_SELLER = [
-      'nuevo', 'prospecto', 'contactado', 'revision', 'cita', 'captacion',
-      'integracion_expedientes', 'negociacion', 'promesa', 'avaluo', 'concluido',
+      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'revision', 'cita',
+      'captacion', 'integracion_expedientes', 'negociacion', 'promesa',
+      'avaluo', 'concluido',
     ];
 
     // Las etapas reales las expone el backend (GET /businesses/stages); así el
@@ -43,17 +44,23 @@ window.Pages.businesses = {
     let users = [];
     let clients = [];
     let me = null;
+    let negociosActivos = [];
     try {
-      const [p, u, c, m] = await Promise.all([
+      // Los negocios activos se piden de entrada porque un cliente no puede tener
+      // dos a la vez: sirven para marcar en el formulario quién ya está
+      // ocupado y no llevar al error del backend.
+      const [p, u, c, m, activos] = await Promise.all([
         API.properties.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.auth.me().catch(() => null),
+        fetchAllBusinesses({ status: 'activo' }).catch(() => []),
       ]);
       properties = p.data;
       users = u.data;
       clients = c.data;
       me = m;
+      negociosActivos = activos;
     } catch (error) {
       // sin opciones
     }
@@ -64,6 +71,16 @@ window.Pages.businesses = {
     const isSellerClient = (x) => x && ((x.type === 'vendedor') || /Vender/i.test(x.servicio || ''));
     const buyers = clients.filter(isBuyerClient);
     const sellers = clients.filter(isSellerClient);
+
+    // Un cliente solo puede pertenecer a un negocio activo por rol (el backend
+    // lo rechaza con 409 y el índice único del modelo lo blinda). Aquí se marca
+    // en el desplegable para que el asesor lo vea antes de elegirlo.
+    const refId = (valor) => String((valor && (valor._id || valor)) || '');
+    const yaTieneNegocio = (cliente, campo) => negociosActivos.some((b) => refId(b[campo]) === refId(cliente));
+    const opcionesCliente = (lista, campo) => lista.map((x) => ({
+      value: x._id,
+      label: `${x.name}${yaTieneNegocio(x, campo) ? ' — ya tiene un negocio activo' : ''}`,
+    }));
 
     const stagesFor = (processType) => stageMeta.byProcess[processType] || stageMeta.byProcess.comprador;
     const stageLabel = (code) => stageMeta.labels[code] || String(code || '').replace(/_/g, ' ');
@@ -76,7 +93,7 @@ window.Pages.businesses = {
       nuevo: '#64748b',
       prospecto: '#64748b',
       contactado: '#64748b',
-      perfilado: '#0ea5e9',
+      seguimiento: '#0ea5e9',
       cita: '#0ea5e9',
       negociacion: '#f59e0b',
       contrato: '#8b5cf6',
@@ -99,7 +116,6 @@ window.Pages.businesses = {
     const userOptions = users.length
       ? users.map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];
-    const clientOptions = clients.map((x) => ({ value: x._id, label: x.name }));
     const propertyOptions = properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }));
 
     const state = { view: 'table', processType: 'comprador' };
@@ -236,8 +252,8 @@ window.Pages.businesses = {
         fields: [
           { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
           { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-          { name: 'buyerClient', label: 'Comprador', type: 'select', options: [{ value: '', label: '— Sin comprador —' }, ...buyers.map((x) => ({ value: x._id, label: x.name }))] },
-          { name: 'sellerClient', label: 'Vendedor', type: 'select', options: [{ value: '', label: '— Sin vendedor —' }, ...sellers.map((x) => ({ value: x._id, label: x.name }))] },
+          { name: 'buyerClient', label: 'Comprador', type: 'select', options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(buyers, 'buyerClient')] },
+          { name: 'sellerClient', label: 'Vendedor', type: 'select', options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(sellers, 'sellerClient')] },
           { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
           { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', options: [{ value: '', label: '— Sin partner —' }, ...users.map((x) => ({ value: x._id, label: x.name }))] },
@@ -368,6 +384,17 @@ window.Pages.businesses = {
         page += 1;
       }
       return all;
+    }
+
+    // Se releen los negocios activos justo antes de abrir el formulario de alta:
+    // el aviso "ya tiene un negocio activo" tiene que reflejar el estado de este
+    // momento, no el de cuando se cargó la página.
+    async function refrescarActivos() {
+      try {
+        negociosActivos = await fetchAllBusinesses({ status: 'activo' });
+      } catch (error) {
+        // si la lista falla se conserva la anterior; el backend sigue rechazando duplicados
+      }
     }
 
     async function loadBoard() {
@@ -512,6 +539,7 @@ window.Pages.businesses = {
             await API.businesses.update(business._id, body);
             UI.toast('Cambios guardados', 'success');
             UI.closeModal();
+            await refrescarActivos();
             renderView();
           } catch (error) {
             UI.toast(error.message, 'error');
@@ -520,12 +548,13 @@ window.Pages.businesses = {
       }
     }
 
-    function openNew() {
+    async function openNew() {
+      await refrescarActivos();
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-        { name: 'buyerClient', label: 'Comprador', type: 'select', options: [{ value: '', label: '— Sin comprador —' }, ...clientOptions] },
-        { name: 'sellerClient', label: 'Vendedor', type: 'select', options: [{ value: '', label: '— Sin vendedor —' }, ...clientOptions] },
+        { name: 'buyerClient', label: 'Comprador', type: 'select', options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient')] },
+        { name: 'sellerClient', label: 'Vendedor', type: 'select', options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient')] },
         { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
         { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number' },

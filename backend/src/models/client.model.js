@@ -198,7 +198,14 @@ const clientSchema = new Schema(
     toJSON: {
       getters: true,
       virtuals: true,
-      transform(doc, ret) { delete ret.__v; return ret; },
+      transform(doc, ret) {
+        delete ret.__v;
+        // `vigencia` se retiró del módulo de clientes. El valor sigue existiendo
+        // en documentos antiguos, así que se quita en la serialización para que
+        // nunca vuelva a exponerse por la API (list, get, create y update).
+        delete ret.vigencia;
+        return ret;
+      },
     },
   }
 );

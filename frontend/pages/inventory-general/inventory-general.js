@@ -432,7 +432,8 @@ window.Pages['inventory-general'] = {
           </div>
           <div class="form-group">
             <label>Descripción</label>
-            <textarea class="form-control" data-description rows="3" placeholder="Detalles del inmueble"></textarea>
+            <textarea class="form-control textarea-tall" data-description rows="10" placeholder="Detalles del inmueble: medidas, espacios, amenidades, estado de conservación, servicios…"></textarea>
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Campo amplio (10 renglones) para capturar la descripción completa sin que se corte en pantalla.</p>
           </div>
           <div class="form-group">
             <label>Fotos <span class="text-danger">*</span></label>

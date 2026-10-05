@@ -1470,7 +1470,10 @@ body.lightbox-open {
 .image-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  /* Por encima de CUALQUIER overlay (modal 999, soporte 1000, verificación 1400,
+     inactividad 3000). Si algo se cuela por delante, el asesor no puede cerrar
+     la foto y se queda atrapado en la pantalla. */
+  z-index: 5000;
   background: rgba(9, 12, 18, 0.94);
   display: flex;
   flex-direction: column;
@@ -1506,6 +1509,18 @@ body.lightbox-open {
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.25);
+  /* Zona táctil amplia: el botón de cerrar es la salida principal. */
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  font-size: 26px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
 }
 
 .lightbox-bar .icon-btn:hover {
@@ -1520,6 +1535,8 @@ body.lightbox-open {
   align-items: center;
   justify-content: center;
   padding: 8px 56px;
+  /* Las fotos altas se pueden desplazar dentro del visor. */
+  overflow: auto;
 }
 
 .lightbox-photo {
@@ -1528,6 +1545,8 @@ body.lightbox-open {
   object-fit: contain;
   border-radius: 8px;
   background: #0b0e13;
+  /* Al pulsar la foto se cierra el visor (mismo comportamiento que el fondo). */
+  cursor: zoom-out;
 }
 
 .lightbox-nav {
@@ -1603,10 +1622,14 @@ body.lightbox-open {
   .lightbox-next { right: 4px; }
 }
 
-/* ---- Textareas altos (descripciones largas) ---- */
+/* ---- Textareas altos (descripciones largas) ----
+   Se usan en los campos de descripción/observaciones para que el asesor no
+   tenga que pelear con un cuadro de 2-3 renglones: aquí se garantizan ~9
+   renglones visibles y el campo sigue siendo redimensionable (resize:vertical). */
 .textarea-tall {
-  min-height: 140px;
+  min-height: 190px;
   line-height: 1.5;
+  resize: vertical;
 }
 
 /* ---- Portada del perfil ---- */

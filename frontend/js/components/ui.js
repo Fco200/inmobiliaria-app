@@ -151,7 +151,7 @@ const UI = (() => {
     no_asistio: 'danger',
     apartada: 'info',
     en_proceso2: 'info',
-    perfilado: 'primary',
+    seguimiento: 'primary',
     captacion: 'primary',
     revision: 'primary',
     notarias: 'primary',
@@ -389,8 +389,27 @@ const UI = (() => {
   // Cierra el visor de fotos si sigue abierto (lo llama closeModal).
 function closeLightbox() {
   const box = document.getElementById('image-lightbox');
-  if (box) box.remove();
+  if (box) {
+    // Se retira el listener de teclado para no dejar enganchados los handlers
+    // de los visores anteriores (provocaba que "Esc" no respondiera bien).
+    if (typeof box._onKey === 'function') document.removeEventListener('keydown', box._onKey);
+    box._onKey = null;
+    box.remove();
+  }
+  // El bloqueo de scroll se libera SIEMPRE, exista o no el visor: si el
+  // elemento se hubiera perdido (recarga parcial, restauración desde la caché
+  // del navegador, error al pintar) el body se quedaba con overflow:hidden y
+  // la interfaz parecía congelada, obligando a recargar la aplicación.
   document.body.classList.remove('lightbox-open');
+}
+
+// Red de seguridad: al volver de la caché del navegador (bfcache) o al
+// mostrar de nuevo la pestaña se limpia cualquier visor huérfano.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pageshow', closeLightbox);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') closeLightbox();
+  });
 }
 
 // Visor de fotos dentro de la misma pantalla. Antes cada clic hacía
@@ -403,8 +422,10 @@ function showImages(images, title = 'Galería de imágenes') {
     return;
   }
 
-  const existing = document.getElementById('image-lightbox');
-  if (existing) existing.remove();
+  // Si ya había un visor abierto se cierra con su cleanup completo (no solo
+  // con .remove()), porque de lo contrario el listener de teclado del visor
+  // anterior quedaba enganchado y respondía sobre el visor nuevo.
+  closeLightbox();
   document.body.classList.add('lightbox-open');
 
   let index = 0;
@@ -473,8 +494,12 @@ function showImages(images, title = 'Galería de imágenes') {
     thumbsEl.remove();
   }
 
+  // Cualquier clic que NO sea un control cierra el visor (incluido pulsar la
+  // foto). Antes solo cerraban la "×", "Esc" o el fondo vacío: al tocar la
+  // imagen el asesor se quedaba atrapado y tenía que cerrar la pestaña.
   box.addEventListener('click', (e) => {
-    if (e.target === box || e.target.classList.contains('lightbox-stage')) closeLightbox();
+    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index]')) return;
+    closeLightbox();
   });
   box.querySelector('[data-lb-close]').addEventListener('click', closeLightbox);
   box.querySelector('[data-lb-prev]').addEventListener('click', () => go(-1));
@@ -491,6 +516,7 @@ function showImages(images, title = 'Galería de imágenes') {
     else if (e.key === 'ArrowLeft') go(-1);
     else if (e.key === 'ArrowRight') go(1);
   }
+  box._onKey = onKey;
   document.addEventListener('keydown', onKey);
   render();
   return { close: closeLightbox };

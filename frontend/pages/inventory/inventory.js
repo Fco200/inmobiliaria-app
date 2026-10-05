@@ -6,14 +6,21 @@ window.Pages.inventory = {
   title: 'Mis Propiedades',
 
   async render(container) {
-    const state = { page: 1, filter: '' };
+    // `vista` separa explícitamente las dos carteras para que no se mezclen:
+    //   'mine'    → SOLO las propiedades captadas por este asesor en su sesión
+    //                (asignadas a él o de las que es responsable). GET /inventory?mine=true
+    //   'general' → TODO el inventario de la agencia. GET /inventory/general
+    // No existe una etiqueta intermedia tipo "MI INVENTARIO": son dos vistas
+    // distintas y cada una llama a su propio endpoint.
+    const state = { page: 1, filter: '', vista: 'mine' };
 
     const stored = window.ApiClient.getStoredUser();
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
     const isBoss = role === 'admin' || role === 'gerencia';
 
-    // Para asesores, la vista inicial es "Mis propiedades" (su propia cartera).
-    state.filter = isBoss ? '' : 'mia';
+    // Para jefes la vista inicial es el inventario completo (administran todo);
+    // para el asesor arranca en "Mis propiedades".
+    state.vista = isBoss ? 'general' : 'mine';
 
     let me = null;
     let users = [];
@@ -96,7 +103,7 @@ window.Pages.inventory = {
         modal.bodyEl.innerHTML = `
           <div class="grid grid-2" style="align-items:start;">
             <div>
-              ${photo ? `<img src="${window.AppConfig.resolveUrl(photo)}" alt="" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;">` : ''}
+              ${photo ? `<img data-photo-cover src="${window.AppConfig.resolveUrl(photo)}" alt="" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;cursor:zoom-in;">` : ''}
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
@@ -131,6 +138,15 @@ window.Pages.inventory = {
                 : '<p class="text-muted" style="font-size:13px;">Sin cambios de precio registrados.</p>'}
             </div>
           </div>`;
+
+        // La portada abre el visor de fotos sin sacar al asesor del CRM. El
+        // listener se registra AQUÍ, después de pintar: antes se buscaba el
+        // <img> antes de que existiera y el clic nunca respondía (el asesor
+        // tenía que cerrar y volver a abrir la propiedad).
+        const coverEl = modal.bodyEl.querySelector('[data-photo-cover]');
+        if (coverEl) {
+          coverEl.addEventListener('click', () => UI.showImages(prop.photos || [], 'Fotos de la propiedad'));
+        }
       };
       paint().catch((error) => {
         modal.bodyEl.innerHTML = UI.errorAlert(error.message);
@@ -343,13 +359,16 @@ window.Pages.inventory = {
     function renderHeader() {
       const el = document.createElement('div');
       el.className = 'page-header';
+      const esGeneral = state.vista === 'general';
       el.innerHTML = `
         <div>
-          <h2>${isBoss ? 'Inventario por asesor' : 'Mis propiedades'}</h2>
+          <h2>${esGeneral ? 'Inventario general' : 'Mis propiedades'}</h2>
           <p class="text-muted" style="margin:4px 0 0;">
-            ${isBoss
-              ? 'Administra qué propiedades se publican y a qué asesor se asignan para trabajar.'
-              : 'Propiedades publicadas y asignadas a ti. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
+            ${esGeneral
+              ? (isBoss
+                  ? 'Todo el inventario de la agencia. Administra qué propiedades se publican y a qué asesor se asignan.'
+                  : 'Todas las propiedades que la agencia tiene en su inventario. Usa "Mis propiedades" para ver solo las tuyas.')
+              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
           </p>
         </div>
         ${isBoss ? '<button class="btn btn-primary" type="button" data-add>Agregar propiedad</button>' : ''}
@@ -362,38 +381,41 @@ window.Pages.inventory = {
     function renderToolbar() {
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;';
+      el.innerHTML = `
+        <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
+          <button class="process-tab${state.vista === 'mine' ? ' active' : ''}" type="button" data-view="mine">Mis propiedades</button>
+          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Inventario general</button>
+        </div>
+      `;
+      el.querySelectorAll('.process-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          el.querySelectorAll('.process-tab').forEach((t) => t.classList.remove('active'));
+          tab.classList.add('active');
+          state.vista = tab.dataset.view === 'general' ? 'general' : 'mine';
+          state.filter = '';
+          state.page = 1;
+          load();
+        });
+      });
+
+      // Solo tiene sentido el filtro de publicación sobre el inventario general.
       if (isBoss) {
-        el.innerHTML = `
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:8px;align-items:center;';
+        wrap.innerHTML = `
           <select class="form-control" data-filter style="max-width:240px;">
             <option value="">Todas</option>
             <option value="true">Solo publicadas</option>
             <option value="false">Solo sin publicar</option>
           </select>
         `;
-      } else {
-        el.innerHTML = `
-          <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
-            <button class="process-tab active" type="button" data-view="mine">Mis propiedades</button>
-            <button class="process-tab" type="button" data-view="all">Inventario general</button>
-          </div>
-        `;
-        el.querySelectorAll('.process-tab').forEach((tab) => {
-          tab.addEventListener('click', () => {
-            el.querySelectorAll('.process-tab').forEach((t) => t.classList.remove('active'));
-            tab.classList.add('active');
-            state.filter = tab.dataset.view === 'mine' ? 'mia' : '';
-            state.page = 1;
-            load();
-          });
-        });
-      }
-      const filterSel = el.querySelector('[data-filter]');
-      if (filterSel) {
+        const filterSel = wrap.querySelector('[data-filter]');
         filterSel.addEventListener('change', (e) => {
           state.filter = e.target.value;
           state.page = 1;
           load();
         });
+        el.appendChild(wrap);
       }
       return el;
     }
@@ -404,9 +426,12 @@ window.Pages.inventory = {
       const wrap = document.createElement('div');
       wrap.className = 'table-wrapper card';
       if (!items.length) {
-        wrap.innerHTML = isBoss
-          ? '<div class="empty-state"><p>El inventario está vacío.</p><p class="text-muted">Agrega una propiedad para publicarla y asignarla a un asesor.</p></div>'
-          : '<div class="empty-state"><p>No hay propiedades en tu inventario todavía.</p><p class="text-muted">Cuando administración publique o te asigne propiedades, aparecerán aquí.</p></div>';
+        const esGeneral = state.vista === 'general';
+        wrap.innerHTML = esGeneral
+          ? (isBoss
+            ? '<div class="empty-state"><p>El inventario general está vacío.</p><p class="text-muted">Agrega una propiedad para publicarla y asignarla a un asesor.</p></div>'
+            : '<div class="empty-state"><p>Aún no hay propiedades en el inventario general.</p><p class="text-muted">Cuando se carguen, aparecerán aquí.</p></div>')
+          : '<div class="empty-state"><p>No tienes propiedades en tu cartera todavía.</p><p class="text-muted">Cuando publiques una propiedad o te asignen una, aparecerá aquí.</p></div>';
         return wrap;
       }
 
@@ -416,7 +441,7 @@ window.Pages.inventory = {
           <tr>
             <td>
               ${prop && prop.photos && prop.photos.length
-                ? `<img src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;" loading="lazy">`
+                ? `<img data-thumb-id="${UI.escapeHtml(String(item._id))}" src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;cursor:zoom-in;" loading="lazy">`
                 : '<span class="text-muted">—</span>'}
             </td>
             <td>${UI.escapeHtml(propertyLabel(prop))}</td>
@@ -446,6 +471,13 @@ window.Pages.inventory = {
           <tbody>${rows}</tbody>
         </table>
       `;
+
+      wrap.querySelectorAll('[data-thumb-id]').forEach((thumb) => {
+        thumb.addEventListener('click', () => {
+          const item = items.find((i) => String(i._id) === thumb.dataset.thumbId);
+          if (item) UI.showImages(item.property && item.property.photos || [], 'Fotos de la propiedad');
+        });
+      });
 
       wrap.querySelectorAll('[data-action]').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -566,12 +598,18 @@ window.Pages.inventory = {
       container.appendChild(loading);
 
       try {
-        const params = { page: state.page, limit: 15 };
-        if (isBoss && state.filter !== '') params.isPublished = state.filter;
-        if (!isBoss && state.filter === 'mia') params.mine = 'true';
-        const result = await API.inventory.list(params);
+        let result;
+        if (state.vista === 'general') {
+          // Inventario general: propiedades de toda la agencia (endpoint dedicado).
+          const params = { page: state.page, limit: 15 };
+          if (state.filter !== '') params.isPublished = state.filter;
+          result = await API.inventory.general(params);
+        } else {
+          // Mis propiedades: solo lo captado/asignado a este asesor.
+          result = await API.inventory.list({ page: state.page, limit: 15, mine: 'true' });
+        }
         loading.remove();
-        container.appendChild(renderTable(result.data));
+        container.appendChild(renderTable(result.data || []));
         if (result.meta && result.meta.pages > 1) {
           container.appendChild(UI.pagination(result.meta, (page) => { state.page = page; load(); }));
         }

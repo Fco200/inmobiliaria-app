@@ -3,27 +3,33 @@
 window.Pages = window.Pages || {};
 
 // Etapas del embudo inmobiliario con su etiqueta y color de tarjeta.
+// "Seguimiento" sustituyó a "Perfilado" y ahora se recorre DESPUÉS de la cita.
 const CLIENT_STAGES = [
   { key: 'PROSPECTO', label: 'Prospecto', color: '#64748b' },
-  { key: 'PERFILADO', label: 'Perfilado', color: '#5B2D8E' },
-  { key: 'SEGUIMIENTO', label: 'Seguimiento', color: '#0ea5e9' },
   { key: 'CITA', label: 'Cita', color: '#d97706' },
+  { key: 'SEGUIMIENTO', label: 'Seguimiento', color: '#0ea5e9' },
   { key: 'NEGOCIACION_CIERRE', label: 'Negociación / Cierre', color: '#1f9d55' },
   { key: 'POSTVENTA', label: 'Postventa', color: '#9333ea' },
   { key: 'DESCARTADO', label: 'Descartado', color: '#dc2626' },
 ];
 
-const FLOW_ORDER = ['PROSPECTO', 'PERFILADO', 'SEGUIMIENTO', 'CITA', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
+const FLOW_ORDER = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
 const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Lona', 'Recomendación', 'Otro'];
-const CLIENT_SERVICIOS = ['Comprar', 'Vender', 'Rentar', 'Otro'];
-const CLIENT_FORMAS_PAGO = ['Contado', 'Efectivo', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'];
+// Cinco operaciones exactas: "Alquilar" antes de "Otro".
+const CLIENT_SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
+// "Efectivo" se retiró: queda "Contado" como pago contra entrega.
+const CLIENT_FORMAS_PAGO = ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'];
+const CLIENT_TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro'];
+// Etapa heredada: se muestra como Seguimiento y ya no se ofrece.
+const STAGE_ALIASES = { PERFILADO: 'SEGUIMIENTO' };
 
 function stageInfo(key) {
-  return CLIENT_STAGES.find((s) => s.key === key) || { key: key || 'PROSPECTO', label: key || 'Prospecto', color: '#64748b' };
+  const normalized = STAGE_ALIASES[key] || key;
+  return CLIENT_STAGES.find((s) => s.key === normalized) || { key: normalized || 'PROSPECTO', label: normalized || 'Prospecto', color: '#64748b' };
 }
 
 function flowIndexOf(key) {
-  return FLOW_ORDER.indexOf(key);
+  return FLOW_ORDER.indexOf(STAGE_ALIASES[key] || key);
 }
 
 function previousOf(key) {
@@ -46,7 +52,18 @@ window.Pages.clients = {
 
   async render(container) {
     if (!container) return;
-    const state = { q: '', page: 1, etapaActual: '', loading: false, counts: {} };
+    const state = {
+      q: '',
+      page: 1,
+      etapaActual: '',
+      servicio: '',
+      tipoPropiedad: '',
+      zona: '',
+      minCapacity: '',
+      maxCapacity: '',
+      loading: false,
+      counts: {},
+    };
     let users = [];
     if (isBossUser()) {
       try {
@@ -62,12 +79,42 @@ window.Pages.clients = {
       <div class="pipeline-strip" id="clients-pipeline">${pipelineHTML()}</div>
       <div class="clients-toolbar">
         <input class="form-control" id="clients-search" type="search" placeholder="Buscar por nombre, teléfono o correo…">
-        <select class="form-control" id="clients-stage-filter">
-          <option value="">Ver Todos</option>
-          ${CLIENT_STAGES.map((s) => `<option value="${s.key}">${s.label}</option>`).join('')}
-        </select>
         <button class="btn btn-primary" id="clients-add" type="button">+ Nuevo cliente</button>
       </div>
+      <details class="clients-filters" id="clients-filters-box">
+        <summary>Filtros avanzados</summary>
+        <div class="clients-filters-grid">
+          <label class="clients-filter">
+            <span>Operación</span>
+            <select class="form-control" id="clients-f-servicio">
+              <option value="">Todas</option>
+              ${CLIENT_SERVICIOS.map((s) => `<option value="${s}">${s}</option>`).join('')}
+            </select>
+          </label>
+          <label class="clients-filter">
+            <span>Tipo de propiedad</span>
+            <select class="form-control" id="clients-f-tipo">
+              <option value="">Todos</option>
+              ${CLIENT_TIPOS_PROPIEDAD.map((t) => `<option value="${t}">${t}</option>`).join('')}
+            </select>
+          </label>
+          <label class="clients-filter">
+            <span>Zona</span>
+            <input class="form-control" id="clients-f-zona" type="search" placeholder="Ej. zona norte">
+          </label>
+          <label class="clients-filter">
+            <span>Presupuesto mínimo ($)</span>
+            <input class="form-control" id="clients-f-min" type="number" min="0" step="1000" placeholder="0">
+          </label>
+          <label class="clients-filter">
+            <span>Presupuesto máximo ($)</span>
+            <input class="form-control" id="clients-f-max" type="number" min="0" step="1000" placeholder="Sin límite">
+          </label>
+        </div>
+        <div class="clients-filters-actions">
+          <button class="btn btn-secondary btn-sm" type="button" id="clients-f-clear">Limpiar filtros</button>
+        </div>
+      </details>
       <div id="clients-grid" class="client-grid"></div>
       <div id="clients-pagination"></div>
     `;
@@ -75,11 +122,67 @@ window.Pages.clients = {
     const gridEl = container.querySelector('#clients-grid');
     const paginationEl = container.querySelector('#clients-pagination');
     const searchEl = container.querySelector('#clients-search');
-    const filterEl = container.querySelector('#clients-stage-filter');
     const addBtn = container.querySelector('#clients-add');
     const pipelineEl = container.querySelector('#clients-pipeline');
+    const filtersBox = container.querySelector('#clients-filters-box');
+    const fServicio = container.querySelector('#clients-f-servicio');
+    const fTipo = container.querySelector('#clients-f-tipo');
+    const fZona = container.querySelector('#clients-f-zona');
+    const fMin = container.querySelector('#clients-f-min');
+    const fMax = container.querySelector('#clients-f-max');
+    const fClear = container.querySelector('#clients-f-clear');
 
     const esc = (v) => UI.escapeHtml(v == null ? '' : v);
+
+    // Select con opción "Otro" y campo de texto condicional PROPIO. No se usa
+    // el "Otros (especificar)" genérico de UI.field porque aquí el texto vive
+    // en un campo separado (servicioOtro / formaPagoOtro / tipoPropiedadOtro),
+    // lo que mantiene el valor del select siempre dentro de su enum.
+    function fieldConOtro(name, label, { value = '', otroValue = '', options = [], placeholder = 'Especifica…', full = false, required = false } = {}) {
+      const id = `fld-${name}`;
+      const otrosId = `otros-${id}`;
+      const isOtro = value === 'Otro';
+      const opts = options.map((o) => {
+        const optValue = typeof o === 'object' ? o.value : o;
+        const optLabel = typeof o === 'object' ? o.label : o;
+        return `<option value="${esc(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
+      }).join('');
+      return `
+        <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
+          <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>
+          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}"${required ? ' required' : ''}>${opts}</select>
+          <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${esc(otroValue)}" placeholder="${esc(placeholder)}" style="display:${isOtro ? 'block' : 'none'};margin-top:8px;">
+        </div>`;
+    }
+
+    // Muestra/oculta el texto "Otro" y limpia el valor cuando ya no aplica.
+    function wireOtros(root) {
+      root.querySelectorAll('select[data-otro-input]').forEach((select) => {
+        const input = root.querySelector('#' + select.dataset.otroInput)
+          || document.getElementById(select.dataset.otroInput);
+        if (!input) return;
+        const sync = () => {
+          const isOtro = select.value === 'Otro';
+          input.style.display = isOtro ? 'block' : 'none';
+          input.required = isOtro && select.required;
+          if (!isOtro) input.value = '';
+        };
+        select.addEventListener('change', sync);
+        sync();
+      });
+    }
+
+    // Elimina los campos "…Otro" que no aplican antes de enviar al servidor.
+    function limpiarOtros(values, names) {
+      names.forEach((name) => {
+        if (values[name] !== 'Otro') delete values[`${name}Otro`];
+        else if (!String(values[`${name}Otro`] || '').trim()) {
+          delete values[`${name}Otro`];
+          values[name] = 'Otro';
+        }
+      });
+      return values;
+    }
 
     function pipelineHTML() {
       return `
@@ -100,13 +203,35 @@ window.Pages.clients = {
         const active = btn.dataset.stage === state.etapaActual;
         btn.classList.toggle('is-active', active);
       });
-      if (filterEl) filterEl.value = state.etapaActual;
     }
 
+    function hasAdvancedFilters() {
+      return Boolean(state.servicio || state.tipoPropiedad || state.zona || state.minCapacity || state.maxCapacity);
+    }
+
+    // Refleja en el encabezado cuántos filtros avanzados hay activos, para que
+    // no queden ocultos dentro del panel colapsado.
+    function paintFiltersSummary() {
+      if (!filtersBox) return;
+      const summary = filtersBox.querySelector('summary');
+      if (!summary) return;
+      const activos = [
+        state.servicio && `operación: ${state.servicio}`,
+        state.tipoPropiedad && `propiedad: ${state.tipoPropiedad}`,
+        state.zona && `zona: ${state.zona}`,
+        state.minCapacity !== '' && `desde ${Format.currency(state.minCapacity)}`,
+        state.maxCapacity !== '' && `hasta ${Format.currency(state.maxCapacity)}`,
+      ].filter(Boolean);
+      summary.textContent = activos.length ? `Filtros avanzados (${activos.length}) — ${activos.join(' · ')}` : 'Filtros avanzados';
+    }
+
+    // Los contadores ya llegan "desenvueltos" desde el cliente HTTP: el
+    // endpoint responde { success, data: counts } y unwrap() devuelve ese
+    // objeto. Antes se leía result.data y por eso todos mostraban 0.
     async function loadCounts() {
       try {
         const result = await API.clients.conteoEtapas();
-        state.counts = (result && result.data) || {};
+        state.counts = (result && typeof result === 'object' && !Array.isArray(result)) ? result : {};
       } catch (error) {
         state.counts = {};
       }
@@ -140,12 +265,58 @@ window.Pages.clients = {
       load();
     });
 
+    function applyFilters() {
+      state.servicio = fServicio ? fServicio.value : '';
+      state.tipoPropiedad = fTipo ? fTipo.value : '';
+      state.zona = fZona ? fZona.value.trim() : '';
+      state.minCapacity = fMin && fMin.value !== '' ? Number(fMin.value) : '';
+      state.maxCapacity = fMax && fMax.value !== '' ? Number(fMax.value) : '';
+      state.page = 1;
+      paintFiltersSummary();
+      load();
+    }
+    [fServicio, fTipo].forEach((el) => { if (el) el.addEventListener('change', applyFilters); });
+    let filterTimer = null;
+    [fZona].forEach((el) => {
+      if (!el) return;
+      el.addEventListener('input', () => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(applyFilters, 350);
+      });
+    });
+    [fMin, fMax].forEach((el) => {
+      if (!el) return;
+      el.addEventListener('change', applyFilters);
+      el.addEventListener('input', () => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(applyFilters, 500);
+      });
+    });
+    if (fClear) fClear.addEventListener('click', () => {
+      if (fServicio) fServicio.value = '';
+      if (fTipo) fTipo.value = '';
+      if (fZona) fZona.value = '';
+      if (fMin) fMin.value = '';
+      if (fMax) fMax.value = '';
+      applyFilters();
+    });
+
     async function load() {
       if (state.loading) return;
       state.loading = true;
       gridEl.innerHTML = '<div class="loading">Cargando clientes…</div>';
       try {
-        const result = await API.clients.list({ q: state.q || undefined, page: state.page, limit: 16, etapaActual: state.etapaActual || undefined });
+        const result = await API.clients.list({
+          q: state.q || undefined,
+          page: state.page,
+          limit: 16,
+          etapaActual: state.etapaActual || undefined,
+          servicio: state.servicio || undefined,
+          tipoPropiedad: state.tipoPropiedad || undefined,
+          zona: state.zona || undefined,
+          minCapacity: state.minCapacity === '' ? undefined : state.minCapacity,
+          maxCapacity: state.maxCapacity === '' ? undefined : state.maxCapacity,
+        });
         const items = (result && result.data) || [];
         const meta = (result && result.meta) || {};
         state.page = meta.page || 1;
@@ -153,7 +324,7 @@ window.Pages.clients = {
         if (!items.length) {
           gridEl.innerHTML = `
             <div class="clients-empty">
-              ${state.q || state.etapaActual
+              ${state.q || state.etapaActual || hasAdvancedFilters()
                 ? '<p class="text-muted">Sin resultados para los filtros actuales.</p>'
                 : '<p class="text-muted">Sin clientes aún. Registra tu primer cliente.</p>'}
             </div>`;
@@ -195,11 +366,11 @@ window.Pages.clients = {
       const canBack = previousOf(c.etapaActual);
       const canNext = nextOf(c.etapaActual);
       const perfil = [
-        c.servicio ? { label: 'Servicio', value: c.servicio } : null,
+        c.servicio ? { label: 'Operación', value: c.servicio === 'Otro' ? (c.servicioOtro || 'Otro') : c.servicio } : null,
+        c.tipoPropiedad ? { label: 'Propiedad', value: c.tipoPropiedad === 'Otro' ? (c.tipoPropiedadOtro || 'Otro') : c.tipoPropiedad } : null,
         c.zona ? { label: 'Zona', value: c.zona } : null,
         c.capacidad ? { label: 'Capacidad', value: Format.currency(c.capacidad) } : null,
-        c.formaPago ? { label: 'Pago', value: c.formaPago } : null,
-        c.vigencia ? { label: 'Vigencia', value: c.vigencia } : null,
+        c.formaPago ? { label: 'Pago', value: c.formaPago === 'Otro' ? (c.formaPagoOtro || 'Otro') : c.formaPago } : null,
       ].filter(Boolean);
       return `
         <article class="client-card" style="--stage-color:${stage.color};">
@@ -337,13 +508,13 @@ window.Pages.clients = {
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo', { type: 'email', value: record.email || '' })}
               ${UI.field('medio', 'Medio de contacto', { type: 'select', value: record.medio || 'Otro', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })) })}
-              ${UI.field('servicio', 'Servicio', { type: 'select', value: record.servicio || 'Comprar', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })) })}
+              ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
+              ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
               ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || 0 })}
-              ${UI.field('formaPago', 'Forma de pago', { type: 'select', value: record.formaPago || 'Contado', options: CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f })) })}
-              ${UI.field('vigencia', 'Vigencia', { value: record.vigencia || 'Inmediata', hint: 'Ej. 6 meses' })}
-              ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
-              ${UI.field('notasGenerales', 'Notas', { type: 'textarea', value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
+              ${fieldConOtro('formaPago', 'Forma de pago', { value: record.formaPago || 'Contado', otroValue: record.formaPagoOtro || '', options: CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f })), placeholder: 'Ej. Pago mixto, uro, préstamo familiar…' })}
+              ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 6, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
+              ${UI.field('notasGenerales', 'Notas', { type: 'textarea', rows: 4, value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
             </div>
           </form>
         `,
@@ -359,25 +530,33 @@ window.Pages.clients = {
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-profile-form') : null;
-      if (form) form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const values = UI.collectForm(e.target);
-        if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-        if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
-        try {
-          await API.clients.update(record._id, values);
-          UI.toast('Perfil actualizado', 'success');
-          UI.closeModal();
-          load();
-        } catch (error) {
-          UI.toast(error.message, 'error');
-        }
-      });
+      if (form) {
+        wireOtros(form);
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const values = UI.collectForm(e.target);
+          if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
+          if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
+          if (values.tipoPropiedad !== null && values.tipoPropiedad !== undefined
+            && !CLIENT_TIPOS_PROPIEDAD.includes(values.tipoPropiedad)) values.tipoPropiedad = 'Otro';
+          limpiarOtros(values, ['servicio', 'tipoPropiedad', 'formaPago']);
+          // `vigencia` ya no existe en el modelo.
+          delete values.vigencia;
+          try {
+            await API.clients.update(record._id, values);
+            UI.toast('Perfil actualizado', 'success');
+            UI.closeModal();
+            load();
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+        });
+      }
     }
 
     /* ── Transición de etapa (avanzar / regresar / descartar / reactivar) ── */
     function openTransition(record, direction) {
-      const current = record.etapaActual || 'PROSPECTO';
+      const current = STAGE_ALIASES[record.etapaActual] || record.etapaActual || 'PROSPECTO';
       let target = '';
       if (direction === 'next') target = nextOf(current);
       else if (direction === 'back') target = previousOf(current);
@@ -399,25 +578,17 @@ window.Pages.clients = {
           ? 'Ej. Retomó contacto, reactivamos su seguimiento…'
           : direction === 'back'
             ? 'Ej. Necesita más tiempo, regresamos a esta etapa…'
-            : (target === 'PERFILADO'
-                ? 'Ej. Completé su perfil: busca casa de 2 recámaras en zona norte…'
+            : (target === 'SEGUIMIENTO'
+                ? 'Ej. Asistió a la cita, seguimos en contacto con opciones…'
                 : target === 'CITA'
                   ? 'Ej. Agendó visita para revisar las opciones disponibles…'
                   : 'Ej. Aceptó la propuesta, se inicia la formalización…');
 
       let extraFields = '';
       let notice = '';
-      if (target === 'PERFILADO') {
-        notice = '<div class="stage-notice">🙋 Completa el perfil del cliente para mejorar el filtrado de propiedades.</div>';
-        extraFields = `
-          <div class="stage-input-grid">
-            ${UI.field('servicio', 'Servicio', { type: 'select', value: record.servicio || 'Comprar', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })) })}
-            ${UI.field('zona', 'Zona deseada', { value: record.zona || '', placeholder: 'Ej. Zona norte' })}
-            ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || 0 })}
-            ${UI.field('formaPago', 'Forma de pago', { type: 'select', value: record.formaPago || 'Contado', options: CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f })) })}
-            ${UI.field('vigencia', 'Vigencia', { value: record.vigencia || 'Inmediata', hint: 'Ej. 6 meses' })}
-            ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
-          </div>`;
+      if (target === 'SEGUIMIENTO') {
+        notice = '<div class="stage-notice">🙋 <strong>Una sola nota</strong> es obligatoria. Si necesitas ajustar el perfil inmobiliario, usa <strong>Editar Perfil</strong> en la tarjeta.</div>';
+        extraFields = '';
       } else if (target === 'CITA') {
         const today = new Date();
         const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -432,7 +603,7 @@ window.Pages.clients = {
       } else if (target === 'NEGOCIACION_CIERRE') {
         notice = record.negocioId
           ? '<div class="stage-notice">⚠️ Este cliente ya tiene un negocio vinculado en <strong>Negocios</strong>.</div>'
-          : '<div class="stage-notice">💼 Al confirmar se creará y vinculará automáticamente la operación en <strong>Negocios</strong>.</div>';
+          : '<div class="stage-notice">💼 Los negocios se crean <strong>únicamente de forma manual</strong> desde el módulo <strong>Negocios</strong>: avanzar de etapa ya no genera ninguno automáticamente.</div>';
         extraFields = `
           <div class="stage-input-grid">
             ${UI.field('capacidad', 'Confirma monto / presupuesto de la operación ($)', { type: 'number', value: record.capacidad || 0, required: true })}
@@ -471,11 +642,7 @@ window.Pages.clients = {
         }
         const payload = { etapaNueva: target, nota };
         const datosEtapa = {};
-        if (target === 'PERFILADO') {
-          ['servicio', 'queBusca', 'zona', 'capacidad', 'formaPago', 'vigencia'].forEach((k) => {
-            if (values[k] !== undefined && String(values[k]).trim() !== '') datosEtapa[k] = values[k];
-          });
-        } else if (target === 'CITA') {
+        if (target === 'CITA') {
           ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach((k) => {
             if (values[k] !== undefined && String(values[k]).trim() !== '') datosEtapa[k] = values[k];
           });
@@ -511,8 +678,11 @@ window.Pages.clients = {
         actions.push({ label: 'Ver mis Citas', href: 'appointments.html' });
         actions.push({ label: 'Ver Calendario', href: 'calendar.html' });
       }
+      if (target === 'NEGOCIACION_CIERRE') {
+        lines.push('💼 Recuerda: el negocio se crea <strong>manualmente</strong> desde <strong>Negocios</strong>; avanzar de etapa no lo genera solo.');
+      }
       if (result && result.newNegocioId) {
-        lines.push('💼 El negocio de la operación fue <strong>creado y vinculado</strong> automáticamente.');
+        lines.push('💼 Negocio ya vinculado a este cliente.');
         actions.push({ label: 'Ver Negocio', href: 'businesses.html' });
       }
 

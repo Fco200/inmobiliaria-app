@@ -27,9 +27,10 @@ const connectDB = require('../src/config/db');
 const { Client, Interaction } = require('../src/models');
 
 // Etapa del embudo legacy -> etapa del ciclo de vida nuevo.
+// La etapa "perfilado" del embudo viejo ya no existe: ahora es SEGUIMIENTO.
 const ETAPA_MAP = {
   prospecto: 'PROSPECTO',
-  perfilado: 'PERFILADO',
+  perfilado: 'SEGUIMIENTO',
   contacto: 'SEGUIMIENTO',
   cita: 'CITA',
   negociacion: 'NEGOCIACION_CIERRE',
@@ -42,7 +43,6 @@ const ETAPA_MAP = {
 // Etapa nueva -> funnelStage sincronizado (mismo mapeo que el controlador).
 const STAGE_TO_FUNNEL = {
   PROSPECTO: 'prospecto',
-  PERFILADO: 'perfilado',
   SEGUIMIENTO: 'contacto',
   CITA: 'cita',
   NEGOCIACION_CIERRE: 'negociacion',
@@ -54,7 +54,7 @@ const TYPE_TO_SERVICIO = {
   comprador: 'Comprar',
   vendedor: 'Vender',
   rentar: 'Rentar',
-  alquilar: 'Rentar',
+  alquilar: 'Alquilar',
 };
 
 const MEDIUM_TO_MEDIO = {
@@ -127,7 +127,7 @@ async function main() {
       changed = true;
     }
 
-    // ── Perfilado inmobiliario ──────────────────────────────────────────
+    // ── Perfil del cliente ──────────────────────────────────────────────────
     const servicioMap = TYPE_TO_SERVICIO[String(rawDoc.type || '').toLowerCase()];
     if (!servicioMap && rawDoc.type) {
       issues.push(`#${rawDoc._id}: type "${rawDoc.type}" sin mapeo; servicio sin cambios`);

@@ -141,8 +141,9 @@ window.Pages['inventory-general'] = {
             </div>
           </div>`;
 
+        // Ampliar una foto usa el visor interno: nunca se abre otra pestaña.
         modal.bodyEl.querySelectorAll('[data-full]').forEach((img) => {
-          img.addEventListener('click', () => window.open(img.getAttribute('src'), '_blank', 'noopener'));
+          img.addEventListener('click', () => UI.showImages([img.getAttribute('src')], `Foto — ${UI.escapeHtml(propertyLabel(prop))}`));
         });
         const galleryBtn = modal.bodyEl.querySelector('[data-gallery]');
         if (galleryBtn) {

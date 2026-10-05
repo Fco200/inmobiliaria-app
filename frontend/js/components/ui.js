@@ -70,6 +70,7 @@ const UI = (() => {
   function closeModal() {
     const overlay = document.getElementById('modal-overlay');
     if (overlay) overlay.remove();
+    closeLightbox();
   }
 
   function confirm(message, { danger = true } = {}) {
@@ -213,6 +214,8 @@ const UI = (() => {
       full = false,
       accept = '',
       multiple = false,
+      rows = null,
+      sinOtros = false,
     } = options;
     const req = required ? 'required' : '';
     const id = `fld-${name}`;
@@ -229,8 +232,13 @@ const UI = (() => {
         .join('');
       // Soporte genérico "Otro/otros": agrega la opción "especificar" y un campo
       // de texto que aparece cuando se selecciona. Aplica a todos los selects.
+      // Los selects que traen su PROPIA opción "Otro" (con su campo de texto
+      // dedicado) pasan `sinOtros: true` para no duplicar la opción ni enviar
+      // el centinela "__ui_otros__" al servidor.
       const otrosId = `otros-${id}`;
-      control = `
+      control = sinOtros
+        ? `<select class="form-control" id="${id}" name="${name}" ${req}>${opts}</select>`
+        : `
         <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros>${opts}
           <option value="__ui_otros__">Otros (especificar)</option>
         </select>
@@ -245,7 +253,11 @@ const UI = (() => {
       `;
       return `<div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">${control}${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}</div>`;
     } else if (type === 'textarea') {
-      control = `<textarea class="form-control" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}" ${req}>${escapeHtml(value)}</textarea>`;
+      // `rows` permite ampliar campos largos (descripciones, notas) sin
+      // tener que forzar estilos inline en cada pantalla.
+      const rowsAttr = rows ? ` rows="${Number(rows)}"` : '';
+      const sizeClass = rows && Number(rows) >= 6 ? ' textarea-tall' : '';
+      control = `<textarea class="form-control${sizeClass}" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}"${rowsAttr} ${req}>${escapeHtml(value)}</textarea>`;
     } else if (type === 'file') {
       const attrs = [
         accept ? `accept="${escapeHtml(accept)}"` : '',
@@ -374,29 +386,115 @@ const UI = (() => {
     `;
   }
 
-  function showImages(images, title = 'Galería de imágenes') {
-    const photos = (images || []).filter(Boolean);
-    if (!photos.length) {
-      toast('No hay imágenes para mostrar.', 'info');
+  // Cierra el visor de fotos si sigue abierto (lo llama closeModal).
+function closeLightbox() {
+  const box = document.getElementById('image-lightbox');
+  if (box) box.remove();
+  document.body.classList.remove('lightbox-open');
+}
+
+// Visor de fotos dentro de la misma pantalla. Antes cada clic hacía
+// window.open(), lo que sacaba al asesor del CRM (y en algunos navegadores
+// móviles congela la interfaz). Ahora hay navegación, teclado y cierre propio.
+function showImages(images, title = 'Galería de imágenes') {
+  const photos = (Array.isArray(images) ? images : []).filter(Boolean);
+  if (!photos.length) {
+    toast('No hay imágenes para mostrar.', 'info');
+    return;
+  }
+
+  const existing = document.getElementById('image-lightbox');
+  if (existing) existing.remove();
+  document.body.classList.add('lightbox-open');
+
+  let index = 0;
+  const box = document.createElement('div');
+  box.id = 'image-lightbox';
+  box.className = 'image-lightbox';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.setAttribute('aria-label', title);
+  box.innerHTML = `
+    <div class="lightbox-bar">
+      <span class="lightbox-title"></span>
+      <span class="lightbox-counter"></span>
+      <button type="button" class="icon-btn" data-lb-close title="Cerrar (Esc)" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="lightbox-stage">
+      <button type="button" class="lightbox-nav lightbox-prev" data-lb-prev title="Anterior" aria-label="Foto anterior">&#8249;</button>
+      <img class="lightbox-photo" alt="">
+      <button type="button" class="lightbox-nav lightbox-next" data-lb-next title="Siguiente" aria-label="Foto siguiente">&#8250;</button>
+    </div>
+    <div class="lightbox-thumbs"></div>
+  `;
+  document.body.appendChild(box);
+
+  const imgEl = box.querySelector('.lightbox-photo');
+  const counterEl = box.querySelector('.lightbox-counter');
+  const titleEl = box.querySelector('.lightbox-title');
+  const thumbsEl = box.querySelector('.lightbox-thumbs');
+
+  function render() {
+    const src = window.AppConfig.resolveUrl(photos[index]);
+    imgEl.src = src;
+    imgEl.alt = `${title} — foto ${index + 1}`;
+    counterEl.textContent = `${index + 1} / ${photos.length}`;
+    titleEl.textContent = title;
+    const single = photos.length < 2;
+    box.querySelector('.lightbox-prev').style.display = single ? 'none' : '';
+    box.querySelector('.lightbox-next').style.display = single ? 'none' : '';
+    box.querySelectorAll('.lightbox-thumb').forEach((t, i) => {
+      t.classList.toggle('is-active', i === index);
+    });
+    // Centra la miniatura activa cuando hay varias.
+    const active = thumbsEl.querySelector('.lightbox-thumb.is-active');
+    if (active && thumbsEl.scrollWidth > thumbsEl.clientWidth) {
+      thumbsEl.scrollLeft = active.offsetLeft - (thumbsEl.clientWidth - active.clientWidth) / 2;
+    }
+  }
+
+  function go(delta) {
+    index = (index + delta + photos.length) % photos.length;
+    render();
+  }
+
+  // Miniaturas: navegación directa a cualquier foto sin abrir otra pestaña.
+  if (photos.length > 1) {
+    thumbsEl.innerHTML = photos
+      .map((p, i) => `<button type="button" class="lightbox-thumb" data-lb-index="${i}" title="Foto ${i + 1}"><img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy"></button>`)
+      .join('');
+    thumbsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-lb-index]');
+      if (!btn) return;
+      index = Number(btn.dataset.lbIndex);
+      render();
+    });
+  } else {
+    thumbsEl.remove();
+  }
+
+  box.addEventListener('click', (e) => {
+    if (e.target === box || e.target.classList.contains('lightbox-stage')) closeLightbox();
+  });
+  box.querySelector('[data-lb-close]').addEventListener('click', closeLightbox);
+  box.querySelector('[data-lb-prev]').addEventListener('click', () => go(-1));
+  box.querySelector('[data-lb-next]').addEventListener('click', () => go(1));
+
+  // Navegación con teclado: no se usa el diálogo modal general para no
+  // provocar scrolls ni recargas al cambiar de imagen.
+  function onKey(e) {
+    if (!document.getElementById('image-lightbox')) {
+      document.removeEventListener('keydown', onKey);
       return;
     }
-    openModal({
-      title,
-      body: `
-        <div class="lightbox-grid">
-          ${photos
-            .map((p) => `<img class="lightbox-img" src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy">`)
-            .join('')}
-        </div>
-      `,
-      size: 920,
-    });
-    const overlay = document.getElementById('modal-overlay');
-    if (!overlay) return;
-    overlay.querySelectorAll('.lightbox-img').forEach((img) => {
-      img.addEventListener('click', () => window.open(img.getAttribute('src'), '_blank', 'noopener'));
-    });
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') go(-1);
+    else if (e.key === 'ArrowRight') go(1);
   }
+  document.addEventListener('keydown', onKey);
+  render();
+  return { close: closeLightbox };
+}
 
   async function showActivityHistory(entityType, entityId, title = 'Centro de actividad') {
     openModal({ title, body: '<div class="loading">Cargando historial...</div>' });
@@ -453,6 +551,7 @@ const UI = (() => {
     otrosText,
     progressBar,
     showImages,
+    closeLightbox,
     showActivityHistory,
   };
 })();

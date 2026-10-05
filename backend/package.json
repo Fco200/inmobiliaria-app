@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seed.js",
     "migrate:clientes": "node scripts/migrar-clientes-legacy.js",
+    "migrate:seguimiento": "node scripts/migrar-clientes-seguimiento.js",
     "test": "node --test"
   },
   "keywords": [

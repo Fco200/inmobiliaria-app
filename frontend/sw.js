@@ -9,8 +9,11 @@
 //  - API, uploads y cualquier no-GET: nunca se tocan.
 //  - NUNCA se responde index.html como fallback para peticiones de assets: eso
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
-const CACHE_NAME = 'crm-inmob-v27';
-const VERSION = '1.7';
+// El nombre de la caché DEBE subirse en cada publicación: los estáticos se
+// sirven cache-first, así que sin cambiar este valor el navegador sigue
+// entregando el JS/CSS viejo aunque el servidor ya tenga los archivos nuevos.
+const CACHE_NAME = 'crm-inmob-v28';
+const VERSION = '1.8';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -22,6 +25,11 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
+      // Avisa a las pestañas abiertas que ya hay versión nueva. La interfaz
+      // decide cuándo recargar (nunca se recarga sola: el asesor puede estar
+      // escribiendo la descripción de una propiedad).
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((clients) => clients.forEach((client) => client.postMessage({ type: 'SW_UPDATED', version: VERSION })))
   );
 });
 

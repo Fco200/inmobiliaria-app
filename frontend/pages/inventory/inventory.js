@@ -3,7 +3,7 @@
 window.Pages = window.Pages || {};
 
 window.Pages.inventory = {
-  title: 'Mi Inventario',
+  title: 'Mis Propiedades',
 
   async render(container) {
     const state = { page: 1, filter: '' };
@@ -12,7 +12,7 @@ window.Pages.inventory = {
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
     const isBoss = role === 'admin' || role === 'gerencia';
 
-    // Para asesores, la vista inicial es "Mi inventario".
+    // Para asesores, la vista inicial es "Mis propiedades" (su propia cartera).
     state.filter = isBoss ? '' : 'mia';
 
     let me = null;
@@ -345,7 +345,7 @@ window.Pages.inventory = {
       el.className = 'page-header';
       el.innerHTML = `
         <div>
-          <h2>${isBoss ? 'Mi Inventario' : 'Mi inventario'}</h2>
+          <h2>${isBoss ? 'Inventario por asesor' : 'Mis propiedades'}</h2>
           <p class="text-muted" style="margin:4px 0 0;">
             ${isBoss
               ? 'Administra qué propiedades se publican y a qué asesor se asignan para trabajar.'
@@ -373,7 +373,7 @@ window.Pages.inventory = {
       } else {
         el.innerHTML = `
           <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
-            <button class="process-tab active" type="button" data-view="mine">Mi inventario</button>
+            <button class="process-tab active" type="button" data-view="mine">Mis propiedades</button>
             <button class="process-tab" type="button" data-view="all">Inventario general</button>
           </div>
         `;

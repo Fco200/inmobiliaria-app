@@ -6,8 +6,8 @@ window.AppShell = (() => {
     { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9638;' },
     { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;' },
     { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;' },
-    { key: 'properties', label: 'Mis Propiedades', href: 'properties.html', icon: '&#127968;' },
-    { key: 'inventory', label: 'Mi Inventario', href: 'inventory.html', icon: '&#128230;' },
+{ key: 'properties', label: 'Capturar Propiedades', href: 'properties.html', icon: '&#127968;' },
+    { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;' },
     { key: 'inventory-general', label: 'Inventario General', href: 'inventory-general.html', icon: '&#128203;' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;' },
     { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;' },
@@ -369,7 +369,38 @@ window.AppShell = (() => {
   }
 
   function initReminders() { setInterval(checkReminders, 60 * 1000); }
-  function registerServiceWorker() { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); }
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    if (!navigator.serviceWorker) return;
+    // Cuando el service worker se activa con una versión nueva ya borró la
+    // caché anterior, pero la pestaña sigue ejecutando el JS viejo. Se avisa
+    // en vez de recargar solos: el asesor puede estar escribiendo la
+    // descripción de una propiedad y perder el texto sería peor.
+    let recargando = false;
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type !== 'SW_UPDATED' || recargando) return;
+      const avisar = () => {
+        recargando = true;
+        window.location.reload();
+      };
+      if (window.UI && typeof window.UI.confirm === 'function') {
+        window.UI.confirm('Hay una versión nueva de la aplicación. ¿Recargar ahora para aplicarla?', { danger: false })
+          .then((ok) => { if (ok) avisar(); })
+          .catch(() => {});
+        return;
+      }
+      avisar();
+    });
+    // Si el worker cambia de control y no-nosotros no lo detectamos por
+    // mensaje (por ejemplo, tras un rato en segundo plano), recargamos una vez.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (recargando) return;
+      recargando = true;
+      window.location.reload();
+    });
+  }
 
   // Carga el módulo global de sonidos y desbloquea el contexto de audio en el
   // primer gesto del usuario. Debe estar listo antes de conectar el tiempo real.

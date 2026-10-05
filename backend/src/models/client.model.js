@@ -4,7 +4,12 @@ const mongoose = require('mongoose');
 
 const { Schema } = mongoose;
 
-const ETAPAS = ['PROSPECTO', 'PERFILADO', 'SEGUIMIENTO', 'CITA', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+// Etapas vigentes del embudo. 'PERFILADO' se conserva SOLO como valor legado
+// para que los registros anteriores a la migración (que renombró Perfilado a
+// Seguimiento) puedan seguir guardándose sin romper la validación; el flujo de
+// la interfaz ya no lo ofrece.
+const ETAPAS = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+const ETAPAS_LEGADAS = ['PERFILADO'];
 
 const clientSchema = new Schema(
   {
@@ -30,18 +35,35 @@ const clientSchema = new Schema(
       default: 'WhatsApp',
     },
     fechaRegistro: { type: Date, default: Date.now },
+    // ── Operación que origina al cliente (captación) ────────────────────
+    // Las cinco opciones reales del formulario: Vender, Comprar, Rentar,
+    // Alquilar y Otro. "Otro" guarda el texto que escribe el asesor.
     servicio: {
       type: String,
-      enum: ['Comprar', 'Vender', 'Rentar', 'Otro'],
+      trim: true,
+      enum: ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'],
       default: 'Comprar',
     },
+    // Texto libre escrito cuando la operación es "Otro" (no se muestra en el
+    // formulario: se combina con `servicio` al presentar el dato).
+    servicioOtro: { type: String, trim: true, default: '' },
+    // Tipo de inmueble/propiedad que busca o que ofrece (filtro avanzado).
+    tipoPropiedad: {
+      type: String,
+      trim: true,
+      enum: ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro', ''],
+      default: '',
+    },
+    // Texto libre escrito cuando el tipo de propiedad es "Otro".
+    tipoPropiedadOtro: { type: String, trim: true, default: '' },
     queBusca: { type: String, trim: true, default: '' },
     zona: { type: String, trim: true, default: '' },
-    // Texto libre por diseño: Efectivo, Infonavit, Fovissste, Bancario, etc.
+    // Texto libre por diseño: Contado, Infonavit, Fovissste, Bancario, etc.
     formaPago: { type: String, trim: true, default: 'Contado' },
+    // Texto libre escrito cuando la forma de pago es "Otro".
+    formaPagoOtro: { type: String, trim: true, default: '' },
     capacidad: { type: Number, min: 0, default: 0 },
-    vigencia: { type: String, trim: true, default: '' },
-    etapaActual: { type: String, enum: ETAPAS, default: 'PROSPECTO' },
+    etapaActual: { type: String, enum: ETAPAS.concat(ETAPAS_LEGADAS), default: 'PROSPECTO' },
     ultVez: { type: Date, default: Date.now },
     totalLlamadas: { type: Number, min: 0, default: 0 },
     notasGenerales: { type: String, trim: true, default: '' },
@@ -62,8 +84,8 @@ const clientSchema = new Schema(
     },
     historialEtapas: [
       {
-        etapaAnterior: { type: String, enum: ETAPAS.concat(['']), default: null },
-        etapaNueva: { type: String, enum: ETAPAS, required: true },
+        etapaAnterior: { type: String, enum: ETAPAS.concat(ETAPAS_LEGADAS, ['']), default: null },
+        etapaNueva: { type: String, enum: ETAPAS.concat(ETAPAS_LEGADAS), required: true },
         nota: { type: String, trim: true, required: true },
         usuario: { type: Schema.Types.ObjectId, ref: 'User', default: null },
         fecha: { type: Date, default: Date.now },
@@ -96,8 +118,8 @@ const clientSchema = new Schema(
       get(v) {
         const s = this._doc && this._doc.servicio;
         if (s) {
-          const map = { Comprar: 'comprador', Vender: 'vendedor', Rentar: 'rentar' };
-          return map[s] || 'comprador';
+          const map = { Comprar: 'comprador', Vender: 'vendedor', Rentar: 'rentar', Alquilar: 'alquilar' };
+          return map[s] || v || 'comprar';
         }
         return v || 'comprar';
       },
@@ -135,6 +157,9 @@ const clientSchema = new Schema(
       },
     },
     metodoPago: {
+      // Campo legado: el formulario ya no ofrece "efectivo" (se usa
+      // formaPago + formaPagoOtro). Se conserva el valor para no romper
+      // registros antiguos.
       type: String,
       enum: ['infonavit', 'credito_bancario', 'efectivo', 'credito_hipotecario', 'otro'],
       default: 'efectivo',
@@ -152,6 +177,7 @@ const clientSchema = new Schema(
         if (raw.zona) canonical.desiredZone = raw.zona;
         if (raw.queBusca) canonical.desiredFeatures = raw.queBusca;
         if (raw.formaPago) canonical.paymentMethod = raw.formaPago;
+        if (raw.tipoPropiedad) canonical.propertyType = raw.tipoPropiedad;
         if (!Object.keys(canonical).length) return v || null;
         return { ...(v && typeof v === 'object' ? v : {}), ...canonical };
       },
@@ -191,5 +217,10 @@ clientSchema.index({ asesorAsignado: 1, status: 1 });
 clientSchema.index({ nombre: 'text' });
 clientSchema.index({ negocioId: 1 });
 clientSchema.index({ email: 1 });
+// Índices de los filtros avanzados del listado de clientes.
+clientSchema.index({ asesorAsignado: 1, servicio: 1, etapaActual: 1 });
+clientSchema.index({ asesorAsignado: 1, tipoPropiedad: 1 });
+clientSchema.index({ zona: 1 });
+clientSchema.index({ capacidad: -1 });
 
 module.exports = mongoose.model('Client', clientSchema);

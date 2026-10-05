@@ -3,16 +3,17 @@
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
-const { Client, Business, BusinessStage, Appointment, User } = require('../models');
-const { STAGE_ORDER, STAGE_LABELS } = require('./business.controller');
+const { Client, Appointment, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { logActivity } = require('../services/log.service');
 
-const ETAPAS = ['PROSPECTO', 'PERFILADO', 'SEGUIMIENTO', 'CITA', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+// Etapas vigentes del embudo. 'PERFILADO' es legada (migrada a SEGUIMIENTO) y
+// solo se acepta para poder guardar registros antiguos sin romper validación.
+const ETAPAS = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
 
 const STAGE_TO_FUNNEL = {
   PROSPECTO: 'prospecto',
-  PERFILADO: 'perfilado',
+  PERFILADO: 'contacto',
   SEGUIMIENTO: 'contacto',
   CITA: 'cita',
   NEGOCIACION_CIERRE: 'negociacion',
@@ -20,11 +21,22 @@ const STAGE_TO_FUNNEL = {
   DESCARTADO: 'descartado',
 };
 
+// Campos que el cliente puede editar desde "Editar perfil". `vigencia`
+// se retiró del formulario, por eso ya no se acepta desde la API.
+const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio'];
+
 const clientCrud = buildCrud(Client, {
   populate: ['asesorAsignado'],
   searchFields: ['nombre', 'telefono', 'email'],
   ownerField: 'asesorAsignado',
-  extraFilters: { etapaActual: 'etapaActual' },
+  // Filtros avanzados del módulo de clientes:
+  //  - etapaActual: selección del embudo (pipeline superior).
+  //  - servicio / tipoPropiedad: tipo de operación y tipo de propiedad.
+  //  - zona: coincidencia parcial (zona de interés).
+  //  - minCapacity / maxCapacity: rango de presupuesto (capacidad de pago).
+  extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad' },
+  textFilters: { zona: 'zona' },
+  rangeFilters: { minCapacity: 'capacidad', maxCapacity: 'capacidad' },
 });
 
 const list = clientCrud.list;
@@ -36,46 +48,14 @@ function assertOwnership(req, client) {
   return ownerId === String(req.user._id);
 }
 
-// Crea un negocio automáticamente cuando el cliente llega a etapa de cierre.
-// Nunca lanza: si falla, el cliente sigue y el error queda en el log.
-async function createAutoBusiness(client, user, nota) {
-  try {
-    const negocio = await Business.create({
-      name: `${client.servicio || 'Operacion'} - ${client.nombre}`,
-      buyerClient: client._id,
-      mainAdvisor: user._id,
-      processType: 'comprador',
-      valueOperation: Number(client.capacidad) || 0,
-      currentStage: 'negociacion',
-      negotiation: {
-        notes: `Negocio iniciado al avanzar etapa de cliente: ${nota}`,
-      },
-      status: 'activo',
-    });
-
-    await BusinessStage.create({
-      business: negocio._id,
-      stageCode: 'negociacion',
-      name: STAGE_LABELS.negociacion,
-      order: STAGE_ORDER.indexOf('negociacion'),
-      startedAt: new Date(),
-      status: 'en_proceso',
-      responsibleUser: user._id,
-    });
-
-    await logActivity({
-      entityType: 'Business',
-      entityId: negocio._id,
-      user: user._id,
-      action: 'creacion',
-      message: `Se generó automáticamente el negocio ${negocio.name} desde el cierre del cliente ${client.nombre}`,
-    });
-
-    return negocio;
-  } catch (error) {
-    console.error('[client.controller] No se pudo generar el negocio automático:', error.message);
-    return null;
-  }
+// La etapa "Perfilado" se renombró a "Seguimiento" (y ahora se muestra después
+// de la cita). Cualquier cliente que aún la tenga, propia o heredada, se
+// normaliza a "Seguimiento" para que nunca quede fuera del embudo.
+function normalizarEtapa(etapa) {
+  const value = String(etapa || '').trim();
+  if (!value) return 'PROSPECTO';
+  if (value === 'PERFILADO') return 'SEGUIMIENTO';
+  return ETAPAS.includes(value) ? value : null;
 }
 
 // Sincroniza la cita creada al Google Calendar del usuario SI tiene la integración
@@ -108,23 +88,45 @@ async function syncCitaToGoogle(doc, user) {
 const conteoEtapas = asyncHandler(async (req, res) => {
   const filter = {};
   if (!isBoss(req)) filter.asesorAsignado = req.user._id;
+
+  // Se normaliza antes de agrupar: `PERFILADO` (legada) cuenta como
+  // `SEGUIMIENTO` y `etapaActual` ausente/ vacío cuenta como `PROSPECTO`, para
+  // que el total del embudo siempre cuadre con el listado.
   const rows = await Client.aggregate([
     { $match: filter },
-    { $group: { _id: '$etapaActual', count: { $sum: 1 } } },
+    {
+      $addFields: {
+        etapaNormalizada: {
+          $switch: {
+            branches: [
+              { case: { $eq: [{ $ifNull: ['$etapaActual', ''] }, ''] }, then: 'PROSPECTO' },
+              { case: { $eq: ['$etapaActual', 'PERFILADO'] }, then: 'SEGUIMIENTO' },
+            ],
+            default: '$etapaActual',
+          },
+        },
+      },
+    },
+    { $group: { _id: '$etapaNormalizada', count: { $sum: 1 } } },
   ]);
+
   const counts = {
     PROSPECTO: 0,
-    PERFILADO: 0,
     SEGUIMIENTO: 0,
     CITA: 0,
     NEGOCIACION_CIERRE: 0,
     POSTVENTA: 0,
     DESCARTADO: 0,
   };
+  let total = 0;
   rows.forEach((row) => {
-    if (row._id && Object.prototype.hasOwnProperty.call(counts, row._id)) counts[row._id] = row.count;
+    const etapa = row._id || 'PROSPECTO';
+    // Una etapa desconocida no debe romper el total del listado.
+    if (!Object.prototype.hasOwnProperty.call(counts, etapa)) return;
+    counts[etapa] = row.count;
+    total += row.count;
   });
-  counts.total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  counts.total = total;
   res.json({ success: true, data: counts });
 });
 
@@ -134,6 +136,7 @@ const create = asyncHandler(async (req, res) => {
   if (!isBoss(req) || !body.asesorAsignado) body.asesorAsignado = req.user._id;
 
   if (!body.etapaActual) body.etapaActual = 'PROSPECTO';
+  body.etapaActual = normalizarEtapa(body.etapaActual) || 'PROSPECTO';
   body.funnelStage = STAGE_TO_FUNNEL[body.etapaActual] || 'prospecto';
   body.fechaRegistro = body.fechaRegistro || new Date();
   body.ultVez = new Date();
@@ -175,6 +178,12 @@ const update = asyncHandler(async (req, res) => {
   // Un asesor no puede reasignar el cliente; solo el jefe.
   if (!isBoss(req)) body.asesorAsignado = client.asesorAsignado || req.user._id;
 
+  // `vigencia` se eliminó del formulario: si llega, se descarta.
+  delete body.vigencia;
+  if (body.etapaActual !== undefined) {
+    body.etapaActual = normalizarEtapa(body.etapaActual) || 'PROSPECTO';
+  }
+
   const previousEtapa = client.etapaActual;
   Object.assign(client, body);
 
@@ -207,12 +216,12 @@ const update = asyncHandler(async (req, res) => {
 
 const cambiarEtapa = asyncHandler(async (req, res) => {
   const body = req.body || {};
-  const etapa = body.etapaNueva || body.etapa;
+  const etapa = normalizarEtapa(body.etapaNueva || body.etapa);
   const cleanNota = String(body.nota || '').trim();
   if (!cleanNota) {
     return res.status(400).json({ success: false, message: 'La nota es obligatoria para mover de etapa.' });
   }
-  if (!ETAPAS.includes(etapa)) {
+  if (!etapa) {
     return res.status(400).json({ success: false, message: 'Etapa no válida.' });
   }
 
@@ -222,14 +231,14 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
   }
 
-  const previousEtapa = client.etapaActual || 'PROSPECTO';
+  const previousEtapa = normalizarEtapa(client.etapaActual) || 'PROSPECTO';
   if (String(previousEtapa) === String(etapa)) {
     return res.status(400).json({ success: false, message: 'El cliente ya esta en esa etapa.' });
   }
 
-  // Datos complementarios del destino: perfilado, cita o cierre.
+  // Datos complementarios del destino: perfil, cita o cierre.
+  // `vigencia` ya no forma parte del formulario, por eso no se acepta.
   const datosEtapa = (body.datosEtapa && typeof body.datosEtapa === 'object') ? body.datosEtapa : {};
-  const PROFILE_FIELDS = ['servicio', 'queBusca', 'zona', 'formaPago', 'vigencia', 'email', 'medio'];
   PROFILE_FIELDS.forEach((field) => {
     if (datosEtapa[field] !== undefined && datosEtapa[field] !== null && String(datosEtapa[field]).trim() !== '') {
       client[field] = datosEtapa[field];
@@ -276,12 +285,9 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
     syncCitaToGoogle(nuevaCita, req.user);
   }
 
-  // Etapa de cierre sin negocio vinculado → se genera automáticamente.
-  let nuevaNegocio = null;
-  if (etapa === 'NEGOCIACION_CIERRE' && !client.negocioId) {
-    nuevaNegocio = await createAutoBusiness(client, req.user, cleanNota);
-    if (nuevaNegocio) client.negocioId = nuevaNegocio._id;
-  }
+  // NEGOCIOS: la creación es EXCLUSIVAMENTE manual. Llegar a la etapa de
+  // negociación/cierre ya NO genera ningún negocio en automático; el asesor
+  // debe crearlo desde el módulo de Negocios (o vincular el existente).
 
   await client.save();
   await client.populate('asesorAsignado');
@@ -297,7 +303,10 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: client,
-    newNegocioId: nuevaNegocio ? nuevaNegocio._id : (client.negocioId || null),
+    // Se mantiene el campo por compatibilidad con el frontend, pero solo
+    // refleja un negocio que YA estaba vinculado: nunca se crea uno aquí.
+    newNegocioId: client.negocioId || null,
+    negocioCreadoAutomaticamente: false,
     newCita: nuevaCita ? { _id: nuevaCita._id, date: nuevaCita.date, place: nuevaCita.place } : null,
   });
 });

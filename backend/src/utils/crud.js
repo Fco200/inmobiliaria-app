@@ -21,8 +21,15 @@ function ownerIdOf(doc, ownerField) {
  *  - ownerMatch: fn(userId) => condición Mongo cuando la propiedad es compuesta.
  *  - beforeCreate/beforeUpdate: hooks existentes.
  *  - extraFilters: { paramDeQuery => nombreDelCampo } filtros exactos adicionales.
+ *  - textFilters: { paramDeQuery => nombreDelCampo } búsqueda parcial sin
+ *    distinguir mayúsculas (se escapan los caracteres de regex).
+ *  - rangeFilters: { paramMin => campo, paramMax => campo } rangos numéricos.
  *  - priceField: campo numérico para aplicar ?minPrice= y ?maxPrice= ($gte/$lte).
  */
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function buildCrud(model, {
   populate = [],
   searchFields = [],
@@ -32,6 +39,8 @@ function buildCrud(model, {
   ownerField = null,
   ownerMatch = null,
   extraFilters = null,
+  textFilters = null,
+  rangeFilters = null,
   priceField = null,
 } = {}) {
   function assertOwnership(req, doc) {
@@ -69,6 +78,29 @@ function buildCrud(model, {
       if (extraFilters) {
         for (const [queryParam, field] of Object.entries(extraFilters)) {
           if (req.query[queryParam] !== undefined) filter[field] = req.query[queryParam];
+        }
+      }
+
+      // Filtros de texto parcial (?param => campo), insensibles a mayúsculas.
+      if (textFilters) {
+        for (const [queryParam, field] of Object.entries(textFilters)) {
+          const value = String(req.query[queryParam] || '').trim();
+          if (value) filter[field] = { $regex: escapeRegex(value), $options: 'i' };
+        }
+      }
+
+      // Rangos numéricos genéricos (?paramMin / ?paramMax => campo).
+      if (rangeFilters) {
+        for (const [queryParam, field] of Object.entries(rangeFilters)) {
+          const isMin = /min/i.test(queryParam);
+          const raw = parseFloat(req.query[queryParam]);
+          if (!Number.isFinite(raw)) continue;
+          const current = filter[field];
+          if (!current || typeof current !== 'object' || Array.isArray(current)) {
+            // Un filtro exacto previo se conserva dentro del mismo operador.
+            filter[field] = (current === undefined || current === '') ? {} : { $eq: current };
+          }
+          filter[field][isMin ? '$gte' : '$lte'] = raw;
         }
       }
 

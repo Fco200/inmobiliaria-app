@@ -4,12 +4,11 @@ const mongoose = require('mongoose');
 
 const { Schema } = mongoose;
 
-// Etapas vigentes del embudo. 'PERFILADO' se conserva SOLO como valor legado
-// para que los registros anteriores a la migración (que renombró Perfilado a
-// Seguimiento) puedan seguir guardándose sin romper la validación; el flujo de
-// la interfaz ya no lo ofrece.
-const ETAPAS = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
-const ETAPAS_LEGADAS = ['PERFILADO'];
+// Etapas vigentes del embudo, en orden. 'PERFILADO' volvió a ser una etapa
+// plena (se recorre ANTES de la cita); 'SEGUIMIENTO' es la etapa que sigue a
+// la cita. ETAPAS_LEGADAS queda vacía, reservada para futuros valores viejos.
+const ETAPAS = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+const ETAPAS_LEGADAS = [];
 
 const clientSchema = new Schema(
   {

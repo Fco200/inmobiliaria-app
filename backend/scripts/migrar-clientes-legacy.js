@@ -27,10 +27,12 @@ const connectDB = require('../src/config/db');
 const { Client, Interaction } = require('../src/models');
 
 // Etapa del embudo legacy -> etapa del ciclo de vida nuevo.
-// La etapa "perfilado" del embudo viejo ya no existe: ahora es SEGUIMIENTO.
+// "perfilado" del embudo viejo equivale a la etapa PERFILADO del embudo nuevo
+// (se recorre antes de la cita); "contacto" es el paso intermedio sin perfil
+// definido y corresponde a SEGUIMIENTO.
 const ETAPA_MAP = {
   prospecto: 'PROSPECTO',
-  perfilado: 'SEGUIMIENTO',
+  perfilado: 'PERFILADO',
   contacto: 'SEGUIMIENTO',
   cita: 'CITA',
   negociacion: 'NEGOCIACION_CIERRE',
@@ -43,6 +45,7 @@ const ETAPA_MAP = {
 // Etapa nueva -> funnelStage sincronizado (mismo mapeo que el controlador).
 const STAGE_TO_FUNNEL = {
   PROSPECTO: 'prospecto',
+  PERFILADO: 'contacto',
   SEGUIMIENTO: 'contacto',
   CITA: 'cita',
   NEGOCIACION_CIERRE: 'negociacion',

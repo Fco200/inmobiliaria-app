@@ -1516,6 +1516,18 @@ window.SoportePanel = (() => {
       window.location.replace('index.html');
     });
 
+    // Salida rápida al CRM: permite volver a la aplicación sin tener que
+    // cerrar la sesión de soporte. Si no hay sesión CRM activa, se manda al
+    // login para que el usuario elija cómo entrar.
+    const backBtn = document.getElementById('btn-sp-back');
+    if (backBtn && !backBtn._wired) {
+      backBtn._wired = true;
+      backBtn.addEventListener('click', () => {
+        const crmActiva = Boolean(window.ApiClient && window.ApiClient.isAuthenticated && window.ApiClient.isAuthenticated());
+        window.location.href = crmActiva ? 'home.html' : 'index.html';
+      });
+    }
+
     initTabs();
     initLogs();
     initRespaldo();

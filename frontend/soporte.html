@@ -56,7 +56,8 @@
     .sp-brand b { color: var(--gold); letter-spacing: 0.02em; }
     .sp-brand small { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
     .sp-user { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
-    .sp-user img { height: 30px; width: 30px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); }    .sp-outline-btn {
+    .sp-user img { height: 30px; width: 30px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); }
+    .sp-outline-btn {
       background: transparent; border: 1px solid var(--gold); color: var(--gold);
       padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all .2s;
     }
@@ -292,6 +293,11 @@
       .sp-card { padding: 14px; }
       .stat-card b { font-size: 20px; }
       .sp-topbar { height: 54px; }
+      .sp-user img { display: none; }
+      .sp-user { gap: 6px; }
+      .sp-outline-btn { padding: 6px 8px; font-size: 11px; }
+      .sp-back-text { display: none; }
+      .sp-brand b { font-size: 13px; }
     }
   </style>
 </head>
@@ -305,6 +311,7 @@
     <div class="sp-user">
       <span id="sp-user-name">Cargando…</span>
       <img id="sp-user-photo" src="" alt="">
+      <button class="sp-outline-btn" id="btn-sp-back" type="button" title="Volver al CRM">&#8592;<span class="sp-back-text"> Volver al CRM</span></button>
       <button class="sp-outline-btn" id="btn-sp-logout" type="button">Cerrar Sesión</button>
     </div>
   </header>

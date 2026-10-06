@@ -14,7 +14,13 @@
   <link rel="apple-touch-icon" sizes="192x192" href="LOGOICONO.jpeg">
   <link rel="stylesheet" href="css/base.css">
   <style>
-    .chat-wrap { display: flex; height: calc(100vh - 80px); gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+    /* El chat ocupa exactamente lo que queda debajo del topnav (y de la
+       fila de padding del contenido) sin depender de cálculos con vh: la
+       página deja de hacer scroll propio y el alto real lo da el flex. */
+    body.page-chat .app { height: 100vh; overflow: hidden; }
+    body.page-chat .main { min-height: 0; overflow: hidden; }
+    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; }
+    .chat-wrap { display: flex; flex: 1; min-height: 0; gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
     .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; }
     .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; }
     .chat-sidebar-head .btn { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
@@ -24,6 +30,10 @@
     .chat-sidebar-list { flex: 1; overflow-y: auto; }
     .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
     .chat-header { padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .chat-header-titles { flex: 1; min-width: 0; }
+    .chat-header-titles #chat-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-header .icon-btn { width: 38px; height: 38px; flex-shrink: 0; }
+    .chat-sidebar-head .chat-exit { flex: 1 1 100%; }
     .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
     .chat-input-bar { padding: 12px 16px; background: var(--white); border-top: 1px solid var(--border); display: flex; gap: 8px; }
     .chat-input-bar input { flex: 1; }
@@ -57,7 +67,7 @@
     @media (max-width: 768px) {
       body.page-chat .topnav { position: sticky; }
       body.page-chat .topnav-credit { display: none; }
-      .chat-wrap { height: calc(100vh - 56px); border-radius: 0; border-left: none; border-right: none; }
+      .chat-wrap { border-radius: 0; border-left: none; border-right: none; }
       .chat-sidebar { width: 100%; }
       .chat-main { display: none; }
       .chat-main.active {
@@ -71,8 +81,6 @@
       .unread-badge { min-width: 20px; height: 20px; font-size: 11px; }
     }
     @media (max-width: 480px) {
-      body.page-chat .topnav { display: none; }
-      .chat-wrap { height: 100vh; }
       .chat-sidebar-head { padding: 10px; }
       .chat-sidebar-tab { padding: 8px 4px; font-size: 12px; }
       .chat-messages { padding: 10px; }

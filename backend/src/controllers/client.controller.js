@@ -7,9 +7,9 @@ const { Client, Appointment, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { logActivity } = require('../services/log.service');
 
-// Etapas vigentes del embudo. 'PERFILADO' es legada (migrada a SEGUIMIENTO) y
-// solo se acepta para poder guardar registros antiguos sin romper validación.
-const ETAPAS = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+// Etapas vigentes del embudo, en orden. 'PERFILADO' volvió a ser una etapa
+// real (se recorre antes de la cita); 'SEGUIMIENTO' es la que sigue a la cita.
+const ETAPAS = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
 
 const STAGE_TO_FUNNEL = {
   PROSPECTO: 'prospecto',
@@ -48,13 +48,11 @@ function assertOwnership(req, client) {
   return ownerId === String(req.user._id);
 }
 
-// La etapa "Perfilado" se renombró a "Seguimiento" (y ahora se muestra después
-// de la cita). Cualquier cliente que aún la tenga, propia o heredada, se
-// normaliza a "Seguimiento" para que nunca quede fuera del embudo.
+// Valida que la etapa exista en el embudo. "PERFILADO" es etapa plena, así que
+// NO se reescribe: sólo se normaliza el vacío y se descarta lo desconocido.
 function normalizarEtapa(etapa) {
   const value = String(etapa || '').trim();
   if (!value) return 'PROSPECTO';
-  if (value === 'PERFILADO') return 'SEGUIMIENTO';
   return ETAPAS.includes(value) ? value : null;
 }
 
@@ -89,9 +87,9 @@ const conteoEtapas = asyncHandler(async (req, res) => {
   const filter = {};
   if (!isBoss(req)) filter.asesorAsignado = req.user._id;
 
-  // Se normaliza antes de agrupar: `PERFILADO` (legada) cuenta como
-  // `SEGUIMIENTO` y `etapaActual` ausente/ vacío cuenta como `PROSPECTO`, para
-  // que el total del embudo siempre cuadre con el listado.
+  // Sólo se normaliza `etapaActual` ausente/ vacío a `PROSPECTO` para que el
+  // total del embudo siempre cuadre con el listado. `PERFILADO` cuenta con su
+  // propia columna, igual que en la interfaz.
   const rows = await Client.aggregate([
     { $match: filter },
     {
@@ -100,7 +98,6 @@ const conteoEtapas = asyncHandler(async (req, res) => {
           $switch: {
             branches: [
               { case: { $eq: [{ $ifNull: ['$etapaActual', ''] }, ''] }, then: 'PROSPECTO' },
-              { case: { $eq: ['$etapaActual', 'PERFILADO'] }, then: 'SEGUIMIENTO' },
             ],
             default: '$etapaActual',
           },
@@ -112,8 +109,9 @@ const conteoEtapas = asyncHandler(async (req, res) => {
 
   const counts = {
     PROSPECTO: 0,
-    SEGUIMIENTO: 0,
+    PERFILADO: 0,
     CITA: 0,
+    SEGUIMIENTO: 0,
     NEGOCIACION_CIERRE: 0,
     POSTVENTA: 0,
     DESCARTADO: 0,

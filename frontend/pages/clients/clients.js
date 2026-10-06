@@ -3,9 +3,11 @@
 window.Pages = window.Pages || {};
 
 // Etapas del embudo inmobiliario con su etiqueta y color de tarjeta.
-// "Seguimiento" sustituyó a "Perfilado" y ahora se recorre DESPUÉS de la cita.
+// "Perfilado" se recorre ANTES de la cita: primero se perfila al cliente
+// (operación, presupuesto, zona) y sólo después se agenda.
 const CLIENT_STAGES = [
   { key: 'PROSPECTO', label: 'Prospecto', color: '#64748b' },
+  { key: 'PERFILADO', label: 'Perfilado', color: '#5B2D8E' },
   { key: 'CITA', label: 'Cita', color: '#d97706' },
   { key: 'SEGUIMIENTO', label: 'Seguimiento', color: '#0ea5e9' },
   { key: 'NEGOCIACION_CIERRE', label: 'Negociación / Cierre', color: '#1f9d55' },
@@ -13,15 +15,15 @@ const CLIENT_STAGES = [
   { key: 'DESCARTADO', label: 'Descartado', color: '#dc2626' },
 ];
 
-const FLOW_ORDER = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
+const FLOW_ORDER = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
 const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Lona', 'Recomendación', 'Otro'];
 // Cinco operaciones exactas: "Alquilar" antes de "Otro".
 const CLIENT_SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
 // "Efectivo" se retiró: queda "Contado" como pago contra entrega.
 const CLIENT_FORMAS_PAGO = ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'];
 const CLIENT_TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro'];
-// Etapa heredada: se muestra como Seguimiento y ya no se ofrece.
-const STAGE_ALIASES = { PERFILADO: 'SEGUIMIENTO' };
+// Sin alias de etapa: "PERFILADO" volvió a ser una etapa real del embudo.
+const STAGE_ALIASES = {};
 
 function stageInfo(key) {
   const normalized = STAGE_ALIASES[key] || key;
@@ -378,7 +380,7 @@ window.Pages.clients = {
             <div class="client-card-title">
               <strong>${esc(c.nombre)}</strong>
               <div class="client-card-meta">
-                ${esc(c.email || '—')}${c.asesorAsignado ? ` · Asesor: ${esc(c.asesorAsignado.name || '')}` : ''}
+                ${[c.email, c.asesorAsignado ? `Asesor: ${c.asesorAsignado.name || ''}` : ''].filter(Boolean).map((v) => esc(v)).join(' · ') || '—'}
               </div>
             </div>
             <span class="stage-badge" style="background:${stage.color}22;color:${stage.color};border:1px solid ${stage.color}55;">${esc(stage.label)}</span>
@@ -461,11 +463,17 @@ window.Pages.clients = {
           <form id="client-quick-form" novalidate>
             <div class="stage-input-grid">
               ${UI.field('nombre', 'Nombre completo', { required: true, full: true, placeholder: 'Ej. María López' })}
+              ${fieldConOtro('servicio', '¿Qué quiere hacer el cliente?', {
+                required: true,
+                full: true,
+                options: [{ value: '', label: '— Selecciona una operación —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))],
+                placeholder: 'Ej. Permuta, herencia, ampliación…',
+              })}
               ${UI.field('telefono', 'Teléfono (con lada)', { type: 'tel', placeholder: '6121234567' })}
-              ${UI.field('email', 'Correo', { type: 'email' })}
               ${UI.field('medio', '¿Cómo nos contactó?', { type: 'select', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })) })}
               ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
             </div>
+            <p class="text-muted" style="font-size:12px;margin:0;">El correo y el resto del perfil inmobiliario se completan después desde <strong>Editar perfil</strong>.</p>
           </form>
         `,
         footer: `
@@ -480,22 +488,39 @@ window.Pages.clients = {
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-quick-form') : null;
-      if (form) form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const values = UI.collectForm(e.target);
-        if (values.asesorAsignado === '') delete values.asesorAsignado;
-        if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-        try {
-          const created = await API.clients.create(values);
-          UI.closeModal();
-          load();
-          loadCounts();
-          const nombre = (created && created.data && created.data.nombre) || 'El cliente';
-          verifyCenter({ title: 'Cliente registrado', message: `${esc(nombre)} quedó como <strong>Prospecto</strong> y ya forma parte de tu embudo de ventas.` });
-        } catch (error) {
-          UI.toast(error.message, 'error');
-        }
-      });
+      if (form) {
+        wireOtros(form);
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const values = UI.collectForm(e.target);
+          if (!String(values.nombre || '').trim()) {
+            UI.toast('Escribe el nombre del cliente', 'warning');
+            return;
+          }
+          if (!values.servicio) {
+            UI.toast('Selecciona si el cliente quiere comprar, vender, rentar o alquilar', 'warning');
+            return;
+          }
+          if (values.servicio === 'Otro' && !String(values.servicioOtro || '').trim()) {
+            UI.toast('Escribe qué operación quiere hacer el cliente', 'warning');
+            return;
+          }
+          if (values.asesorAsignado === '') delete values.asesorAsignado;
+          if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
+          if (!CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
+          limpiarOtros(values, ['servicio']);
+          try {
+            const created = await API.clients.create(values);
+            UI.closeModal();
+            load();
+            loadCounts();
+            const nombre = (created && created.data && created.data.nombre) || 'El cliente';
+            verifyCenter({ title: 'Cliente registrado', message: `${esc(nombre)} quedó como <strong>Prospecto</strong>. El siguiente paso es <strong>Perfilarlo</strong> antes de agendar la cita.` });
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+        });
+      }
     }
 
     /* ── Editar perfil inmobiliario ───────────────────────────────────── */
@@ -578,15 +603,26 @@ window.Pages.clients = {
           ? 'Ej. Retomó contacto, reactivamos su seguimiento…'
           : direction === 'back'
             ? 'Ej. Necesita más tiempo, regresamos a esta etapa…'
-            : (target === 'SEGUIMIENTO'
-                ? 'Ej. Asistió a la cita, seguimos en contacto con opciones…'
-                : target === 'CITA'
-                  ? 'Ej. Agendó visita para revisar las opciones disponibles…'
-                  : 'Ej. Aceptó la propuesta, se inicia la formalización…');
+            : (target === 'PERFILADO'
+                ? 'Ej. Se perfila al cliente: operación, presupuesto, zona y tipo de propiedad…'
+                : target === 'SEGUIMIENTO'
+                  ? 'Ej. Asistió a la cita, seguimos en contacto con opciones…'
+                  : target === 'CITA'
+                    ? 'Ej. Agendó visita para revisar las opciones disponibles…'
+                    : 'Ej. Aceptó la propuesta, se inicia la formalización…');
 
       let extraFields = '';
       let notice = '';
-      if (target === 'SEGUIMIENTO') {
+      if (target === 'PERFILADO') {
+        notice = '<div class="stage-notice">📋 Aquí se perfila al cliente antes de agendar. Puedes dejar campos en blanco y completarlos luego con <strong>Editar Perfil</strong>.</div>';
+        extraFields = `
+          <div class="stage-input-grid">
+            ${fieldConOtro('servicio', 'Operación', { value: record.servicio || '', otroValue: record.servicioOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))], placeholder: 'Ej. Permuta, herencia…' })}
+            ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
+            ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || 0 })}
+            ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 3, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
+          </div>`;
+      } else if (target === 'SEGUIMIENTO') {
         notice = '<div class="stage-notice">🙋 <strong>Una sola nota</strong> es obligatoria. Si necesitas ajustar el perfil inmobiliario, usa <strong>Editar Perfil</strong> en la tarjeta.</div>';
         extraFields = '';
       } else if (target === 'CITA') {
@@ -632,34 +668,42 @@ window.Pages.clients = {
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-stage-form') : null;
-      if (form) form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const values = UI.collectForm(e.target);
-        const nota = String(values.nota || '').trim();
-        if (!nota) {
-          UI.toast('La nota es obligatoria para mover de etapa', 'warning');
-          return;
-        }
-        const payload = { etapaNueva: target, nota };
-        const datosEtapa = {};
-        if (target === 'CITA') {
-          ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach((k) => {
-            if (values[k] !== undefined && String(values[k]).trim() !== '') datosEtapa[k] = values[k];
-          });
-        } else if (target === 'NEGOCIACION_CIERRE' && values.capacidad !== undefined && String(values.capacidad).trim() !== '') {
-          datosEtapa.capacidad = values.capacidad;
-        }
-        if (Object.keys(datosEtapa).length) payload.datosEtapa = datosEtapa;
-        try {
-          const result = await API.clients.changeEtapa(record._id, payload);
-          UI.closeModal();
-          load();
-          loadCounts();
-          showVerify(record, target, result, direction);
-        } catch (error) {
-          UI.toast(error.message, 'error');
-        }
-      });
+      if (form) {
+        wireOtros(form);
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const values = UI.collectForm(e.target);
+          const nota = String(values.nota || '').trim();
+          if (!nota) {
+            UI.toast('La nota es obligatoria para mover de etapa', 'warning');
+            return;
+          }
+          const payload = { etapaNueva: target, nota };
+          const datosEtapa = {};
+          const putIfFilled = (key) => {
+            const value = values[key];
+            if (value !== null && value !== undefined && String(value).trim() !== '') datosEtapa[key] = value;
+          };
+          if (target === 'PERFILADO') {
+            limpiarOtros(values, ['servicio']);
+            ['servicio', 'servicioOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
+          } else if (target === 'CITA') {
+            ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach(putIfFilled);
+          } else if (target === 'NEGOCIACION_CIERRE' && values.capacidad !== undefined && values.capacidad !== null && String(values.capacidad).trim() !== '') {
+            datosEtapa.capacidad = values.capacidad;
+          }
+          if (Object.keys(datosEtapa).length) payload.datosEtapa = datosEtapa;
+          try {
+            const result = await API.clients.changeEtapa(record._id, payload);
+            UI.closeModal();
+            load();
+            loadCounts();
+            showVerify(record, target, result, direction);
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+        });
+      }
     }
 
     /* ── Confirmación / verificación centrada en pantalla ────────────── */

@@ -21,6 +21,19 @@
 const connectDB = require('../src/config/db');
 const { Client } = require('../src/models');
 
+// ⚠️ PRECAUCIÓN: la etapa PERFILADO volvió a ser una etapa plena del embudo
+// (se recorre antes de la cita). Esta migración convertiría a SEGUIMIENTO los
+// clientes que hoy están en PERFILADO a propósito, así que ahora exige una
+// confirmación explícita y por defecto no hace nada.
+// PowerShell:  $env:CONFIRMAR_MIGRACION_PERFILADO='1'; node scripts/migrar-clientes-seguimiento.js
+// bash:        CONFIRMAR_MIGRACION_PERFILADO=1 node scripts/migrar-clientes-seguimiento.js
+if (process.env.CONFIRMAR_MIGRACION_PERFILADO !== '1') {
+  console.log('[Migración] Detenida: la etapa PERFILADO ya es válida de nuevo en el embudo.');
+  console.log('[Migración] Si de verdad quieres convertir PERFILADO -> SEGUIMIENTO, vuelve a');
+  console.log('[Migración] ejecutar el script con CONFIRMAR_MIGRACION_PERFILADO=1.');
+  process.exit(0);
+}
+
 // El campo legado `type` se escribía con dos grafías según el origen
 // ("comprador" en la migración antigua, "comprar" en el enum del modelo),
 // por eso se aceptan ambas.

@@ -59,6 +59,7 @@ window.Pages.chat = {
       <div class="chat-wrap">
         <div class="chat-sidebar" id="chat-sidebar">
           <div class="chat-sidebar-head">
+            <button class="btn btn-secondary chat-exit" id="btn-exit-modules" type="button" title="Volver al menú de módulos">&#8592; Módulos</button>
             <button class="btn btn-primary" id="btn-general">&#128172; Canal general</button>
             <button class="btn btn-primary" id="btn-soporte">&#128736;&#65039; Soporte</button>
             <button class="btn btn-secondary" id="btn-new-chat">+ Chat 1:1</button>
@@ -74,11 +75,12 @@ window.Pages.chat = {
         </div>
         <div class="chat-main" id="chat-main">
           <div class="chat-header" id="chat-header">
-            <button class="icon-btn" id="btn-back-chat" type="button" style="display:none;">&#8592;</button>
-            <div>
+            <button class="icon-btn" id="btn-back-chat" type="button" title="Volver a la lista de chats" aria-label="Volver a la lista de chats">&#8592;</button>
+            <div class="chat-header-titles">
               <div id="chat-title" style="font-weight:600;">Selecciona un chat</div>
               <div id="chat-participants" style="font-size:12px;color:var(--text-muted);"></div>
             </div>
+            <button class="icon-btn" id="btn-exit-header" type="button" title="Cambiar de módulo" aria-label="Cambiar de módulo">&#9776;</button>
           </div>
           <div class="chat-messages" id="chat-messages">
             <div class="chat-empty">Selecciona una conversación para comenzar</div>
@@ -104,6 +106,8 @@ window.Pages.chat = {
     const btnNewAnnouncement = $('#btn-new-announcement');
     const btnNewChat = $('#btn-new-chat');
     const btnSend = $('#btn-send');
+    const btnExit = $('#btn-exit-modules');
+    const btnExitHeader = $('#btn-exit-header');
     const chatMain = $('#chat-main');
     let currentChat = null;
     let chats = [];
@@ -369,10 +373,42 @@ window.Pages.chat = {
     btnSend.addEventListener('click', sendMessage);
     msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    btnBack.addEventListener('click', () => {
+    // Cierra la conversación abierta y regresa a la lista de chats.
+    // En móvil la lista ocupa toda la pantalla y ahí vuelve a estar el menú
+    // superior, así que siempre hay por dónde salir.
+    function closeConversation() {
       if (currentChat) leaveChat(currentChat._id);
-      chatMain.classList.remove('active');
       currentChat = null;
+      chatMain.classList.remove('active');
+    }
+
+    // Sale del módulo de chat: primero cierra la conversación (si hay) y luego
+    // regresa al módulo desde el que se entró; sin módulo de origen, al inicio.
+    function exitToModules() {
+      closeConversation();
+      let referrer = null;
+      try {
+        referrer = document.referrer ? new URL(document.referrer) : null;
+      } catch (error) {
+        referrer = null;
+      }
+      const fromAnotherModule = referrer
+        && referrer.origin === window.location.origin
+        && referrer.pathname !== window.location.pathname;
+      if (fromAnotherModule && window.history.length > 1) window.history.back();
+      else window.location.href = 'home.html';
+    }
+
+    btnBack.addEventListener('click', closeConversation);
+    if (btnExit) btnExit.addEventListener('click', exitToModules);
+    if (btnExitHeader) btnExitHeader.addEventListener('click', exitToModules);
+
+    // Tecla Escape (PC): cierra la conversación. No actúa con modales abiertos
+    // para no pisar el cierre de confirmaciones y formularios.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (document.getElementById('modal-overlay')) return;
+      if (currentChat) closeConversation();
     });
 
     const tabEls = Array.from(container.querySelectorAll('.chat-sidebar-tab'));
@@ -476,14 +512,16 @@ window.Pages.chat = {
     initSocket();
     loadChats();
 
-    // Abrir el canal general de forma predeterminada para que el chat se
-    // sienta "listo" al entrar (grupal visible para todo el equipo).
-    try {
-      const result = await API.chats.general();
-      const gen = pickData(result);
-      if (gen && gen._id) openChat(gen._id);
-    } catch (e) {
-      /* el canal general se abre bajo demanda */
+    // En PC se abre el canal general para que el chat arranque "listo".
+    // En móvil NO: se prefiere mostrar la lista de chats con el menú superior
+    // visible, para que entrar al chat nunca deje sin salida al usuario.
+    if (!window.matchMedia('(max-width: 768px)').matches) {
+      API.chats.general()
+        .then((result) => {
+          const gen = pickData(result);
+          if (gen && gen._id) openChat(gen._id);
+        })
+        .catch(() => { /* el canal general se abre bajo demanda */ });
     }
   },
 };

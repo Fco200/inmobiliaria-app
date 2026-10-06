@@ -3,10 +3,8 @@
 const { body, param } = require('express-validator');
 const validate = require('../middlewares/validate');
 
-// 'PERFILADO' es una etapa legada: se acepta para que los registros anteriores
-// a la migración (Perfilado → Seguimiento) puedan seguir guardándose, pero el
-// flujo de la interfaz ya no la ofrece.
-const ETAPAS = ['PROSPECTO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO', 'PERFILADO'];
+// Etapas del embudo, en el mismo orden que las ofrece la interfaz.
+const ETAPAS = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
 const MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
 // Cinco opciones exactas del formulario de operación + la variante "Otro".
 const SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];

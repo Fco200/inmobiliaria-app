@@ -531,7 +531,7 @@ window.Pages.clients = {
           <form id="client-profile-form" novalidate>
             <div class="stage-input-grid">
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
-              ${UI.field('email', 'Correo', { type: 'email', value: record.email || '' })}
+              ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
               ${UI.field('medio', 'Medio de contacto', { type: 'select', value: record.medio || 'Otro', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })) })}
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
@@ -560,6 +560,12 @@ window.Pages.clients = {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const values = UI.collectForm(e.target);
+          // Los campos vacíos llegan como `null`: no se envían, para que
+          // dejar algo en blanco (p. ej. el correo) no bloquee el guardado
+          // ni borre lo que ya tenía guardado el cliente.
+          Object.keys(values).forEach((key) => {
+            if (values[key] === null) delete values[key];
+          });
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
           if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
           if (values.tipoPropiedad !== null && values.tipoPropiedad !== undefined

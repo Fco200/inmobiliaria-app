@@ -25,6 +25,17 @@ const STAGE_TO_FUNNEL = {
 // se retiró del formulario, por eso ya no se acepta desde la API.
 const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio'];
 
+// Los formularios envían `null` en los campos vacíos. Se descartan: un campo
+// sin llenar no debe bloquear la validación (p. ej. el correo, que es
+// opcional) ni borrar el valor que ya tenía guardado el cliente.
+function sinNulos(obj) {
+  const out = { ...obj };
+  Object.keys(out).forEach((key) => {
+    if (out[key] === null) delete out[key];
+  });
+  return out;
+}
+
 const clientCrud = buildCrud(Client, {
   populate: ['asesorAsignado'],
   searchFields: ['nombre', 'telefono', 'email'],
@@ -129,7 +140,7 @@ const conteoEtapas = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const body = { ...req.body };
+  const body = sinNulos(req.body);
   // Un asesor siempre es el dueño de sus clientes; el jefe puede asignar a cualquiera.
   if (!isBoss(req) || !body.asesorAsignado) body.asesorAsignado = req.user._id;
 
@@ -172,7 +183,7 @@ const update = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
   }
 
-  const body = { ...req.body };
+  const body = sinNulos(req.body);
   // Un asesor no puede reasignar el cliente; solo el jefe.
   if (!isBoss(req)) body.asesorAsignado = client.asesorAsignado || req.user._id;
 

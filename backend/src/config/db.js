@@ -18,7 +18,8 @@ async function connectDB() {
     // corrido antes `npm run migrate:negocios` si quedaran clientes repetidos.
     mongoose.modelNames().forEach((nombre) => {
       mongoose.model(nombre).on('index', (err) => {
-        console.error(`No se pudo crear un índice de ${nombre}: ${err.message}`);
+        console.error(`No se pudo crear un índice de ${nombre}:`, err);
+        //console.error(`No se pudo crear un índice de ${nombre}: ${err.message}`);
       });
     });
 

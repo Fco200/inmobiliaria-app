@@ -207,11 +207,8 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   const isPublished = req.body.isPublished === true;
 
-  // Solo admin/gerencia pueden despublicar propiedades del inventario general.
-  if (!isPublished && !isBoss(req)) {
-    return res.status(403).json({ success: false, message: 'Solo un administrador puede despublicar propiedades del inventario general.' });
-  }
-
+  // Quien es dueño de la propiedad (o la tiene asignada) puede publicar y
+  // despublicar; la restricción anterior dejaba botón y API desincronizados.
   property.isPublished = isPublished;
   await property.save();
 
@@ -255,13 +252,18 @@ const uploadPhotos = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
   }
 
-  const { IMAGE_EXTS } = require('../middlewares/upload');
+  const { IMAGE_EXTS, MIME_EXTS } = require('../middlewares/upload');
   const files = req.files || [];
   if (!files.length) {
     return res.status(400).json({ success: false, message: 'No se recibieron fotos' });
   }
 
-  const bad = files.find((f) => !IMAGE_EXTS.has(path.extname(f.originalname || '').slice(1).toLowerCase()));
+  const bad = files.find((f) => {
+    // En móviles/WA la foto puede venir sin extensión en el nombre: se toma
+    // la que corresponda al MIME para no rechazar imágenes válidas.
+    const ext = path.extname(f.originalname || '').slice(1).toLowerCase();
+    return !IMAGE_EXTS.has(ext) && !MIME_EXTS[f.mimetype];
+  });
   if (bad) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ success: false, message: 'Solo se permiten imágenes' });

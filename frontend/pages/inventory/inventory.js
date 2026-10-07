@@ -6,6 +6,21 @@ window.Pages.inventory = {
   title: 'Mis Propiedades',
 
   async render(container) {
+    // Tipos de cita en el orden del formulario (compartido con Citas).
+    const TIPOS_CITA = [
+      ['visita_propiedad', 'Visita a la propiedad'],
+      ['oficina', 'Oficina'],
+      ['promesa', 'Promesa'],
+      ['avaluo', 'Avalúo'],
+      ['seguimiento', 'Seguimiento'],
+      ['firma_notario', 'Firma Notario'],
+      ['entrega', 'Entrega'],
+      ['comisiones', 'Comisiones'],
+      ['otro', 'Otro (especificar)'],
+    ];
+    const TIPOS_INMUEBLE = ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'];
+    const ESTADOS_PROPIEDAD = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
+
     // `vista` separa explícitamente las dos carteras para que no se mezclen:
     //   'mine'    → SOLO las propiedades captadas por este asesor en su sesión
     //                (asignadas a él o de las que es responsable). GET /inventory?mine=true
@@ -26,16 +41,19 @@ window.Pages.inventory = {
     let users = [];
     let clients = [];
     try {
-      me = await API.auth.me().catch(() => null);
-    } catch (error) { me = null; }
-    try {
-      const u = await API.users.list({ limit: 100 }).catch(() => ({ data: [] }));
+      const [m, u, c] = await Promise.all([
+        API.auth.me().catch(() => null),
+        API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
+        API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
+      ]);
+      me = m;
       users = u.data;
-    } catch (error) { users = []; }
-    try {
-      const c = await API.clients.list({ limit: 100 }).catch(() => ({ data: [] }));
       clients = c.data;
-    } catch (error) { clients = []; }
+    } catch (error) {
+      me = null;
+      users = [];
+      clients = [];
+    }
 
     const myId = (me && me._id) || (stored && stored._id) || '';
 
@@ -174,12 +192,7 @@ window.Pages.inventory = {
           <div class="form-group">
             <label>Tipo de cita</label>
             <select class="form-control" data-type>
-              <option value="visita_propiedad" selected>Visita a la propiedad</option>
-              <option value="oficina">Oficina</option>
-              <option value="firma">Firma</option>
-              <option value="avaluo">Avalúo</option>
-              <option value="seguimiento">Seguimiento</option>
-              <option value="otro">Otro</option>
+              ${TIPOS_CITA.map(([v, l]) => `<option value="${v}" ${v === 'visita_propiedad' ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -204,14 +217,17 @@ window.Pages.inventory = {
         try {
           const typeEl = overlay.querySelector('[data-type]');
           const notesEl = overlay.querySelector('[data-notes]');
+          const type = typeEl ? typeEl.value : 'visita_propiedad';
           const specify = UI.otrosText ? UI.otrosText(typeEl) : '';
+          if (type === 'otro' && !String(specify).trim()) return UI.toast('Especifica el tipo de cita', 'warning');
           await API.appointments.create({
             user: myId,
             client,
             property: prop._id,
             date: new Date(date).toISOString(),
-            type: typeEl.value,
-            notes: [notesEl.value, specify].filter(Boolean).join(' — '),
+            type,
+            typeOther: type === 'otro' ? String(specify).trim() : '',
+            notes: notesEl.value || '',
           });
           UI.toast('Cita agendada', 'success');
           UI.closeModal();
@@ -318,6 +334,95 @@ window.Pages.inventory = {
       });
     }
 
+    // ---- Editar propiedad (desde el inventario) ----
+
+    function openEditModal(item) {
+      const prop = item.property || {};
+      const opts = (list, current) => list.map((v) => `<option value="${v}" ${String(current) === v ? 'selected' : ''}>${v}</option>`).join('');
+      const agentOptions = users.map((u) => `<option value="${u._id}" ${prop.responsibleUser && String(prop.responsibleUser._id || prop.responsibleUser) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
+      const modal = UI.openModal({
+        title: `Editar propiedad — ${propertyLabel(prop)}`,
+        body: `
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>Tipo</label>
+              <select class="form-control" data-type>${opts(TIPOS_INMUEBLE, prop.type)}</select>
+            </div>
+            <div class="form-group">
+              <label>Operación</label>
+              <select class="form-control" data-operation>${opts(['venta', 'renta'], prop.operationType)}</select>
+            </div>
+            <div class="form-group">
+              <label>Precio</label>
+              <input class="form-control" type="number" min="0" step="0.01" data-price value="${Number(prop.price) || 0}">
+            </div>
+            <div class="form-group">
+              <label>Valor del ticket</label>
+              <input class="form-control" type="number" min="0" step="0.01" data-ticket value="${Number(prop.ticketValue) || 0}">
+            </div>
+            <div class="form-group">
+              <label>Estado</label>
+              <select class="form-control" data-status>${opts(ESTADOS_PROPIEDAD, prop.status)}</select>
+            </div>
+            ${isBoss ? `<div class="form-group">
+              <label>Responsable</label>
+              <select class="form-control" data-responsible>
+                <option value="">— Sin responsable —</option>
+                ${agentOptions}
+              </select>
+            </div>` : ''}
+            <div class="form-group">
+              <label>Calle / dirección</label>
+              <input class="form-control" data-address value="${UI.escapeHtml(prop.address || '')}">
+            </div>
+            <div class="form-group">
+              <label>Colonia</label>
+              <input class="form-control" data-zone value="${UI.escapeHtml(prop.zone || '')}">
+            </div>
+            <div class="form-group">
+              <label>Ciudad</label>
+              <input class="form-control" data-city value="${UI.escapeHtml(prop.city || '')}">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label>Descripción</label>
+              <textarea class="form-control" data-description rows="3">${UI.escapeHtml(prop.description || '')}</textarea>
+            </div>
+          </div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>Guardar</button>`,
+      });
+      const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+      if (!overlay) return;
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      const okBtn = overlay.querySelector('[data-ok]');
+      if (okBtn) okBtn.addEventListener('click', async () => {
+        try {
+          const body = {
+            type: overlay.querySelector('[data-type]').value,
+            operationType: overlay.querySelector('[data-operation]').value,
+            price: Number(overlay.querySelector('[data-price]').value) || 0,
+            ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
+            status: overlay.querySelector('[data-status]').value,
+            address: overlay.querySelector('[data-address]').value.trim(),
+            zone: overlay.querySelector('[data-zone]').value.trim(),
+            city: overlay.querySelector('[data-city]').value.trim(),
+            description: overlay.querySelector('[data-description]').value.trim(),
+          };
+          const responsibleEl = overlay.querySelector('[data-responsible]');
+          if (responsibleEl) body.responsibleUser = responsibleEl.value || null;
+          await API.properties.update(prop._id, body);
+          UI.toast('Propiedad actualizada', 'success');
+          UI.closeModal();
+          load();
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+      });
+    }
+
     // ---- Asignar asesor (solo jefes) ----
 
     function openAssignModal(item) {
@@ -410,6 +515,7 @@ window.Pages.inventory = {
           </select>
         `;
         const filterSel = wrap.querySelector('[data-filter]');
+        filterSel.value = state.filter;
         filterSel.addEventListener('change', (e) => {
           state.filter = e.target.value;
           state.page = 1;
@@ -452,6 +558,7 @@ window.Pages.inventory = {
             <td>${UI.escapeHtml(item.assignedAgent ? item.assignedAgent.name : '—')}</td>
             <td>
               <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
+              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>
               ${item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
               ${!isBoss ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>` : ''}
               ${!isBoss ? `<button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>` : ''}
@@ -485,6 +592,7 @@ window.Pages.inventory = {
           if (!item) return;
           const kind = btn.dataset.kind;
           if (kind === 'view') openDetailModal(item);
+          else if (kind === 'edit') openEditModal(item);
           else if (kind === 'obs') openObservationsModal(item);
           else if (kind === 'appointment') openAppointmentModal(item);
           else if (kind === 'business') openBusinessModal(item);

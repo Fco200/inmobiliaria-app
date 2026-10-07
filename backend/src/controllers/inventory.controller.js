@@ -301,9 +301,15 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   const isPublished = req.body.isPublished === true;
 
-  // Solo admin/gerencia pueden despublicar propiedades del inventario general.
+  // Publicar/despublicar: administración/gerencia siempre; el asesor asignado
+  // y el responsable de la propiedad también (el botón "Despublicar" se muestra
+  // a todos, así que la API debe acompañarlo).
   if (!isPublished && !isBoss(req.user)) {
-    return res.status(403).json({ success: false, message: 'Solo un administrador puede despublicar propiedades del inventario general.' });
+    const assigned = String(inventory.assignedAgent || '') === String(req.user._id);
+    const responsible = String((inventory.property && inventory.property.responsibleUser) || '') === String(req.user._id);
+    if (!assigned && !responsible) {
+      return res.status(403).json({ success: false, message: 'No tienes acceso a despublicar esta propiedad.' });
+    }
   }
 
   inventory.isPublished = isPublished;

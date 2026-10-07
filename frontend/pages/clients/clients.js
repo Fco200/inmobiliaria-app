@@ -16,7 +16,12 @@ const CLIENT_STAGES = [
 ];
 
 const FLOW_ORDER = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
-const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Lona', 'Recomendación', 'Otro'];
+// Medios en el MISMO orden y con los MISMOS valores que el enum del backend
+// (models/client.model.js) para que ningún valor caiga fuera del enum.
+const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
+// Medios donde el texto libre (medioOtro) está permitido. En "Recomendación"
+// es opcional (puede quedarse "Recomendación" a secas); en "Otro" es obligatorio.
+const MEDIO_OTROS = ['Otro', 'Recomendación'];
 // Cinco operaciones exactas: "Alquilar" antes de "Otro".
 const CLIENT_SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
 // "Efectivo" se retiró: queda "Contado" como pago contra entrega.
@@ -140,10 +145,12 @@ window.Pages.clients = {
     // el "Otros (especificar)" genérico de UI.field porque aquí el texto vive
     // en un campo separado (servicioOtro / formaPagoOtro / tipoPropiedadOtro),
     // lo que mantiene el valor del select siempre dentro de su enum.
-    function fieldConOtro(name, label, { value = '', otroValue = '', options = [], placeholder = 'Especifica…', full = false, required = false } = {}) {
+    //   otroWhen:     valores del select donde se MUESTRA el texto libre.
+    //   requiredWhen: valores del select donde el texto libre es OBLIGATORIO.
+    function fieldConOtro(name, label, { value = '', otroValue = '', options = [], placeholder = 'Especifica…', full = false, required = false, otroWhen = ['Otro'], requiredWhen = ['Otro'] } = {}) {
       const id = `fld-${name}`;
       const otrosId = `otros-${id}`;
-      const isOtro = value === 'Otro';
+      const isOtro = otroWhen.includes(value);
       const opts = options.map((o) => {
         const optValue = typeof o === 'object' ? o.value : o;
         const optLabel = typeof o === 'object' ? o.label : o;
@@ -152,7 +159,7 @@ window.Pages.clients = {
       return `
         <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
           <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>
-          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}"${required ? ' required' : ''}>${opts}</select>
+          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${esc(JSON.stringify(otroWhen))}" data-required-when="${esc(JSON.stringify(requiredWhen))}"${required ? ' required' : ''}>${opts}</select>
           <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${esc(otroValue)}" placeholder="${esc(placeholder)}" style="display:${isOtro ? 'block' : 'none'};margin-top:8px;">
         </div>`;
     }
@@ -163,27 +170,54 @@ window.Pages.clients = {
         const input = root.querySelector('#' + select.dataset.otroInput)
           || document.getElementById(select.dataset.otroInput);
         if (!input) return;
+        const otroWhen = parseWhen(select.dataset.otroWhen, ['Otro']);
+        const requiredWhen = parseWhen(select.dataset.requiredWhen, ['Otro']);
         const sync = () => {
-          const isOtro = select.value === 'Otro';
-          input.style.display = isOtro ? 'block' : 'none';
-          input.required = isOtro && select.required;
-          if (!isOtro) input.value = '';
+          const show = otroWhen.includes(select.value);
+          input.style.display = show ? 'block' : 'none';
+          input.required = show && requiredWhen.includes(select.value) && select.required;
+          if (!show) input.value = '';
         };
         select.addEventListener('change', sync);
         sync();
       });
     }
 
+    // Los valores de data-*-when se serializan como JSON; si algo los rompe
+    // se cae a la lista por defecto (["Otro"]) en vez de fallar.
+    function parseWhen(raw, fallback) {
+      if (!raw) return fallback;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+      } catch (error) {
+        return fallback;
+      }
+    }
+
     // Elimina los campos "…Otro" que no aplican antes de enviar al servidor.
-    function limpiarOtros(values, names) {
+    // `root` es el formulario donde viven los selects (para leer su data-otro-when).
+    function limpiarOtros(values, names, root) {
+      const scope = root || document;
       names.forEach((name) => {
-        if (values[name] !== 'Otro') delete values[`${name}Otro`];
+        const select = scope.querySelector(`select[name="${name}"]`);
+        const otroWhen = select ? parseWhen(select.dataset.otroWhen, ['Otro']) : ['Otro'];
+        if (!otroWhen.includes(values[name])) delete values[`${name}Otro`];
         else if (!String(values[`${name}Otro`] || '').trim()) {
           delete values[`${name}Otro`];
-          values[name] = 'Otro';
         }
       });
       return values;
+    }
+
+    // Texto del medio para presentar en tarjeta: "Otro" muestra lo escrito y
+    // "Recomendación" lo anexa sólo si escribió algo.
+    function medioLabel(c) {
+      const medio = c.medio || 'Otro';
+      const otro = String(c.medioOtro || '').trim();
+      if (medio === 'Otro') return otro || medio;
+      if (medio === 'Recomendación' && otro) return `Recomendación · ${otro}`;
+      return medio;
     }
 
     function pipelineHTML() {
@@ -387,7 +421,7 @@ window.Pages.clients = {
           </div>
 
           <div class="client-card-line">
-            <span class="client-card-media">${esc(c.medio || 'Otro')}</span>
+            <span class="client-card-media">${esc(medioLabel(c))}</span>
             <span>${esc(c.telefono || '—')}</span>
           </div>
 
@@ -470,7 +504,12 @@ window.Pages.clients = {
                 placeholder: 'Ej. Permuta, herencia, ampliación…',
               })}
               ${UI.field('telefono', 'Teléfono (con lada)', { type: 'tel', placeholder: '6121234567' })}
-              ${UI.field('medio', '¿Cómo nos contactó?', { type: 'select', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })) })}
+              ${fieldConOtro('medio', '¿Cómo nos contactó?', {
+                options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })),
+                otroWhen: MEDIO_OTROS,
+                requiredWhen: ['Otro'],
+                placeholder: 'Ej. Referido por Juan Pérez…',
+              })}
               ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
             </div>
             <p class="text-muted" style="font-size:12px;margin:0;">El correo y el resto del perfil inmobiliario se completan después desde <strong>Editar perfil</strong>.</p>
@@ -507,8 +546,12 @@ window.Pages.clients = {
           }
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
+          if (values.medio === 'Otro' && !String(values.medioOtro || '').trim()) {
+            UI.toast('Escribe cómo te contactó el cliente', 'warning');
+            return;
+          }
           if (!CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
-          limpiarOtros(values, ['servicio']);
+          limpiarOtros(values, ['servicio', 'medio'], e.target);
           try {
             const created = await API.clients.create(values);
             UI.closeModal();
@@ -532,7 +575,7 @@ window.Pages.clients = {
             <div class="stage-input-grid">
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
-              ${UI.field('medio', 'Medio de contacto', { type: 'select', value: record.medio || 'Otro', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })) })}
+              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro'], placeholder: 'Ej. Referido por Juan Pérez…' })}
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
@@ -567,10 +610,14 @@ window.Pages.clients = {
             if (values[key] === null) delete values[key];
           });
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
+          if (values.medio === 'Otro' && !String(values.medioOtro || '').trim()) {
+            UI.toast('Escribe cómo te contactó el cliente', 'warning');
+            return;
+          }
           if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
           if (values.tipoPropiedad !== null && values.tipoPropiedad !== undefined
             && !CLIENT_TIPOS_PROPIEDAD.includes(values.tipoPropiedad)) values.tipoPropiedad = 'Otro';
-          limpiarOtros(values, ['servicio', 'tipoPropiedad', 'formaPago']);
+          limpiarOtros(values, ['servicio', 'tipoPropiedad', 'formaPago', 'medio'], e.target);
           // `vigencia` ya no existe en el modelo.
           delete values.vigencia;
           try {
@@ -691,7 +738,7 @@ window.Pages.clients = {
             if (value !== null && value !== undefined && String(value).trim() !== '') datosEtapa[key] = value;
           };
           if (target === 'PERFILADO') {
-            limpiarOtros(values, ['servicio']);
+            limpiarOtros(values, ['servicio'], e.target);
             ['servicio', 'servicioOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
           } else if (target === 'CITA') {
             ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach(putIfFilled);

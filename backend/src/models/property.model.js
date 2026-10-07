@@ -2,6 +2,8 @@
 
 const mongoose = require('mongoose');
 
+const { PROPERTY_PAYMENT_METHODS } = require('../constants/appointment-types');
+
 const propertySchema = new mongoose.Schema(
   {
     folio: {
@@ -42,6 +44,12 @@ const propertySchema = new mongoose.Schema(
       ref: 'Client',
       default: null,
     },
+    // Propietario externo: cuando no está en la cartera de clientes se guarda
+    // el nombre en texto libre y `owner` queda en null.
+    ownerName: { type: String, trim: true, default: '' },
+    // "Se puede vender con…": contado, infonavit, banco, fovissste, todos, otro.
+    paymentMethods: [{ type: String, enum: PROPERTY_PAYMENT_METHODS }],
+    paymentMethodsOther: { type: String, trim: true, default: '' },
     responsibleUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

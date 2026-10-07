@@ -2,6 +2,8 @@
 
 const mongoose = require('mongoose');
 
+const { APPOINTMENT_TYPES } = require('../constants/appointment-types');
+
 const appointmentSchema = new mongoose.Schema(
   {
     client: {
@@ -28,9 +30,11 @@ const appointmentSchema = new mongoose.Schema(
     place: { type: String, trim: true, default: '' },
     type: {
       type: String,
-      enum: ['visita_propiedad', 'oficina', 'firma', 'avaluo', 'seguimiento', 'otro'],
+      enum: APPOINTMENT_TYPES,
       default: 'visita_propiedad',
     },
+    // Texto libre cuando el tipo es 'otro': "Otro (especificar)".
+    typeOther: { type: String, trim: true, default: '' },
     notes: { type: String, trim: true, default: '' },
     reminder: { type: Date, default: null },
     status: {

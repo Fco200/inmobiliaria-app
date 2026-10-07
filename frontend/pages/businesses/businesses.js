@@ -286,26 +286,35 @@ window.Pages.businesses = {
         },
         extraActions(record) {
           const options = stagesFor(record.processType).map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`).join('');
+          // El select de etapa guarda SOLO al cambiar (data-extra-auto): el
+          // botón "Cambiar" se retiró porque ahora no hace falta pulsarlo.
           return `
-            <select class="form-control" data-stage style="display:inline-block;width:150px;padding:5px 8px;font-size:12px;margin-left:6px;" title="Cambiar etapa">${options}</select>
-            <button class="btn btn-secondary btn-sm" data-extra data-stage-btn style="margin-left:4px;">Cambiar</button>
+            <select class="form-control" data-stage data-extra-auto data-field="currentStage" data-record="${record._id}" style="display:inline-block;width:150px;padding:5px 8px;font-size:12px;margin-left:6px;" title="Cambiar etapa (se guarda al elegir)">${options}</select>
             <button class="btn btn-secondary btn-sm" data-history style="margin-left:6px;">Etapas</button>
-            <button class="btn btn-secondary btn-sm" data-activity data-record="${record._id}" style="margin-left:6px;">Actividad</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-activity data-record="${record._id}" style="margin-left:6px;">Actividad</button>
           `;
         },
-        onExtraAction(record, btn, ctx) {
-          if (btn.dataset.activity) {
+        onExtraAction(record, control, ctx) {
+          // Historial de actividad del negocio.
+          if (control.dataset.activity) {
             UI.showActivityHistory('Business', record._id, `Centro de actividad — ${record.name}`);
             return;
           }
-          const stageSel = btn.parentElement.querySelector('[data-stage]');
+          // Cambio de etapa: llega desde el select auto-guardado (o un botón).
+          const sel = control.matches && control.matches('select[data-stage]')
+            ? control
+            : (control.parentElement && control.parentElement.querySelector('[data-stage]'));
+          if (!sel) return;
           API.businesses
-            .stage(record._id, { stage: stageSel.value })
+            .stage(record._id, { stage: sel.value })
             .then((res) => {
-              ctx.toast(res.message, 'success');
+              ctx.toast((res && res.message) || 'Etapa actualizada', 'success');
               ctx.reload();
             })
-            .catch((error) => ctx.toast(error.message, 'error'));
+            .catch((error) => {
+              ctx.toast(error.message, 'error');
+              ctx.reload();
+            });
         },
         onEdit: true,
         onRemove: true,

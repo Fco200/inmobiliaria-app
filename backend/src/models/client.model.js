@@ -33,6 +33,9 @@ const clientSchema = new Schema(
       enum: ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'],
       default: 'WhatsApp',
     },
+    // Texto libre escrito cuando el medio es "Otro" (o cuando se detalla una
+    // "Recomendación"). Nunca rompe el enum de `medio`.
+    medioOtro: { type: String, trim: true, default: '' },
     fechaRegistro: { type: Date, default: Date.now },
     // ── Operación que origina al cliente (captación) ────────────────────
     // Las cinco opciones reales del formulario: Vender, Comprar, Rentar,

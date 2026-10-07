@@ -13,7 +13,11 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const safe = String(file.originalname || 'archivo').replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    cb(null, `${Date.now()}-${safe}`);
+    // En móviles algunas fotos llegan SIN extensión en el nombre: se completa
+    // con la que corresponda al MIME para que el navegador pueda mostrarla.
+    const hasExt = Boolean(path.extname(safe));
+    const suffix = hasExt ? '' : `.${extFromMime(file.mimetype) || 'bin'}`;
+    cb(null, `${Date.now()}-${safe}${suffix}`);
   },
 });
 
@@ -30,15 +34,50 @@ const IMAGE_EXTS = new Set([
   'webp', 'bmp', 'avif', 'tiff', 'tif', 'heic', 'heif',
 ]);
 
+// MIME → extensión, para archivos que llegan sin extensión en el nombre.
+const MIME_EXTS = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/pjpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/bmp': 'bmp',
+  'image/avif': 'avif',
+  'image/tiff': 'tiff',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
+function extFromMime(mime) {
+  return MIME_EXTS[String(mime || '').toLowerCase()] || '';
+}
+
+// Extensión real del archivo: la del nombre si es válida; si no, la que
+// indique el MIME (caso típico de fotos tomadas con el celular).
+function effectiveExt(file) {
+  const raw = path.extname(file.originalname || '').slice(1).toLowerCase();
+  if (raw && ALLOWED_EXTS.has(raw)) return raw;
+  return extFromMime(file.mimetype) || raw;
+}
+
 const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
-  cb(null, ALLOWED_EXTS.has(ext));
+  cb(null, ALLOWED_EXTS.has(effectiveExt(file)));
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+  // `files: 10` para poder subir varias fotos en una sola petición
+  // (POST /properties/:id/photos usa upload.array('photos', 10)).
+  limits: { fileSize: 15 * 1024 * 1024, files: 10 },
 });
 
 // ── Validación de contenido real (magic bytes) ──────────────────────────────
@@ -72,7 +111,7 @@ function looksLikeText(buf) {
 
 // Verifica el contenido real (magic bytes) de un archivo ya guardado por multer.
 function verifyFile(file) {
-  const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
+  const ext = effectiveExt(file);
   try {
     const fd = fs.openSync(file.path, 'r');
     const buf = Buffer.alloc(16);
@@ -137,4 +176,4 @@ function uploadErrorHandler(err, req, res, next) {
   return next(err);
 }
 
-module.exports = { upload, verifyUpload, verifyUploads, uploadErrorHandler, ALLOWED_EXTS, IMAGE_EXTS };
+module.exports = { upload, verifyUpload, verifyUploads, uploadErrorHandler, ALLOWED_EXTS, IMAGE_EXTS, MIME_EXTS, effectiveExt };

@@ -244,6 +244,20 @@ const UI = (() => {
         </select>
         <input class="form-control" id="${otrosId}" name="__ui_otros_${name}" type="text" placeholder="Especifica..." style="display:none;margin-top:8px;">
       `;
+    } else if (type === 'checkboxGroup') {
+      // Varias casillas con el MISMO name: collectForm las devuelve como array.
+      const list = (Array.isArray(value) ? value : []).map(String);
+      const boxes = selectOptions
+        .map((o) => {
+          const optValue = typeof o === 'object' ? o.value : o;
+          const optLabel = typeof o === 'object' ? o.label : o;
+          const checked = list.includes(String(optValue)) ? 'checked' : '';
+          return `<label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" name="${name}" value="${escapeHtml(optValue)}" ${checked}> ${escapeHtml(optLabel)}
+          </label>`;
+        })
+        .join('');
+      control = `<div id="${id}" style="display:flex;flex-direction:column;gap:2px;">${boxes}</div>`;
     } else if (type === 'checkbox') {
       const checked = value ? 'checked' : '';
       control = `
@@ -344,24 +358,42 @@ const UI = (() => {
   function collectForm(form) {
     const others = {};
     const data = {};
+    const seen = {};
+    const groupValue = (nodes) => Array.from(nodes).filter((n) => n.checked).map((n) => n.value);
+
     new FormData(form).forEach((value, key) => {
       if (key.indexOf('__ui_otros_') === 0) {
         others[key.slice('__ui_otros_'.length)] = value;
         return;
       }
-      const input = form.querySelector(`[name="${key}"]`);
-      if (!input) return;
+      const nodes = form.querySelectorAll(`[name="${key}"]`);
+      if (!nodes.length) return;
+      const input = nodes[0];
       if (input.type === 'file') return;
-      if (input.type === 'number') {
+      seen[key] = true;
+      if (input.type === 'checkbox') {
+        // Varias casillas con el mismo name → array de los marcados.
+        // Una sola → booleano (antes se perdía el "desmarcar" y las casillas
+        // múltiples sólo reflejaban la primera).
+        data[key] = nodes.length > 1 ? groupValue(nodes) : input.checked;
+      } else if (input.type === 'number') {
         data[key] = value === '' ? null : Number(value);
-      } else if (input.type === 'checkbox') {
-        data[key] = input.checked;
       } else if (value === '') {
         data[key] = null;
       } else {
         data[key] = value;
       }
     });
+
+    // FormData omite las casillas NO marcadas: sin este pase, desmarcar una
+    // casilla en modo edición no se enviaba al servidor y el valor no cambiaba.
+    form.querySelectorAll('input[type="checkbox"][name]').forEach((box) => {
+      const key = box.name;
+      if (Object.prototype.hasOwnProperty.call(seen, key)) return;
+      const nodes = form.querySelectorAll(`[name="${key}"]`);
+      data[key] = nodes.length > 1 ? groupValue(nodes) : false;
+    });
+
     // Si el usuario eligió "Otros" y escribió algo, se usa ese texto como valor.
     // Si eligió el genérico "Otros (especificar)" pero no escribió nada, se
     // evita enviar el valor centinela __ui_otros__ al servidor.

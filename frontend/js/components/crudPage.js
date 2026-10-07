@@ -242,7 +242,7 @@ ${rowXml}
       if (config.onRemove) {
         actions += `<button class="btn btn-danger btn-sm" data-remove="${record._id}" style="margin-left:6px;">Eliminar</button>`;
       }
-      rows += `<tr>${cells}<td data-label="Acciones">${actions}</td></tr>`;
+      rows += `<tr data-record="${record._id}">${cells}<td data-label="Acciones">${actions}</td></tr>`;
     });
 
     table.innerHTML = `
@@ -278,11 +278,36 @@ ${rowXml}
     });
 
     if (config.onExtraAction) {
+      // El registro puede venir en el propio botón (data-record) o en la fila
+      // (data-record del <tr>), así cualquier control de la fila lo resuelve.
+      const recordFor = (el) => {
+        const holder = el.dataset.record ? el : (el.closest('[data-record]') || {});
+        const id = el.dataset.record || (holder.dataset ? holder.dataset.record : '');
+        return state.records.find((r) => r._id === id);
+      };
       table.querySelectorAll('[data-extra]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const record = state.records.find((r) => r._id === btn.dataset.record);
-          config.onExtraAction(record, btn, ctx());
+          config.onExtraAction(recordFor(btn), btn, ctx());
+        });
+      });
+      // Guardado rápido: selects marcados con data-extra-auto guardan al
+      // cambiar de valor, sin necesidad de pulsar un botón.
+      table.querySelectorAll('select[data-extra-auto]').forEach((sel) => {
+        sel.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const record = recordFor(sel);
+          if (!record) return;
+          const current = sel.dataset.currentValue !== undefined
+            ? sel.dataset.currentValue
+            : (record[sel.dataset.field || ''] ?? '');
+          if (String(current) === sel.value) return;
+          sel.disabled = true;
+          config.onExtraAction(record, sel, {
+            ...ctx(),
+            reload: () => { sel.disabled = false; load(); },
+          });
+          setTimeout(() => { if (document.contains(sel)) sel.disabled = false; }, 4000);
         });
       });
     }
@@ -372,14 +397,24 @@ ${rowXml}
   }
 
   async function load() {
-    container.innerHTML = '';
-    container.appendChild(renderHeader());
-    container.appendChild(renderToolbar());
+    // El encabezado y la barra de búsqueda/filtros se pintan UNA sola vez:
+    // reconstruirlos en cada carga hacía perder el foco del buscador y
+    // re-ejecutar los listeners de los filtros.
+    if (!container.querySelector('[data-crud-body]')) {
+      container.innerHTML = '';
+      container.appendChild(renderHeader());
+      container.appendChild(renderToolbar());
+      const body = document.createElement('div');
+      body.setAttribute('data-crud-body', '');
+      container.appendChild(body);
+    }
+    const body = container.querySelector('[data-crud-body]');
+    body.innerHTML = '';
 
     const loading = document.createElement('div');
     loading.className = 'loading';
     loading.textContent = 'Cargando...';
-    container.appendChild(loading);
+    body.appendChild(loading);
 
     try {
       const params = { page: state.page, limit: 15 };
@@ -395,17 +430,17 @@ ${rowXml}
       state.meta = result.meta;
 
       loading.remove();
-      container.appendChild(renderTable());
+      body.appendChild(renderTable());
 
       if (state.meta && state.meta.pages > 1) {
-        container.appendChild(UI.pagination(state.meta, (page) => {
+        body.appendChild(UI.pagination(state.meta, (page) => {
           state.page = page;
           load();
         }));
       }
     } catch (error) {
       loading.remove();
-      container.appendChild(UI.errorAlert(error.message));
+      body.appendChild(UI.errorAlert(error.message));
     }
   }
 

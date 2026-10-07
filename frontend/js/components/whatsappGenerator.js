@@ -116,12 +116,12 @@ window.WhatsAppGenerator = (() => {
     const clientSel = overlay.querySelector('[data-wa-client]');
     const openLink = overlay.querySelector('[data-wa-open]');
 
-    const urlBase = digits(contactPhone)
-      ? `https://wa.me/${digits(contactPhone)}`
+    const urlBase = Format.waNumber(contactPhone)
+      ? `https://wa.me/${Format.waNumber(contactPhone)}`
       : (window.AppConfig && window.AppConfig.resolveUrl) ? '' : '';
 
     const refresh = () => {
-      const num = digits(clientSel ? clientSel.value : '') || digits(phoneInput ? phoneInput.value : '');
+      const num = Format.waNumber(clientSel ? clientSel.value : '') || Format.waNumber(phoneInput ? phoneInput.value : '');
       const text = textoMensaje(prop, contact || (asesor ? asesor : null));
       if (textArea) textArea.value = text;
       if (openLink) {

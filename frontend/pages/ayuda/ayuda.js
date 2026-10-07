@@ -27,8 +27,8 @@ window.Pages.ayuda = {
     const supportEmail = support.email || '';
     const supportPhoto = support.photo || '';
     const supportIntro = support.intro || '¿Necesitas ayuda? Escríbenos y con gusto te atendemos.';
-    const waLink = supportWhatsapp
-      ? `https://wa.me/${String(supportWhatsapp).replace(/[^\d]/g, '')}?text=${encodeURIComponent('Hola, necesito ayuda con el sistema INMOBLES.')}`
+    const waLink = supportWhatsapp && Format.waNumber(supportWhatsapp)
+      ? `https://wa.me/${Format.waNumber(supportWhatsapp)}?text=${encodeURIComponent('Hola, necesito ayuda con el sistema INMOBLES.')}`
       : '#';
 
     const photoHtml = supportPhoto

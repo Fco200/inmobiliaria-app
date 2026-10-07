@@ -3,7 +3,7 @@
 window.Pages = window.Pages || {};
 
 window.Pages.properties = {
-  title: 'Capturar Propiedades',
+  title: 'Captar Propiedades',
 
   async render(container) {
     const stored = window.ApiClient ? window.ApiClient.getStoredUser() : null;
@@ -75,9 +75,10 @@ window.Pages.properties = {
     } catch (error) { whatsappNumber = ''; }
 
     // Enlace wa.me con mensaje predefinido (mismo formato que la landing).
-    const waLink = (text) => whatsappNumber
-      ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(text)}`
-      : '';
+    const waLink = (text) => {
+      const num = Format.waNumber(whatsappNumber);
+      return num ? `https://wa.me/${num}?text=${encodeURIComponent(text)}` : '';
+    };
 
     // Imagen por defecto (SVG) cuando una propiedad no tiene fotografías.
     const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -137,7 +138,8 @@ window.Pages.properties = {
                 ${detailRow('Precio', Format.currency(record.price))}
                 ${detailRow('Valor ticket', record.ticketValue ? Format.currency(record.ticketValue) : '—')}
                 ${detailRow('Asesor', record.responsibleUser ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser) : '—')}
-                ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.name || record.owner) : '—')}
+                ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.name || record.owner) : UI.escapeHtml(record.ownerName || '—'))}
+                ${detailRow('Se puede vender con', paymentMethodsLabel(record))}
               </tbody>
             </table>
           </div>
@@ -215,6 +217,25 @@ window.Pages.properties = {
 
     const typeLabel = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—');
 
+    // Etiquetas de las formas de pago guardadas en `paymentMethods`.
+    const PAYMENT_LABELS = {
+      contado: 'Contado',
+      infonavit: 'Infonavit',
+      banco: 'Banco',
+      fovissste: 'Fovissste',
+      todos: 'Todos',
+      otro: 'Otro',
+    };
+    const paymentMethodsLabel = (record) => {
+      const list = Array.isArray(record.paymentMethods) ? record.paymentMethods : [];
+      if (!list.length) return '—';
+      const labels = list.map((m) => {
+        if (m === 'otro' && record.paymentMethodsOther) return record.paymentMethodsOther;
+        return PAYMENT_LABELS[m] || m;
+      });
+      return labels.join(', ');
+    };
+
     // Fotografías pendientes por subir (se leen del input de archivo al guardar).
     const readPendingPhotoFiles = () => {
       const input = document.getElementById('fld-photos_files');
@@ -267,7 +288,7 @@ window.Pages.properties = {
     let openPropertyForm = null;
 
     crudPage(container, {
-      title: 'Capturar Propiedades',
+      title: 'Captar Propiedades',
       newLabel: 'Nueva propiedad',
       service: {
         list: (params) => API.properties.list(params),
@@ -330,6 +351,7 @@ window.Pages.properties = {
         { key: 'price', label: 'Precio', render: (r) => Format.currency(r.price) },
         { key: 'ticketValue', label: 'Valor ticket', render: (r) => (r.ticketValue ? Format.currency(r.ticketValue) : '—') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
+        { key: 'responsibleUser', label: 'Asesor', render: (r) => UI.escapeHtml(r.responsibleUser ? (r.responsibleUser.name || r.responsibleUser) : '—') },
         { key: 'isPublished', label: 'Publicación', render: (r) => (r.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')) },
       ],
       fields: [
@@ -342,18 +364,74 @@ window.Pages.properties = {
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
         { name: 'city', label: 'Ciudad', type: 'text' },
         { name: 'state', label: 'Estado', type: 'text' },
-        { name: 'owner', label: 'Propietario', type: 'select', options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions] },
+        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
+        { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
+        { name: 'paymentMethods', label: 'Se puede vender con', type: 'checkboxGroup', full: true, options: [
+          { value: 'contado', label: 'Contado' },
+          { value: 'infonavit', label: 'Infonavit' },
+          { value: 'banco', label: 'Banco' },
+          { value: 'fovissste', label: 'Fovissste' },
+          { value: 'todos', label: 'Todos' },
+          { value: 'otro', label: 'Otro (especificar)' },
+        ], hint: 'Formas de pago que se aceptan para esta propiedad.' },
+        { name: 'paymentMethodsOther', label: 'Otra forma de pago', type: 'text', placeholder: 'Ej. Pago mixto, crédito FOVISSSTE + enganche…' },
         { name: 'photos', label: 'Fotografías existentes (URLs separadas por coma)', type: 'text', full: true, value: (r) => (r && Array.isArray(r.photos) ? r.photos.join(', ') : '') },
         { name: 'photos_files', label: 'Subir fotografías desde el dispositivo', type: 'file', accept: 'image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif', multiple: true, full: true, hint: 'JPG, PNG, GIF, WebP, HEIC... (máx. 15 MB c/u). Se guardan en el servidor y quedan en la propiedad.' },
         { name: 'isPublished', label: 'Publicar en el catálogo (visible en la landing)', type: 'checkbox', full: true, hint: 'Si no está marcado, la propiedad queda oculta hasta publicarla.' },
         { name: 'description', label: 'Descripción', type: 'textarea', rows: 10, full: true, hint: 'Describe medidas, espacios, amenidades y estado. Mientras más detalle, mejor aparece en el catálogo y en las búsquedas. El campo es amplio (10 renglones) y se puede arrastrar para hacerlo más grande.' },
-      ].filter((f) => f.name !== 'isPublished' || isBossUser),
+      ],
       formData(values) {
         const body = { ...values };
         const urlText = typeof values.photos === 'string' ? values.photos.trim() : '';
         body.photos = urlText ? urlText.split(',').map((p) => p.trim()).filter(Boolean) : [];
+
+        // Propietario: opción "externo" → el nombre va en texto libre y el
+        // campo ObjectId queda vacío (no se manda el centinela al servidor).
+        if (values.owner === '__externo__') {
+          const nombre = String(values.ownerName || '').trim();
+          if (!nombre) throw new Error('Escribe el nombre del propietario externo.');
+          body.owner = null;
+          body.ownerName = nombre;
+        } else {
+          body.owner = values.owner || null;
+          body.ownerName = '';
+        }
+
+        // Formas de pago: sólo se conserva el texto "otro" si la casilla está.
+        const methods = Array.isArray(values.paymentMethods) ? values.paymentMethods : [];
+        body.paymentMethods = methods;
+        if (methods.includes('otro')) {
+          const extra = String(values.paymentMethodsOther || '').trim();
+          if (!extra) throw new Error('Especifica la otra forma de pago.');
+          body.paymentMethodsOther = extra;
+        } else {
+          body.paymentMethodsOther = '';
+        }
         return body;
+      },
+      onFormMount(form) {
+        const wrapOf = (id) => {
+          const el = form.querySelector(id);
+          return el ? el.parentElement : null;
+        };
+        // Propietario externo: muestra/oculta el nombre libre.
+        const ownerSel = form.querySelector('#fld-owner');
+        const ownerNameWrap = wrapOf('#fld-ownerName');
+        const syncOwner = () => {
+          if (ownerNameWrap) ownerNameWrap.style.display = ownerSel && ownerSel.value === '__externo__' ? '' : 'none';
+        };
+        if (ownerSel) ownerSel.addEventListener('change', syncOwner);
+        syncOwner();
+
+        // Otra forma de pago: sólo aparece con la casilla "Otro" marcada.
+        const otherWrap = wrapOf('#fld-paymentMethodsOther');
+        const boxes = Array.from(form.querySelectorAll('input[name="paymentMethods"]'));
+        const syncPay = () => {
+          if (otherWrap) otherWrap.style.display = boxes.some((b) => b.value === 'otro' && b.checked) ? '' : 'none';
+        };
+        boxes.forEach((b) => b.addEventListener('change', syncPay));
+        syncPay();
       },
       extraActions(record) {
         const waHref = waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
@@ -362,7 +440,7 @@ window.Pages.properties = {
           out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos="1" data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
         }
         const pub = record.isPublished
-          ? (isBossUser ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>` : '')
+          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
           : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
         return out + pub +
           `<button class="btn btn-secondary btn-sm" data-extra data-property-history="1" data-record="${record._id}" style="margin-left:6px;">Historial</button>` +

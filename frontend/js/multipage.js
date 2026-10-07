@@ -6,7 +6,7 @@ window.AppShell = (() => {
     { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9638;' },
     { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;' },
     { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;' },
-{ key: 'properties', label: 'Capturar Propiedades', href: 'properties.html', icon: '&#127968;' },
+{ key: 'properties', label: 'Captar Propiedades', href: 'properties.html', icon: '&#127968;' },
     { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;' },
     { key: 'inventory-general', label: 'Inventario General', href: 'inventory-general.html', icon: '&#128203;' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;' },

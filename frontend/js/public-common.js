@@ -35,6 +35,20 @@ window.PublicSite = (() => {
     return String(value || '').replace(/\D/g, '');
   }
 
+  // Normaliza a los dígitos que wa.me espera, con la lada del país una sola
+  // vez (evita enlaces 5252… cuando el número ya traía +52 o 0052).
+  function waNumber(value, countryCode = '52') {
+    let d = digits(value);
+    if (!d) return '';
+    const cc = String(countryCode);
+    if (d.indexOf('00') === 0) d = d.slice(2);
+    if (d.indexOf(cc + cc) === 0) d = d.slice(cc.length);
+    if (d.length > 10 && d.charAt(0) === '0') d = d.replace(/^0+/, '');
+    if (d.length === cc.length + 11 && d.indexOf(`${cc}1`) === 0) d = cc + d.slice(cc.length + 1);
+    if (d.length === 10) d = cc + d;
+    return d;
+  }
+
   // Convierte un número (con código de país) al formato amigable "+52 1 662 318 8580".
   function formatPhone(value, fallback) {
     const d = digits(value);
@@ -48,7 +62,7 @@ window.PublicSite = (() => {
 
   // Enlace de WhatsApp. Si no se pasa número usa el del negocio (state.whatsapp).
   function whatsappLink(text, phone) {
-    const num = digits(phone || state.whatsapp);
+    const num = waNumber(phone || state.whatsapp);
     if (!num) return '';
     return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
   }
@@ -116,7 +130,7 @@ window.PublicSite = (() => {
   function applyConfig(settings) {
     const s = settings || {};
     const l = s.landing || {};
-    state.whatsapp = digits(l.whatsappNumber || s.whatsappNumber || OWNER_WHATSAPP);
+    state.whatsapp = waNumber(l.whatsappNumber || s.whatsappNumber || OWNER_WHATSAPP);
     state.agencyName = s.agencyName || l.agencyName || AGENCY;
     state.websiteUrl = l.websiteUrl || s.websiteUrl || OWNER_WEBSITE;
     state.email = l.contactEmail || s.contactEmail || OWNER_EMAIL;

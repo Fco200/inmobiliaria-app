@@ -2,6 +2,32 @@
 
 window.Pages = window.Pages || {};
 
+// Tipos de cita en el orden exacto en que los ofrece el formulario.
+// 'otro' abre el campo "especificar" (typeOther) y 'firma' es el valor legado
+// que se migra a 'firma_notario' al editar.
+const APPOINTMENT_TYPES = [
+  { value: 'visita_propiedad', label: 'Visita propiedad' },
+  { value: 'oficina', label: 'Oficina' },
+  { value: 'promesa', label: 'Promesa' },
+  { value: 'avaluo', label: 'Avalúo' },
+  { value: 'seguimiento', label: 'Seguimiento' },
+  { value: 'firma_notario', label: 'Firma Notario' },
+  { value: 'entrega', label: 'Entrega' },
+  { value: 'comisiones', label: 'Comisiones' },
+  { value: 'otro', label: 'Otro (especificar)' },
+];
+
+const APPOINTMENT_TYPE_LABELS = APPOINTMENT_TYPES.reduce((acc, t) => {
+  acc[t.value] = t.label;
+  return acc;
+}, { firma: 'Firma Notario' });
+
+const appointmentTypeLabel = (r) => {
+  const type = r.type === 'firma' ? 'firma_notario' : r.type;
+  const base = APPOINTMENT_TYPE_LABELS[type] || String(type || '').replace(/_/g, ' ');
+  return r.type === 'otro' && r.typeOther ? `${base}: ${r.typeOther}` : base;
+};
+
 window.Pages.appointments = {
   title: 'Citas',
 
@@ -46,7 +72,7 @@ window.Pages.appointments = {
         { key: 'date', label: 'Fecha y hora', render: (r) => Format.dateTime(r.date) },
         { key: 'client', label: 'Cliente', render: (r) => UI.escapeHtml(r.client ? r.client.name : '—') },
         { key: 'property', label: 'Propiedad', render: (r) => (r.property ? `${UI.escapeHtml(r.property.zone)} ${UI.escapeHtml(r.property.city)}` : '—') },
-        { key: 'type', label: 'Tipo', render: (r) => UI.badge(String(r.type || '').replace(/_/g, ' '), 'info') },
+        { key: 'type', label: 'Tipo', render: (r) => UI.badge(appointmentTypeLabel(r), 'info') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         { key: 'user', label: 'Asesor', render: (r) => UI.escapeHtml(r.user ? r.user.name : '—') },
       ],
@@ -56,19 +82,40 @@ window.Pages.appointments = {
         { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
         { name: 'business', label: 'Negocio', type: 'select', options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'user', label: 'Asesor', type: 'select', value: me ? me._id : '', options: userOptions },
-        { name: 'type', label: 'Tipo de cita', type: 'select', options: ['visita_propiedad', 'oficina', 'firma', 'avaluo', 'seguimiento', 'otro'] },
+        { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },
+        { name: 'typeOther', label: 'Especifica el tipo de cita', type: 'text', placeholder: 'Ej. Revisión de escrituras…' },
         { name: 'status', label: 'Estado', type: 'select', options: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'] },
         { name: 'reminder', label: 'Recordatorio', type: 'datetime-local', hint: 'Aviso antes de la cita', value: (r) => Format.toLocalInput(r.reminder) },
         { name: 'place', label: 'Lugar', type: 'text', full: true },
         { name: 'notes', label: 'Notas', type: 'textarea', full: true },
       ],
       formData(values) {
-        const { reminder, ...rest } = values;
+        const { reminder, typeOther, ...rest } = values;
+        const type = values.type || 'visita_propiedad';
+        // "Otro (especificar)": exige el texto y lo guarda aparte del enum.
+        if (type === 'otro' && !String(typeOther || '').trim()) {
+          throw new Error('Especifica el tipo de cita.');
+        }
         return {
           ...rest,
+          type,
+          typeOther: type === 'otro' ? String(typeOther).trim() : '',
           date: new Date(values.date).toISOString(),
           reminder: reminder ? new Date(reminder).toISOString() : null,
         };
+      },
+      onFormMount(form) {
+        // El campo "especificar" sólo se muestra con el tipo "Otro".
+        const typeSel = form.querySelector('#fld-type');
+        const otherWrap = (() => {
+          const el = form.querySelector('#fld-typeOther');
+          return el ? el.parentElement : null;
+        })();
+        const sync = () => {
+          if (otherWrap) otherWrap.style.display = typeSel && typeSel.value === 'otro' ? '' : 'none';
+        };
+        if (typeSel) typeSel.addEventListener('change', sync);
+        sync();
       },
       onEdit: true,
       onRemove: true,

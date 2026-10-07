@@ -105,11 +105,13 @@ window.Pages.negotiations = {
     async function loadBoard() {
       boardEl.innerHTML = '<div class="loading">Cargando negociaciones...</div>';
       try {
-        const result = await API.businesses.list({ limit: 200, status: 'activo' });
+        const [result, doneResult, cancelledResult] = await Promise.all([
+          API.businesses.list({ limit: 200, status: 'activo' }),
+          API.businesses.list({ limit: 200, status: 'concluido' }),
+          API.businesses.list({ limit: 200, status: 'cancelado' }),
+        ]);
         const active = result.data || [];
-        const doneResult = await API.businesses.list({ limit: 200, status: 'concluido' });
-        const cancelledResult = await API.businesses.list({ limit: 200, status: 'cancelado' });
-        const all = [...active, ...doneResult.data, ...cancelledResult.data];
+        const all = [...active, ...(doneResult.data || []), ...(cancelledResult.data || [])];
 
         const columns = columnsFor();
         const byStage = {};

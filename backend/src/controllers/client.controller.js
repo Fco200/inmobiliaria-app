@@ -23,7 +23,7 @@ const STAGE_TO_FUNNEL = {
 
 // Campos que el cliente puede editar desde "Editar perfil". `vigencia`
 // se retiró del formulario, por eso ya no se acepta desde la API.
-const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio'];
+const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio', 'medioOtro'];
 
 // Los formularios envían `null` en los campos vacíos. Se descartan: un campo
 // sin llenar no debe bloquear la validación (p. ej. el correo, que es

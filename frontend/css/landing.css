@@ -323,6 +323,9 @@
   height: 200px;
   background-size: cover;
   background-position: center;
+  /* Si la foto del servidor no carga (404/401) queda un bloque neutro en vez
+     de un hueco blanco. */
+  background-color: #eef1f6;
   position: relative;
   transition: transform 0.4s ease;
 }

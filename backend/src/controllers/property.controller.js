@@ -8,6 +8,7 @@ const { isBoss } = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty } = require('../services/mail.service');
+const { normalizePhotos } = require('../utils/photos');
 
 const propertyCrud = buildCrud(Property, {
   populate: ['owner', 'responsibleUser'],
@@ -105,6 +106,7 @@ async function notifyNewsletter(property) {
 
 const create = asyncHandler(async (req, res) => {
   const body = { ...req.body };
+  if (body.photos !== undefined) body.photos = normalizePhotos(body.photos);
   if (!isBoss(req) || !body.responsibleUser) body.responsibleUser = req.user._id;
   
   // Generar folio INMO-###-AÑO
@@ -138,6 +140,7 @@ const update = asyncHandler(async (req, res) => {
   const previousPublished = Boolean(property.isPublished);
 
   Object.assign(property, req.body);
+  if (req.body.photos !== undefined) property.photos = normalizePhotos(req.body.photos);
 
   if (req.body.price !== undefined && Number(req.body.price) !== previousPrice) {
     property.priceHistory.push({

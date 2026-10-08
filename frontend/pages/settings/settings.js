@@ -668,6 +668,20 @@ window.Pages.settings = {
           </p>
         </div>
 
+        <div class="card" style="margin-bottom:16px;" id="push-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+              <h3 style="margin:0;">&#128241;&nbsp; Notificaciones push (app)</h3>
+              <p class="text-muted" style="font-size:12px;margin:6px 0 0;">
+                Recibe los avisos del CRM aunque la aplicación esté cerrada: en Android, escritorio y
+                en iPhone/iPad (agregando la app a la pantalla de inicio). Se aplica solo a este dispositivo.
+              </p>
+            </div>
+            <div id="push-actions"><span class="text-muted" style="font-size:12px;">Comprobando...</span></div>
+          </div>
+          <p class="text-muted" style="font-size:12px;margin:8px 0 0;" id="push-status"></p>
+        </div>
+
         <div class="card" style="margin-bottom:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
             <div>
@@ -765,6 +779,88 @@ window.Pages.settings = {
         });
       });
 
+      // Tarjeta de notificaciones push: si el módulo push.js aún no cargó
+      // (multipage lo difiere), se trae aquí mismo y se pinta el estado real
+      // de la suscripción del dispositivo.
+      async function initPushCard() {
+        const actions = tabContent.querySelector('#push-actions');
+        const statusEl = tabContent.querySelector('#push-status');
+        if (!actions || !statusEl) return;
+
+        if (!window.PushNotify) {
+          await new Promise((resolve) => {
+            const s = document.createElement('script');
+            s.src = 'js/push.js';
+            s.onload = resolve;
+            s.onerror = resolve;
+            document.head.appendChild(s);
+          });
+        }
+        const Push = window.PushNotify;
+        if (!Push) {
+          actions.innerHTML = '<span class="text-muted" style="font-size:12px;">No disponible</span>';
+          statusEl.textContent = '';
+          return;
+        }
+        if (!Push.supported()) {
+          actions.innerHTML = '<button class="btn btn-secondary" type="button" disabled>No compatible</button>';
+          statusEl.textContent = 'Este navegador o dispositivo no soporta notificaciones push.';
+          return;
+        }
+
+        let st;
+        try { st = await Push.status(); } catch (error) { st = { supported: true, permission: Push.permission(), enabled: false }; }
+
+        const permBadge = st.permission === 'granted'
+          ? UI.badge('Permiso concedido', 'success')
+          : st.permission === 'denied'
+            ? UI.badge('Permiso bloqueado', 'danger')
+            : UI.badge('Permiso sin conceder', 'warning');
+        statusEl.innerHTML = `Estado: ${st.enabled ? UI.badge('Activadas', 'success') : UI.badge('Desactivadas', 'muted')} · ${permBadge}`;
+
+        actions.innerHTML = st.enabled
+          ? `<button class="btn btn-secondary" type="button" data-push-off>&#128263;&nbsp; Desactivar</button>
+             <button class="btn btn-secondary btn-sm" type="button" data-push-test style="margin-left:8px;">&#128276;&nbsp; Probar</button>`
+          : `<button class="btn btn-primary" type="button" data-push-on>&#128276;&nbsp; Activar push</button>`;
+
+        const onBtn = actions.querySelector('[data-push-on]');
+        if (onBtn) onBtn.addEventListener('click', async () => {
+          onBtn.disabled = true;
+          onBtn.textContent = 'Activando...';
+          try {
+            await Push.enable();
+            UI.toast('Notificaciones push activadas en este dispositivo', 'success');
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+          renderAlerts();
+        });
+
+        const offBtn = actions.querySelector('[data-push-off]');
+        if (offBtn) offBtn.addEventListener('click', async () => {
+          offBtn.disabled = true;
+          try {
+            await Push.disable();
+            UI.toast('Notificaciones push desactivadas', 'info');
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+          renderAlerts();
+        });
+
+        const testBtn = actions.querySelector('[data-push-test]');
+        if (testBtn) testBtn.addEventListener('click', async () => {
+          testBtn.disabled = true;
+          try {
+            await Push.sendTest();
+            UI.toast('Notificación de prueba enviada a este dispositivo', 'success');
+          } catch (error) {
+            UI.toast(error.message, 'error');
+          }
+          testBtn.disabled = false;
+        });
+      }
+
       async function loadAlerts() {
         listEl.innerHTML = '<div class="loading">Cargando avisos...</div>';
         try {
@@ -796,6 +892,7 @@ window.Pages.settings = {
       }
 
       loadAlerts();
+      initPushCard();
     }
 
     function renderActivity() {

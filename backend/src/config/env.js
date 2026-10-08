@@ -48,6 +48,12 @@ const env = {
   loginLockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES, 10) || 15,
   supportEmail: process.env.SUPPORT_EMAIL || 'soporte@inmobiliaria.com',
   supportPassword: process.env.SUPPORT_PASSWORD || 'Soporte2026!',
+  // Web Push (notificaciones nativas en Android/iOS/escritorio).
+  // Genera las llaves con:  node -e "console.log(require('web-push').generateVapidKeys())"
+  // o con el motor integrado: node -e "console.log(require('./src/services/webpush.engine').generateVapidKeys())"
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
+  vapidSubject: process.env.VAPID_SUBJECT || 'mailto:soporte@inmobiliaria.com',
   isProduction,
 };
 

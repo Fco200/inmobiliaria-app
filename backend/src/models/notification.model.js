@@ -50,4 +50,27 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ user: 1, read: 1, createdAt: -1 });
 
+// Notificación push nativa (Web Push en Android/iOS/escritorio): se dispara al
+// crear CUALQUIER aviso, sin importar si nació en un controlador, en el job de
+// recordatorios o en el servicio de avisos. El require es perezoso para
+// evitar un ciclo de imports (push.service -> models -> notification.model).
+// Un fallo de push jamás debe romper la creación del aviso.
+notificationSchema.post('save', function pushAfterCreate(doc) {
+  try {
+    // eslint-disable-next-line global-require
+    const push = require('../services/push.service');
+    push
+      .notifyUser(doc.user, {
+        title: doc.title,
+        body: doc.message,
+        tag: String(doc._id),
+        type: doc.type,
+        url: 'notifications.html',
+      })
+      .catch(() => {});
+  } catch (error) {
+    /* sin push configurado o servicio no disponible: se ignora */
+  }
+});
+
 module.exports = mongoose.model('Notification', notificationSchema);

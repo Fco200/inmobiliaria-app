@@ -17,8 +17,8 @@
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
 // El nombre de la caché DEBE subirse en cada publicación: sin cambiarlo, las
 // copias viejas siguen en disco y ocupan cuota.
-const CACHE_NAME = 'crm-inmob-v30';
-const VERSION = '2.0';
+const CACHE_NAME = 'crm-inmob-v31';
+const VERSION = '2.1';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -127,4 +127,61 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'CHECK_VERSION') {
     event.source && event.source.postMessage({ type: 'SW_VERSION', version: VERSION });
   }
+});
+
+// ── Notificaciones push nativas (Web Push) ──────────────────────────────────
+// El backend envía el payload cifrado (RFC 8291) y aquí se muestra con
+// showNotification: es lo que permite recibir avisos con la app cerrada en
+// Android, iOS (PWA agregada al inicio) y escritorio.
+self.addEventListener('push', (event) => {
+  let payload = { title: 'INMOBLES', body: '', url: '/', tag: '' };
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      if (parsed && typeof parsed === 'object') payload = Object.assign({}, payload, parsed);
+    }
+  } catch (error) {
+    // El servidor mandó texto plano en vez de JSON.
+    if (event.data) payload.body = event.data.text();
+  }
+
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: payload.tag || undefined,
+    renotify: true,
+    data: { url: payload.url || '/' },
+    vibrate: [120, 60, 120],
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title || 'INMOBLES', options));
+});
+
+// Al tocar la notificación se abre (o recupera) la pestaña de la aplicación.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) return client.focus();
+      }
+      return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+    })
+  );
+});
+
+// El servicio de push puede renovar/rotar la suscripción (caducidad, cambio de
+// dispositivo, recuperación del sistema). El Service Worker vive SIN token de
+// sesión, así que no puede llamar a la API directamente: se avisa a las pestañas
+// abiertas y la interfaz (push.js → syncAfterLogin) re-registra la suscripción
+// nueva con POST /api/push/subscribe. Si la app está cerrada, el re-sync ocurre
+// al abrirla (multipage.js ya llama a syncAfterLogin al cargar).
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => clients.forEach((client) => client.postMessage({ type: 'PUSH_RESYNC_REQUIRED' })))
+  );
 });

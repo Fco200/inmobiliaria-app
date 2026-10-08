@@ -679,9 +679,13 @@ window.Pages['inventory-general'] = {
         return `
           <tr>
             <td>
-              ${prop && prop.photos && prop.photos.length
-                ? `<img src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;" loading="lazy">`
-                : '<span class="text-muted">—</span>'}
+              ${(() => {
+                const hasPhoto = Boolean(prop && prop.photos && prop.photos.length);
+                const src = hasPhoto
+                  ? window.AppConfig.resolveUrl(prop.photos[0])
+                  : window.AppConfig.FALLBACK_IMG;
+                return `<img src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;" loading="lazy" ${window.AppConfig.imgFallback}>`;
+              })()}
             </td>
             <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}</td>
             <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>

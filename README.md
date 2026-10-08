@@ -1,4 +1,5 @@
 # CRM Inmobiliario
+opencode -s ses_ee7e80098ffeRCbqwZU2IXRT4P
 
 Sistema de gestión de relaciones con clientes para el ciclo completo de operaciones inmobiliarias:
 prospección, clientes, propiedades, inventario, negocios, citas, tareas, metas, gastos, tickets,
@@ -46,6 +47,18 @@ HTML/CSS/JS → API REST → Node.js/Express → MongoDB
 2. Revisar `backend/.env` (un único archivo de configuración) y completar:
    - `MONGODB_URI` (cadena de Atlas)
    - `JWT_SECRET` (secreto largo y aleatorio)
+   - `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY` (notificaciones push nativas).
+     Son opcionales pero recomendadas: sin ellas los avisos internos del CRM
+     siguen funcionando, solo no llegan como notificación del sistema en
+     Android/iOS/escritorio. Se generan con:
+
+     ```bash
+     node -e "console.log(require('./backend/src/services/webpush.engine').generateVapidKeys())"
+     ```
+
+     (desde la raíz del proyecto; copia `publicKey` y `privateKey` en esas dos
+     variables. `VAPID_SUBJECT` ya tiene un valor por defecto: el correo de
+     soporte).
 3. Instalar dependencias y arrancar:
 
 ```bash
@@ -87,12 +100,73 @@ En producción, el arranque falla si no hay base de datos.
 | Prospección (inversión por actividad) | `/api/prospecting` | Prospección |
 | Documentación (carga de archivos) | `/api/documents` | Documentación |
 | Avisos y notificaciones | `/api/notifications` | Avisos |
+| Notificaciones push nativas (Web Push) | `/api/push` | Configuración → Alertas |
 | Centro de actividad | `/api/activity` | Historial por registro |
 | Metas | `/api/goals` | Metas |
 | Gastos e inversiones | `/api/expenses` | Gastos |
 | Reportes de usuario | `/api/dashboard/user/:userId` | Mis reportes |
 | Reportes de gerencia | `/api/reports/management` | Reportes gerencia |
 | Perfil | `/api/auth/me` | Mi perfil |
+
+## Notificaciones push nativas (Web Push)
+
+El CRM puede mandar **notificaciones del sistema** (no solo dentro de la app)
+cuando llega un aviso: notas de citas, tareas vencidas, mensajes o alertas. Se
+muestran aunque la app esté cerrada en Android, escritorio y en iPhone/iPad
+(instalando la app con "Añadir a pantalla de inicio").
+
+- **Flujo:** el navegador se suscribe (`pushManager.subscribe`) → el backend
+  guarda la suscripción en `PushSubscription` → cada aviso interno dispara
+  `push.service.notifyUser()` → el Service Worker (`sw.js`) muestra la
+  notificación con `showNotification`.
+- **Activación:** en *Configuración → Alertas* (botón "Activar push"). El
+  permiso solo se pide ahí; al iniciar sesión la suscripción se re-sincroniza en
+  silencio si ya fue concedido.
+- **Cifrado:** los mensajes viajan cifrados con el algoritmo *aes128gcm*
+  (RFC 8291) y se autentican con VAPID (JWT ES256). El backend usa el paquete
+  `web-push` si está instalado; si no, usa un motor integrado sin dependencias
+  (`services/webpush.engine.js`) verificado contra el vector de prueba oficial
+  del RFC (`tests/webpush.test.js`).
+- **Limpieza:** si el servicio de push responde 404/410 (suscripción caducada),
+  la suscripción se elimina sola para no acumular ruido. Si el navegador rota la
+  suscripción, el Service Worker avisa a la app y se re-registra.
+
+## Mantenimiento de archivos (fotos y documentos)
+
+Las fotos y documentos se guardan según `STORAGE_DRIVER` (GridFS en MongoDB,
+Cloudflare R2 o disco local). Los archivos que viven en GridFS o R2 sobreviven a
+cualquier redespliegue; los del disco local (`local`) se pierden al reiniciar el
+servidor.
+
+Si alguna imagen no aparece (marcador "Sin foto"), normalmente es porque la
+referencia existe en la base de datos pero el archivo físico ya no está en el
+almacenamiento (por ejemplo, después de migrar a otro clúster de MongoDB sin
+copiar los archivos de GridFS). Para detectarlas:
+
+```bash
+cd backend
+node scripts/verificar-media.js
+```
+
+Muestra cada archivo referenciado que no existe en el almacenamiento y en qué
+propiedad/usuario se usa (solo lectura, no modifica nada). La solución es
+re-subir la foto desde el módulo correspondiente (Propiedades → Fotos o Mi
+perfil); el proceso de carga actual sí persiste en GridFS/R2.
+
+## Despliegue (Render)
+
+La aplicación está preparada para Render: `backend/server.js` sirve también el
+frontend. En el panel de Render, además de `MONGODB_URI`, `JWT_SECRET` y las
+variables documentadas, define:
+
+```
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+```
+
+para habilitar las notificaciones push en producción. El paquete no depende de
+Web Push externos (motor integrado), por lo que no hace falta `npm install`
+adicional.
 
 ## Contacto directo con clientes
 
@@ -167,6 +241,11 @@ POST /api/notifications/generate      Generar avisos automáticos
 POST /api/notifications/mark-all-read Marcar todos como leídos
 PATCH /api/notifications/:id/read     Marcar uno como leído
 
+GET  /api/push/vapid-public-key       Llave pública VAPID y estado (autenticado)
+POST /api/push/subscribe              Registrar la suscripción push de este dispositivo
+POST /api/push/unsubscribe            Dar de baja la suscripción de este dispositivo
+POST /api/push/test                   Enviar notificación de prueba (Configuración → Alertas)
+
 GET /api/activity                     Centro de actividad (filtro entityType/entityId)
 GET /api/reports/management           Reportes de gerencia (filtros y comparativa)
 
@@ -187,6 +266,8 @@ Las contraseñas nunca se devuelven en las respuestas de la API.
   resultado + notas en el CRM (`/api/interactions`).
 - **WhatsApp con seguimiento**: el botón WhatsApp abre el chat y guarda la nota
   del seguimiento en el historial del cliente.
+- **Notificaciones push**: los avisos del CRM llegan como notificación nativa
+  aunque la app esté cerrada (se activa en Configuración → Alertas).
 - **Expediente por cliente**: sube INE/escrituras/comprobantes directamente desde
   la tarjeta del cliente; admin/gerencia validan o rechazan cada documento.
 
@@ -224,6 +305,9 @@ Las contraseñas nunca se devuelven en las respuestas de la API.
 - **Aislamiento por asesor**: clientes, propiedades, negocios, metas, gastos,
   documentos, tareas, citas e interacciones se filtran por usuario;
   admin/gerencia ven todo. El reporte `/dashboard/user/:userId` es privado.
+- **Suscripciones push por usuario**: cada suscripción Web Push pertenece a un
+  solo usuario y el backend es el único que puede enviarle notificaciones; un
+  aviso fallido nunca rompe la creación del aviso interno.
 - Página pública de contacto sin base de datos (`contacto.html`, vía WhatsApp/mailto).
 - Variables sensibles únicamente en `.env` (nunca en Git).
 - Validaciones en backend, no solo en el frontend.

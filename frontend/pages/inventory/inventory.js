@@ -121,7 +121,7 @@ window.Pages.inventory = {
         modal.bodyEl.innerHTML = `
           <div class="grid grid-2" style="align-items:start;">
             <div>
-              ${photo ? `<img data-photo-cover src="${window.AppConfig.resolveUrl(photo)}" alt="" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;cursor:zoom-in;">` : ''}
+              <img data-photo-cover src="${(photo ? window.AppConfig.resolveUrl(photo) : window.AppConfig.FALLBACK_IMG).replace(/"/g, '&quot;')}" alt="${photo ? '' : 'Sin foto'}" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;${photo ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
@@ -162,7 +162,7 @@ window.Pages.inventory = {
         // <img> antes de que existiera y el clic nunca respondía (el asesor
         // tenía que cerrar y volver a abrir la propiedad).
         const coverEl = modal.bodyEl.querySelector('[data-photo-cover]');
-        if (coverEl) {
+        if (coverEl && (prop.photos || []).length) {
           coverEl.addEventListener('click', () => UI.showImages(prop.photos || [], 'Fotos de la propiedad'));
         }
       };
@@ -546,9 +546,13 @@ window.Pages.inventory = {
         return `
           <tr>
             <td>
-              ${prop && prop.photos && prop.photos.length
-                ? `<img data-thumb-id="${UI.escapeHtml(String(item._id))}" src="${window.AppConfig.resolveUrl(prop.photos[0]).replace(/"/g, '&quot;')}" alt="" style="width:56px;height:42px;object-fit:cover;border-radius:6px;cursor:zoom-in;" loading="lazy">`
-                : '<span class="text-muted">—</span>'}
+              ${(() => {
+                const hasPhoto = Boolean(prop && prop.photos && prop.photos.length);
+                const src = hasPhoto
+                  ? window.AppConfig.resolveUrl(prop.photos[0])
+                  : window.AppConfig.FALLBACK_IMG;
+                return `<img ${hasPhoto ? `data-thumb-id="${UI.escapeHtml(String(item._id))}"` : ''} src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;${hasPhoto ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>`;
+              })()}
             </td>
             <td>${UI.escapeHtml(propertyLabel(prop))}</td>
             <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>

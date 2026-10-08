@@ -27,6 +27,7 @@ const Announcement = require('./announcement.model');
 const Meeting = require('./meeting.model');
 const UserRequest = require('./userRequest.model');
 const Newsletter = require('./newsletter.model');
+const PushSubscription = require('./pushSubscription.model');
 
 module.exports = {
   User,
@@ -56,4 +57,5 @@ module.exports = {
   Meeting,
   UserRequest,
   Newsletter,
+  PushSubscription,
 };

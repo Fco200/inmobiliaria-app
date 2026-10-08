@@ -441,6 +441,25 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
+  // Carga el módulo de notificaciones push nativas (Web Push). Si el usuario
+  // ya concedió el permiso, se re-sincroniza la suscripción con el servidor
+  // (puede haber caducado o cambiado de dispositivo); si no, no se pide nada:
+  // el diálogo de permiso solo se muestra desde Configuración → Alertas.
+  function loadPush() {
+    if (!window.ApiClient.isAuthenticated()) return;
+    if (document.getElementById('push-loaded')) return;
+    const marker = document.createElement('span');
+    marker.id = 'push-loaded';
+    marker.style.display = 'none';
+    document.body.appendChild(marker);
+    const script = document.createElement('script');
+    script.src = 'js/push.js';
+    script.onload = () => {
+      if (window.PushNotify) window.PushNotify.syncAfterLogin().catch(() => {});
+    };
+    document.head.appendChild(script);
+  }
+
   // Carga el módulo de mantenimiento programado (cuenta regresiva + capa de
   // bloqueo MANTENIMIENTO ACTIVO para roles Asesor/Admin/Gerencia). Se
   // inyecta dinámicamente como el resto. Superadmin/Soporte nunca se bloquean.
@@ -804,6 +823,7 @@ window.AppShell = (() => {
       loadMantenimiento();
       loadWelcome();
       loadOnboarding();
+      loadPush();
     }, 50);
 
     // Tras el primer render se da la oportunidad al banner de avisos con un

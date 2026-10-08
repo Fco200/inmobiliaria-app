@@ -16,6 +16,23 @@ const CACHE_TTL = 60 * 1000;
 // que el directorio público de asesores pueda mostrar los avatares actualizados.
 const photoCache = new Map();
 
+// Escape de un nombre de archivo para usarlo dentro de una expresión regular.
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Busca propiedades cuyo arreglo `photos` contenga ESTE archivo, sin importar
+// cómo se haya guardado la ruta en la BD (relativa /uploads/x.jpg, absoluta
+// http://host/uploads/x.jpg o con la extensión en mayúsculas). Antes se usaba
+// igualdad exacta y cualquier variación dejaba la imagen en 401 (rota).
+async function countPropertiesWithFile(fileName, extraFilter = {}) {
+  const safe = escapeRegex(fileName);
+  return Property.countDocuments({
+    ...extraFilter,
+    photos: { $regex: `(^|/)${safe}$`, $options: 'i' },
+  });
+}
+
 async function isPubliclyShared(fileName) {
   const now = Date.now();
   const cached = publicCache.get(fileName);
@@ -23,10 +40,9 @@ async function isPubliclyShared(fileName) {
 
   let isPublic = false;
   try {
-    const count = await Property.countDocuments({
+    const count = await countPropertiesWithFile(fileName, {
       isPublished: true,
       status: { $ne: 'inactiva' },
-      photos: `/uploads/${fileName}`,
     });
     isPublic = count > 0;
   } catch (error) {
@@ -47,8 +63,9 @@ async function isPublicUserPhoto(fileName) {
 
   let isPublic = false;
   try {
+    const safe = escapeRegex(fileName);
     const count = await User.countDocuments({
-      photo: `/uploads/${fileName}`,
+      photo: { $regex: `(^|/)${safe}$`, $options: 'i' },
       status: 'activo',
     });
     isPublic = count > 0;

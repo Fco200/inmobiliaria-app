@@ -342,8 +342,9 @@ window.Pages.properties = {
       ],
       columns: [
         { key: 'photos', label: 'Foto', render: (r) => {
-            const src = (r.photos && r.photos.length) ? window.AppConfig.resolveUrl(r.photos[0]) : '';
-            return src ? `<img src="${src.replace(/"/g, '&quot;')}" alt="" style="width:52px;height:40px;object-fit:cover;border-radius:6px;" loading="lazy">` : '<span class="text-muted">—</span>';
+            const hasPhoto = Boolean(r.photos && r.photos.length);
+            const src = hasPhoto ? window.AppConfig.resolveUrl(r.photos[0]) : window.AppConfig.FALLBACK_IMG;
+            return `<img src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:52px;height:40px;object-fit:cover;border-radius:6px;" loading="lazy" ${window.AppConfig.imgFallback}>`;
           } },
         { key: 'type', label: 'Tipo', render: (r) => UI.badge(typeLabel(r.type), 'info') },
         { key: 'operationType', label: 'Operación', render: (r) => UI.escapeHtml((r.operationType || '').toUpperCase()) },

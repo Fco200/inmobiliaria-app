@@ -215,6 +215,8 @@
     /* -- Chat interno -- */
     .sp-chat { display: flex; gap: 14px; align-items: flex-start; }
     .sp-chat-list { width: 300px; flex-shrink: 0; }
+    .sp-chat-list-head { margin-bottom: 10px; }
+    .sp-chat-list-head .btn { width: 100%; }
     .sp-chat-item {
       width: 100%; text-align: left; background: transparent; border: none; cursor: pointer;
       padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
@@ -325,6 +327,7 @@
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
       <button class="sp-tab" data-tab="solicitudes"><span class="ico">&#128229;</span> Solicitudes</button>
       <button class="sp-tab" data-tab="chat"><span class="ico">&#128172;</span> Chat Interno</button>
+      <button class="sp-tab" data-tab="herramientas"><span class="ico">&#129513;</span> Herramientas</button>
       <button class="sp-tab" data-tab="config"><span class="ico">&#9881;&#65039;</span> Ajustes Globales</button>
       <button class="sp-tab" data-tab="roles"><span class="ico">&#129518;</span> Roles y Permisos</button>
       <button class="sp-tab" data-tab="logs"><span class="ico">&#128220;</span> Logs y Errores</button>
@@ -456,6 +459,90 @@
         <h1 class="sp-pane-title">Chat Interno</h1>
         <p class="sp-pane-sub">Ve y responde los mensajes que los asesores y el equipo envían por el chat del CRM.</p>
         <div class="sp-chat" id="sp-chat-root"></div>
+      </section>
+
+      <!-- --- Herramientas --- -->
+      <section class="sp-pane" id="pane-herramientas">
+        <h1 class="sp-pane-title">Herramientas de Soporte</h1>
+        <p class="sp-pane-sub">Monitoreo en vivo, mantenimiento masivo, avisos, diagnóstico y gestión de contenido del sistema.</p>
+
+        <div class="sp-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <h3>&#128225; Monitoreo en vivo</h3>
+            <button class="btn btn-gold btn-sm" id="ht-mon-refresh" type="button">&#8635; Actualizar</button>
+          </div>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">Usuarios del equipo conectados ahora mismo (vía Socket.io).</p>
+          <div id="ht-monitor" class="sp-loading"><span class="spinner"></span> Cargando…</div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:6px;">&#129520; Mantenimiento masivo</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">Estas acciones se aplican a TODOS los dispositivos conectados en este momento.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-gold" id="ht-limpiar" type="button">&#128260; Limpiar caché y actualizar</button>
+            <button class="btn btn-ghost" id="ht-recargar" type="button">&#8635; Recargar la app</button>
+            <button class="btn btn-danger" id="ht-cerrar-ses" type="button">&#128274; Cerrar todas las sesiones</button>
+          </div>
+          <span class="alert" id="ht-mt-alert"></span>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:12px;">&#128276; Notificación masiva</h3>
+          <form id="ht-notif-form">
+            <div class="form-grid">
+              <div class="fgroup fgroup-full">
+                <label>Título</label>
+                <input name="title" placeholder="Ej. Actualización importante" required>
+              </div>
+              <div class="fgroup fgroup-full">
+                <label>Mensaje</label>
+                <textarea name="message" rows="3" placeholder="Texto de la notificación..." required></textarea>
+              </div>
+              <div class="fgroup">
+                <label>Destinatarios</label>
+                <select name="audience">
+                  <option value="todos">Todo el equipo</option>
+                  <option value="admin">Administradores</option>
+                  <option value="gerencia">Gerencia</option>
+                  <option value="asesor">Asesores</option>
+                  <option value="superadmin">Soporte Técnico</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+              <button class="btn btn-gold" type="submit">Enviar notificación</button>
+              <span class="alert" id="ht-notif-alert"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="sp-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <h3>&#129658; Diagnóstico del sistema</h3>
+            <button class="btn btn-ghost btn-sm" id="ht-diag-refresh" type="button">&#8635; Actualizar</button>
+          </div>
+          <div id="ht-diag" class="sp-loading"><span class="spinner"></span> Cargando…</div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:12px;">&#128269; Auditoría por usuario</h3>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+            <div class="fgroup" style="flex:1;min-width:220px;">
+              <label>Usuario</label>
+              <select id="ht-aud-user"><option value="">Selecciona un usuario…</option></select>
+            </div>
+            <button class="btn btn-gold btn-sm" id="ht-aud-load" type="button">Ver actividad</button>
+          </div>
+          <div id="ht-auditoria"><div class="sp-empty">Selecciona un usuario para ver su actividad.</div></div>
+        </div>
+
+        <div class="sp-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <h3>&#128231; Suscriptores del boletín</h3>
+            <button class="btn btn-ghost btn-sm" id="ht-subs-refresh" type="button">&#8635; Actualizar</button>
+          </div>
+          <div id="ht-subs" class="sp-loading"><span class="spinner"></span> Cargando…</div>
+        </div>
       </section>
 
       <!-- --- Config --- -->

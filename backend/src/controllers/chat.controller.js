@@ -1,7 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Chat, User, Role } = require('../models');
+const { Chat, User, Role, Notification } = require('../models');
 
 // Códigos de rol que participan en el canal grupal general.
 const TEAM_ROLES = ['admin', 'gerencia', 'asesor', 'superadmin'];
@@ -117,7 +117,7 @@ const supportChat = asyncHandler(async (req, res) => {
 const getChat = asyncHandler(async (req, res) => {
   const chat = await Chat.findById(req.params.id)
     .populate('participants', 'name username role')
-    .populate('messages.sender', 'name username role');
+    .populate({ path: 'messages.sender', select: 'name username role', populate: { path: 'role', select: 'code' } });
 
   if (!chat) {
     return res.status(404).json({ success: false, message: 'Chat no encontrado' });
@@ -253,6 +253,27 @@ const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
     }
   }
 
+  // Aviso (notificación interna + push nativo) al destinatario de un chat 1 a 1.
+  // El hook post('save') de Notification dispara el push. Nunca debe romper el
+  // envío del mensaje, por eso todo va en try/catch y se ignora cualquier fallo.
+  try {
+    if (chat.type === 'individual') {
+      const recipients = chat.participants.filter((p) => p && p.toString() !== String(userId));
+      const senderName = (userName || 'Usuario').trim().slice(0, 80) || 'Usuario';
+      await Promise.all(
+        recipients.map((p) =>
+          Notification.create({
+            user: p,
+            type: 'nuevo_mensaje_chat',
+            title: `Nuevo mensaje de ${senderName}`,
+            message: text.slice(0, 140),
+            data: { chatId: String(chat._id) },
+          }).catch(() => null)
+        )
+      );
+    }
+  } catch (e) { /* el aviso nunca debe impedir el mensaje */ }
+
   return newMsg;
 };
 
@@ -299,7 +320,7 @@ const markAsRead = asyncHandler(async (req, res) => {
   }
 
   chat.messages.forEach(msg => {
-    if (!msg.readBy.includes(userId)) {
+    if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
       msg.readBy.push(userId);
     }
   });
@@ -321,7 +342,7 @@ const unreadCount = asyncHandler(async (req, res) => {
   let totalUnread = 0;
   chats.forEach(chat => {
     chat.messages.forEach(msg => {
-      if (!msg.readBy.includes(userId)) {
+      if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
         totalUnread++;
       }
     });

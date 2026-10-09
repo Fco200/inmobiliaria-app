@@ -12,6 +12,14 @@ window.PublicSite = (() => {
   const OWNER_WEBSITE = 'https://inmobles.com';
   const AGENCY = 'INMOBLES';
 
+  // Datos del DESARROLLADOR de la plataforma (FCO / FVO DIGITAL HMO). NO son
+  // los datos de contacto de la inmobiliaria: se usan SOLO en la promo del pie
+  // de página ("¿Te interesa un proyecto como este?"). El número de contacto de
+  // la inmobiliaria (Alberto) sigue siendo OWNER_* más arriba.
+  const DEV_WHATSAPP = '5216625374491';
+  const DEV_PHONE = '+526625374491';
+  const DEV_PHONE_DISPLAY = '662 537 4491';
+
   const TYPE_LABELS = {
     casa: 'Casa',
     departamento: 'Departamento',
@@ -174,12 +182,13 @@ window.PublicSite = (() => {
     href('cta-wa-float', waUrl);
     href('cta-call-float', `tel:${phone}`);
 
-    // Promo de marca de Alberto (FVO DIGITAL HMO) al pie de la página pública.
-    // "¿Te interesa un proyecto como este? Llámame 6623188580 · FVO DIGITAL HMO. Soluciones y desarrollos"
+    // Promo de marca del DESARROLLADOR (FCO · FVO DIGITAL HMO) al pie de la
+    // página pública: "¿Te interesa un proyecto como este? Llámame 662 537 4491".
+    // Es independiente del contacto de la inmobiliaria (Alberto, OWNER_*).
     const promoTel = document.getElementById('footer-promo-tel');
     if (promoTel) {
-      promoTel.href = 'tel:+526623188580';
-      promoTel.textContent = 'Llámame 6623188580';
+      promoTel.href = `tel:${DEV_PHONE}`;
+      promoTel.textContent = `Llámame ${DEV_PHONE_DISPLAY}`;
     }
   }
 

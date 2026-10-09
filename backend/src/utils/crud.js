@@ -42,6 +42,7 @@ function buildCrud(model, {
   textFilters = null,
   rangeFilters = null,
   priceField = null,
+  baseFilter = null,
 } = {}) {
   function assertOwnership(req, doc) {
     if (isBoss(req)) return true;
@@ -65,6 +66,12 @@ function buildCrud(model, {
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
       const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
       const filter = {};
+
+      // Filtro base fijo, independiente de la query, para acotar el listado
+      // (p.ej. ocultar ciertos roles del directorio general de usuarios).
+      // Puede ser un objeto o una función async (req) => objeto.
+      const staticFilter = typeof baseFilter === 'function' ? await baseFilter(req) : baseFilter;
+      if (staticFilter) Object.assign(filter, staticFilter);
 
       if (req.query.q && searchFields.length) {
         filter.$or = searchFields.map((field) => ({

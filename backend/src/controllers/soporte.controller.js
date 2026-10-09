@@ -850,12 +850,35 @@ const renombrarPlantilla = asyncHandler(async (req, res) => {
 const CANAL_GENERAL_SOPORTE = 'general';
 
 const listarChatsSoporte = asyncHandler(async (req, res) => {
+  const meId = String(req.user._id);
   const chats = await Chat.find()
     .populate('participants', 'name username role photo')
-    .populate({ path: 'messages.sender', select: 'name username role photo' })
     .sort({ lastMessageAt: -1, updatedAt: -1 })
-    .limit(50);
-  res.json({ success: true, data: chats });
+    .limit(50)
+    .lean();
+
+  // Se devuelve un resumen ligero (sin el historial completo) incluyendo el
+  // número de mensajes NO leídos por Soporte, para pintar el indicador.
+  const data = chats.map((chat) => {
+    const messages = chat.messages || [];
+    const unread = messages.filter((m) =>
+      !(m.readBy || []).some((r) => r && String(r) === meId)
+    ).length;
+    const last = messages[messages.length - 1] || null;
+    return {
+      _id: chat._id,
+      name: chat.name,
+      type: chat.type,
+      participants: chat.participants,
+      lastMessage: chat.lastMessage,
+      lastMessageAt: chat.lastMessageAt,
+      updatedAt: chat.updatedAt,
+      unread,
+      lastSender: (last && last.emisorNombre) || '',
+    };
+  });
+
+  res.json({ success: true, data });
 });
 
 const generalSoporte = asyncHandler(async (req, res) => {
@@ -898,6 +921,26 @@ const enviarMensajeSoporte = asyncHandler(async (req, res) => {
   const io = req.app.get('io');
   const newMsg = await persistAndBroadcast(io, chat._id.toString(), req.user._id.toString(), displayName, text);
 
+  // Aviso (notificación interna + push nativo) al equipo cuando Soporte escribe
+  // en el canal grupal de Soporte. En los chats 1 a 1 el aviso ya lo dispara
+  // persistAndBroadcast, así que aquí solo se hace para el canal grupal.
+  try {
+    if (chat.type === 'grupal') {
+      const recipients = chat.participants.filter((p) => p && p.toString() !== String(req.user._id));
+      await Promise.all(
+        recipients.map((p) =>
+          Notification.create({
+            user: p,
+            type: 'nuevo_mensaje_chat',
+            title: 'Mensaje de Soporte Técnico',
+            message: text.slice(0, 140),
+            data: { chatId: String(chat._id) },
+          }).catch(() => null)
+        )
+      );
+    }
+  } catch (e) { /* el aviso nunca debe impedir el mensaje */ }
+
   await logActivity({
     entityType: 'Chat',
     entityId: chat._id,
@@ -919,6 +962,206 @@ const marcarLeidoSoporte = asyncHandler(async (req, res) => {
   });
   await chat.save();
   res.json({ success: true, message: 'Mensajes marcados como leídos' });
+});
+
+// El Soporte inicia una conversación 1 a 1 con cualquier usuario del equipo.
+// Reutiliza el chat individual si ya existía entre ambos.
+const crearChatSoporte = asyncHandler(async (req, res) => {
+  const participantId = (req.body && req.body.participantId) || '';
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'Selecciona un usuario para conversar.' });
+  }
+  const target = await User.findById(participantId).populate('role', 'code name');
+  if (!target) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+
+  const meId = req.user._id;
+  let chat = await Chat.findOne({
+    type: 'individual',
+    participants: { $all: [meId, participantId], $size: 2 },
+  });
+  if (!chat) {
+    chat = await Chat.create({ type: 'individual', participants: [meId, participantId] });
+  }
+  const populated = await chat.populate('participants', 'name username role photo');
+
+  await logActivity({
+    entityType: 'Chat',
+    entityId: chat._id,
+    user: meId,
+    action: 'soporte_chat_creado',
+    message: `Soporte inició una conversación con ${target.name || target.username || 'un usuario'}`,
+  });
+
+  res.status(201).json({ success: true, data: populated });
+});
+
+// ── Herramientas avanzadas del panel de soporte ─────────────────────────────
+// 1) Monitoreo en vivo: usuarios conectados ahora mismo por Socket.io.
+const monitoreo = asyncHandler(async (req, res) => {
+  const io = req.app.get('io');
+  const conectados = new Map();
+  try {
+    if (io && io.sockets && io.sockets.sockets) {
+      io.sockets.sockets.forEach((socket) => {
+        const u = socket.user;
+        if (!u || !u._id) return;
+        const id = String(u._id);
+        if (!conectados.has(id)) {
+          conectados.set(id, {
+            id,
+            name: u.name || u.username || 'Usuario',
+            username: u.username || '',
+            roleId: u.role ? String(u.role) : '',
+            sockets: 0,
+          });
+        }
+        conectados.get(id).sockets += 1;
+      });
+    }
+  } catch (e) { /* ignore */ }
+
+  const roles = await Role.find().select('code name');
+  const roleMap = new Map(roles.map((r) => [String(r._id), r.name || r.code]));
+  const usuarios = Array.from(conectados.values()).map((u) => ({
+    id: u.id,
+    name: u.name,
+    username: u.username,
+    role: roleMap.get(u.roleId) || '',
+    sockets: u.sockets,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+
+  const sesionesActivas = await Session.countDocuments({}).catch(() => 0);
+  res.json({
+    success: true,
+    data: {
+      usuarios,
+      totalUsuarios: usuarios.length,
+      totalConexiones: usuarios.reduce((n, u) => n + u.sockets, 0),
+      sesionesActivas,
+      generadoEn: new Date().toISOString(),
+    },
+  });
+});
+
+// 2) Diagnóstico del sistema (servidor, memoria, Node, BD, versión de la app).
+const diagnostico = asyncHandler(async (req, res) => {
+  const mem = process.memoryUsage();
+  const dbState = mongoose.connection.readyState;
+  const estados = { 0: 'desconectado', 1: 'conectado', 2: 'conectando', 3: 'desconectando' };
+  let versionApp = null;
+  try {
+    // eslint-disable-next-line global-require
+    versionApp = await require('../services/version.service').getVersion();
+  } catch (e) { /* ignore */ }
+
+  res.json({
+    success: true,
+    data: {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      pid: process.pid,
+      uptime: process.uptime(),
+      hostname: os.hostname(),
+      cpus: (os.cpus() || []).length,
+      loadAvg: typeof os.loadavg === 'function' ? os.loadavg() : [],
+      memoria: { rss: mem.rss, heapTotal: mem.heapTotal, heapUsed: mem.heapUsed, external: mem.external },
+      memoriaSistema: { total: os.totalmem(), libre: os.freemem() },
+      baseDatos: {
+        estado: estados[dbState] || 'desconocido',
+        nombre: mongoose.connection.name || '',
+      },
+      versionApp,
+    },
+  });
+});
+
+// 3) Notificación masiva a todo el equipo o a un rol concreto.
+const notificarMasivo = asyncHandler(async (req, res) => {
+  const titulo = String((req.body && req.body.title) || '').trim();
+  const cuerpo = String((req.body && req.body.message) || '').trim();
+  const audience = String((req.body && req.body.audience) || 'todos');
+  if (!titulo || !cuerpo) {
+    return res.status(400).json({ success: false, message: 'Título y mensaje son obligatorios.' });
+  }
+
+  let query = { status: 'activo' };
+  if (audience && audience !== 'todos') {
+    const role = await Role.findOne({ code: audience }).select('_id');
+    if (!role) return res.status(400).json({ success: false, message: 'Rol no válido.' });
+    query = { status: 'activo', role: role._id };
+  }
+  const users = await User.find(query).select('_id');
+
+  let enviadas = 0;
+  for (const u of users) {
+    try {
+      // El hook post('save') de Notification dispara el push nativo.
+      await Notification.create({ user: u._id, type: 'sistema', title: titulo, message: cuerpo, data: { masivo: true } });
+      enviadas += 1;
+    } catch (e) { /* ignore */ }
+  }
+
+  await logActivity({
+    entityType: 'User',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'notificacion_masiva',
+    message: `Notificación masiva a ${enviadas} usuarios (${audience})`,
+  });
+
+  res.json({ success: true, data: { enviadas, total: users.length } });
+});
+
+// 4) Auditoría por usuario: historial de actividad de una cuenta.
+const auditoriaUsuario = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(200, parseInt(req.query.limit, 10) || 60);
+  const user = await User.findById(id).populate('role', 'code name').select('name username email role status lastLoginAt');
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+  const logs = await ActivityLog.find({ user: id }).sort({ createdAt: -1 }).limit(limit).lean();
+  res.json({ success: true, data: { user, logs } });
+});
+
+// 5) Acciones de mantenimiento masivo sobre todos los dispositivos conectados.
+const accionMasiva = asyncHandler(async (req, res) => {
+  const accion = String((req.body && req.body.accion) || '');
+  const io = req.app.get('io');
+
+  if (accion === 'limpiar-cache') {
+    if (io) io.emit('force-update', { at: Date.now() });
+    await logActivity({ entityType: 'User', entityId: req.user._id, user: req.user._id, action: 'mass_update', message: 'Se ordenó limpiar caché y actualizar en todos los dispositivos' });
+    return res.json({ success: true, message: 'Se ordenó limpiar la caché y actualizar en todos los dispositivos.' });
+  }
+
+  if (accion === 'recargar') {
+    if (io) io.emit('force-reload', { at: Date.now() });
+    await logActivity({ entityType: 'User', entityId: req.user._id, user: req.user._id, action: 'mass_reload', message: 'Se ordenó recargar la app en todos los dispositivos' });
+    return res.json({ success: true, message: 'Se ordenó recargar la aplicación en todos los dispositivos.' });
+  }
+
+  if (accion === 'cerrar-sesiones') {
+    const token = req.token;
+    const filter = token ? { tokenHash: { $ne: hashToken(token) } } : {};
+    const result = await Session.deleteMany(filter);
+    if (io) io.emit('force-logout', { at: Date.now() });
+    await logActivity({ entityType: 'User', entityId: req.user._id, user: req.user._id, action: 'mass_logout', message: `Se cerraron ${result.deletedCount || 0} sesiones de todo el equipo` });
+    return res.json({ success: true, message: `Se cerraron ${result.deletedCount || 0} sesiones. Solo se conserva la tuya.` });
+  }
+
+  return res.status(400).json({ success: false, message: 'Acción no válida.' });
+});
+
+// 6) Gestión de contenido: suscriptores del boletín (newsletter).
+const listarSuscriptores = asyncHandler(async (req, res) => {
+  const subs = await Newsletter.find().sort({ createdAt: -1 }).limit(500).lean();
+  res.json({ success: true, data: subs });
+});
+
+const eliminarSuscriptor = asyncHandler(async (req, res) => {
+  const n = await Newsletter.findByIdAndDelete(req.params.id);
+  if (!n) return res.status(404).json({ success: false, message: 'Suscriptor no encontrado.' });
+  res.json({ success: true, message: 'Suscriptor eliminado' });
 });
 
 // Cerrar la sesión de soporte y volver al login normal.
@@ -973,4 +1216,12 @@ module.exports = {
   verChatSoporte,
   enviarMensajeSoporte,
   marcarLeidoSoporte,
+  crearChatSoporte,
+  monitoreo,
+  diagnostico,
+  notificarMasivo,
+  auditoriaUsuario,
+  accionMasiva,
+  listarSuscriptores,
+  eliminarSuscriptor,
 };

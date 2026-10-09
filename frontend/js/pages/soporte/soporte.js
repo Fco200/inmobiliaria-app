@@ -70,6 +70,7 @@ window.SoportePanel = (() => {
     if (tab === 'solicitudes') renderSolicitudes();
     if (tab === 'usuarios') renderUsuarios();
     if (tab === 'anuncios') renderAnuncios();
+    if (tab === 'herramientas') renderHerramientas();
   }
 
   // ── Pestaña Usuarios ──────────────────────────────────────────────────────
@@ -1161,11 +1162,14 @@ window.SoportePanel = (() => {
     root.innerHTML = `
       <div class="sp-chat">
         <div class="sp-chat-list">
+          <div class="sp-chat-list-head">
+            <button class="btn btn-gold" id="sp-chat-new" type="button">&#43; Nuevo chat 1 a 1</button>
+          </div>
           <div class="sp-loading" style="display:none" id="sp-chat-loading"><span class="spinner"></span> Cargando chats…</div>
           <div id="sp-chat-items">
             ${list.length ? list.map((chat) => `
               <button class="sp-chat-item ${chat._id === activeChatId ? 'active' : ''}" data-chat="${chat._id}">
-                <div class="name">${escapeHtml(chatParticipantName(chat))}</div>
+                <div class="name">${escapeHtml(chatParticipantName(chat))}${chat.unread ? ` <span class="sp-chat-unread">${chat.unread}</span>` : ''}</div>
                 <div class="meta">${chat.type === 'grupal' ? 'Grupal' : 'Directo'}${chat.lastMessageAt ? ' · ' + fmtDate(chat.lastMessageAt) : ''}</div>
                 <div class="last">${escapeHtml(chat.lastMessage || 'Sin mensajes')}</div>
               </button>
@@ -1192,6 +1196,8 @@ window.SoportePanel = (() => {
       btn.addEventListener('click', () => openChat(btn.dataset.chat));
     });
     document.getElementById('sp-chat-refresh').addEventListener('click', loadChatList);
+    const newChatBtn = document.getElementById('sp-chat-new');
+    if (newChatBtn) newChatBtn.addEventListener('click', openNewChatPicker);
 
     const sendBtn = document.getElementById('sp-chat-send');
     const textEl = document.getElementById('sp-chat-text');
@@ -1306,6 +1312,69 @@ window.SoportePanel = (() => {
       loadChatList();
       startChatTimer();
     }
+  }
+
+  // Abre un selector para iniciar (o retomar) una conversación 1 a 1 con
+  // cualquier miembro activo del equipo.
+  async function openNewChatPicker() {
+    let usuarios = [];
+    try {
+      const data = await window.API.soporte.usuarios();
+      usuarios = (Array.isArray(data) ? data : []).filter((u) => u && String(u._id) !== String(soporteUserId || ''));
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+
+    const modal = UI.openModal({
+      title: 'Iniciar conversación',
+      size: 520,
+      body: `
+        <input type="text" id="sp-new-chat-search" class="input" placeholder="Buscar por nombre, usuario o correo…" style="width:100%;margin-bottom:10px;">
+        <div id="sp-new-chat-list" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:8px;"></div>
+      `,
+      footer: '<button class="btn btn-secondary" type="button" data-close>Cancelar</button>',
+    });
+
+    const listEl = modal.bodyEl.querySelector('#sp-new-chat-list');
+    const searchEl = modal.bodyEl.querySelector('#sp-new-chat-search');
+
+    const renderList = (q) => {
+      const term = String(q || '').toLowerCase();
+      const filtered = usuarios.filter((u) => {
+        const n = `${u.name || ''} ${u.username || ''} ${u.email || ''}`.toLowerCase();
+        return !term || n.includes(term);
+      });
+      listEl.innerHTML = filtered.length
+        ? filtered.map((u) => {
+            const role = u.role && (u.role.name || u.role.code);
+            return `<button type="button" data-user="${u._id}" style="display:flex;width:100%;text-align:left;align-items:center;gap:8px;background:none;border:none;border-bottom:1px solid var(--border);padding:10px 12px;cursor:pointer;">
+              <span style="font-weight:600;">${escapeHtml(u.name || u.username || 'Usuario')}</span>
+              ${role ? `<span style="opacity:.6;font-size:12px;">· ${escapeHtml(role)}</span>` : ''}
+            </button>`;
+          }).join('')
+        : '<div class="sp-empty">Sin resultados.</div>';
+
+      listEl.querySelectorAll('[data-user]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const chat = await window.API.soporte.crearChat({ participantId: btn.dataset.user });
+            UI.closeModal();
+            activeChatId = chat && chat._id ? chat._id : null;
+            await loadChatList();
+            if (activeChatId) await openChat(activeChatId);
+          } catch (error) {
+            alert(error.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    };
+
+    renderList('');
+    searchEl.addEventListener('input', () => renderList(searchEl.value));
+    searchEl.focus();
   }
 
   // ── Inicio / autenticación ────────────────────────────────────────────────
@@ -1479,6 +1548,214 @@ window.SoportePanel = (() => {
     `;
   }
 
+  // ── Pestaña Herramientas ──────────────────────────────────────────────────
+  let herramientasUsersLoaded = false;
+
+  function estadoPill(ok, labelOk, labelBad) {
+    return `<span class="estado-pill ${ok ? 'estado-ok' : 'estado-bad'}"><span class="dot"></span>${escapeHtml(ok ? labelOk : labelBad)}</span>`;
+  }
+
+  async function renderMonitoreo() {
+    const box = document.getElementById('ht-monitor');
+    if (!box) return;
+    box.className = 'sp-loading';
+    box.innerHTML = '<span class="spinner"></span> Cargando…';
+    try {
+      const d = await window.API.soporte.monitoreo();
+      const usuarios = (d && d.usuarios) || [];
+      box.className = '';
+      box.innerHTML = `
+        <div class="stat-cards">
+          <div class="stat-card"><b>${d.totalUsuarios || 0}</b><span>En línea</span></div>
+          <div class="stat-card"><b>${d.totalConexiones || 0}</b><span>Conexiones</span></div>
+          <div class="stat-card"><b>${d.sesionesActivas || 0}</b><span>Sesiones guardadas</span></div>
+        </div>
+        <div class="sp-table-wrap">
+          <table>
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Dispositivos</th></tr></thead>
+            <tbody>
+              ${usuarios.length ? usuarios.map((u) => `
+                <tr>
+                  <td>${escapeHtml(u.name)} <span style="color:var(--text-muted);">@${escapeHtml(u.username || '')}</span></td>
+                  <td>${escapeHtml(u.role || '—')}</td>
+                  <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;"></span>${u.sockets}</td>
+                </tr>`).join('') : '<tr><td colspan="3" class="sp-empty">Nadie conectado ahora mismo.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        <p style="color:var(--text-muted);font-size:11px;margin:10px 0 0;">Actualizado: ${fmtDate(d.generadoEn)}</p>
+      `;
+    } catch (error) {
+      box.className = 'sp-empty';
+      box.innerHTML = escapeHtml(error.message);
+    }
+  }
+
+  async function renderDiagnostico() {
+    const box = document.getElementById('ht-diag');
+    if (!box) return;
+    box.className = 'sp-loading';
+    box.innerHTML = '<span class="spinner"></span> Cargando…';
+    try {
+      const d = await window.API.soporte.diagnostico();
+      const ms = d.memoriaSistema || {};
+      const memPct = ms.total ? Math.round(((ms.total - ms.libre) / ms.total) * 100) : 0;
+      const dbOk = d.baseDatos && d.baseDatos.estado === 'conectado';
+      const ver = d.versionApp || {};
+      box.className = '';
+      box.innerHTML = `
+        <div class="kv-grid">
+          <div class="kv"><b>${estadoPill(dbOk, 'Conectada', (d.baseDatos && d.baseDatos.estado) || 'n/d')}</b><span>Base de datos</span></div>
+          <div class="kv"><b>${escapeHtml(fmtUptime(d.uptime))}</b><span>Encendido</span></div>
+          <div class="kv"><b>${escapeHtml(d.node || '')}</b><span>Node.js</span></div>
+          <div class="kv"><b>${escapeHtml((d.platform || '') + ' / ' + (d.arch || ''))}</b><span>Plataforma</span></div>
+          <div class="kv"><b>${d.cpus || 0}</b><span>Núcleos CPU</span></div>
+          <div class="kv"><b>${memPct}%</b><span>Memoria usada</span></div>
+          <div class="kv"><b>${fmtBytes(d.memoria ? d.memoria.rss : 0)}</b><span>RAM proceso</span></div>
+          <div class="kv"><b>${fmtBytes(ms.total)}</b><span>RAM sistema</span></div>
+          <div class="kv"><b>${escapeHtml((ver && ver.version) || '—')}</b><span>Versión app</span></div>
+          <div class="kv"><b>${escapeHtml(d.hostname || '')}</b><span>Servidor</span></div>
+        </div>`;
+    } catch (error) {
+      box.className = 'sp-empty';
+      box.innerHTML = escapeHtml(error.message);
+    }
+  }
+
+  async function cargarUsuariosHerramientas() {
+    const sel = document.getElementById('ht-aud-user');
+    if (!sel) return;
+    try {
+      const usuarios = await window.API.soporte.usuarios();
+      herramientasUsersLoaded = true;
+      sel.innerHTML = '<option value="">Selecciona un usuario…</option>' +
+        usuarios.map((u) => `<option value="${u._id}">${escapeHtml(u.name || u.username || 'Usuario')}</option>`).join('');
+    } catch (error) { /* ignore */ }
+  }
+
+  async function cargarAuditoria() {
+    const sel = document.getElementById('ht-aud-user');
+    const box = document.getElementById('ht-auditoria');
+    if (!sel || !box) return;
+    const id = sel.value;
+    if (!id) {
+      box.innerHTML = '<div class="sp-empty">Selecciona un usuario para ver su actividad.</div>';
+      return;
+    }
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando actividad…</div>';
+    try {
+      const d = await window.API.soporte.auditoriaUsuario(id);
+      const logs = (d && d.logs) || [];
+      box.innerHTML = logs.length ? `
+        <div class="sp-logs">
+          ${logs.map((l) => `
+            <div class="log-row">
+              <span class="log-time">${fmtDate(l.createdAt)}</span>
+              <span class="log-badge log-badge-INFO">${escapeHtml(l.action || '')}</span>
+              <span class="log-msg">${escapeHtml(l.message || '')}</span>
+            </div>`).join('')}
+        </div>` : '<div class="sp-empty">Sin actividad registrada.</div>';
+    } catch (error) {
+      box.innerHTML = `<div class="sp-empty">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function renderSuscriptores() {
+    const box = document.getElementById('ht-subs');
+    if (!box) return;
+    box.className = 'sp-loading';
+    box.innerHTML = '<span class="spinner"></span> Cargando…';
+    try {
+      const subs = await window.API.soporte.newsletter();
+      box.className = '';
+      box.innerHTML = subs.length ? `
+        <div class="sp-table-wrap">
+          <table>
+            <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Alta</th><th></th></tr></thead>
+            <tbody>
+              ${subs.map((s) => `
+                <tr>
+                  <td>${escapeHtml(s.email || '')}</td>
+                  <td>${escapeHtml(s.name || '—')}</td>
+                  <td>${escapeHtml(s.source || '—')}</td>
+                  <td><span class="badge ${s.status === 'suscrito' ? 'badge-on' : 'badge-off'}">${escapeHtml(s.status || '')}</span></td>
+                  <td>${fmtDate(s.createdAt)}</td>
+                  <td><button class="btn btn-danger btn-sm" data-sub-del="${s._id}" type="button">Eliminar</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : '<div class="sp-empty">No hay suscriptores todavía.</div>';
+
+      box.querySelectorAll('[data-sub-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!window.confirm('¿Eliminar este suscriptor del boletín?')) return;
+          try {
+            await window.API.soporte.eliminarSuscriptor(btn.dataset.subDel);
+            renderSuscriptores();
+          } catch (error) { alert(error.message); }
+        });
+      });
+    } catch (error) {
+      box.className = 'sp-empty';
+      box.innerHTML = escapeHtml(error.message);
+    }
+  }
+
+  function renderHerramientas() {
+    renderMonitoreo();
+    renderDiagnostico();
+    if (!herramientasUsersLoaded) cargarUsuariosHerramientas();
+    renderSuscriptores();
+  }
+
+  function initHerramientas() {
+    const mon = document.getElementById('ht-mon-refresh');
+    if (mon) mon.addEventListener('click', renderMonitoreo);
+    const diag = document.getElementById('ht-diag-refresh');
+    if (diag) diag.addEventListener('click', renderDiagnostico);
+    const subs = document.getElementById('ht-subs-refresh');
+    if (subs) subs.addEventListener('click', renderSuscriptores);
+    const audBtn = document.getElementById('ht-aud-load');
+    if (audBtn) audBtn.addEventListener('click', cargarAuditoria);
+
+    const accion = async (name) => {
+      const preguntas = {
+        'limpiar-cache': '¿Limpiar la caché y actualizar la app en TODOS los dispositivos conectados?',
+        recargar: '¿Recargar la aplicación en TODOS los dispositivos conectados?',
+        'cerrar-sesiones': '¿Cerrar TODAS las sesiones del equipo? Solo se conservará la tuya; los demás deberán iniciar sesión de nuevo.',
+      };
+      if (!window.confirm(preguntas[name] || '¿Continuar?')) return;
+      try {
+        const r = await window.API.soporte.accionMasiva({ accion: name });
+        showAlert2(null, 'ht-mt-alert', (r && r.message) || 'Acción enviada.', 'success');
+      } catch (error) {
+        showAlert2(null, 'ht-mt-alert', error.message, 'error');
+      }
+    };
+    const b1 = document.getElementById('ht-limpiar');
+    if (b1) b1.addEventListener('click', () => accion('limpiar-cache'));
+    const b2 = document.getElementById('ht-recargar');
+    if (b2) b2.addEventListener('click', () => accion('recargar'));
+    const b3 = document.getElementById('ht-cerrar-ses');
+    if (b3) b3.addEventListener('click', () => accion('cerrar-sesiones'));
+
+    const form = document.getElementById('ht-notif-form');
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = new FormData(form);
+        const body = { title: data.get('title'), message: data.get('message'), audience: data.get('audience') };
+        try {
+          const r = await window.API.soporte.notificarMasivo(body);
+          form.reset();
+          showAlert2(null, 'ht-notif-alert', `Notificación enviada a ${r.enviadas} de ${r.total} usuarios.`, 'success');
+        } catch (error) {
+          showAlert2(null, 'ht-notif-alert', error.message, 'error');
+        }
+      });
+    }
+  }
+
   async function init() {
     const token = getToken();
     if (!token) {
@@ -1537,6 +1814,7 @@ window.SoportePanel = (() => {
     initSolicitudes();
     initChat();
     initMantenimiento();
+    initHerramientas();
 
     renderResumen();
     renderGuia();

@@ -132,9 +132,13 @@ function crudPage(container, config) {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 0);
+    // Se revoca con margen: revocar en 0ms puede cancelar la descarga en
+    // algunos navegadores móviles justo cuando el archivo empieza a guardarse.
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
   }
 
   function buildExcelXml(title, records) {
@@ -176,8 +180,14 @@ ${rowXml}
     }
   }
 
-  function exportPdf() {
-    const records = state.records;
+  async function exportPdf() {
+    let records;
+    try {
+      records = await fetchAllForExport();
+    } catch (error) {
+      UI.toast(error.message, 'error');
+      return;
+    }
     if (!records.length) { UI.toast('No hay datos para exportar', 'warning'); return; }
     const rows = records.map((r) =>
       `<tr>${config.columns.map((c) => `<td>${UI.escapeHtml(cellText(r, c))}</td>`).join('')}</tr>`
@@ -185,9 +195,9 @@ ${rowXml}
     const head = config.columns.map((c) => `<th>${UI.escapeHtml(c.label)}</th>`).join('');
     const title = UI.escapeHtml(config.title);
     const when = new Date().toLocaleString('es-MX');
-    const win = window.open('', '_blank', 'width=1000,height=700');
-    if (!win) { UI.toast('El navegador bloqueó la ventana emergente. Permita popups para este sitio.', 'error'); return; }
-    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title>
+    // Se imprime en un iframe de la MISMA página (no window.open): así el móvil
+    // abre el diálogo nativo de "Guardar como PDF" sin sacar al usuario de la app.
+    UI.printHtmlDocument(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title>
       <style>
         body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; margin: 24px; }
         h1 { font-size: 20px; margin: 0 0 4px; }
@@ -202,9 +212,6 @@ ${rowXml}
       <div class="meta">Generado el ${UI.escapeHtml(when)} &middot; ${records.length} registros</div>
       <table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
       </body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 500);
   }
 
   function renderTable() {

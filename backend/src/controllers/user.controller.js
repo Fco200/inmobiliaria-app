@@ -8,6 +8,16 @@ const { logActivity } = require('../services/log.service');
 const userCrud = buildCrud(User, {
   populate: ['role'],
   searchFields: ['name', 'email', 'username', 'phone'],
+  // El usuario de SOPORTE TÉCNICO (rol superadmin) es una credencial interna de
+  // administración: NO debe aparecer como asesor/integrante en el directorio,
+  // listas, selectores de "asesor responsable" ni en el chat 1 a 1 del CRM.
+  // El Panel de Soporte tiene su propio listado (/soporte/usuarios) y sigue
+  // viéndolo. Se resuelve el rol con un filtro base (aplica a TODOS, incluidos
+  // admin/gerencia) para no tener que filtrar página por página en el frontend.
+  baseFilter: async () => {
+    const supportRole = await Role.findOne({ code: 'superadmin' }).select('_id');
+    return supportRole ? { role: { $nin: [supportRole._id] } } : {};
+  },
   beforeCreate: (body) => {
     if (body.password === undefined || body.password === '') {
       throw Object.assign(new Error('La contraseña es obligatoria'), { statusCode: 400 });

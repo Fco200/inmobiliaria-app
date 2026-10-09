@@ -366,9 +366,19 @@ window.API = {
     // Chat interno: el soporte ve y responde los mensajes del equipo.
     chats: () => soporteJson('/soporte/chat'),
     chatGeneral: () => soporteJson('/soporte/chat/general'),
+    crearChat: (body) => soporteJson('/soporte/chat', { method: 'POST', body }),
     verChat: (id) => soporteJson(`/soporte/chat/${id}`),
     enviarMensajeChat: (id, body) => soporteJson(`/soporte/chat/${id}/messages`, { method: 'POST', body }),
     marcarLeidoChat: (id) => soporteJson(`/soporte/chat/${id}/leido`, { method: 'POST' }),
+
+    // Herramientas avanzadas del panel de soporte.
+    monitoreo: () => soporteJson('/soporte/monitoreo'),
+    diagnostico: () => soporteJson('/soporte/diagnostico'),
+    notificarMasivo: (body) => soporteJson('/soporte/notificaciones-masivas', { method: 'POST', body }),
+    auditoriaUsuario: (id, params) => soporteJson(`/soporte/usuarios/${id}/auditoria${qs(params)}`),
+    accionMasiva: (body) => soporteJson('/soporte/acciones-masivas', { method: 'POST', body }),
+    newsletter: (params) => soporteJson(`/soporte/newsletter${qs(params)}`),
+    eliminarSuscriptor: (id) => soporteJson(`/soporte/newsletter/${id}`, { method: 'DELETE' }),
 
     // Solicitudes de creación de usuario que llegan desde el login público.
     // Se usan los mismos endpoints del CRM (el token de soporte es SUPERADMIN).

@@ -581,6 +581,67 @@ function showImages(images, title = 'Galería de imágenes') {
     }
   }
 
+  // Impresión / exportación a PDF SIN salir de la aplicación. Antes se abría
+  // una pestaña con window.open('', '_blank'): en la PWA móvil eso dejaba al
+  // usuario atrapado en un visor sin botón "atrás". Ahora el documento se
+  // renderiza en un iframe oculto de la MISMA página y se lanza print() ahí,
+  // de modo que el teléfono ofrece "Guardar como PDF" sin abandonar la app.
+  function printHtmlDocument(html, onDone) {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+      document.body.appendChild(iframe);
+
+      let printed = false;
+      const cleanup = () => {
+        try { iframe.remove(); } catch (e) { /* ignore */ }
+        if (typeof onDone === 'function') onDone();
+      };
+      const trigger = () => {
+        if (printed) return;
+        printed = true;
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (e) { /* ignore */ }
+        // El diálogo es bloqueante en la mayoría de navegadores; se limpia con
+        // margen por si el usuario tarda en elegir destino (Guardar como PDF).
+        setTimeout(cleanup, 1500);
+      };
+
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      // Espera a que carguen las imágenes (p.ej. la firma) antes de imprimir.
+      const images = Array.from(doc.images || []);
+      if (!images.length) {
+        setTimeout(trigger, 200);
+        return iframe;
+      }
+      let pending = images.length;
+      const oneDone = () => {
+        pending -= 1;
+        if (pending <= 0) setTimeout(trigger, 100);
+      };
+      images.forEach((img) => {
+        if (img.complete) oneDone();
+        else {
+          img.addEventListener('load', oneDone);
+          img.addEventListener('error', oneDone);
+        }
+      });
+      // Red de seguridad: no esperar más de 2.5s aunque falte alguna imagen.
+      setTimeout(trigger, 2500);
+      return iframe;
+    } catch (e) {
+      toast('No se pudo generar la vista previa para imprimir.', 'error');
+      return null;
+    }
+  }
+
   // Delegación global (debe registrarse ANTES del return para ejecutarse):
   // muestra/oculta el campo "especificar" de CUALQUIER select —tenga o no
   // data-ui-otros— sin depender de atributos onchange inline. Escucha change
@@ -611,6 +672,7 @@ function showImages(images, title = 'Galería de imágenes') {
     showImages,
     closeLightbox,
     showActivityHistory,
+    printHtmlDocument,
   };
 })();
 

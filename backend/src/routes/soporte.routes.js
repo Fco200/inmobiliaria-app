@@ -40,6 +40,14 @@ const {
   verChatSoporte,
   enviarMensajeSoporte,
   marcarLeidoSoporte,
+  crearChatSoporte,
+  monitoreo,
+  diagnostico,
+  notificarMasivo,
+  auditoriaUsuario,
+  accionMasiva,
+  listarSuscriptores,
+  eliminarSuscriptor,
 } = require('../controllers/soporte.controller');
 
 const router = Router();
@@ -108,9 +116,19 @@ router.get('/plantillas/:archivo/descargar', requireSoporte, descargarPlantillaS
 
 // Chat interno (soporte ve y responde los mensajes del equipo)
 router.get('/chat', requireSoporte, listarChatsSoporte);
+router.post('/chat', requireSoporte, crearChatSoporte);
 router.get('/chat/general', requireSoporte, generalSoporte);
 router.get('/chat/:id', requireSoporte, verChatSoporte);
 router.post('/chat/:id/messages', requireSoporte, enviarMensajeSoporte);
 router.post('/chat/:id/leido', requireSoporte, marcarLeidoSoporte);
+
+// Herramientas avanzadas del panel de soporte
+router.get('/monitoreo', requireSoporte, monitoreo);
+router.get('/diagnostico', requireSoporte, diagnostico);
+router.post('/notificaciones-masivas', requireSoporte, notificarMasivo);
+router.get('/usuarios/:id/auditoria', requireSoporte, auditoriaUsuario);
+router.post('/acciones-masivas', requireSoporte, accionMasiva);
+router.get('/newsletter', requireSoporte, listarSuscriptores);
+router.delete('/newsletter/:id', requireSoporte, eliminarSuscriptor);
 
 module.exports = router;

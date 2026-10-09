@@ -396,15 +396,12 @@ window.Pages.documents = {
       return problemas;
     }
 
-    // Abre una ventana imprimible (Ctrl+P / Guardar como PDF) con la cabecera
-    // de INMOBLES, las secciones de datos y la firma.
+    // Abre el diálogo de impresión (Ctrl+P / Guardar como PDF) con la cabecera
+    // de INMOBLES, las secciones de datos y la firma. Se hace en un iframe
+    // oculto de la MISMA página: el móvil muestra el diálogo nativo sin sacar
+    // al usuario de la app (antes window.open dejaba atrapado en una pestaña).
     function openPrintPreview(titulo, secciones, values, firma) {
       const firmaData = firma || (values && values.firma) || '';
-      const w = window.open('', '_blank');
-      if (!w) {
-        UI.toast('Permite las ventanas emergentes para abrir la vista previa.', 'error');
-        return;
-      }
       const cells = (secciones || []).map((sec) => `
         <h3>${UI.escapeHtml(sec.titulo)}</h3>
         <table>
@@ -414,7 +411,7 @@ window.Pages.documents = {
         </table>
       `).join('');
       const hoy = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-      w.document.write(`<!DOCTYPE html>
+      UI.printHtmlDocument(`<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -443,8 +440,7 @@ window.Pages.documents = {
 </head>
 <body>
   <div class="no-print">
-    <span>Vista previa de impresión: usa <strong>Ctrl+P</strong> (Guardar como PDF) o el botón Imprimir.</span>
-    <button type="button" id="btn-imprimir">Imprimir</button>
+    <span>Se abrirá el diálogo de impresión: elige <strong>Guardar como PDF</strong>.</span>
   </div>
   <div class="header">
     <div class="brand">&#127968; INMOBLES<small>Gestión inmobiliaria profesional</small></div>
@@ -465,11 +461,6 @@ window.Pages.documents = {
   </div>
 </body>
 </html>`);
-      w.document.close();
-      w.focus();
-      // Sin handlers inline (el CSP del sitio los bloquea); se conecta con el DOM.
-      const btnPrint = w.document.getElementById('btn-imprimir');
-      if (btnPrint) btnPrint.addEventListener('click', () => w.print());
     }
 
     // Hoja de Visita: formulario + firma + vista previa imprimible.

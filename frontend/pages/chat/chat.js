@@ -317,9 +317,15 @@ window.Pages.chat = {
         const sRaw = s && typeof s === 'object' ? (s._id || s.id || null) : (s || null);
         const sId = sRaw ? String(sRaw) : '';
         const isMine = sId ? sameAsUser(sRaw) : true;
-        const senderName = (s && (s.name || s.username)) || m.emisorNombre || 'Usuario';
-        return `<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}">
-          ${!isMine ? `<div class="msg-sender">${UI.escapeHtml(senderName)}</div>` : ''}
+        // ¿Es un mensaje del Soporte Técnico? Puede venir identificado por el
+        // rol del remitente (superadmin) o porque el chat es el canal de Soporte.
+        const senderRole = s && s.role ? (s.role.code || s.role) : null;
+        const supportMsg = senderRole === 'superadmin' || isSoporte(currentChat);
+        const senderName = supportMsg ? 'Soporte Técnico'
+          : ((s && (s.name || s.username)) || m.emisorNombre || 'Usuario');
+        const extra = (!isMine && supportMsg) ? ' msg-support' : '';
+        return `<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}${extra}">
+          ${!isMine ? `<div class="msg-sender">${supportMsg ? '&#128736;&#65039; ' : ''}${UI.escapeHtml(senderName)}</div>` : ''}
           <div>${UI.escapeHtml(String(m.message || ''))}</div>
           <div class="msg-time">${Format.time(m.createdAt)}</div>
         </div>`;

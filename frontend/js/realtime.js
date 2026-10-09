@@ -340,6 +340,36 @@ window.Realtime = (() => {
     };
     socket.on('new-message', onChatActivity);
     socket.on('receive-message', onChatActivity);
+
+    // Órdenes de mantenimiento masivo enviadas desde el Panel de Soporte.
+    // Estas acciones pueden afectar a CUALQUIER dispositivo conectado.
+    socket.on('force-update', () => {
+      // Limpia caché + service worker y recarga para traer la última versión.
+      (async () => {
+        try {
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+          }
+          localStorage.removeItem('crm_app_version_seen');
+        } catch (e) { /* ignore */ }
+        window.location.reload();
+      })();
+    });
+    socket.on('force-reload', () => {
+      window.location.reload();
+    });
+    socket.on('force-logout', () => {
+      try {
+        localStorage.removeItem('crm_token');
+        localStorage.removeItem('crm_user');
+      } catch (e) { /* ignore */ }
+      window.location.replace('index.html');
+    });
   }
 
   function reset() {

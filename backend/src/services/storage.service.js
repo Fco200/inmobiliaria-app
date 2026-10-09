@@ -62,7 +62,11 @@ function resolveMode() {
   if (requestedDriver === 'local' || requestedDriver === 'disk') {
     return 'local';
   }
-  return r2Configured ? 'r2' : 'local';
+  if (r2Configured) return 'r2';
+  // Sin configuración explícita: en producción NUNCA usar el disco efímero
+  // (en Render el disco se borra en cada despliegue). Se usa gridfs en MongoDB,
+  // que es persistente y no necesita servicios extra.
+  return process.env.NODE_ENV === 'production' ? 'mongodb' : 'local';
 }
 
 const mode = resolveMode();

@@ -37,6 +37,16 @@ async function start() {
     console.warn('[MAIL] SIN SMTP configurado: MODO DRY-RUN. Revisa SMTP_HOST/USER/PASS en las variables de entorno.');
   }
 
+  // Diagnóstico de almacenamiento: deja claro en los logs DÓNDE se guardan las
+  // fotos y documentos. En Render debe ser "mongodb" o "r2" (persistente); si
+  // aparece "local" las fotos se borrarán en cada despliegue.
+  const storageMode = require('./src/services/storage.service').getMode();
+  if (storageMode === 'local' && nodeEnv === 'production') {
+    console.warn('[Storage] MODO LOCAL en producción: las fotos SE BORRARÁN en cada despliegue. Define STORAGE_DRIVER=mongodb o r2, o conecta MongoDB.');
+  } else {
+    console.log(`[Storage] Modo activo: ${storageMode}`);
+  }
+
   const connection = await connectDB();
 
   if (connection) {

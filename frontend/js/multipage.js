@@ -19,6 +19,7 @@ window.AppShell = (() => {
     { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;' },
     { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;' },
       { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;' },
+    { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;' },
     { key: 'directorio', label: 'Directorio', href: 'directorio.html', icon: '&#128101;' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;' },
     { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;' },
@@ -204,30 +205,35 @@ window.AppShell = (() => {
     right.insertBefore(btn, right.querySelector('#btn-notifications'));
   }
 
-  // Abre la calculadora de negocio (hipoteca / comisión). El script del
-  // componente se inyecta la primera vez para no tocar cada HTML del CRM.
-  function openCalculator() {
-    if (window.Calculator) {
-      window.Calculator.open();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'js/components/calculator.js';
-    script.onload = () => { if (window.Calculator) window.Calculator.open(); };
-    document.head.appendChild(script);
+  // Botón de actualización de la aplicación en la barra superior (sustituye a
+  // la antigua calculadora). Lleva al módulo de Actualizaciones y muestra un
+  // punto cuando hay una versión nueva disponible.
+  function injectUpdateButton() {
+    const right = document.querySelector('.topnav-right');
+    if (!right || right.querySelector('#btn-update')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-update';
+    btn.className = 'icon-btn update-toggle';
+    btn.title = 'Actualizaciones de la aplicación';
+    btn.setAttribute('aria-label', 'Actualizaciones de la aplicación');
+    btn.innerHTML = '&#128260;';
+    btn.addEventListener('click', () => { window.location.href = 'actualizaciones.html'; });
+    right.insertBefore(btn, right.querySelector('#btn-notifications'));
   }
 
-  function injectCalculatorButton() {
-    const right = document.querySelector('.topnav-right');
-    if (!right || right.querySelector('#btn-calc')) return;
-    const btn = document.createElement('button');
-    btn.id = 'btn-calc';
-    btn.className = 'icon-btn calc-toggle';
-    btn.title = 'Calculadora de negocio (hipoteca y comisión)';
-    btn.setAttribute('aria-label', 'Calculadora de negocio');
-    btn.innerHTML = '&#128200;';
-    btn.addEventListener('click', openCalculator);
-    right.insertBefore(btn, right.querySelector('#btn-notifications'));
+  // Carga el módulo de versiones/actualizaciones. Consulta el servidor y, si
+  // hay una versión nueva, muestra la notificación (banner + punto en el botón)
+  // que lleva al módulo de Actualizaciones. Disponible para todos los roles.
+  function loadAppVersion() {
+    if (document.getElementById('appversion-loaded')) return;
+    const marker = document.createElement('span');
+    marker.id = 'appversion-loaded';
+    marker.style.display = 'none';
+    document.body.appendChild(marker);
+    const script = document.createElement('script');
+    script.src = 'js/appVersion.js';
+    script.onload = () => { if (window.AppVersion) window.AppVersion.init(); };
+    document.head.appendChild(script);
   }
 
   // Botón (?) de guía rápida en el encabezado, visible para todos. Reabre la
@@ -381,6 +387,14 @@ window.AppShell = (() => {
     navigator.serviceWorker.addEventListener('message', (event) => {
       const data = event.data || {};
       if (data.type !== 'SW_UPDATED' || recargando) return;
+      // Con el sistema de versiones activo, el aviso lleva al módulo de
+      // Actualizaciones (desde ahí el usuario aplica la actualización). Si el
+      // módulo no está cargado, se ofrece recargar directamente.
+      if (window.AppVersion && typeof window.AppVersion.check === 'function') {
+        window.AppVersion.check({ notify: true });
+        if (window.UI) UI.toast('Hay una nueva versión. Revísala en Actualizaciones.', 'info');
+        return;
+      }
       const avisar = () => {
         recargando = true;
         window.location.reload();
@@ -786,7 +800,8 @@ window.AppShell = (() => {
     injectBrandCollab();
     injectThemeButton();
     injectGuideButton();
-    injectCalculatorButton();
+    injectUpdateButton();
+    loadAppVersion();
     startClock();
     injectAssistant();
     loadSounds();

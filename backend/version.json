@@ -1,0 +1,13 @@
+{
+  "version": "2.2",
+  "channel": "estable",
+  "title": "Actualización de la aplicación",
+  "date": "",
+  "notes": [
+    "Nuevo módulo de Actualizaciones: la app te avisa cuando hay una versión nueva y te muestra las mejoras, como en tu teléfono.",
+    "Botón de actualización en la barra superior con aviso automático cada que se publica una nueva versión.",
+    "Editor visual de fotografías de propiedades: agrega, quita y ordena las fotos con un clic (ya no hace falta escribir URLs).",
+    "Ahora también puedes editar las fotos desde Mis Propiedades e Inventario General.",
+    "Se retiró la calculadora de negocio de la barra superior."
+  ]
+}

@@ -265,6 +265,9 @@ window.API = {
     // Estado del mantenimiento (público) y configuración programada.
     mantenimiento: () => ApiClient.get('/config/mantenimiento'),
     setMantenimiento: (body) => ApiClient.post('/config/mantenimiento', body),
+    // Versión actual de la app + changelog (público). La usa el módulo de
+    // Actualizaciones y el aviso de "nueva versión disponible".
+    version: () => ApiClient.get('/config/version'),
   },
 
   soporte: {

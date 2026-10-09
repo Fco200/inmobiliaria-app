@@ -236,10 +236,29 @@ window.Pages.properties = {
       return labels.join(', ');
     };
 
-    // Fotografías pendientes por subir (se leen del input de archivo al guardar).
-    const readPendingPhotoFiles = () => {
-      const input = document.getElementById('fld-photos_files');
-      return input && input.files ? Array.from(input.files) : [];
+    // Fotografías nuevas (archivos) pendientes por subir. Las llena el editor
+    // visual (PhotoManager) a través de formData justo antes de guardar.
+    let pendingPhotoFiles = [];
+
+    // Inserta el editor visual de fotos (PhotoManager) en el formulario, como
+    // un campo de ancho completo antes de la descripción. Sustituye al antiguo
+    // par de campos "URLs" + "subir archivos".
+    const mountPhotoManager = (form, record) => {
+      if (!form || !window.PhotoManager) return;
+      const manager = window.PhotoManager.create({
+        photos: record && Array.isArray(record.photos) ? record.photos : [],
+      });
+      const wrap = document.createElement('div');
+      wrap.className = 'form-group';
+      wrap.style.gridColumn = '1 / -1';
+      wrap.innerHTML = '<label>Fotografías</label>';
+      wrap.appendChild(manager.el);
+      const grid = form.querySelector('div');
+      const descWrap = form.querySelector('#fld-description') ? form.querySelector('#fld-description').parentElement : null;
+      if (grid && descWrap && descWrap.parentElement === grid) grid.insertBefore(wrap, descWrap);
+      else if (grid) grid.appendChild(wrap);
+      else form.appendChild(wrap);
+      form._photoManager = manager;
     };
 
     // Sube las fotos del input una por una vía /documents/upload y devuelve las
@@ -295,7 +314,7 @@ window.Pages.properties = {
         // Al CREAR: sube las fotos primero (obtiene URLs) y las guarda en la
         // propiedad en el mismo registro. Al menos una foto es obligatoria.
         create: async (body) => {
-          const files = readPendingPhotoFiles();
+          const files = pendingPhotoFiles;
           const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
           if (!files.length && !existing.length) {
             throw new Error('La propiedad debe incluir al menos una fotografía.');
@@ -316,7 +335,7 @@ window.Pages.properties = {
         // endpoint dedicado, para que se registren aunque el archivo falle.
         update: async (id, body, record) => {
           delete body.photos_files;
-          const files = readPendingPhotoFiles();
+          const files = pendingPhotoFiles;
           const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
           if (!files.length && !existing.length) {
             throw new Error('La propiedad debe incluir al menos una fotografía.');
@@ -377,15 +396,17 @@ window.Pages.properties = {
           { value: 'otro', label: 'Otro (especificar)' },
         ], hint: 'Formas de pago que se aceptan para esta propiedad.' },
         { name: 'paymentMethodsOther', label: 'Otra forma de pago', type: 'text', placeholder: 'Ej. Pago mixto, crédito FOVISSSTE + enganche…' },
-        { name: 'photos', label: 'Fotografías existentes (URLs separadas por coma)', type: 'text', full: true, value: (r) => (r && Array.isArray(r.photos) ? r.photos.join(', ') : '') },
-        { name: 'photos_files', label: 'Subir fotografías desde el dispositivo', type: 'file', accept: 'image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif', multiple: true, full: true, hint: 'JPG, PNG, GIF, WebP, HEIC... (máx. 15 MB c/u). Se guardan en el servidor y quedan en la propiedad.' },
         { name: 'isPublished', label: 'Publicar en el catálogo (visible en la landing)', type: 'checkbox', full: true, hint: 'Si no está marcado, la propiedad queda oculta hasta publicarla.' },
         { name: 'description', label: 'Descripción', type: 'textarea', rows: 10, full: true, hint: 'Describe medidas, espacios, amenidades y estado. Mientras más detalle, mejor aparece en el catálogo y en las búsquedas. El campo es amplio (10 renglones) y se puede arrastrar para hacerlo más grande.' },
       ],
-      formData(values) {
+      formData(values, record, form) {
         const body = { ...values };
-        const urlText = typeof values.photos === 'string' ? values.photos.trim() : '';
-        body.photos = urlText ? urlText.split(',').map((p) => p.trim()).filter(Boolean) : [];
+        // Fotografías: las administra el editor visual (URLs existentes ya sin
+        // las eliminadas + archivos nuevos pendientes de subir).
+        const manager = form ? form._photoManager : null;
+        body.photos = manager ? manager.getPhotos() : [];
+        pendingPhotoFiles = manager ? manager.getFiles() : [];
+        delete body.photos_files;
 
         // Propietario: opción "externo" → el nombre va en texto libre y el
         // campo ObjectId queda vacío (no se manda el centinela al servidor).
@@ -411,7 +432,10 @@ window.Pages.properties = {
         }
         return body;
       },
-      onFormMount(form) {
+      onFormMount(form, record) {
+        // Editor visual de fotografías (agregar / quitar / reordenar).
+        mountPhotoManager(form, record);
+
         const wrapOf = (id) => {
           const el = form.querySelector(id);
           return el ? el.parentElement : null;

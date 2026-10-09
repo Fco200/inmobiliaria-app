@@ -391,6 +391,10 @@ window.Pages['inventory-general'] = {
               <input class="form-control" data-city value="${UI.escapeHtml(prop.city || '')}">
             </div>
             <div class="form-group" style="grid-column:1/-1;">
+              <label>Fotografías</label>
+              <div data-photos-manager></div>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
               <label>Descripción</label>
               <textarea class="form-control" data-description rows="3">${UI.escapeHtml(prop.description || '')}</textarea>
             </div>
@@ -402,8 +406,19 @@ window.Pages['inventory-general'] = {
       });
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
       if (!overlay) return;
+
+      // Editor visual de fotografías (agregar / quitar / reordenar).
+      const pmMount = overlay.querySelector('[data-photos-manager]');
+      const photoManager = (window.PhotoManager && pmMount)
+        ? window.PhotoManager.create({ photos: Array.isArray(prop.photos) ? prop.photos : [] })
+        : null;
+      if (photoManager) pmMount.appendChild(photoManager.el);
+
       overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
       overlay.querySelector('[data-ok]').addEventListener('click', async () => {
+        const okBtn = overlay.querySelector('[data-ok]');
+        if (okBtn && okBtn.disabled) return;
+        if (okBtn) okBtn.disabled = true;
         try {
           const body = {
             type: overlay.querySelector('[data-type]').value,
@@ -418,12 +433,26 @@ window.Pages['inventory-general'] = {
           };
           const responsibleEl = overlay.querySelector('[data-responsible]');
           if (responsibleEl) body.responsibleUser = responsibleEl.value || null;
+          if (photoManager) body.photos = photoManager.getPhotos();
           await API.properties.update(prop._id, body);
+
+          // Sube las fotos nuevas una por una para no perder el resto si una falla.
+          const files = photoManager ? photoManager.getFiles() : [];
+          if (files.length) {
+            UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
+            let failed = 0;
+            for (const file of files) {
+              try { await API.properties.uploadPhotos(prop._id, [file]); }
+              catch (photoError) { failed += 1; }
+            }
+            if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
+          }
           UI.toast('Propiedad actualizada', 'success');
           UI.closeModal();
           load();
         } catch (error) {
           UI.toast(error.message, 'error');
+          if (okBtn) okBtn.disabled = false;
         }
       });
     }

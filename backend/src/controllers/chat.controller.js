@@ -2,6 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Chat, User, Role, Notification } = require('../models');
+const { pushNative } = require('../services/notification.service');
 
 // Códigos de rol que participan en el canal grupal general.
 const TEAM_ROLES = ['admin', 'gerencia', 'asesor', 'superadmin'];
@@ -271,6 +272,23 @@ const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
           }).catch(() => null)
         )
       );
+    } else if (chat.type === 'grupal') {
+      // Chats grupales (general / soporte): push NATIVO directo a todos los
+      // participantes excepto el emisor. No se crea aviso en la lista interna
+      // para no saturarla; el mensaje llega igualmente al celular (incluso
+      // bloqueado o con la app cerrada).
+      const recipients = chat.participants
+        .filter((p) => p && p.toString() !== String(userId))
+        .map((p) => p.toString());
+      const groupLabel = chat.name && String(chat.name).trim()
+        ? String(chat.name).trim()
+        : 'Equipo';
+      await pushNative(recipients, {
+        title: `${groupLabel}: ${(userName || 'Usuario').trim().slice(0, 40)}`,
+        body: text.slice(0, 140),
+        tag: `chat-${chat._id}`,
+        url: 'chat.html',
+      });
     }
   } catch (e) { /* el aviso nunca debe impedir el mensaje */ }
 

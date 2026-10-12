@@ -803,6 +803,16 @@ window.Pages.settings = {
           return;
         }
         if (!Push.supported()) {
+          // En iPhone (Safari, sin instalar) las notificaciones no están
+          // disponibles hasta agregar la app a la pantalla de inicio. En vez de
+          // un "No compatible" sin salida, se ofrece la guía paso a paso.
+          if (typeof Push.needsIosInstall === 'function' && Push.needsIosInstall()) {
+            actions.innerHTML = '<button class="btn btn-primary" type="button" data-push-ios>&#128241;&nbsp; Cómo activar en iPhone</button>';
+            statusEl.textContent = 'En iPhone, agrega la app a la pantalla de inicio para poder recibir notificaciones.';
+            const iosBtn = actions.querySelector('[data-push-ios]');
+            if (iosBtn) iosBtn.addEventListener('click', () => Push.showIosNotificationGuide());
+            return;
+          }
           actions.innerHTML = '<button class="btn btn-secondary" type="button" disabled>No compatible</button>';
           statusEl.textContent = 'Este navegador o dispositivo no soporta notificaciones push.';
           return;

@@ -5,6 +5,7 @@ const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
 const { Business, BusinessStage, Client } = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
+const { ensure } = require('../services/notification.service');
 
 // Proceso de ventas para un comprador: captación del prospecto hasta la entrega del inmueble.
 const BUYER_STAGES = [
@@ -255,6 +256,18 @@ const create = asyncHandler(async (req, res) => {
     message: `Se creó el negocio ${business.name}`,
   });
 
+  const advisorId = business.mainAdvisor && (business.mainAdvisor._id || business.mainAdvisor);
+  if (advisorId) {
+    ensure({
+      type: 'nuevo_negocio',
+      key: `business-${business._id}`,
+      title: 'Nuevo negocio',
+      message: `Se creó el negocio "${business.name}".`,
+      userId: advisorId,
+      data: { entityId: business._id },
+    }).catch(() => {});
+  }
+
   await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor']);
 
   res.status(201).json({ success: true, data: business });
@@ -445,6 +458,18 @@ const changeStage = asyncHandler(async (req, res) => {
     action: 'cambio_etapa',
     message: `Cambió de ${STAGE_LABELS[previousStage]} a ${STAGE_LABELS[stage]}`,
   });
+
+  const stageAdvisorId = idOf(business.mainAdvisor);
+  if (stageAdvisorId) {
+    ensure({
+      type: 'cambio_etapa',
+      key: `stage-${business._id}-${stage}`,
+      title: 'Cambio de etapa',
+      message: `El negocio "${business.name}" cambió a ${STAGE_LABELS[stage]}.`,
+      userId: stageAdvisorId,
+      data: { entityId: business._id },
+    }).catch(() => {});
+  }
 
   res.json({
     success: true,

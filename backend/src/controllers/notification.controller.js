@@ -53,4 +53,15 @@ const generate = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Avisos generados', data: { generated: created.length } });
 });
 
-module.exports = { list, unreadCount, markRead, markAllRead, generate };
+// Borra TODO el historial de avisos/notificaciones del usuario que lo pide.
+// Solo afecta los avisos propios (user = req.user), nunca los del resto.
+const clearAll = asyncHandler(async (req, res) => {
+  const result = await Notification.deleteMany({ user: req.user._id });
+  res.json({
+    success: true,
+    message: 'Historial de avisos borrado',
+    data: { deleted: result.deletedCount || 0 },
+  });
+});
+
+module.exports = { list, unreadCount, markRead, markAllRead, generate, clearAll };

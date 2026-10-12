@@ -1,14 +1,12 @@
 {
-  "version": "2.6",
+  "version": "2.9",
   "channel": "estable",
   "title": "Actualización de la aplicación",
   "date": "2026-10-12",
   "notes": [
-    "Notificaciones al teléfono: activa las notificaciones del sistema y recibe los avisos del CRM aunque la app esté cerrada (Android, iPhone/iPad y escritorio).",
-    "Nuevo aviso para activar las notificaciones con un solo toque; también puedes hacerlo desde Configuración → Alertas.",
-    "Al tocar \"Actualizar ahora\" aparece una pantalla de carga con el mensaje ACTUALIZANDO TU APP; la actualización se aplica sin cerrar ni salir de la aplicación.",
-    "Las animaciones de carga normales ahora duran 3 segundos y la de actualización 6 segundos.",
-    "El encabezado muestra solo el logo de INMOBLES y tu perfil (foto, nombre y rol).",
-    "Las fotos y documentos se guardan en la base de datos: ya no se pierden al desplegar la app."
+    "Todas las notificaciones llegan al celular aunque esté bloqueado: citas, tareas, clientes asignados, negocios y cambios de etapa.",
+    "Mensajes de los chats grupeales (Equipo y Soporte) llegan también como notificación al celular de todos los participantes.",
+    "Los anuncios y las reuniones nuevas se notifican al celular de todo el equipo al instante.",
+    "Recordatorio: activa las notificaciones en cada dispositivo para recibirlas; en iPhone agrégalo a la pantalla de inicio."
   ]
 }

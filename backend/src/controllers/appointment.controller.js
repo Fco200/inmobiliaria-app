@@ -5,6 +5,7 @@ const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
 const { Appointment, Task, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
+const { ensure } = require('../services/notification.service');
 
 // Sincroniza un evento recién creado al Google Calendar del usuario, SOLO si
 // tiene la integración activa. Nunca interrumpe la creación (fire-and-forget).
@@ -34,14 +35,38 @@ const appointmentCrud = buildCrud(Appointment, {
   populate: ['client', 'user', 'business', 'property'],
   searchFields: ['place', 'notes'],
   ownerField: 'user',
-  afterCreate: (doc, req) => syncToGoogle(doc, req, 'appointment'),
+  afterCreate: async (doc, req) => {
+    await syncToGoogle(doc, req, 'appointment').catch(() => {});
+    const ownerId = doc.user && (doc.user._id || doc.user);
+    if (!ownerId) return;
+    await ensure({
+      type: 'cita_proxima',
+      key: `appointment-${doc._id}`,
+      title: 'Cita agendada',
+      message: `Tienes una cita${doc.type ? ` (${doc.type.replace(/_/g, ' ')})` : ''} el ${new Date(doc.date).toLocaleString('es-MX')}.`,
+      userId: ownerId,
+      data: { entityId: doc._id, date: doc.date },
+    }).catch(() => {});
+  },
 });
 
 const taskCrud = buildCrud(Task, {
   populate: ['assignedTo', 'client', 'business', 'property'],
   searchFields: ['title', 'description'],
   ownerField: 'assignedTo',
-  afterCreate: (doc, req) => syncToGoogle(doc, req, 'task'),
+  afterCreate: async (doc, req) => {
+    await syncToGoogle(doc, req, 'task').catch(() => {});
+    const assigneeId = doc.assignedTo && (doc.assignedTo._id || doc.assignedTo);
+    if (!assigneeId) return;
+    await ensure({
+      type: 'nueva_tarea',
+      key: `newtask-${doc._id}`,
+      title: 'Nueva tarea',
+      message: `Te asignaron la tarea "${doc.title}".`,
+      userId: assigneeId,
+      data: { entityId: doc._id, date: doc.date },
+    }).catch(() => {});
+  },
 });
 
 const changeTaskStatus = asyncHandler(async (req, res) => {

@@ -223,10 +223,14 @@ window.API = {
     markRead: (id) => ApiClient.patch(`/notifications/${id}/read`),
     markAllRead: () => ApiClient.post('/notifications/mark-all-read'),
     generate: () => ApiClient.post('/notifications/generate'),
+    // Borra todo el historial de avisos de mi cuenta.
+    clearAll: () => ApiClient.remove('/notifications/all'),
   },
 
   activity: {
     list: (params) => ApiClient.get('/activity', params),
+    // Borra todo el historial de actividad de mi cuenta.
+    clearAll: () => ApiClient.remove('/activity/all'),
   },
 
   interactions: {

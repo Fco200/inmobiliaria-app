@@ -25,4 +25,16 @@ const list = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list };
+// Borra el historial de actividad del usuario que lo pide. Solo afecta las
+// acciones propias (user = req.user), el registro del resto del equipo queda
+// intacto.
+const clearMine = asyncHandler(async (req, res) => {
+  const result = await ActivityLog.deleteMany({ user: req.user._id });
+  res.json({
+    success: true,
+    message: 'Historial de actividad borrado',
+    data: { deleted: result.deletedCount || 0 },
+  });
+});
+
+module.exports = { list, clearMine };

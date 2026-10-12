@@ -35,6 +35,7 @@ notificationRouter.get('/', notificationController.list);
 notificationRouter.get('/unread-count', notificationController.unreadCount);
 notificationRouter.post('/generate', notificationController.generate);
 notificationRouter.post('/mark-all-read', notificationController.markAllRead);
+notificationRouter.delete('/all', notificationController.clearAll);
 notificationRouter.patch('/:id/read', idParam, notificationController.markRead);
 
 prospectingRouter.get('/', prospectingController.list);
@@ -45,6 +46,7 @@ prospectingRouter.put('/:id', idParam, prospectingRules, prospectingController.u
 prospectingRouter.delete('/:id', idParam, prospectingController.remove);
 
 activityRouter.get('/', activityController.list);
+activityRouter.delete('/all', activityController.clearMine);
 
 reportRouter.get('/management', reportController.management);
 

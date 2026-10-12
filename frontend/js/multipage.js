@@ -584,10 +584,11 @@ window.AppShell = (() => {
     script.onload = () => {
       if (!window.PushNotify) return;
       window.PushNotify.syncAfterLogin().catch(() => {});
-      // Si todavía no se pidió permiso, se ofrece activar las notificaciones
-      // del sistema (teléfono/escritorio) con un solo toque.
-      if (typeof window.PushNotify.promptIfNeeded === 'function') {
-        window.PushNotify.promptIfNeeded();
+      // En cada sesión nueva se pregunta si quiere activar las notificaciones
+      // (una vez por pestaña). Si dice que no, se le recuerda activarlas más
+      // tarde desde su Perfil.
+      if (typeof window.PushNotify.askOnNewSession === 'function') {
+        window.PushNotify.askOnNewSession();
       }
     };
     document.head.appendChild(script);

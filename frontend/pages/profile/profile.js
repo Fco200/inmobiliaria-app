@@ -214,6 +214,34 @@ window.Pages.profile = {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">${teamCards}</div>
       </div>
 
+      <div class="card" style="margin-top:16px;">
+        <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#128276; Notificaciones y privacidad</h3>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:220px;">
+            <strong>Notificaciones del sistema (push)</strong>
+            <div class="text-muted" id="profile-push-status" style="font-size:12px;margin-top:2px;">Cargando...</div>
+          </div>
+          <div id="profile-push-actions"></div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;min-width:220px;">
+            <strong>Historial de avisos</strong>
+            <div class="text-muted" style="font-size:12px;margin-top:2px;">Borra todos los avisos de tu cuenta.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" data-clear-notifs>&#128465;&nbsp; Borrar historial</button>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;">
+          <div style="flex:1;min-width:220px;">
+            <strong>Historial de actividad</strong>
+            <div class="text-muted" style="font-size:12px;margin-top:2px;">Borra el registro de tus acciones en la app.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" data-clear-activity>&#128465;&nbsp; Borrar historial</button>
+        </div>
+      </div>
+
       ${goals.length ? `
       <div class="card profile-goal-card" style="margin-top:16px;">
         <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#127919; Tu meta en curso</h3>
@@ -303,5 +331,126 @@ window.Pages.profile = {
     container.querySelectorAll('[data-colleague]').forEach((card) => {
       card.addEventListener('click', () => { window.location.href = 'directorio.html'; });
     });
+
+    // Notificaciones push + borrado de historial (avisos / actividad).
+    // Como Configuración es solo para administradores, el Perfil es el lugar
+    // donde cualquier usuario (incluido el soporte) gestiona sus avisos.
+    initNotificationsCard(container);
+
+    async function initNotificationsCard(host) {
+      const statusEl = host.querySelector('#profile-push-status');
+      const actionsEl = host.querySelector('#profile-push-actions');
+      if (!actionsEl) return;
+
+      // push.js se carga bajo demanda si aún no está disponible (multipage lo
+      // difiere), igual que hace Configuración → Alertas.
+      if (!window.PushNotify) {
+        await new Promise((resolve) => {
+          const s = document.createElement('script');
+          s.src = 'js/push.js';
+          s.onload = resolve;
+          s.onerror = resolve;
+          document.head.appendChild(s);
+        });
+      }
+      const Push = window.PushNotify;
+
+      const iosInstall = Push && typeof Push.needsIosInstall === 'function' && Push.needsIosInstall();
+      if (Push && iosInstall) {
+        if (statusEl) statusEl.textContent = 'En iPhone: agrega la app a la pantalla de inicio para activarlas.';
+        actionsEl.innerHTML = '<button class="btn btn-primary btn-sm" type="button" data-push-ios>&#128241;&nbsp; Cómo hacerlo</button>';
+      } else if (Push && Push.supported()) {
+        try {
+          const st = await Push.status();
+          if (st.enabled) {
+            if (statusEl) statusEl.textContent = 'Activadas en este dispositivo.';
+            actionsEl.innerHTML =
+              '<button class="btn btn-secondary btn-sm" type="button" data-push-off>&#128263;&nbsp; Desactivar</button> ' +
+              '<button class="btn btn-secondary btn-sm" type="button" data-push-test>&#128276;&nbsp; Probar</button>';
+          } else {
+            if (statusEl) statusEl.textContent = 'No activadas en este dispositivo.';
+            actionsEl.innerHTML = '<button class="btn btn-primary btn-sm" type="button" data-push-on>&#128276;&nbsp; Activar</button>';
+          }
+        } catch (error) {
+          if (statusEl) statusEl.textContent = 'No se pudo consultar el estado.';
+        }
+      } else if (Push) {
+        if (statusEl) statusEl.textContent = 'Este navegador o dispositivo no soporta notificaciones push.';
+        actionsEl.innerHTML = '';
+      }
+
+      const onBtn = actionsEl.querySelector('[data-push-on]');
+      if (onBtn) onBtn.addEventListener('click', async () => {
+        onBtn.disabled = true;
+        onBtn.textContent = 'Activando...';
+        try {
+          await Push.enable();
+          UI.toast('Notificaciones activadas en este dispositivo', 'success');
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+        initNotificationsCard(host);
+      });
+      const offBtn = actionsEl.querySelector('[data-push-off]');
+      if (offBtn) offBtn.addEventListener('click', async () => {
+        offBtn.disabled = true;
+        try {
+          await Push.disable();
+          UI.toast('Notificaciones desactivadas', 'info');
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+        initNotificationsCard(host);
+      });
+      const testBtn = actionsEl.querySelector('[data-push-test]');
+      if (testBtn) testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        try {
+          await Push.sendTest();
+          UI.toast('Notificación de prueba enviada a este dispositivo', 'success');
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+        testBtn.disabled = false;
+      });
+      const iosBtn = actionsEl.querySelector('[data-push-ios]');
+      if (iosBtn) iosBtn.addEventListener('click', () => Push.showIosNotificationGuide());
+
+      const clearNotifs = host.querySelector('[data-clear-notifs]');
+      if (clearNotifs) clearNotifs.addEventListener('click', () => confirmClear('el historial de avisos', () => API.notifications.clearAll()));
+      const clearActivity = host.querySelector('[data-clear-activity]');
+      if (clearActivity) clearActivity.addEventListener('click', () => confirmClear('el historial de actividad', () => API.activity.clearAll()));
+    }
+
+    function confirmClear(label, action) {
+      UI.openModal({
+        title: '¿Borrar ' + label + '?',
+        body:
+          '<p class="text-muted" style="margin:0;">Esta acción no se puede deshacer. Se borrará ' + label + ' de tu cuenta.</p>',
+        footer:
+          '<button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>' +
+          '<button class="btn btn-danger" type="button" data-confirm>&#128465;&nbsp; Borrar</button>',
+        size: 440,
+      });
+      const cancel = document.querySelector('#modal-overlay [data-cancel]');
+      if (cancel) cancel.addEventListener('click', () => UI.closeModal());
+      const confirmBtn = document.querySelector('#modal-overlay [data-confirm]');
+      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Borrando...';
+        try {
+          await action();
+          UI.closeModal();
+          UI.toast('Historial borrado correctamente.', 'success');
+          if (window.AppShell && typeof window.AppShell.refreshNotificationBadge === 'function') {
+            window.AppShell.refreshNotificationBadge();
+          }
+        } catch (error) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Borrar';
+          UI.toast(error.message, 'error');
+        }
+      });
+    }
   },
 };

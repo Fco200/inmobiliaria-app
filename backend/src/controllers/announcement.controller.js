@@ -1,7 +1,8 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Announcement } = require('../models');
+const { Announcement, User } = require('../models');
+const { pushNative } = require('../services/notification.service');
 
 // Código de rol robusto: el rol viene poblado como documento ({code, name}) o
 // puede llegar como string; nunca debe romper por undefined.
@@ -69,6 +70,17 @@ const createAnnouncement = asyncHandler(async (req, res) => {
   if (io) {
     io.emit('new-announcement', populated);
   }
+
+  // Push NATIVO a todo el equipo activo (incluso con equipo bloqueado).
+  try {
+    const users = await User.find({ status: { $ne: 'inactivo' } }).select('_id');
+    await pushNative(users.map((u) => u._id), {
+      title: `Anuncio${priority && priority !== 'normal' ? ` (${priority})` : ''}: ${title}`,
+      body: messageText.slice(0, 140),
+      tag: `announcement-${announcement._id}`,
+      url: 'dashboard.html',
+    });
+  } catch (e) { /* el anuncio se crea igual aunque el push falle */ }
 
   res.status(201).json({ success: true, data: populated });
 });

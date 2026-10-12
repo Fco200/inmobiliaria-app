@@ -1,8 +1,9 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { Meeting } = require('../models');
+const { Meeting, User } = require('../models');
 const { isBoss } = require('../utils/scope');
+const { pushNative } = require('../services/notification.service');
 
 // Lista reuniones. Todos los autenticados pueden verlas (son eventos de
 // equipo). Admite filtros por rango de fechas y estado.
@@ -73,6 +74,18 @@ const create = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
   });
   const populated = await Meeting.findById(meeting._id).populate('createdBy', 'name photo');
+
+  // Push NATIVO a todo el equipo activo (incluso con equipo bloqueado).
+  try {
+    const users = await User.find({ status: { $ne: 'inactivo' } }).select('_id');
+    await pushNative(users.map((u) => u._id), {
+      title: 'Nueva reunión',
+      body: `${title}${location ? ` · ${location}` : ''}`,
+      tag: `meeting-${meeting._id}`,
+      url: 'calendar.html',
+    });
+  } catch (e) { /* la reunión se publica igual aunque el push falle */ }
+
   res.status(201).json({ success: true, message: 'Reunión publicada.', data: populated });
 });
 

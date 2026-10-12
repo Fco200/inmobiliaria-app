@@ -39,6 +39,34 @@ async function ensure({ type, key, title, message, userId, data }) {
   return doc;
 }
 
+// Push NATIVO directo (sin crear un aviso en la lista de la app) para eventos
+// de equipo o de alta frecuencia (anuncios, reuniones, mensajes de grupo). Así
+// llegan AL CELULAR aunque el dispositivo esté bloqueado o la app cerrada.
+// Nunca rompe el flujo que lo invoca.
+async function pushNative(userIds, { title, body, url, tag, icon } = {}) {
+  try {
+    const push = require('./push.service');
+    const ids = Array.from(new Set((userIds || []).filter(Boolean).map((id) => String(id))));
+    if (!ids.length) return { sent: 0, total: 0 };
+    const results = await Promise.all(
+      ids.map((id) =>
+        push
+          .notifyUser(id, {
+            title: String(title || 'INMOBLES'),
+            body: String(body || ''),
+            url: url || '/',
+            tag: tag ? String(tag) : '',
+            icon: icon || undefined,
+          })
+          .catch(() => null)
+      )
+    );
+    return { sent: results.filter(Boolean).length, total: ids.length };
+  } catch (error) {
+    return { sent: 0, total: 0 };
+  }
+}
+
 const DATE_OPTS = { hour: '2-digit', minute: '2-digit' };
 
 async function generateForUser(userId) {
@@ -247,4 +275,4 @@ async function generateForAllUsers() {
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers, setIo, ensure };
+module.exports = { generateForUser, generateForAllUsers, setIo, ensure, pushNative };

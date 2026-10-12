@@ -28,6 +28,63 @@ window.PushNotify = (() => {
     return supported() ? Notification.permission : 'unsupported';
   }
 
+  // iPhone/iPad/iPod clásicos + iPadOS 13+ (que se hace pasar por Mac táctil).
+  function isIos() {
+    if (typeof navigator === 'undefined') return false;
+    return (
+      (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    );
+  }
+
+  // La app abierta como PWA instalada (pantalla completa), no como pestaña.
+  function isStandalone() {
+    try {
+      return (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.navigator.standalone === true
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // En iPhone/iPad las notificaciones push SOLO funcionan si la app está
+  // agregada a la pantalla de inicio (iOS 16.4+). Mientras se use en Safari
+  // como pestaña normal ni siquiera existen las APIs de push.
+  function needsIosInstall() {
+    return isIos() && !isStandalone();
+  }
+
+  // Guía paso a paso (se muestra también cuando push aún no está disponible,
+  // porque en Safari de iPhone no lo está hasta instalar la app).
+  function showIosNotificationGuide() {
+    if (typeof UI === 'undefined') return;
+    UI.openModal({
+      title: 'Notificaciones en iPhone',
+      body: `
+        <p style="margin-top:0;">En iPhone las notificaciones solo funcionan si agregas la app a la pantalla de inicio (requiere iOS 16.4 o superior).</p>
+        <ol style="margin:0;padding-left:20px;line-height:2;">
+          <li>Abre el CRM en <strong>Safari</strong>.</li>
+          <li>Toca el botón <strong>Compartir</strong>
+            <span style="display:inline-block;padding:1px 8px;border-radius:6px;background:#0a84ff;color:#fff;font-weight:700;">&#8599;</span>
+            de la barra inferior.</li>
+          <li>Desliza y elige <strong>"Añadir a pantalla de inicio"</strong>.</li>
+          <li>Toca <strong>"Añadir"</strong> y <strong>cierra Safari</strong>.</li>
+          <li>Abre la app desde el <strong>nuevo icono</strong> e inicia sesión.</li>
+          <li>Cuando aparezca el aviso, toca <strong>"Activar"</strong> y luego <strong>"Permitir"</strong>
+            (o ve a Configuración &rarr; Alertas).</li>
+        </ol>
+        <p class="text-muted" style="margin-bottom:0;">Si antes tocaste "No permitir", borra el icono de la pantalla de inicio y vuelve a agregarlo para reiniciar el permiso.</p>
+      `,
+      footer: '<button class="btn btn-primary" type="button" data-ok>Entendido</button>',
+      size: 480,
+    });
+    const okBtn = document.querySelector('#modal-overlay [data-ok]');
+    if (okBtn) okBtn.addEventListener('click', () => UI.closeModal());
+  }
+
   // La API de suscripción pide la llave pública VAPID en base64url y el
   // navegador necesita los bytes crudos (Uint8Array).
   function urlBase64ToUint8Array(base64String) {
@@ -144,64 +201,77 @@ window.PushNotify = (() => {
     return result;
   }
 
-  // Muestra un aviso (una sola vez cada 7 días) invitando a activar las
-  // notificaciones del sistema. No pide permiso solo: espera a que el usuario
-  // toque "Activar", requisito de los navegadores (sobre todo iOS) para poder
-  // mostrar el diálogo de permiso.
-  const PROMPT_KEY = 'crm_push_prompt_dismissed_at';
-  const PROMPT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  // Pregunta al usuario (UNA vez por sesión de navegación) si quiere activar
+  // las notificaciones. El permiso del navegador solo puede pedirse tras un
+  // toque del usuario, por eso se muestra un modal con "Sí, activar".
+  // Si dice "Ahora no", se le recuerda que puede activarlas más tarde desde
+  // su Perfil → Notificaciones.
+  const SESSION_ASK_KEY = 'crm_push_asked_session';
 
-  function promptIfNeeded() {
+  async function askOnNewSession() {
     try {
-      if (!supported() || permission() !== 'default') return;
       if (!window.ApiClient || !window.ApiClient.isAuthenticated()) return;
-      if (document.getElementById('push-prompt-banner')) return;
-      const dismissedAt = Number(localStorage.getItem(PROMPT_KEY) || 0);
-      if (dismissedAt && Date.now() - dismissedAt < PROMPT_COOLDOWN_MS) return;
+      try {
+        if (sessionStorage.getItem(SESSION_ASK_KEY)) return;
+      } catch (error) { /* sin almacenamiento */ }
 
-      const host = document.getElementById('app-content') || document.querySelector('.main');
-      if (!host) return;
-
-      const banner = document.createElement('div');
-      banner.id = 'push-prompt-banner';
-      banner.className = 'push-prompt-banner';
-      banner.innerHTML =
-        '<span class="push-prompt-icon">&#128276;</span>' +
-        '<div class="push-prompt-text">' +
-        '<strong>Activa las notificaciones</strong>' +
-        '<span>Recibe los avisos del CRM en tu teléfono, aunque la app esté cerrada.</span>' +
-        '</div>' +
-        '<button class="btn btn-primary btn-sm" type="button" data-push-enable>Activar</button>' +
-        '<button class="btn btn-ghost btn-sm" type="button" data-push-later>Ahora no</button>';
-
-      const rememberDismiss = () => {
-        try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch (error) { /* noop */ }
-      };
-      banner.querySelector('[data-push-later]').addEventListener('click', () => {
-        rememberDismiss();
-        banner.remove();
-      });
-      banner.querySelector('[data-push-enable]').addEventListener('click', async () => {
-        const btn = banner.querySelector('[data-push-enable]');
-        btn.disabled = true;
-        btn.textContent = 'Activando...';
-        try {
-          await enable();
-          banner.remove();
-          if (window.UI) window.UI.toast('Notificaciones activadas en este dispositivo', 'success');
-        } catch (error) {
-          btn.disabled = false;
-          btn.textContent = 'Activar';
-          if (window.UI) window.UI.toast(error.message, 'error');
-        }
-      });
-
-      if (host.parentNode && host.parentNode.classList.contains('main')) {
-        host.parentNode.insertBefore(banner, host);
-      } else {
-        host.insertBefore(banner, host.firstChild);
+      const iosInstall = needsIosInstall();
+      // Solo se pregunta si todavía no se decidió (permiso en "default") o si
+      // es iPhone sin instalar. Con permiso denegado o ya activado no se pide.
+      if (!iosInstall && (!supported() || permission() !== 'default')) return;
+      if (!iosInstall) {
+        const sub = await currentSubscription();
+        if (sub) return;
       }
+
+      // Nunca volver a preguntar en esta misma pestaña/sesión.
+      try { sessionStorage.setItem(SESSION_ASK_KEY, '1'); } catch (error) { /* noop */ }
+      showAskSessionModal(iosInstall);
     } catch (error) { /* noop */ }
+  }
+
+  function showAskSessionModal(iosInstall) {
+    if (typeof UI === 'undefined') return;
+    const body = iosInstall
+      ? '<p>En iPhone las notificaciones llegan cuando la app está <strong>agregada a la pantalla de inicio</strong>.</p><p class="text-muted" style="margin-bottom:0;">Te mostramos cómo hacerlo paso a paso.</p>'
+      : '<p>Recibe en este dispositivo los avisos del CRM (mensajes, citas, recordatorios), aunque la app esté cerrada.</p>';
+
+    UI.openModal({
+      title: '¿Quieres activar las notificaciones?',
+      body,
+      footer:
+        '<button class="btn btn-secondary" type="button" data-push-not-now>Ahora no</button>' +
+        `<button class="btn btn-primary" type="button" data-push-yes>${iosInstall ? 'Cómo hacerlo' : 'Sí, activar'}</button>`,
+      size: 480,
+    });
+
+    document.querySelector('#modal-overlay [data-push-not-now]').addEventListener('click', () => {
+      UI.closeModal();
+      if (window.UI) {
+        window.UI.toast('Puedes activarlas más tarde desde tu Perfil → Notificaciones.', 'info');
+      }
+    });
+
+    document.querySelector('#modal-overlay [data-push-yes]').addEventListener('click', async () => {
+      const btn = document.querySelector('#modal-overlay [data-push-yes]');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = iosInstall ? 'Abriendo guía...' : 'Activando...';
+      try {
+        if (iosInstall) {
+          UI.closeModal();
+          showIosNotificationGuide();
+          return;
+        }
+        await enable();
+        UI.closeModal();
+        if (window.UI) window.UI.toast('Notificaciones activadas en este dispositivo', 'success');
+      } catch (error) {
+        btn.disabled = false;
+        btn.textContent = iosInstall ? 'Cómo hacerlo' : 'Sí, activar';
+        if (window.UI) window.UI.toast(error.message, 'error');
+      }
+    });
   }
 
   // El Service Worker detectó que el servicio de push rotó la suscripción
@@ -217,5 +287,5 @@ window.PushNotify = (() => {
     });
   }
 
-  return { supported, permission, enable, disable, status, syncAfterLogin, sendTest, promptIfNeeded, urlBase64ToUint8Array };
+  return { supported, permission, enable, disable, status, syncAfterLogin, sendTest, askOnNewSession, needsIosInstall, isIos, isStandalone, showIosNotificationGuide, urlBase64ToUint8Array };
 })();

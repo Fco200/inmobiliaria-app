@@ -6,6 +6,7 @@ const { isBoss } = require('../utils/scope');
 const { Client, Appointment, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { logActivity } = require('../services/log.service');
+const { ensure } = require('../services/notification.service');
 
 // Etapas vigentes del embudo, en orden. 'PERFILADO' volvió a ser una etapa
 // real (se recorre antes de la cita); 'SEGUIMIENTO' es la que sigue a la cita.
@@ -172,6 +173,18 @@ const create = asyncHandler(async (req, res) => {
   });
 
   await client.populate('asesorAsignado');
+
+  const asesorId = client.asesorAsignado && (client.asesorAsignado._id || client.asesorAsignado);
+  if (asesorId && String(asesorId) !== String(req.user._id)) {
+    ensure({
+      type: 'nuevo_prospecto',
+      key: `prospect-${client._id}`,
+      title: 'Cliente asignado',
+      message: `Se te asignó el cliente ${client.nombre}.`,
+      userId: asesorId,
+      data: { entityId: client._id },
+    }).catch(() => {});
+  }
 
   res.status(201).json({ success: true, data: client });
 });

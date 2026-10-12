@@ -14,7 +14,9 @@
  *              también sobreviven a los redespliegues (la base va con la app).
  *
  * Si STORAGE_DRIVER queda vacío: se usa r2 si hay credenciales R2_* configuradas
- * y local en caso contrario.
+ * y, en cualquier otro caso, mongodb (GridFS). NUNCA se cae a "local" por
+ * defecto: el disco de Render es efímero y borraría las fotos en cada deploy.
+ * Para usar el disco local hay que pedirlo explícitamente con STORAGE_DRIVER=local.
  *
  * En los modos nube/BD, multer sigue escribiendo primero en /uploads (temporal)
  * y luego el archivo se copia al destino persistente y se borra el temporal, así
@@ -63,10 +65,13 @@ function resolveMode() {
     return 'local';
   }
   if (r2Configured) return 'r2';
-  // Sin configuración explícita: en producción NUNCA usar el disco efímero
-  // (en Render el disco se borra en cada despliegue). Se usa gridfs en MongoDB,
-  // que es persistente y no necesita servicios extra.
-  return process.env.NODE_ENV === 'production' ? 'mongodb' : 'local';
+  // Sin configuración explícita se usa SIEMPRE GridFS (MongoDB), nunca el disco
+  // local: el disco de Render es efímero y borraría las fotos en cada
+  // despliegue. MongoDB siempre está configurado (MONGODB_URI), así que este
+  // default es persistente y no depende de NODE_ENV ni de variables extra.
+  // El modo "local" queda reservado para cuando se solicita explícitamente
+  // (STORAGE_DRIVER=local), p. ej. en desarrollo sin base de datos.
+  return 'mongodb';
 }
 
 const mode = resolveMode();
@@ -264,28 +269,67 @@ function readAll(stream, maxBytes = 2 * 1024 * 1024) {
 
 // ── Operaciones públicas ────────────────────────────────────────────────────
 
-// Sube un archivo ya guardado en disco (multer) al destino persistente.
-// En modo local no hace nada (el archivo ya está en su ruta definitiva).
-// En modo r2/mongodb lo copia al destino y BORRA el temporal.
-async function persistFile(multerFile) {
-  if (!multerFile) return;
-  if (mode === 'local') return;
-  const key = path.basename(multerFile.filename || multerFile.originalname || 'archivo');
-  const localPath = multerFile.path;
-  const contentType = multerFile.mimetype || 'application/octet-stream';
+// Genera un nombre único y seguro para el archivo subido (multer en memoria no
+// asigna `filename`, a diferencia de diskStorage). Se completa la extensión con
+// el MIME cuando el nombre original no la trae (fotos tomadas con el celular).
+const MIME_TO_EXT = {
+  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/pjpeg': 'jpg',
+  'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+  'image/bmp': 'bmp', 'image/avif': 'avif', 'image/tiff': 'tiff',
+  'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',
+};
+
+function buildKey(file) {
+  const safe = String(file.originalname || 'archivo').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const hasExt = Boolean(path.extname(safe));
+  const suffix = hasExt ? '' : `.${MIME_TO_EXT[String(file.mimetype || '').toLowerCase()] || 'bin'}`;
+  const unique = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${unique}-${safe}${suffix}`;
+}
+
+// Persiste un archivo subido por multer (que ahora llega EN MEMORIA) al
+// almacenamiento definitivo: GridFS/R2 (persistente) o disco local (solo si se
+// pidió explícitamente con STORAGE_DRIVER=local). NUNCA deja el archivo en el
+// disco efímero del servidor cuando el modo es persistente.
+async function persistFile(file) {
+  if (!file) return;
+
+  // Asigna un filename estable (usado luego para construir /uploads/<nombre>).
+  if (!file.filename) file.filename = buildKey(file);
+  const key = path.basename(file.filename);
+  file.filename = key;
+  const contentType = file.mimetype || 'application/octet-stream';
+
   try {
-    await putFile(key, localPath, contentType);
-    try { fs.unlinkSync(localPath); } catch (e) { /* ignorar */ }
+    // Caso normal: multer.memoryStorage → el archivo viene en file.buffer.
+    if (file.buffer) {
+      if (mode === 'local') {
+        const diskPath = path.join(uploadsDir, key);
+        fs.mkdirSync(path.dirname(diskPath), { recursive: true });
+        fs.writeFileSync(diskPath, file.buffer);
+      } else {
+        await putBuffer(key, file.buffer, contentType);
+      }
+      delete file.buffer; // libera la memoria del proceso
+      return;
+    }
+
+    // Compatibilidad: si algún día vuelve a llegar una ruta temporal en disco.
+    if (file.path) {
+      if (mode === 'local') return;
+      await putFile(key, file.path, contentType);
+      try { fs.unlinkSync(file.path); } catch (e) { /* ignorar */ }
+    }
   } catch (error) {
     console.warn('[Storage] No se pudo persistir el archivo:', error.message);
     throw error;
   }
 }
 
-// Sube varios archivos a la vez. Si alguno falla se borran los que ya se
-// subieron y se propaga el error.
-async function persistFiles(multerFiles) {
-  const list = multerFiles || [];
+// Sube varios archivos a la vez (cada uno se escribe una sola vez en el
+// almacenamiento persistente). Si alguno falla se propaga el error.
+async function persistFiles(files) {
+  const list = files || [];
   for (const file of list) {
     await persistFile(file);
   }

@@ -4,22 +4,11 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const uploadDir = path.join(__dirname, '..', '..', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const safe = String(file.originalname || 'archivo').replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    // En móviles algunas fotos llegan SIN extensión en el nombre: se completa
-    // con la que corresponda al MIME para que el navegador pueda mostrarla.
-    const hasExt = Boolean(path.extname(safe));
-    const suffix = hasExt ? '' : `.${extFromMime(file.mimetype) || 'bin'}`;
-    cb(null, `${Date.now()}-${safe}${suffix}`);
-  },
-});
+// Multer guarda el archivo SOLO en memoria (file.buffer): nunca se escribe en
+// el disco del servidor (backend/uploads), que en Render es efímero y borraría
+// las fotos en cada despliegue. El buffer se sube después a MongoDB/GridFS (o
+// R2) desde storage.service.persistFile/persistFiles.
+const storage = multer.memoryStorage();
 
 // Extensiones permitidas (SVG e ICO bloqueados: vectores de XSS / contenido activo).
 const ALLOWED_EXTS = new Set([
@@ -109,18 +98,29 @@ function looksLikeText(buf) {
   return true;
 }
 
-// Verifica el contenido real (magic bytes) de un archivo ya guardado por multer.
+// Verifica el contenido real (magic bytes) del archivo que multer dejó EN
+// MEMORIA (file.buffer). Se leen los primeros 16 bytes sin escribir nada a disco.
 function verifyFile(file) {
   const ext = effectiveExt(file);
   try {
-    const fd = fs.openSync(file.path, 'r');
-    const buf = Buffer.alloc(16);
-    const read = fs.readSync(fd, buf, 0, 16, 0);
-    fs.closeSync(fd);
-    buf.fill(0, read);
+    let buf;
+    let len;
+    if (file.buffer) {
+      len = Math.min(16, file.buffer.length);
+      buf = Buffer.alloc(16);
+      file.buffer.copy(buf, 0, 0, len);
+    } else if (file.path) {
+      const fd = fs.openSync(file.path, 'r');
+      buf = Buffer.alloc(16);
+      len = fs.readSync(fd, buf, 0, 16, 0);
+      fs.closeSync(fd);
+      buf.fill(0, len);
+    } else {
+      return false;
+    }
 
     if (ext === 'txt' || ext === 'csv') {
-      return looksLikeText(buf.subarray(0, read));
+      return looksLikeText(buf.subarray(0, len));
     }
     const sig = SIGNATURES.find((s) => s.exts.includes(ext));
     return sig ? sig.test(buf) : false;
@@ -130,8 +130,9 @@ function verifyFile(file) {
 }
 
 function rejectFile(req, res) {
-  if (req.file) fs.unlink(req.file.path, () => {});
-  (req.files || []).forEach((f) => fs.unlink(f.path, () => {}));
+  // Con memoryStorage no hay archivos temporales en disco que eliminar.
+  if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+  (req.files || []).forEach((f) => { if (f.path) fs.unlink(f.path, () => {}); });
   delete req.file;
   delete req.files;
   return res.status(400).json({

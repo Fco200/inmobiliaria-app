@@ -268,7 +268,9 @@ const uploadPhotos = asyncHandler(async (req, res) => {
     return !IMAGE_EXTS.has(ext) && !MIME_EXTS[f.mimetype];
   });
   if (bad) {
-    files.forEach((f) => fs.unlink(f.path, () => {}));
+    // Los archivos viven solo en memoria (multer.memoryStorage): no hay nada
+    // que borrar del disco, basta descartar el buffer.
+    files.forEach((f) => { if (f.path) fs.unlink(f.path, () => {}); });
     return res.status(400).json({ success: false, message: 'Solo se permiten imágenes' });
   }
 

@@ -34,7 +34,11 @@ function cleanKey(value) {
   if (!raw) return '';
   if (/^(data|blob):/i.test(raw)) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
-  return raw.replace(/^\/+/, '');
+  // En la BD las rutas se guardan como "/uploads/<archivo>", pero en el
+  // almacenamiento (GridFS/R2) y en el disco la clave es solo "<archivo>"
+  // (la ruta /uploads se monta en Express y no forma parte del nombre). Se
+  // quita el prefijo para que la comprobación de existencia coincida.
+  return raw.replace(/^\/+/, '').replace(/^uploads\//i, '');
 }
 
 function isRemote(raw) {

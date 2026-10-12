@@ -83,14 +83,74 @@ html, body {
   border: 1px solid var(--border);
 }
 
-.topnav-brand-name {
-  font-size: 16px;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+/* El título "INMOBLES" se oculta: en su lugar se muestra la mini vista del
+   perfil (arriba a la izquierda, junto al logo). */
+.topnav-brand-name { display: none; }
+
+/* ── Mini vista del perfil (reemplaza al título INMOBLES) ─────────────────── */
+.topnav-profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 20px;
+  padding: 4px 13px 4px 4px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  border: 1px solid rgba(91, 45, 142, 0.14);
+  text-decoration: none;
+  color: var(--text);
+  flex-shrink: 0;
+  transition: box-shadow 0.18s, transform 0.18s, background 0.18s;
 }
+.topnav-profile:hover {
+  background: var(--white);
+  box-shadow: 0 6px 18px rgba(91, 45, 142, 0.18);
+  transform: translateY(-1px);
+}
+.topnav-profile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--white);
+  box-shadow: 0 2px 6px rgba(91, 45, 142, 0.25);
+  background: var(--grad-primary);
+}
+.topnav-profile-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+}
+.topnav-profile-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.topnav-profile-text strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+.topnav-profile-text small {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+/* Se oculta la ficha de usuario de la derecha: la vista previa del perfil ya
+   vive a la izquierda y evita mostrar el avatar dos veces. */
+#topnav-user { display: none; }
+[data-theme="dark"] .topnav-profile { background: #241a33; border-color: #3a2b52; }
+[data-theme="dark"] .topnav-profile:hover { background: #2d2140; }
+[data-theme="dark"] .topnav-profile-text strong { color: #ede4f7; }
 
 .topnav-nav {
   display: flex;
@@ -2118,6 +2178,9 @@ body.lightbox-open {
 /* ── Responsividad global: celulares ────────────────────────────────── */
 @media (max-width: 600px) {
   .topnav-brand-name { display: none; }
+  .topnav-profile-text { display: none; }
+  .topnav-profile { padding: 3px; margin-right: 8px; border-radius: 50%; }
+  .topnav-profile-avatar { width: 30px; height: 30px; border-width: 1px; }
   .topnav-user-text { display: none; }
   .topnav-user { padding: 4px 6px; }
   .topbar-clock { display: none; }
@@ -3077,4 +3140,150 @@ body.page-chat .assistant-panel {
 .update-meta strong { font-size: 15px; }
 .update-timeline li { font-size: 13px; }
 [data-theme="dark"] .update-card { background: #1b1d2e; border-color: #343654; }
+
+/* Encabezado (hero) del módulo */
+.updates-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--grad-primary);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+}
+.updates-hero::after {
+  content: '';
+  position: absolute;
+  right: -40px; top: -60px;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+.updates-hero-icon {
+  font-size: 40px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.25));
+}
+.updates-hero-info { flex: 1; min-width: 220px; position: relative; z-index: 1; }
+.updates-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 4px;
+}
+.updates-hero-info h2 { margin: 0; font-size: 22px; }
+.updates-hero-info .text-muted { color: rgba(255, 255, 255, 0.85) !important; margin: 4px 0 0; font-size: 13px; max-width: 620px; }
+.updates-hero-btn { position: relative; z-index: 1; background: #fff; color: var(--primary) !important; border: none; }
+.updates-hero-btn:hover { background: #f3eafa; }
+
+/* Tarjeta de estado (nueva versión / al día) */
+.updates-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.updates-status.is-new { border-left: 5px solid var(--primary); }
+.updates-status.is-current { border-left: 5px solid var(--success); }
+.updates-status-icon { font-size: 34px; line-height: 1; }
+.updates-status-body { flex: 1; min-width: 0; }
+.updates-status-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.updates-status-top h3 { margin: 0; font-size: 18px; }
+.updates-status-sub { margin: 4px 0 0; font-size: 13px; }
+.updates-pill {
+  display: inline-flex; align-items: center;
+  padding: 2px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 700;
+  background: var(--primary-light); color: var(--primary);
+  border: 1px solid rgba(91, 45, 142, 0.16);
+}
+.updates-pill.is-ok { background: #e7f6ec; color: var(--success); border-color: rgba(31, 157, 85, 0.2); }
+.updates-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.updates-flag {
+  align-self: flex-start;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+}
+.updates-flag.is-new { background: var(--primary-light); color: var(--primary); }
+.updates-flag.is-current { background: #e7f6ec; color: var(--success); }
+
+/* Tiles de metadatos */
+.updates-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.updates-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--white);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.updates-stat-ico { font-size: 18px; line-height: 1; }
+.updates-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700; margin-top: 4px; }
+.updates-stat-value { font-size: 16px; color: var(--text); }
+
+/* Paneles de contenido */
+.updates-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-top: 16px;
+  box-shadow: var(--shadow);
+}
+.updates-panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.updates-panel-head h3 { margin: 0; font-size: 17px; }
+.updates-changelog { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.updates-changelog li { display: flex; align-items: flex-start; gap: 12px; }
+.updates-changelog-num {
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff;
+  background: var(--grad-primary);
+  box-shadow: 0 2px 6px rgba(91, 45, 142, 0.3);
+}
+.updates-changelog-text { font-size: 14px; line-height: 1.5; padding-top: 2px; }
+.updates-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.updates-commits li {
+  position: relative;
+  padding: 8px 12px 8px 26px;
+  font-size: 13px;
+  background: var(--primary-light);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.updates-commits li::before { content: '\\2022'; position: absolute; left: 12px; top: 8px; color: var(--primary); font-weight: 700; }
+
+[data-theme="dark"] .updates-status,
+[data-theme="dark"] .updates-stat,
+[data-theme="dark"] .updates-panel { background: #1b1d2e; border-color: #343654; }
+[data-theme="dark"] .updates-stat-value { color: #ede4f7; }
+[data-theme="dark"] .updates-commits li { background: #241a33; color: #ede4f7; }
+
+@media (max-width: 600px) {
+  .updates-hero { padding: 18px; }
+  .updates-hero-icon { font-size: 32px; }
+  .updates-hero-info h2 { font-size: 19px; }
+  .updates-status { flex-direction: column; gap: 10px; }
+  .updates-flag { align-self: flex-start; }
+}
 

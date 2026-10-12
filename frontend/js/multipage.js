@@ -91,6 +91,42 @@ window.AppShell = (() => {
     }
   }
 
+  // Mini vista del perfil en la esquina superior izquierda, justo después del
+  // logo. Sustituye al título "INMOBLES" para dar una apariencia de CRM real:
+  // muestra el avatar, el nombre y el rol del usuario y lleva a Mi perfil.
+  // Se aplica en TODOS los módulos porque vive en el shell compartido.
+  function injectBrandProfile() {
+    const brand = document.querySelector('.topnav-brand');
+    if (!brand) return;
+
+    // Oculta el texto "INMOBLES" del logo (además del display:none del CSS).
+    const brandName = brand.querySelector('.topnav-brand-name');
+    if (brandName) brandName.style.display = 'none';
+
+    if (document.querySelector('.topnav-profile')) return;
+
+    const user = (window.ApiClient && window.ApiClient.getStoredUser()) || null;
+    if (!user || !(user.name || user.username) || !user._id) return;
+
+    const role = user.role && (user.role.name || user.role.code || user.role);
+    const displayName = user.name || user.username;
+    const avatar = user.photo
+      ? `<img class="topnav-profile-avatar" src="${window.AppConfig.resolveUrl(user.photo)}" alt="">`
+      : `<span class="topnav-profile-avatar topnav-profile-fallback">${UI.escapeHtml(String(displayName).charAt(0).toUpperCase())}</span>`;
+
+    const link = document.createElement('a');
+    link.className = 'topnav-profile';
+    link.href = 'profile.html';
+    link.title = role ? `${displayName} · ${role} — Ir a mi perfil` : `${displayName} — Ir a mi perfil`;
+    link.innerHTML =
+      `${avatar}<span class="topnav-profile-text">` +
+      `<strong>${UI.escapeHtml(displayName)}</strong>` +
+      `<small>${UI.escapeHtml(role || 'Mi perfil')}</small>` +
+      `</span>`;
+
+    brand.insertAdjacentElement('afterend', link);
+  }
+
   function updateFabBadge(key, count) {
     const el = document.querySelector(`.activity-fab [data-badge="${key}"]`);
     if (!el) return;
@@ -798,6 +834,7 @@ window.AppShell = (() => {
     renderNav();
     updateTopnavUser();
     injectBrandCollab();
+    injectBrandProfile();
     injectThemeButton();
     injectGuideButton();
     injectUpdateButton();

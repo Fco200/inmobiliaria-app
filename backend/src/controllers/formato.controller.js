@@ -8,7 +8,6 @@ const { POSICIONES, DEFAULT_LAYOUT } = require('../config/formatoPosiciones');
 const logger = require('../services/logger.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
-const UPLOADS_DIR = path.join(__dirname, '../../uploads');
 
 // Normaliza a NFC el nombre de plantilla recibido (URL) o leído del disco.
 // En git/Linux los nombres vienen descompuestos (NFD: "Prestacio\u0301n"); los
@@ -587,11 +586,9 @@ const generarPDF = async (req, res) => {
     // disco local.
     let fileUrl = null;
     try {
-      if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-      const diskPath = path.join(UPLOADS_DIR, fileName);
-      fs.writeFileSync(diskPath, Buffer.from(modifiedPdfBytes));
+      // Se sube directamente el buffer al almacenamiento persistente (GridFS/R2)
+      // SIN escribir nada en el disco del servidor (backend/uploads es efímero).
       await require('../services/storage.service').putBuffer(fileName, Buffer.from(modifiedPdfBytes), 'application/pdf');
-      try { fs.unlinkSync(diskPath); } catch (e) { /* el PDF ya quedó en la nube */ }
       fileUrl = `/uploads/${fileName}`;
 
       await Document.create({

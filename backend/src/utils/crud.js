@@ -20,6 +20,9 @@ function ownerIdOf(doc, ownerField) {
  *  - ownerField: campo propietario simple (responsibleUser, user, uploadedBy…).
  *  - ownerMatch: fn(userId) => condición Mongo cuando la propiedad es compuesta.
  *  - beforeCreate/beforeUpdate: hooks existentes.
+ *  - afterCreate/afterUpdate/afterRemove: hooks no bloqueantes post-operación.
+ *    afterUpdate(doc, req, previous) recibe el documento previo (objeto plano)
+ *    para comparar cambios; afterRemove(doc, req) recibe el documento eliminado.
  *  - extraFilters: { paramDeQuery => nombreDelCampo } filtros exactos adicionales.
  *  - textFilters: { paramDeQuery => nombreDelCampo } búsqueda parcial sin
  *    distinguir mayúsculas (se escapan los caracteres de regex).
@@ -36,6 +39,8 @@ function buildCrud(model, {
   beforeCreate,
   beforeUpdate,
   afterCreate,
+  afterUpdate,
+  afterRemove,
   ownerField = null,
   ownerMatch = null,
   extraFilters = null,
@@ -182,11 +187,16 @@ function buildCrud(model, {
       if (!assertOwnership(req, doc)) {
         return res.status(403).json({ success: false, message: 'No tienes acceso a este registro.' });
       }
+      const previous = doc.toObject({ versionKey: false });
       let body = { ...req.body };
       forceOwner(req, body);
       if (beforeUpdate) body = (await beforeUpdate(body, req)) || body;
       Object.assign(doc, body);
       await doc.save();
+      if (afterUpdate) {
+        // Hook no bloqueante: nunca debe romper la actualización ni la petición.
+        Promise.resolve(afterUpdate(doc, req, previous)).catch(() => {});
+      }
       if (populate.length) await doc.populate(populate);
       res.json({ success: true, data: doc });
     }),
@@ -200,6 +210,10 @@ function buildCrud(model, {
         return res.status(403).json({ success: false, message: 'No tienes acceso a este registro.' });
       }
       await doc.deleteOne();
+      if (afterRemove) {
+        // Hook no bloqueante: nunca debe romper el borrado ni la petición.
+        Promise.resolve(afterRemove(doc, req)).catch(() => {});
+      }
       res.json({ success: true, message: 'Registro eliminado' });
     }),
   };

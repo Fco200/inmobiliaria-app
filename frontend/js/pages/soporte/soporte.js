@@ -979,10 +979,26 @@ window.SoportePanel = (() => {
     if (logSocket) { try { logSocket.removeAllListeners(); logSocket.disconnect(); } catch (e) { /* ignore */ } logSocket = null; }
   }
 
+  // Cierre forzado de la sesión de soporte (la revocaron desde otra parte o
+  // desde el propio panel). Vuelve al login mostrando el motivo.
+  function panelLogout(message) {
+    if (message) {
+      try { localStorage.setItem('crm_logout_msg', String(message)); } catch (e) { /* ignore */ }
+    }
+    clearSession();
+    try {
+      if (logSocket) { logSocket.removeAllListeners(); logSocket.disconnect(); }
+    } catch (e) { /* ignore */ }
+    logSocket = null;
+    window.location.replace('index.html');
+  }
+
   function startLogs() {
     if (logTimer || logSocket) return;
     // Conexión en tiempo real: si hay Socket.io disponible se escucha el evento
-    // 'server-log'; si no, se cae en un polling cada 4 segundos.
+    // 'server-log'; si no, se cae en un polling cada 4 segundos. Además, el
+    // panel se mantiene al día con la lista de sesiones ('sessions-changed') y
+    // se cierra solo si su propia sesión es revocada ('session-revoked').
     try {
       if (window.io && typeof window.io === 'function') {
         const socket = window.io(window.AppConfig.BASE_URL || window.AppConfig.API_URL, {
@@ -990,7 +1006,16 @@ window.SoportePanel = (() => {
           auth: { token: getToken() },
           reconnectionAttempts: 3,
         });
-        socket.on('connect', () => socket.on('server-log', pushLiveLog));
+        socket.on('connect', () => {
+          socket.on('server-log', pushLiveLog);
+          socket.on('sessions-changed', () => {
+            const pane = document.getElementById('pane-sesiones');
+            if (pane && pane.classList.contains('active')) renderSesiones();
+          });
+          socket.on('session-revoked', (payload) => {
+            panelLogout((payload && payload.message) || 'Tu sesión de soporte fue cerrada. Inicia sesión de nuevo.');
+          });
+        });
         socket.on('disconnect', () => {});
         logSocket = socket;
       }

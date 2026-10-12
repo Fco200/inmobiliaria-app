@@ -1,12 +1,14 @@
 {
-  "version": "2.9",
+  "version": "2.11",
   "channel": "estable",
   "title": "Actualización de la aplicación",
   "date": "2026-10-12",
   "notes": [
-    "Todas las notificaciones llegan al celular aunque esté bloqueado: citas, tareas, clientes asignados, negocios y cambios de etapa.",
-    "Mensajes de los chats grupeales (Equipo y Soporte) llegan también como notificación al celular de todos los participantes.",
-    "Los anuncios y las reuniones nuevas se notifican al celular de todo el equipo al instante.",
-    "Recordatorio: activa las notificaciones en cada dispositivo para recibirlas; en iPhone agrégalo a la pantalla de inicio."
+    "Recordatorios al celular: la app avisa antes de tus tareas y citas, y te alerta de citas vencidas sin cerrar.",
+    "Alertas de inventario: recibes un aviso cuando una propiedad asignada lleva una semana sin publicar.",
+    "Historial de cambios del cliente: consulta quién cambió cada dato y cuándo, además de los movimientos de etapa.",
+    "Firma digital en Formatos: la firma capturada en pantalla ahora queda estampada en el PDF generado.",
+    "Metas con avance: las metas atrasadas se marcan con una advertencia para ubicarlas de inmediato.",
+    "Exporta a CSV desde Clientes, Gastos, Actividad y el Reporte de gerencia para tu análisis externo."
   ]
 }

@@ -45,6 +45,9 @@ window.Pages.management = {
           <div>
             <button class="btn btn-primary" type="button" data-apply>Generar reporte</button>
           </div>
+          <div>
+            <button class="btn btn-secondary" type="button" data-mgr-csv>&#11015;&nbsp; Exportar CSV</button>
+          </div>
         </div>
       </div>
       <div id="mgr-cards" class="advisor-grid">
@@ -72,6 +75,7 @@ window.Pages.management = {
               ${users.map((u) => `<option value="${u._id}">${UI.escapeHtml(u.name)}</option>`).join('')}
             </select>
             <button class="btn btn-secondary btn-sm" type="button" data-activity-refresh>&#8635;&nbsp; Actualizar</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-activity-csv>&#11015;&nbsp; CSV</button>
           </div>
         </div>
         <div id="mgr-activity-feed"><div class="loading">Cargando actividad...</div></div>
@@ -309,8 +313,7 @@ window.Pages.management = {
         });
     }
 
-    async function load() {
-      contentEl.innerHTML = '<div class="loading">Generando reporte...</div>';
+    function reportParams() {
       const params = {
         userId: container.querySelector('#mgr-user').value,
       };
@@ -318,6 +321,12 @@ window.Pages.management = {
       const to = container.querySelector('#mgr-to').value;
       if (from) params.from = new Date(from).toISOString();
       if (to) params.to = new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
+      return params;
+    }
+
+    async function load() {
+      contentEl.innerHTML = '<div class="loading">Generando reporte...</div>';
+      const params = reportParams();
 
       try {
         const r = await API.reports.management(params);
@@ -392,6 +401,27 @@ window.Pages.management = {
     });
     const applyBtn = container.querySelector('[data-apply]');
     if (applyBtn) applyBtn.addEventListener('click', load);
+    const mgrCsvBtn = container.querySelector('[data-mgr-csv]');
+    if (mgrCsvBtn) mgrCsvBtn.addEventListener('click', async () => {
+      try {
+        UI.toast('Generando CSV del reporte...', 'info');
+        await API.reports.managementCsv(reportParams());
+        UI.toast('CSV del reporte exportado', 'success');
+      } catch (error) {
+        UI.toast(error.message, 'error');
+      }
+    });
+    const activityCsvBtn = container.querySelector('[data-activity-csv]');
+    if (activityCsvBtn) activityCsvBtn.addEventListener('click', async () => {
+      try {
+        const userId = activityUserEl ? activityUserEl.value : '';
+        UI.toast('Generando CSV de actividad...', 'info');
+        await API.activity.exportCsv(userId ? { user: userId } : {});
+        UI.toast('CSV de actividad exportado', 'success');
+      } catch (error) {
+        UI.toast(error.message, 'error');
+      }
+    });
     load();
   },
 };

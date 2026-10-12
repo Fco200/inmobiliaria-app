@@ -576,6 +576,44 @@ const generarPDF = async (req, res) => {
       }
     });
 
+    // 4) Firma digital: si el formulario incluyó la firma dibujada (PNG en
+    //    base64), se incrusta sobre el área inferior de la última página.
+    const firmaDataUrl = typeof values.firma === 'string' && values.firma.startsWith('data:image/png;base64,')
+      ? values.firma.slice('data:image/png;base64,'.length)
+      : null;
+    if (firmaDataUrl && pageCount) {
+      try {
+        const png = await output.embedPng(Buffer.from(firmaDataUrl, 'base64'));
+        const last = copiedPages[pageCount - 1];
+        const w = last.getWidth();
+        const h = last.getHeight();
+        const ratio = png.width / png.height || 3;
+        const boxH = 44;
+        const boxW = Math.min(200, boxH * ratio, w * 0.5);
+        const x = w * 0.08;
+        const y = 44;
+        last.drawRectangle({
+          x: x - 4,
+          y: y - 4,
+          width: boxW + 8,
+          height: boxH + 20,
+          color: rgb(1, 1, 1),
+          borderColor: rgb(0.4, 0.35, 0.5),
+          borderWidth: 0.8,
+        });
+        last.drawImage(png, { x, y, width: boxW, height: boxH });
+        last.drawText('Firma digital', {
+          x,
+          y: y + boxH + 8,
+          size: 8,
+          font: helvetica,
+          color: rgb(0.42, 0.42, 0.5),
+        });
+      } catch (firmaError) {
+        console.warn('[Formatos] No se pudo incrustar la firma en el PDF:', firmaError.message);
+      }
+    }
+
     const modifiedPdfBytes = await output.save();
     const safeNombre = String(config.nombre || 'formato').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'formato';
     const fileName = `${safeNombre}_${Date.now()}.pdf`;

@@ -1,6 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
+const { toCsv, sendCsv } = require('../utils/csv');
 const {
   Client, Appointment, Business, Expense, Ticket, User, Task, Goal,
 } = require('../models');
@@ -94,11 +95,9 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
   };
 }
 
-const management = asyncHandler(async (req, res) => {
-  if (!['admin', 'gerencia'].includes(req.user.role.code)) {
-    return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
-  }
-
+// Prepara los indicadores por asesor (solo gerencia/admin). Compartido entre el
+// JSON (GET /management) y el CSV (GET /management/export).
+async function buildManagementData(req) {
   const { from, to, userId, propertyType, operationType, businessStage } = req.query;
 
   const advisors = await User.find({ status: 'activo' })
@@ -157,15 +156,72 @@ const management = asyncHandler(async (req, res) => {
   const grand = totals.activeBusinesses + totals.concludedBusinesses + totals.cancelledBusinesses;
   totals.conversion = grand ? Math.round((totals.concludedBusinesses / grand) * 100) : 0;
 
-  res.json({
-    success: true,
-    data: {
-      from: from || null,
-      to: to || null,
-      totals,
-      byUser: rows,
-    },
-  });
+  return {
+    from: from || null,
+    to: to || null,
+    totals,
+    byUser: rows,
+  };
+}
+
+const management = asyncHandler(async (req, res) => {
+  if (!['admin', 'gerencia'].includes(req.user.role.code)) {
+    return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
+  }
+
+  const data = await buildManagementData(req);
+  res.json({ success: true, data });
 });
 
-module.exports = { management };
+const managementCsv = asyncHandler(async (req, res) => {
+  if (!['admin', 'gerencia'].includes(req.user.role.code)) {
+    return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
+  }
+
+  const { byUser } = await buildManagementData(req);
+  const rows = byUser.map((r) => ({
+    asesor: r.userName || '',
+    prospectos: r.prospects || 0,
+    contactos: r.contacts || 0,
+    citas: r.appointments || 0,
+    tareas: r.tasks || 0,
+    negociaciones: r.negotiations || 0,
+    promesas: r.promises || 0,
+    cierres: r.closures || 0,
+    valorCierres: Number(r.closureValue) || 0,
+    comision: Number(r.commission) || 0,
+    cancelaciones: r.cancellations || 0,
+    negociosActivos: r.activeBusinesses || 0,
+    concluidos: r.concludedBusinesses || 0,
+    cancelados: r.cancelledBusinesses || 0,
+    inversion: Number(r.investment) || 0,
+    ticketsGenerados: r.ticketsGenerated || 0,
+    ticketsCobrados: r.ticketsCollected || 0,
+    metas: r.goals || 0,
+    conversion: r.conversion || 0,
+  }));
+
+  sendCsv(res, 'reporte-gerencia.csv', toCsv(rows, [
+    { key: 'asesor', label: 'Asesor' },
+    { key: 'prospectos', label: 'Prospectos' },
+    { key: 'contactos', label: 'Contactos' },
+    { key: 'citas', label: 'Citas' },
+    { key: 'tareas', label: 'Tareas' },
+    { key: 'negociaciones', label: 'Negociaciones' },
+    { key: 'promesas', label: 'Promesas' },
+    { key: 'cierres', label: 'Cierres' },
+    { key: 'valorCierres', label: 'Valor de cierres' },
+    { key: 'comision', label: 'Comisión' },
+    { key: 'cancelaciones', label: 'Cancelaciones' },
+    { key: 'negociosActivos', label: 'Negocios activos' },
+    { key: 'concluidos', label: 'Negocios concluidos' },
+    { key: 'cancelados', label: 'Negocios cancelados' },
+    { key: 'inversion', label: 'Inversión (gastos)' },
+    { key: 'ticketsGenerados', label: 'Tickets generados' },
+    { key: 'ticketsCobrados', label: 'Tickets cobrados' },
+    { key: 'metas', label: 'Metas activas' },
+    { key: 'conversion', label: 'Conversión (%)' },
+  ]));
+});
+
+module.exports = { management, managementCsv };

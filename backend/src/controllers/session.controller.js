@@ -2,7 +2,8 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Session, User } = require('../models');
-const { hashToken } = require('../services/session.service');
+const sessionService = require('../services/session.service');
+const { hashToken } = sessionService;
 
 const BOSS_ROLES = ['admin', 'gerencia', 'superadmin'];
 
@@ -50,7 +51,7 @@ const revoke = asyncHandler(async (req, res) => {
   }
 
   const isCurrent = session.tokenHash === hashToken(req.token);
-  await Session.deleteOne({ _id: session._id });
+  await sessionService.revokeSession(session, isCurrent ? 'SELF_REVOKED' : 'ADMIN_REVOKED');
 
   res.json({
     success: true,
@@ -61,14 +62,15 @@ const revoke = asyncHandler(async (req, res) => {
 
 const revokeAllMine = asyncHandler(async (req, res) => {
   const currentHash = hashToken(req.token);
-  const result = await Session.deleteMany({
-    user: req.user._id,
-    tokenHash: { $ne: currentHash },
-  });
+  const result = await sessionService.revokeUserSessionsExcept(
+    req.user._id,
+    currentHash,
+    'SELF_LOGOUT_OTHERS'
+  );
   res.json({
     success: true,
     message: 'Se cerraron las demás sesiones',
-    data: { closed: result.deletedCount || 0 },
+    data: { closed: result.closed },
   });
 });
 
@@ -76,11 +78,11 @@ const revokeUserSessions = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.userId);
   if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
-  const result = await Session.deleteMany({ user: user._id });
+  const result = await sessionService.revokeUserSessions(user._id, 'ADMIN_REVOKED');
   res.json({
     success: true,
     message: `Sesiones de ${user.name} cerradas`,
-    data: { closed: result.deletedCount || 0 },
+    data: { closed: result.closed },
   });
 });
 

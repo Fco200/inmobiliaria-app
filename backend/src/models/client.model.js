@@ -94,6 +94,19 @@ const clientSchema = new Schema(
       },
     ],
 
+    // Bitácora de CAMBIOS de campos (quién, qué y cuándo): se llena en cada
+    // edición de perfil o movimiento de etapa. Complementa a historialEtapas.
+    historialCambios: [
+      {
+        campo: { type: String, trim: true },
+        campoLabel: { type: String, trim: true },
+        anterior: { type: Schema.Types.Mixed, default: null },
+        nuevo: { type: Schema.Types.Mixed, default: null },
+        usuario: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+        fecha: { type: Date, default: Date.now },
+      },
+    ],
+
     // ── Estado del embudo y del expediente ──────────────────────────────
     status: {
       type: String,

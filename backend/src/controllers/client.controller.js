@@ -5,8 +5,9 @@ const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
 const { Client, Appointment, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
-const { logActivity } = require('../services/log.service');
+const { logActivity, logAudit } = require('../services/log.service');
 const { ensure } = require('../services/notification.service');
+const { toCsv, sendCsv } = require('../utils/csv');
 
 // Etapas vigentes del embudo, en orden. 'PERFILADO' volvió a ser una etapa
 // real (se recorre antes de la cita); 'SEGUIMIENTO' es la que sigue a la cita.
@@ -25,6 +26,72 @@ const STAGE_TO_FUNNEL = {
 // Campos que el cliente puede editar desde "Editar perfil". `vigencia`
 // se retiró del formulario, por eso ya no se acepta desde la API.
 const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio', 'medioOtro'];
+
+// Etiquetas legibles de los campos rastreados en el historial de cambios.
+const CAMPO_LABELS = {
+  nombre: 'Nombre',
+  telefono: 'Teléfono',
+  email: 'Correo',
+  medio: 'Medio de contacto',
+  medioOtro: 'Medio (detalle)',
+  servicio: 'Operación',
+  servicioOtro: 'Operación (detalle)',
+  tipoPropiedad: 'Tipo de propiedad',
+  tipoPropiedadOtro: 'Tipo de propiedad (detalle)',
+  queBusca: 'Qué busca',
+  zona: 'Zona',
+  formaPago: 'Forma de pago',
+  formaPagoOtro: 'Forma de pago (detalle)',
+  capacidad: 'Capacidad de pago',
+  notasGenerales: 'Notas generales',
+  asesorAsignado: 'Asesor asignado',
+};
+
+// Serie comparación de valores: nulos/vacios e ids de ObjectId cuentan como "".
+function normalizarComparable(val) {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') return JSON.stringify(val);
+  return String(val).trim();
+}
+
+// Guarda los cambios detectados en historialCambios + en la tabla de auditoría.
+function registrarCambios(client, userId, changes) {
+  if (!changes || !changes.length) return;
+  changes.forEach((c) => {
+    client.historialCambios.push({
+      campo: c.campo,
+      campoLabel: c.campoLabel || CAMPO_LABELS[c.campo] || c.campo,
+      anterior: c.anterior || null,
+      nuevo: c.nuevo || null,
+      usuario: userId,
+      fecha: new Date(),
+    });
+    logAudit({
+      user: userId,
+      action: 'actualizacion',
+      entity: 'Client',
+      entityId: client._id,
+      field: c.campo,
+      previousValue: c.anterior || null,
+      newValue: c.nuevo || null,
+      ip: '',
+    });
+  });
+}
+
+// Compara la fotografía previa con el body y devuelve la lista de cambios.
+function diffCampos(snapshot, body) {
+  const changes = [];
+  Object.keys(CAMPO_LABELS).forEach((campo) => {
+    if (!(campo in body)) return;
+    const anterior = normalizarComparable(snapshot[campo]);
+    const nuevo = normalizarComparable(body[campo]);
+    if (anterior !== nuevo) {
+      changes.push({ campo, anterior: snapshot[campo] || null, nuevo: body[campo] || null });
+    }
+  });
+  return changes;
+}
 
 // Los formularios envían `null` en los campos vacíos. Se descartan: un campo
 // sin llenar no debe bloquear la validación (p. ej. el correo, que es
@@ -207,6 +274,7 @@ const update = asyncHandler(async (req, res) => {
   }
 
   const previousEtapa = client.etapaActual;
+  const snapshot = Object.fromEntries(Object.keys(CAMPO_LABELS).map((k) => [k, client[k]]));
   Object.assign(client, body);
 
   // Cambio de etapa desde la edición: sincroniza embudo y bitácora sin exigir nota.
@@ -221,6 +289,13 @@ const update = asyncHandler(async (req, res) => {
       fecha: new Date(),
     });
   }
+
+  // Bitácora de cambios de campos (quién, qué y cuándo) + Auditoria.
+  const changes = diffCampos(snapshot, body);
+  if (previousEtapa !== body.etapaActual) {
+    changes.push({ campo: 'etapaActual', campoLabel: 'Etapa', anterior: previousEtapa || null, nuevo: body.etapaActual || null });
+  }
+  registrarCambios(client, req.user._id, changes);
 
   await client.save();
   await client.populate('asesorAsignado');
@@ -261,6 +336,7 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
   // Datos complementarios del destino: perfil, cita o cierre.
   // `vigencia` ya no forma parte del formulario, por eso no se acepta.
   const datosEtapa = (body.datosEtapa && typeof body.datosEtapa === 'object') ? body.datosEtapa : {};
+  const snapshotEtapa = Object.fromEntries(Object.keys(CAMPO_LABELS).map((k) => [k, client[k]]));
   PROFILE_FIELDS.forEach((field) => {
     if (datosEtapa[field] !== undefined && datosEtapa[field] !== null && String(datosEtapa[field]).trim() !== '') {
       client[field] = datosEtapa[field];
@@ -314,6 +390,14 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
   await client.save();
   await client.populate('asesorAsignado');
 
+  // Bitácora de cambios del perfil + el movimiento de etapa (y Auditoria).
+  const aplicaCapacidad = datosEtapa.capacidad !== undefined && datosEtapa.capacidad !== null
+    && String(datosEtapa.capacidad).trim() !== '' && !isNaN(Number(datosEtapa.capacidad));
+  const etpChanges = diffCampos(snapshotEtapa, datosEtapa)
+    .filter((c) => c.campo !== 'capacidad' || aplicaCapacidad);
+  etpChanges.push({ campo: 'etapaActual', campoLabel: 'Etapa', anterior: previousEtapa, nuevo: etapa });
+  registrarCambios(client, req.user._id, etpChanges);
+
   await logActivity({
     entityType: 'Client',
     entityId: client._id,
@@ -342,6 +426,9 @@ const registrarLlamada = asyncHandler(async (req, res) => {
 
   client.totalLlamadas = (client.totalLlamadas || 0) + 1;
   client.ultVez = new Date();
+  registrarCambios(client, req.user._id, [
+    { campo: 'totalLlamadas', campoLabel: 'Llamadas', anterior: client.totalLlamadas - 1, nuevo: client.totalLlamadas },
+  ]);
   await client.save();
   await client.populate('asesorAsignado');
 
@@ -372,6 +459,22 @@ const historial = asyncHandler(async (req, res) => {
   res.json({ success: true, data: items });
 });
 
+const historialCambios = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id);
+  if (!client) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+  if (!assertOwnership(req, client)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
+  }
+
+  await client.populate('historialCambios.usuario', 'name');
+
+  const items = (client.historialCambios || [])
+    .slice()
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  res.json({ success: true, data: items });
+});
+
 const remove = asyncHandler(async (req, res) => {
   const client = await Client.findById(req.params.id);
   if (!client) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
@@ -392,4 +495,54 @@ const remove = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Cliente eliminado' });
 });
 
-module.exports = { list, get, create, update, remove, cambiarEtapa, registrarLlamada, historial, conteoEtapas };
+// Exporta los clientes a CSV con el mismo alcance del listado y sus filtros
+// principales (etapa, operación y tipo de propiedad).
+const exportCsv = asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.etapaActual) filter.etapaActual = req.query.etapaActual;
+  if (req.query.servicio) filter.servicio = req.query.servicio;
+  if (req.query.tipoPropiedad) filter.tipoPropiedad = req.query.tipoPropiedad;
+  if (!isBoss(req)) {
+    filter.asesorAsignado = req.user._id;
+  } else if (req.query.asesor) {
+    filter.asesorAsignado = req.query.asesor;
+  }
+
+  const items = await Client.find(filter)
+    .populate('asesorAsignado', 'name')
+    .sort({ createdAt: -1 })
+    .limit(5000);
+
+  const rows = items.map((c) => ({
+    nombre: c.nombre || '',
+    telefono: c.telefono || '',
+    email: c.email || '',
+    medio: c.medio || '',
+    operacion: c.servicio || '',
+    tipoPropiedad: c.tipoPropiedad || '',
+    zona: c.zona || '',
+    capacidad: Number(c.capacidad) || 0,
+    etapa: c.etapaActual || '',
+    asesor: (c.asesorAsignado && c.asesorAsignado.name) || '',
+    fechaRegistro: c.fechaRegistro ? new Date(c.fechaRegistro).toISOString() : '',
+    notas: c.notasGenerales || '',
+  }));
+
+  sendCsv(res, 'clientes.csv', toCsv(rows, [
+    { key: 'nombre', label: 'Nombre' },
+    { key: 'telefono', label: 'Teléfono' },
+    { key: 'email', label: 'Correo' },
+    { key: 'medio', label: 'Medio de contacto' },
+    { key: 'operacion', label: 'Operación' },
+    { key: 'tipoPropiedad', label: 'Tipo de propiedad' },
+    { key: 'zona', label: 'Zona' },
+    { key: 'capacidad', label: 'Capacidad de pago' },
+    { key: 'etapa', label: 'Etapa' },
+    { key: 'asesor', label: 'Asesor' },
+    { key: 'fechaRegistro', label: 'Fecha de registro' },
+    { key: 'notas', label: 'Notas' },
+  ]));
+});
+
+module.exports = { list, get, create, update, remove, cambiarEtapa, registrarLlamada, historial, historialCambios, conteoEtapas, exportCsv };

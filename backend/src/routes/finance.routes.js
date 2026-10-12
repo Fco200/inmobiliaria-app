@@ -20,6 +20,7 @@ goalRouter.put('/:id', idParam, goalRules, goalController.update);
 goalRouter.delete('/:id', idParam, goalController.remove);
 
 expenseRouter.get('/', expenseController.list);
+expenseRouter.get('/export', expenseController.exportCsv);
 expenseRouter.post('/', expenseRules, expenseController.create);
 expenseRouter.get('/:id', idParam, expenseController.get);
 expenseRouter.put('/:id', idParam, expenseRules, expenseController.update);

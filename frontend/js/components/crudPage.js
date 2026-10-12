@@ -65,6 +65,7 @@ function crudPage(container, config) {
       ${filterControls}
       <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
       <button class="btn btn-secondary btn-sm" type="button" data-export-pdf title="Exportar a PDF (imprime o guarda como PDF)">&#128424;&nbsp; PDF</button>
+      ${config.csvExport ? `<button class="btn btn-secondary btn-sm" type="button" data-export-csv title="Exportar a CSV">&#11015;&nbsp; CSV</button>` : ''}
     `;
     el.querySelector('[data-search]').addEventListener('input', (e) => {
       state.q = e.target.value;
@@ -92,6 +93,8 @@ function crudPage(container, config) {
     }
     el.querySelector('[data-export-xls]').addEventListener('click', () => exportXls());
     el.querySelector('[data-export-pdf]').addEventListener('click', () => exportPdf());
+    const csvEl = el.querySelector('[data-export-csv]');
+    if (csvEl) csvEl.addEventListener('click', () => config.csvExport());
     return el;
   }
 

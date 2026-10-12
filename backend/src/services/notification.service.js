@@ -10,6 +10,7 @@ const {
   Property,
   Client,
   User,
+  Inventory,
 } = require('../models');
 
 let ioRef = null;
@@ -127,6 +128,24 @@ async function generateForUser(userId) {
     created.push('cita_proxima');
   }
 
+  // Vencimientos: citas cuya fecha ya pasó y siguen sin marcar su resultado.
+  const expiredAppointments = await Appointment.find({
+    user: userId,
+    status: { $in: ['pendiente', 'confirmada'] },
+    date: { $lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+  }).populate('client');
+  for (const app of expiredAppointments) {
+    await ensure({
+      type: 'cita_vencida',
+      key: `appointment-expired-${app._id}`,
+      title: 'Cita sin avance',
+      message: `La cita con ${app.client ? app.client.name : 'sin cliente'} del ${app.date.toLocaleDateString('es-MX')} ya pasó y sigue sin registrar resultado.`,
+      userId,
+      data: { entityId: app._id, date: app.date },
+    });
+    created.push('cita_vencida');
+  }
+
   const overdue = await Task.find({
     assignedTo: userId,
     status: { $in: ['pendiente', 'en_proceso'] },
@@ -142,6 +161,25 @@ async function generateForUser(userId) {
       data: { entityId: t._id, date: t.date },
     });
     created.push('tarea_vencida');
+  }
+
+  // Recordatorio de tarea próxima (próximas 2 horas): aunque el dispositivo
+  // esté bloqueado llega el push vía el hook post('save') de Notification.
+  const nearTasks = await Task.find({
+    assignedTo: userId,
+    status: { $in: ['pendiente', 'en_proceso'] },
+    date: { $gte: now, $lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
+  });
+  for (const t of nearTasks) {
+    await ensure({
+      type: 'tarea_proxima',
+      key: `task-near-${t._id}`,
+      title: 'Tarea próxima',
+      message: `Tienes la tarea "${t.title}" a las ${t.date.toLocaleTimeString('es-MX', DATE_OPTS)}.`,
+      userId,
+      data: { entityId: t._id, date: t.date },
+    });
+    created.push('tarea_proxima');
   }
 
   const nearGoals = await Goal.find({
@@ -255,6 +293,26 @@ async function generateForUser(userId) {
       data: { entityId: p._id },
     });
     created.push('propiedad_apartada');
+  }
+
+  // Stock: propiedades del inventario del usuario sin publicar hace +7 días.
+  const SAME_AS_UNPUBLISHED = 7 * 24 * 60 * 60 * 1000;
+  const unpublishedInventory = await Inventory.find({ assignedAgent: userId }).populate('property');
+  for (const inv of unpublishedInventory) {
+    if (inv.isPublished) continue;
+    const since = inv.unpublishedAt || inv.createdAt;
+    const days = Math.floor((now.getTime() - new Date(since).getTime()) / (24 * 60 * 60 * 1000));
+    if (!since || days < 7) continue;
+    const prop = inv.property || {};
+    await ensure({
+      type: 'propiedad_sin_publicar',
+      key: `inv-unpublished-${inv._id}`,
+      title: 'Propiedad sin publicar',
+      message: `La propiedad en ${prop.zone || ''} ${prop.city || ''} lleva ${days} días en tu inventario sin publicar.`,
+      userId,
+      data: { entityId: inv.property ? inv.property._id : null },
+    });
+    created.push('propiedad_sin_publicar');
   }
 
   return created;

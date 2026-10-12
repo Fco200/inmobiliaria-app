@@ -14,9 +14,12 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         'nueva_tarea',
         'tarea_vencida',
+        'tarea_proxima',
         'cita_proxima',
+        'cita_vencida',
         'cita_recordatorio_24h',
         'cita_recordatorio_1h',
+        'propiedad_sin_publicar',
         'documento_pendiente',
         'documento_rechazado',
         'avaluo_pendiente',

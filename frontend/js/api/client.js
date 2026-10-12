@@ -203,6 +203,26 @@ window.ApiClient = (() => {
         return response.blob();
       })();
     },
+    getBlob: (path, params) => {
+      const headers = {};
+      const token = getToken();
+      if (token && !isExpired()) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      return (async () => {
+        const response = await fetch(`${BASE_URL}${path}${buildQuery(params)}`, { method: 'GET', headers });
+        if (response.status === 401 && getToken()) {
+          handleUnauthorized();
+          throw new Error('Tu sesión expiró. Inicia sesión nuevamente.');
+        }
+        if (!response.ok) {
+          let data = null;
+          try { data = await response.json(); } catch (e) { /* ignore */ }
+          throw new Error((data && data.message) || `Error ${response.status}`);
+        }
+        return response.blob();
+      })();
+    },
     setToken: (token) => localStorage.setItem(TOKEN_KEY, token),
     clearToken,
     getToken,

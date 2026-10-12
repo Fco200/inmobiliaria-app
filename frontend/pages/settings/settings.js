@@ -47,6 +47,14 @@ window.Pages.settings = {
     `;
 
     const tabContent = container.querySelector('#tab-content');
+    let currentTab = null;
+
+    // Refresco en tiempo real: cuando alguien abre o cierra una sesión en
+    // cualquier dispositivo, el servidor emite 'sessions-changed' y esta
+    // pestaña se recarga sola si está visible.
+    window.addEventListener('sessions-changed', () => {
+      if (currentTab === 'sessions') renderSessions();
+    });
 
     container.querySelectorAll('[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -54,6 +62,7 @@ window.Pages.settings = {
           b.classList.toggle('btn-primary', b === btn);
           b.classList.toggle('btn-secondary', b !== btn);
         });
+        currentTab = btn.dataset.tab;
         if (btn.dataset.tab === 'users') renderUsers();
         else if (btn.dataset.tab === 'roles') renderRoles();
         else if (btn.dataset.tab === 'register') renderRegister();

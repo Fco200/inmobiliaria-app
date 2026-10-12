@@ -57,7 +57,11 @@ window.Pages.goals = {
       columns: [
         { key: 'name', label: 'Meta', render: (r) => (r.image ? `<img src="${UI.escapeHtml(window.AppConfig.resolveUrl(r.image))}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:8px;">` : '') + `<strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${UI.escapeHtml(r.description || '')}</small>` },
         { key: 'objectiveAmount', label: 'Objetivo', render: (r) => Format.currency(r.objectiveAmount) },
-        { key: 'currentResult', label: 'Avance', render: (r) => UI.progressBar((r.currentResult / r.objectiveAmount) * 100) },
+        { key: 'currentResult', label: 'Avance', render: (r) => {
+            const pct = (r.currentResult / r.objectiveAmount) * 100;
+            const behind = r.currentResult < expectedSoFar(r);
+            return `${UI.progressBar(pct)}<small style="color:${behind ? '#dc2626' : 'var(--text-muted)'};font-weight:${behind ? '700' : '400'};">${pct.toFixed(1)}% · ${behind ? 'Atrasada ⚠' : 'Al día'}</small>`;
+          } },
         { key: 'weekly', label: 'Meta semanal', render: (r) => `${Format.currency(weeklyTarget(r))}<br><small class="text-muted">Semana ${weeksElapsed(r)} de ${totalWeeks(r)} · esperado ${Format.currency(expectedSoFar(r))}</small>` },
         { key: 'missingAmount', label: 'Faltante', render: (r) => Format.currency(r.objectiveAmount - r.currentResult) },
         { key: 'projection', label: 'Proyección', render: (r) => `${Format.currency(r.projection)}<br><small class="text-muted">Al ritmo actual</small>` },

@@ -1,6 +1,19 @@
 'use strict';
 
 window.API = {
+  // Descarga un CSV desde el backend y dispara la descarga en el navegador.
+  downloadCsv: async (path, filename, params) => {
+    const blob = await ApiClient.getBlob(path, params);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
   auth: {
     login: (body) => ApiClient.post('/auth/login', body),
     me: () => ApiClient.get('/auth/me'),
@@ -62,7 +75,9 @@ window.API = {
     changeEtapa: (id, body) => ApiClient.post(`/clients/${id}/cambiar-etapa`, body),
     registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
     historial: (id) => ApiClient.get(`/clients/${id}/historial`),
+    historialCambios: (id) => ApiClient.get(`/clients/${id}/historial-cambios`),
     conteoEtapas: () => ApiClient.get('/clients/conteo-etapas'),
+    exportCsv: () => API.downloadCsv('/clients/export', 'clientes.csv'),
   },
 
   properties: {
@@ -129,6 +144,7 @@ window.API = {
     create: (body) => ApiClient.post('/expenses', body),
     update: (id, body) => ApiClient.put(`/expenses/${id}`, body),
     remove: (id) => ApiClient.remove(`/expenses/${id}`),
+    exportCsv: () => API.downloadCsv('/expenses/export', 'gastos.csv'),
   },
 
   dashboard: {
@@ -231,6 +247,7 @@ window.API = {
     list: (params) => ApiClient.get('/activity', params),
     // Borra todo el historial de actividad de mi cuenta.
     clearAll: () => ApiClient.remove('/activity/all'),
+    exportCsv: (params) => API.downloadCsv('/activity/export', 'actividad.csv', params),
   },
 
   interactions: {
@@ -241,6 +258,7 @@ window.API = {
 
   reports: {
     management: (params) => ApiClient.get('/reports/management', params),
+    managementCsv: (params) => API.downloadCsv('/reports/management/export', 'reporte-gerencia.csv', params),
   },
 
   assistant: {

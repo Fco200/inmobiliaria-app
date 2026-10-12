@@ -32,6 +32,7 @@ const { persistAndBroadcast, getOrCreateGeneralChat } = require('./chat.controll
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
 const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
+const sessionService = require('../services/session.service');
 const logger = require('../services/logger.service');
 const maintenanceService = require('../services/maintenance.service');
 
@@ -172,9 +173,10 @@ const actualizarUsuario = asyncHandler(async (req, res) => {
 
   await user.save({ validateBeforeSave: false });
 
-  // Si se desactiva un usuario, se cierran sus sesiones activas.
+  // Si se desactiva un usuario, se cierran sus sesiones activas y se avisa a
+  // los dispositivos conectados en tiempo real.
   if (status === 'inactivo') {
-    await Session.deleteMany({ user: user._id });
+    await sessionService.revokeUserSessions(user._id, 'USER_DEACTIVATED');
   }
 
   await logActivity({
@@ -218,8 +220,9 @@ const restablecerPassword = asyncHandler(async (req, res) => {
   user.lockUntil = null;
   await user.save();
 
-  // Invalida todas sus sesiones para que reingrese con la nueva contraseña.
-  await Session.deleteMany({ user: user._id });
+  // Invalida todas sus sesiones para que reingrese con la nueva contraseña,
+  // cerrando los dispositivos activos en tiempo real.
+  await sessionService.revokeUserSessions(user._id, 'PASSWORD_RESET');
 
   await logActivity({
     entityType: 'User',
@@ -510,7 +513,7 @@ const revocarSesionSoporte = asyncHandler(async (req, res) => {
 
   const currentHash = hashToken(req.token);
   const isCurrent = session.tokenHash === currentHash;
-  await Session.deleteOne({ _id: session._id });
+  await sessionService.revokeSession(session, isCurrent ? 'SELF_REVOKED' : 'ADMIN_REVOKED');
 
   res.json({
     success: true,
@@ -524,8 +527,8 @@ const revocarSesionesUsuarioSoporte = asyncHandler(async (req, res) => {
   if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
   const currentHash = hashToken(req.token);
-  const result = await Session.deleteMany({ user: user._id, tokenHash: { $ne: currentHash } });
-  res.json({ success: true, message: 'Sesiones cerradas', data: { cerradas: result.deletedCount || 0 } });
+  const result = await sessionService.revokeUserSessionsExcept(user._id, currentHash, 'ADMIN_REVOKED');
+  res.json({ success: true, message: 'Sesiones cerradas', data: { cerradas: result.closed } });
 });
 
 // ── Gestión de avisos / anuncios del equipo ─────────────────────────────────
@@ -1144,7 +1147,10 @@ const accionMasiva = asyncHandler(async (req, res) => {
     const token = req.token;
     const filter = token ? { tokenHash: { $ne: hashToken(token) } } : {};
     const result = await Session.deleteMany(filter);
-    if (io) io.emit('force-logout', { at: Date.now() });
+    if (io) {
+      io.emit('force-logout', { at: Date.now() });
+      io.emit('sessions-changed', {});
+    }
     await logActivity({ entityType: 'User', entityId: req.user._id, user: req.user._id, action: 'mass_logout', message: `Se cerraron ${result.deletedCount || 0} sesiones de todo el equipo` });
     return res.json({ success: true, message: `Se cerraron ${result.deletedCount || 0} sesiones. Solo se conserva la tuya.` });
   }

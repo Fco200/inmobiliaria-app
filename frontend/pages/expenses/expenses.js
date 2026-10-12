@@ -37,6 +37,7 @@ window.Pages.expenses = {
         update: async (id, body) => { await uploadReceipt(body); return API.expenses.update(id, body); },
         remove: (id) => API.expenses.remove(id),
       },
+      csvExport: () => API.expenses.exportCsv(),
       columns: [
         { key: 'concept', label: 'Concepto', render: (r) => `<strong>${UI.escapeHtml(r.concept)}</strong><br><small class="text-muted">${UI.escapeHtml(r.activity || '')}</small>` },
         { key: 'category', label: 'Categoría', render: (r) => UI.badge(String(r.category || '').replace(/_/g, ' '), 'info') },

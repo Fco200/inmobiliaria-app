@@ -615,6 +615,16 @@ window.LoginPage = (() => {
     const form = document.getElementById('login-form');
     if (form) form.addEventListener('submit', submit);
 
+    // Motivo del cierre de sesión (tiempo real o expiración): lo guardó la
+    // app antes de redirigir aquí y se muestra al usuario al volver a entrar.
+    try {
+      const msg = localStorage.getItem('crm_logout_msg');
+      if (msg) {
+        setError(msg);
+        localStorage.removeItem('crm_logout_msg');
+      }
+    } catch (e) { /* sin almacenamiento */ }
+
     forgotPasswordFlow();
 
     const toggle = document.getElementById('btn-toggle-password');

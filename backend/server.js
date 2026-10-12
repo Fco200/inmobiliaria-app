@@ -24,9 +24,10 @@ const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const maintenanceJob = require('./src/jobs/maintenance.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { User } = require('./src/models');
+const { User, Session } = require('./src/models');
 const { getOrCreateGeneralChat, getOrCreateSupportChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
 const { setIo } = require('./src/services/notification.service');
+const sessionService = require('./src/services/session.service');
 const logger = require('./src/services/logger.service');
 
 async function start() {
@@ -72,9 +73,17 @@ async function start() {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (!token) return next(new Error('Autenticación requerida'));
       const decoded = jwt.verify(token, jwtSecret);
-      const user = await User.findById(decoded.id).select('name username role');
+      const user = await User.findById(decoded.id).select('name username role status');
       if (!user) return next(new Error('Usuario no encontrado'));
+      // Un usuario desactivado no puede mantener el socket abierto.
+      if (user.status !== 'activo') return next(new Error('Tu usuario está inactivo'));
+      // La sesión debe seguir vigente en la base de datos (revocada o expirada
+      // → rechazo). Así un dispositivo cuya sesión cerró el administrador queda
+      // desconectado al instante, incluso si intenta reconectar.
+      const session = await Session.findOne({ tokenHash: sessionService.hashToken(token) });
+      if (!session) return next(new Error('Tu sesión fue cerrada. Inicia sesión de nuevo.'));
       socket.user = user;
+      socket.sessionHash = session.tokenHash;
       next();
     } catch (err) {
       next(new Error('Token inválido'));
@@ -88,10 +97,15 @@ async function start() {
       usuario: socket.user && (socket.user.name || socket.user.username),
     }, 'socket');
 
-    // Cada usuario entra a su habitación privada (para avisos 1 a 1) y al
-    // canal grupal general del equipo.
+    // Cada usuario entra a su habitación privada (para avisos 1 a 1), al
+    // canal grupal general del equipo y a la sala de SU sesión: la sala
+    // `session:<hash>` recibe el evento 'session-revoked' cuando esa sesión
+    // concreta es cerrada, para que solo ese dispositivo pierda el acceso.
     if (socket.user && socket.user._id) {
       socket.join(`user:${socket.user._id.toString()}`);
+    }
+    if (socket.sessionHash) {
+      socket.join(sessionService.sessionRoom(socket.sessionHash));
     }
     socket.join('general');
 
@@ -152,6 +166,7 @@ async function start() {
 
   app.set('io', io);
   setIo(io);
+  sessionService.setIo(io);
   maintenanceJob.setIo(io);
   maintenanceJob.startMaintenanceJob();
 

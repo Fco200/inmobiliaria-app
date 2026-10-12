@@ -46,9 +46,11 @@ prospectingRouter.put('/:id', idParam, prospectingRules, prospectingController.u
 prospectingRouter.delete('/:id', idParam, prospectingController.remove);
 
 activityRouter.get('/', activityController.list);
+activityRouter.get('/export', activityController.exportCsv);
 activityRouter.delete('/all', activityController.clearMine);
 
 reportRouter.get('/management', reportController.management);
+reportRouter.get('/management/export', reportController.managementCsv);
 
 interactionRouter.get('/', interactionController.list);
 interactionRouter.post('/', interactionController.create);

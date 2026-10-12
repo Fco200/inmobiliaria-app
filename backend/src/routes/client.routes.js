@@ -15,11 +15,13 @@ const router = Router();
 router.use(protect);
 
 router.get('/', clientController.list);
+router.get('/export', clientController.exportCsv);
 router.post('/', clientRules, clientController.create);
 
 router.get('/conteo-etapas', clientController.conteoEtapas);
 
 router.get('/:id/historial', clientIdParam, clientController.historial);
+router.get('/:id/historial-cambios', clientIdParam, clientController.historialCambios);
 router.post('/:id/cambiar-etapa', clientIdParam, stageRules, clientController.cambiarEtapa);
 router.post('/:id/registrar-llamada', clientIdParam, clientController.registrarLlamada);
 

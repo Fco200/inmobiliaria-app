@@ -87,6 +87,7 @@ window.Pages.clients = {
       <div class="clients-toolbar">
         <input class="form-control" id="clients-search" type="search" placeholder="Buscar por nombre, teléfono o correo…">
         <button class="btn btn-primary" id="clients-add" type="button">+ Nuevo cliente</button>
+        <button class="btn btn-secondary" id="clients-csv" type="button">&#11015;&nbsp; Exportar CSV</button>
       </div>
       <details class="clients-filters" id="clients-filters-box">
         <summary>Filtros avanzados</summary>
@@ -292,6 +293,16 @@ window.Pages.clients = {
       searchTimer = setTimeout(() => { state.q = searchEl.value.trim(); state.page = 1; load(); }, 350);
     });
     if (addBtn) addBtn.addEventListener('click', () => openQuickCreate());
+    const csvBtn = container.querySelector('#clients-csv');
+    if (csvBtn) csvBtn.addEventListener('click', async () => {
+      try {
+        UI.toast('Generando CSV de clientes...', 'info');
+        await API.clients.exportCsv();
+        UI.toast('CSV de clientes exportado', 'success');
+      } catch (error) {
+        UI.toast(error.message, 'error');
+      }
+    });
     if (pipelineEl) pipelineEl.addEventListener('click', (e) => {
       const btn = e.target.closest('.pipeline-step');
       if (!btn || !pipelineEl.contains(btn)) return;
@@ -819,29 +830,54 @@ window.Pages.clients = {
     /* ── Bitácora de etapas ───────────────────────────────────────────── */
     async function openHistorialModal(record) {
       const modal = UI.openModal({
-        title: `Bitácora — ${esc(record.nombre)}`,
+        title: `Historial — ${esc(record.nombre)}`,
         body: '<div class="loading">Cargando historial…</div>',
-        size: 640,
+        size: 680,
       });
       const bodyEl = modal.bodyEl;
       try {
-        const items = (await API.clients.historial(record._id)) || [];
-        if (!Array.isArray(items) || !items.length) {
-          bodyEl.innerHTML = '<p class="text-muted">Aún no hay movimientos en la bitácora.</p>';
+        const [etapas, cambios] = await Promise.all([
+          API.clients.historial(record._id).catch(() => []),
+          API.clients.historialCambios(record._id).catch(() => []),
+        ]);
+        const etapasArr = Array.isArray(etapas) ? etapas : [];
+        const cambiosArr = Array.isArray(cambios) ? cambios : [];
+
+        if (!etapasArr.length && !cambiosArr.length) {
+          bodyEl.innerHTML = '<p class="text-muted">Aún no hay movimientos en el historial.</p>';
           return;
         }
+
+        const etapaItems = etapasArr.map((h) => {
+          const who = h.usuario && typeof h.usuario === 'object' && h.usuario.name ? h.usuario.name : (h.usuario ? h.usuario : 'Admin');
+          return `
+            <li>
+              <strong>${esc(h.etapaAnterior ? `${stageInfo(h.etapaAnterior).label} → ${stageInfo(h.etapaNueva || h.etapa).label}` : `Registro en ${stageInfo(h.etapaNueva || h.etapa).label}`)}</strong>
+              <div class="text-muted" style="font-size:12px;">${Format.dateTime(h.fecha)} · ${esc(who)}</div>
+              <div style="font-size:13px;">${esc(h.nota || '')}</div>
+            </li>`;
+        });
+
+        const cambioItems = cambiosArr.map((c) => {
+          const who = c.usuario && typeof c.usuario === 'object' && c.usuario.name ? c.usuario.name : (c.usuario ? c.usuario : 'Admin');
+          const anterior = c.anterior === null || c.anterior === undefined || c.anterior === '' ? '<em class="text-muted">vacío</em>' : esc(String(c.anterior));
+          const nuevo = c.nuevo === null || c.nuevo === undefined || c.nuevo === '' ? '<em class="text-muted">vacío</em>' : esc(String(c.nuevo));
+          return `
+            <li>
+              <strong>${esc(c.campoLabel || c.campo)}</strong>: ${anterior} <span class="text-muted">→</span> ${nuevo}
+              <div class="text-muted" style="font-size:12px;">${Format.dateTime(c.fecha)} · ${esc(who)}</div>
+            </li>`;
+        });
+
         bodyEl.innerHTML = `
-          <ul class="timeline">
-            ${items.map((h) => {
-              const who = h.usuario && typeof h.usuario === 'object' && h.usuario.name ? h.usuario.name : (h.usuario ? h.usuario : 'Admin');
-              return `
-              <li>
-                <strong>${esc(h.etapaAnterior ? `${stageInfo(h.etapaAnterior).label} → ${stageInfo(h.etapaNueva || h.etapa).label}` : `Registro en ${stageInfo(h.etapaNueva || h.etapa).label}`)}</strong>
-                <div class="text-muted" style="font-size:12px;">${Format.dateTime(h.fecha)} · ${esc(who)}</div>
-                <div style="font-size:13px;">${esc(h.nota || '')}</div>
-              </li>`;
-            }).join('')}
-          </ul>
+          ${cambioItems.length ? `
+            <h4 style="margin:0 0 10px;color:var(--primary);">✎ Cambios de perfil</h4>
+            <ul class="timeline" style="margin-bottom:22px;">${cambioItems.join('')}</ul>
+          ` : ''}
+          ${etapaItems.length ? `
+            <h4 style="margin:0 0 10px;color:var(--primary);">🔀 Movimientos de etapa</h4>
+            <ul class="timeline">${etapaItems.join('')}</ul>
+          ` : ''}
         `;
       } catch (error) {
         bodyEl.innerHTML = UI.errorAlert(error.message);

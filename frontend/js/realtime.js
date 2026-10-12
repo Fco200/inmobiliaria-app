@@ -341,6 +341,22 @@ window.Realtime = (() => {
     socket.on('new-message', onChatActivity);
     socket.on('receive-message', onChatActivity);
 
+    // Cierre de sesión puntual EN TIEMPO REAL: el servidor emite 'session-revoked'
+    // solo a la sala `session:<hash>` del dispositivo afectado. Ese dispositivo
+    // pierde el acceso al instante; los demás usuarios y dispositivos siguen
+    // con su sesión normal.
+    socket.on('session-revoked', (payload) => {
+      forceLogout((payload && payload.message) || 'Tu sesión fue cerrada. Inicia sesión de nuevo.');
+    });
+
+    // Las listas de sesiones (Configuración y Soporte) se refrescan solas
+    // cuando alguien abre o cierra una sesión en cualquier dispositivo.
+    socket.on('sessions-changed', () => {
+      try {
+        window.dispatchEvent(new CustomEvent('sessions-changed'));
+      } catch (e) { /* ignore */ }
+    });
+
     // Órdenes de mantenimiento masivo enviadas desde el Panel de Soporte.
     // Estas acciones pueden afectar a CUALQUIER dispositivo conectado.
     socket.on('force-update', () => {
@@ -364,12 +380,20 @@ window.Realtime = (() => {
       window.location.reload();
     });
     socket.on('force-logout', () => {
-      try {
-        localStorage.removeItem('crm_token');
-        localStorage.removeItem('crm_user');
-      } catch (e) { /* ignore */ }
-      window.location.replace('index.html');
+      forceLogout('Tu sesión fue cerrada.');
     });
+  }
+
+  // Cierra la sesión local: guarda un mensaje para la pantalla de login y
+  // limpia token/usuario almacenados antes de redirigir.
+  function forceLogout(message) {
+    try {
+      if (message) localStorage.setItem('crm_logout_msg', String(message));
+      localStorage.removeItem('crm_token');
+      localStorage.removeItem('crm_user');
+      localStorage.removeItem('crm_login_at');
+    } catch (e) { /* ignore */ }
+    window.location.replace('index.html');
   }
 
   function reset() {

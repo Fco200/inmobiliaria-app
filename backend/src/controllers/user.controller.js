@@ -4,6 +4,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { User, Role, Permission } = require('../models');
 const { logActivity } = require('../services/log.service');
+const sessionService = require('../services/session.service');
 
 const userCrud = buildCrud(User, {
   populate: ['role'],
@@ -32,6 +33,26 @@ const userCrud = buildCrud(User, {
       delete body.password;
     }
     return body;
+  },
+  // Al desactivar un usuario o cambiarle la contraseña (o eliminarlo), se
+  // revocan sus sesiones activas en tiempo real: el dispositivo afectado deja
+  // de tener acceso al instante, aunque siga abierto.
+  afterUpdate: async (doc, req, previous) => {
+    const prevStatus = previous && previous.status;
+    const wasActive = prevStatus === 'activo';
+    const nowInactive = doc.status === 'inactivo';
+    const body = req.body || {};
+    if (wasActive && nowInactive) {
+      await sessionService.revokeUserSessions(doc._id, 'USER_DEACTIVATED');
+      return;
+    }
+    if (body.password) {
+      const currentHash = sessionService.hashToken(req.token);
+      await sessionService.revokeUserSessionsExcept(doc._id, currentHash, 'PASSWORD_CHANGED');
+    }
+  },
+  afterRemove: async (doc) => {
+    if (doc && doc._id) await sessionService.revokeUserSessions(doc._id, 'USER_DEACTIVATED');
   },
 });
 

@@ -144,6 +144,66 @@ window.PushNotify = (() => {
     return result;
   }
 
+  // Muestra un aviso (una sola vez cada 7 días) invitando a activar las
+  // notificaciones del sistema. No pide permiso solo: espera a que el usuario
+  // toque "Activar", requisito de los navegadores (sobre todo iOS) para poder
+  // mostrar el diálogo de permiso.
+  const PROMPT_KEY = 'crm_push_prompt_dismissed_at';
+  const PROMPT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function promptIfNeeded() {
+    try {
+      if (!supported() || permission() !== 'default') return;
+      if (!window.ApiClient || !window.ApiClient.isAuthenticated()) return;
+      if (document.getElementById('push-prompt-banner')) return;
+      const dismissedAt = Number(localStorage.getItem(PROMPT_KEY) || 0);
+      if (dismissedAt && Date.now() - dismissedAt < PROMPT_COOLDOWN_MS) return;
+
+      const host = document.getElementById('app-content') || document.querySelector('.main');
+      if (!host) return;
+
+      const banner = document.createElement('div');
+      banner.id = 'push-prompt-banner';
+      banner.className = 'push-prompt-banner';
+      banner.innerHTML =
+        '<span class="push-prompt-icon">&#128276;</span>' +
+        '<div class="push-prompt-text">' +
+        '<strong>Activa las notificaciones</strong>' +
+        '<span>Recibe los avisos del CRM en tu teléfono, aunque la app esté cerrada.</span>' +
+        '</div>' +
+        '<button class="btn btn-primary btn-sm" type="button" data-push-enable>Activar</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-push-later>Ahora no</button>';
+
+      const rememberDismiss = () => {
+        try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch (error) { /* noop */ }
+      };
+      banner.querySelector('[data-push-later]').addEventListener('click', () => {
+        rememberDismiss();
+        banner.remove();
+      });
+      banner.querySelector('[data-push-enable]').addEventListener('click', async () => {
+        const btn = banner.querySelector('[data-push-enable]');
+        btn.disabled = true;
+        btn.textContent = 'Activando...';
+        try {
+          await enable();
+          banner.remove();
+          if (window.UI) window.UI.toast('Notificaciones activadas en este dispositivo', 'success');
+        } catch (error) {
+          btn.disabled = false;
+          btn.textContent = 'Activar';
+          if (window.UI) window.UI.toast(error.message, 'error');
+        }
+      });
+
+      if (host.parentNode && host.parentNode.classList.contains('main')) {
+        host.parentNode.insertBefore(banner, host);
+      } else {
+        host.insertBefore(banner, host.firstChild);
+      }
+    } catch (error) { /* noop */ }
+  }
+
   // El Service Worker detectó que el servicio de push rotó la suscripción
   // (pushsubscriptionchange). Se re-sincroniza con el servidor sin volver a
   // pedir permiso; así las notificaciones no se pierden aunque el usuario lleve
@@ -157,5 +217,5 @@ window.PushNotify = (() => {
     });
   }
 
-  return { supported, permission, enable, disable, status, syncAfterLogin, sendTest, urlBase64ToUint8Array };
+  return { supported, permission, enable, disable, status, syncAfterLogin, sendTest, promptIfNeeded, urlBase64ToUint8Array };
 })();

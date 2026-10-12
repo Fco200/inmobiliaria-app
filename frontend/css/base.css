@@ -3220,6 +3220,29 @@ body.page-chat .assistant-panel {
 .version-banner .icon-btn { color: #fff; }
 .version-banner-icon { font-size: 22px; line-height: 1; }
 
+/* ── Aviso para activar notificaciones del sistema (push) ────────────────── */
+.push-prompt-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 12px 14px;
+  background: linear-gradient(135deg, #f3eafa 0%, #e9ddf7 100%);
+  color: var(--text);
+  border: 1px solid rgba(91, 45, 142, 0.16);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.push-prompt-icon {
+  font-size: 22px; line-height: 1;
+  width: 40px; height: 40px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--grad-primary); color: #fff;
+  box-shadow: var(--glow);
+}
+.push-prompt-text { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 2px; }
+.push-prompt-text strong { font-size: 14px; }
+.push-prompt-text span { font-size: 12px; color: var(--text-muted); }
+[data-theme="dark"] .push-prompt-banner { background: #241a33; border-color: #3a2b52; }
+[data-theme="dark"] .push-prompt-text strong { color: #ede4f7; }
+
 /* ── Módulo de Actualizaciones ───────────────────────────────────────────── */
 .update-card {
   background: var(--white); border: 1px solid var(--border);

@@ -117,6 +117,18 @@ window.AppVersion = (() => {
   // "Actualizar ahora" del módulo.
   async function applyUpdate() {
     if (latest && latest.hash) setSeen(latest.hash);
+
+    // 1) Se muestra la pantalla de carga especial ("ACTUALIZANDO TU APP").
+    //    El usuario permanece dentro de la app: no se navega a ningún lado.
+    const holdMs = 6000;
+    try {
+      if (window.AppShell && typeof window.AppShell.showUpdateLoader === 'function') {
+        window.AppShell.showUpdateLoader();
+      }
+    } catch (e) { /* noop */ }
+
+    // 2) Se limpia la caché y el Service Worker viejos mientras se ve la
+    //    animación, para que al recargar se tomen los archivos nuevos.
     try {
       if ('caches' in window) {
         const keys = await caches.keys();
@@ -129,7 +141,12 @@ window.AppVersion = (() => {
         await Promise.all(regs.map((reg) => reg.unregister()));
       }
     } catch (e) { /* noop */ }
-    window.location.reload();
+
+    // 3) Se mantiene la pantalla de carga ~6 s (sin salir de la app) y luego se
+    //    recarga la MISMA página para cargar la versión nueva.
+    setTimeout(() => {
+      window.location.reload();
+    }, holdMs);
   }
 
   async function check({ notify = true } = {}) {

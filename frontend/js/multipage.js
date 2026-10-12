@@ -134,12 +134,27 @@ window.AppShell = (() => {
   // render terminó. Es responsiva (móvil, tablet, PC) y respeta el tema.
   let appLoaderShownAt = 0;
   let appLoaderSafety = null;
-  // Tiempo mínimo que la animación permanece visible: se pidió verla con calma
-  // (más de 4 segundos) en lugar de un parpadeo rápido.
-  const APP_LOADER_MIN_MS = 4500;
+  // Duración de las cargas normales (navegar entre módulos) y de la carga
+  // especial de actualización.
+  const APP_LOADER_MIN_MS = 3000;
+  const UPDATE_LOADER_MIN_MS = 6000;
 
-  function showGlobalLoader() {
-    if (document.getElementById('app-loader')) return;
+  function showGlobalLoader(options) {
+    const opts = options || {};
+    const minMs = Number(opts.minMs) > 0 ? Number(opts.minMs) : APP_LOADER_MIN_MS;
+    const label = opts.text || 'INMOBLES';
+    const subtext = opts.subtext || 'Preparando tu espacio de trabajo…';
+    const existing = document.getElementById('app-loader');
+    if (existing) {
+      // Ya hay un loader visible: solo se actualiza el mensaje y el tiempo.
+      const brandEl = existing.querySelector('.app-loader-brand');
+      const textEl = existing.querySelector('.app-loader-text');
+      if (brandEl && opts.text) brandEl.textContent = label;
+      if (textEl && opts.subtext) textEl.textContent = subtext;
+      existing.dataset.minMs = String(minMs);
+      if (opts.text) appLoaderShownAt = Date.now();
+      return;
+    }
     // Se vacía el contenido para que NUNCA se vean dos animaciones a la vez:
     // mientras el overlay está activo, solo se ve la de pantalla completa.
     const content = document.getElementById('app-content');
@@ -147,28 +162,40 @@ window.AppShell = (() => {
     const el = document.createElement('div');
     el.id = 'app-loader';
     el.className = 'app-loader';
+    el.dataset.minMs = String(minMs);
     el.setAttribute('role', 'status');
     el.setAttribute('aria-live', 'polite');
     el.setAttribute('aria-label', 'Cargando');
     el.innerHTML =
       '<div class="app-loader-box">' +
       '<div class="app-loader-ring"></div>' +
-      '<div class="app-loader-brand">INMOBLES</div>' +
-      '<div class="app-loader-text">Preparando tu espacio de trabajo…</div>' +
+      `<div class="app-loader-brand">${label}</div>` +
+      `<div class="app-loader-text">${subtext}</div>` +
       '</div>';
     document.body.appendChild(el);
     appLoaderShownAt = Date.now();
     // Red de seguridad: si algo falla, el overlay jamás se queda pegado.
     clearTimeout(appLoaderSafety);
-    appLoaderSafety = setTimeout(hideGlobalLoader, 20000);
+    appLoaderSafety = setTimeout(hideGlobalLoader, Math.max(20000, minMs + 5000));
+  }
+
+  // Pantalla de carga especial al aplicar una actualización: mensaje propio y
+  // duración larga (6 s) sin salir de la app.
+  function showUpdateLoader() {
+    showGlobalLoader({
+      text: 'ACTUALIZANDO TU APP',
+      subtext: 'Aplicando las últimas mejoras. No cierres ni salgas de esta pantalla…',
+      minMs: UPDATE_LOADER_MIN_MS,
+    });
   }
 
   function hideGlobalLoader() {
     clearTimeout(appLoaderSafety);
     const el = document.getElementById('app-loader');
     if (!el) return;
+    const minMs = Number(el.dataset.minMs) || APP_LOADER_MIN_MS;
     // Tiempo mínimo en pantalla solicitado para que la animación se aprecie.
-    const wait = Math.max(0, APP_LOADER_MIN_MS - (Date.now() - appLoaderShownAt));
+    const wait = Math.max(0, minMs - (Date.now() - appLoaderShownAt));
     setTimeout(() => {
       el.classList.add('is-hidden');
       setTimeout(() => el.remove(), 450);
@@ -555,7 +582,13 @@ window.AppShell = (() => {
     const script = document.createElement('script');
     script.src = 'js/push.js';
     script.onload = () => {
-      if (window.PushNotify) window.PushNotify.syncAfterLogin().catch(() => {});
+      if (!window.PushNotify) return;
+      window.PushNotify.syncAfterLogin().catch(() => {});
+      // Si todavía no se pidió permiso, se ofrece activar las notificaciones
+      // del sistema (teléfono/escritorio) con un solo toque.
+      if (typeof window.PushNotify.promptIfNeeded === 'function') {
+        window.PushNotify.promptIfNeeded();
+      }
     };
     document.head.appendChild(script);
   }
@@ -935,7 +968,7 @@ window.AppShell = (() => {
 
   window.App = { refreshNotificationBadge, refreshChatBadge, remindersEnabled, setRemindersEnabled, startClock, reopenOnboarding };
 
-  return { init, showGlobalLoader, hideGlobalLoader, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
+  return { init, showGlobalLoader, showUpdateLoader, hideGlobalLoader, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
 })();
 
 // ---- Auto-inicialización del shell ----

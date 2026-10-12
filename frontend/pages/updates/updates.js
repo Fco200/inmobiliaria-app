@@ -139,6 +139,10 @@ window.Pages.actualizaciones = {
                </ul>
              </div>`
           : ''}
+        <div class="updates-signature">
+          <span class="updates-signature-ico">&#127968;</span>
+          <span>A disposición del equipo de <strong>INMOBLES</strong></span>
+        </div>
       `;
 
       const applyBtn = body.querySelector('[data-apply]');

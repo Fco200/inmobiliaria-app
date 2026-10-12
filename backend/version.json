@@ -1,13 +1,13 @@
 {
-  "version": "2.4",
+  "version": "2.5",
   "channel": "estable",
   "title": "Actualización de la aplicación",
   "date": "2026-10-12",
   "notes": [
-    "Tu perfil ahora aparece junto al logo, arriba a la izquierda: foto, nombre y rol, con acceso directo a Mi perfil.",
-    "Nuevas animaciones de carga en toda la app (a pantalla completa y centradas), adaptadas a celular, tablet y PC.",
-    "Las fotos y documentos ahora se guardan en la base de datos: ya no se pierden al actualizar o desplegar la app.",
-    "Módulo de Actualizaciones renovado: muestra el estado de la versión, las novedades y el detalle de cada cambio.",
+    "El encabezado ahora muestra únicamente el logo de INMOBLES y tu perfil (foto, nombre y rol), con acceso directo a Mi perfil.",
+    "Animación de carga única y más visible: se muestra una sola vez a pantalla completa, sin animaciones dobles.",
+    "Las fotos y documentos se guardan en la base de datos: ya no se pierden al actualizar o desplegar la app.",
+    "Módulo de Actualizaciones renovado, con el estado de la versión, las novedades y el detalle de cada cambio.",
     "Mejoras de rendimiento y estabilidad al cargar los módulos."
   ]
 }

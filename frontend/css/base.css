@@ -3376,11 +3376,31 @@ body.page-chat .assistant-panel {
 [data-theme="dark"] .updates-stat-value { color: #ede4f7; }
 [data-theme="dark"] .updates-commits li { background: #241a33; color: #ede4f7; }
 
+/* Firma del módulo de Actualizaciones */
+.updates-signature {
+  margin-top: 16px;
+  padding: 18px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--grad-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  box-shadow: var(--glow);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+.updates-signature strong { font-weight: 800; }
+.updates-signature-ico { font-size: 18px; }
+
 @media (max-width: 600px) {
   .updates-hero { padding: 18px; }
   .updates-hero-icon { font-size: 32px; }
   .updates-hero-info h2 { font-size: 19px; }
   .updates-status { flex-direction: column; gap: 10px; }
   .updates-flag { align-self: flex-start; }
+  .updates-signature { flex-direction: column; gap: 4px; }
 }
 

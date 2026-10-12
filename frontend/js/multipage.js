@@ -124,11 +124,8 @@ window.AppShell = (() => {
       `<small>${UI.escapeHtml(role || 'Mi perfil')}</small>` +
       `</span>`;
 
-    // Se coloca JUSTO al lado del logo: el logotipo de la colaboración (FV
-    // DIGITAL) se mueve detrás del perfil para que este quede pegando al logo.
+    // Se coloca JUSTO al lado del logo.
     brand.insertAdjacentElement('afterend', link);
-    const dev = brand.querySelector('.topnav-brand-dev');
-    if (dev) link.insertAdjacentElement('afterend', dev);
   }
 
   // ── Animación de carga a pantalla completa ────────────────────────────────
@@ -137,9 +134,16 @@ window.AppShell = (() => {
   // render terminó. Es responsiva (móvil, tablet, PC) y respeta el tema.
   let appLoaderShownAt = 0;
   let appLoaderSafety = null;
+  // Tiempo mínimo que la animación permanece visible: se pidió verla con calma
+  // (más de 4 segundos) en lugar de un parpadeo rápido.
+  const APP_LOADER_MIN_MS = 4500;
 
   function showGlobalLoader() {
     if (document.getElementById('app-loader')) return;
+    // Se vacía el contenido para que NUNCA se vean dos animaciones a la vez:
+    // mientras el overlay está activo, solo se ve la de pantalla completa.
+    const content = document.getElementById('app-content');
+    if (content) content.innerHTML = '';
     const el = document.createElement('div');
     el.id = 'app-loader';
     el.className = 'app-loader';
@@ -156,15 +160,15 @@ window.AppShell = (() => {
     appLoaderShownAt = Date.now();
     // Red de seguridad: si algo falla, el overlay jamás se queda pegado.
     clearTimeout(appLoaderSafety);
-    appLoaderSafety = setTimeout(hideGlobalLoader, 15000);
+    appLoaderSafety = setTimeout(hideGlobalLoader, 20000);
   }
 
   function hideGlobalLoader() {
     clearTimeout(appLoaderSafety);
     const el = document.getElementById('app-loader');
     if (!el) return;
-    // Tiempo mínimo en pantalla para evitar un parpadeo feo en cargas rápidas.
-    const wait = Math.max(0, 450 - (Date.now() - appLoaderShownAt));
+    // Tiempo mínimo en pantalla solicitado para que la animación se aprecie.
+    const wait = Math.max(0, APP_LOADER_MIN_MS - (Date.now() - appLoaderShownAt));
     setTimeout(() => {
       el.classList.add('is-hidden');
       setTimeout(() => el.remove(), 450);
@@ -337,17 +341,19 @@ window.AppShell = (() => {
     right.insertBefore(btn, right.querySelector('#btn-theme'));
   }
 
-  // Añade el logotipo de FV DIGITAL junto al de INMOBLES para mostrar la
-  // colaboración de marcas de forma permanente en el encabezado.
+  // Se retira cualquier logotipo de colaboración (FV DIGITAL) del encabezado:
+  // arriba a la izquierda solo deben verse el logo de INMOBLES y el perfil.
   function injectBrandCollab() {
     const brand = document.querySelector('.topnav-brand');
-    if (!brand || brand.querySelector('.topnav-brand-dev')) return;
-    const dev = document.createElement('img');
-    dev.className = 'topnav-brand-dev';
-    dev.src = 'fv_digital_logo.png.webp';
-    dev.alt = 'FV DIGITAL';
-    dev.title = 'Desarrollado por FV DIGITAL';
-    brand.appendChild(dev);
+    if (brand) {
+      const dev = brand.querySelector('.topnav-brand-dev');
+      if (dev) dev.remove();
+      const extra = brand.querySelector('img:not(.topnav-logo)');
+      if (extra) extra.remove();
+    }
+    // Limpia el pie del encabezado para dejar solo la marca INMOBLES.
+    const credit = document.querySelector('.topnav-credit');
+    if (credit) credit.innerHTML = '&copy; INMOBLES';
   }
 
   function startClock() {
@@ -733,7 +739,6 @@ window.AppShell = (() => {
       return;
     }
     if (page && typeof page.render === 'function') {
-      content.innerHTML = '<div class="loading">Cargando...</div>';
       try {
         await page.render(content);
         labelTableColumns(content);
@@ -751,7 +756,6 @@ window.AppShell = (() => {
       await new Promise((resolve) => setTimeout(resolve, wait));
       const retryPage = currentPage();
       if (retryPage && typeof retryPage.render === 'function') {
-        content.innerHTML = '<div class="loading">Cargando...</div>';
         try {
           await retryPage.render(content);
           labelTableColumns(content);

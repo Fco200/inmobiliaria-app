@@ -76,7 +76,7 @@ window.AppShell = (() => {
     const el = document.getElementById('topnav-user');
     if (!el) return;
     const user = (window.ApiClient && window.ApiClient.getStoredUser()) || null;
-    if (user && (user.name || user.username) && user._id) {
+    if (user && (user.name || user.username) && (user._id || user.id)) {
       const role = user.role && (user.role.name || user.role.code || user.role);
       const photo = user.photo
         ? `<img class="topnav-avatar" src="${window.AppConfig.resolveUrl(user.photo)}" alt="">`
@@ -106,7 +106,7 @@ window.AppShell = (() => {
     if (document.querySelector('.topnav-profile')) return;
 
     const user = (window.ApiClient && window.ApiClient.getStoredUser()) || null;
-    if (!user || !(user.name || user.username) || !user._id) return;
+    if (!user || !(user.name || user.username)) return;
 
     const role = user.role && (user.role.name || user.role.code || user.role);
     const displayName = user.name || user.username;
@@ -124,7 +124,51 @@ window.AppShell = (() => {
       `<small>${UI.escapeHtml(role || 'Mi perfil')}</small>` +
       `</span>`;
 
+    // Se coloca JUSTO al lado del logo: el logotipo de la colaboración (FV
+    // DIGITAL) se mueve detrás del perfil para que este quede pegando al logo.
     brand.insertAdjacentElement('afterend', link);
+    const dev = brand.querySelector('.topnav-brand-dev');
+    if (dev) link.insertAdjacentElement('afterend', dev);
+  }
+
+  // ── Animación de carga a pantalla completa ────────────────────────────────
+  // Se muestra al arrancar cada página protegida (y al navegar entre módulos,
+  // porque cada módulo recarga el documento) y se oculta cuando el primer
+  // render terminó. Es responsiva (móvil, tablet, PC) y respeta el tema.
+  let appLoaderShownAt = 0;
+  let appLoaderSafety = null;
+
+  function showGlobalLoader() {
+    if (document.getElementById('app-loader')) return;
+    const el = document.createElement('div');
+    el.id = 'app-loader';
+    el.className = 'app-loader';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-label', 'Cargando');
+    el.innerHTML =
+      '<div class="app-loader-box">' +
+      '<div class="app-loader-ring"></div>' +
+      '<div class="app-loader-brand">INMOBLES</div>' +
+      '<div class="app-loader-text">Preparando tu espacio de trabajo…</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    appLoaderShownAt = Date.now();
+    // Red de seguridad: si algo falla, el overlay jamás se queda pegado.
+    clearTimeout(appLoaderSafety);
+    appLoaderSafety = setTimeout(hideGlobalLoader, 15000);
+  }
+
+  function hideGlobalLoader() {
+    clearTimeout(appLoaderSafety);
+    const el = document.getElementById('app-loader');
+    if (!el) return;
+    // Tiempo mínimo en pantalla para evitar un parpadeo feo en cargas rápidas.
+    const wait = Math.max(0, 450 - (Date.now() - appLoaderShownAt));
+    setTimeout(() => {
+      el.classList.add('is-hidden');
+      setTimeout(() => el.remove(), 450);
+    }, wait);
   }
 
   function updateFabBadge(key, count) {
@@ -828,7 +872,7 @@ window.AppShell = (() => {
     installErrorHandlers();
     applyTheme();
 
-    if (!window.ApiClient.requireAuth()) return;
+    if (!window.ApiClient.requireAuth()) { hideGlobalLoader(); return; }
 
     registerServiceWorker();
     renderNav();
@@ -866,7 +910,7 @@ window.AppShell = (() => {
     initReminders();
     initIdleTimeout();
 
-    renderPage();
+    renderPage().finally(() => hideGlobalLoader());
 
     // Se difieren los módulos no críticos (mantenimiento, onboarding,
     // bienvenida) hasta después del primer render para que la página
@@ -887,7 +931,7 @@ window.AppShell = (() => {
 
   window.App = { refreshNotificationBadge, refreshChatBadge, remindersEnabled, setRemindersEnabled, startClock, reopenOnboarding };
 
-  return { init, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
+  return { init, showGlobalLoader, hideGlobalLoader, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
 })();
 
 // ---- Auto-inicialización del shell ----
@@ -901,6 +945,11 @@ window.AppShell = (() => {
   if (window.__appShellAutoInit) return;
   window.__appShellAutoInit = true;
   if (window.AppShell && window.ApiClient && window.ApiClient.isAuthenticated()) {
+    // Muestra la animación de carga a pantalla completa en cuanto el shell está
+    // disponible, antes de renderizar el módulo, para tapar el "flash" blanco.
+    const boot = () => window.AppShell.showGlobalLoader();
+    if (document.body) boot();
+    else document.addEventListener('DOMContentLoaded', boot);
     const run = () => window.AppShell.init();
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', run);

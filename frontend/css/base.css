@@ -66,7 +66,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-right: 24px;
+  margin-right: 12px;
   flex-shrink: 0;
   text-decoration: none;
 }
@@ -811,7 +811,104 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   color: var(--text-muted);
 }
 
+/* Loader centrado dentro del contenido (módulos, tablas, modales). El spinner
+   se dibuja con ::before para no tener que tocar cada plantilla. Se excluye a
+   los botones (.btn.loading) que ya tienen su propio spinner pequeño. */
 .loading { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+
+.loading:not(.btn) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.loading:not(.btn)::before {
+  content: "";
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Animación de carga a pantalla completa (arranque / navegación) ───────── */
+.app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1000px 520px at 50% -10%, rgba(91, 45, 142, 0.16), transparent 62%),
+    var(--bg);
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.app-loader.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.app-loader-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: app-loader-in 0.4s ease both;
+}
+
+.app-loader-ring {
+  width: clamp(56px, 13vw, 78px);
+  height: clamp(56px, 13vw, 78px);
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #7B3FA0, #5B2D8E, #d9a822, #7B3FA0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  animation: spin 0.9s linear infinite;
+}
+
+.app-loader-brand {
+  font-size: clamp(13px, 2.8vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--primary);
+  animation: app-loader-pulse 1.5s ease-in-out infinite;
+}
+
+.app-loader-text {
+  font-size: clamp(11px, 2.5vw, 13px);
+  color: var(--text-muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+@keyframes app-loader-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes app-loader-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+[data-theme="dark"] .app-loader {
+  background:
+    radial-gradient(1000px 520px at 50% -10%, rgba(123, 63, 160, 0.24), transparent 62%),
+    #150f21;
+}
+
+[data-theme="dark"] .app-loader-brand { color: #cdb4ec; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loader-ring,
+  .app-loader-brand,
+  .loading:not(.btn)::before { animation-duration: 1.4s; }
+}
+
 
 .page-header {
   display: flex;

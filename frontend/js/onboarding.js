@@ -1,8 +1,10 @@
-// Onboarding: guía rápida de bienvenida en 5 pasos.
+// Onboarding: guía rápida de bienvenida paso a paso.
 // Se muestra automáticamente a los USUARIOS NUEVOS en su primera sesión
 // (cuando el backend reporta hasCompletedOnboarding=false) y puede reabrirse
 // desde el botón '?' del encabezado o desde Ayuda en cualquier momento.
-// Al terminar, se marca en el backend para no volver a mostrarse sola.
+// Al terminar, se marca en el backend para no volver a mostrarse sola y, si se
+// pasó un callback onFinish (primera sesión), se invita a activar las
+// notificaciones.
 window.Onboarding = (() => {
   'use strict';
 
@@ -21,17 +23,37 @@ window.Onboarding = (() => {
     {
       icon: '&#128640;',
       title: 'Bienvenido a INMOBLES',
-      text: 'Tu CRM inmobiliario: administra propiedades, clientes, negocios, citas y más desde un solo lugar.',
+      text: 'Tu CRM inmobiliario: propiedades, clientes, negocios, citas, metas y documentos, todo en un solo lugar. Te mostramos lo esencial en un minuto.',
+    },
+    {
+      icon: '&#129517;',
+      title: 'Tu menú lateral',
+      text: 'Muévete entre módulos desde el menú lateral. Pulsa el botón (&#9776;) para plegarlo y dejar más espacio a tu trabajo; en el celular se abre como panel deslizante.',
+    },
+    {
+      icon: '&#128172;',
+      title: 'Avisos y chat en paneles',
+      text: 'Los accesos rápidos de la derecha abren los Avisos y el Chat en un panel flotante, sin salir de la página en la que estás trabajando.',
     },
     {
       icon: '&#127968;',
       title: 'Propiedades y captación',
-      text: 'Registra tus avalúos, lleva su historial de precios y administra la captación de nuevas propiedades.',
+      text: 'Registra tus avalúos, lleva su historial de precios y administra la captación de nuevas propiedades con fotos y documentos.',
+    },
+    {
+      icon: '&#128230;',
+      title: 'Mis Propiedades',
+      text: 'Consulta tu inventario completo: filtra por asesor y estado, revisa el mercado y el historial, y publica o asigna propiedades desde un mismo módulo.',
     },
     {
       icon: '&#129309;',
       title: 'Clientes y negocios',
-      text: 'Perfila a tus clientes, haz seguimiento desde prospecting y cierra negocios con promesas y notarías.',
+      text: 'Perfila a tus clientes, haz seguimiento desde prospecting y cierra negocios con promesas, notarías y comisiones.',
+    },
+    {
+      icon: '&#128197;',
+      title: 'Agenda y pendientes',
+      text: 'Agenda citas, administra tareas y da seguimiento a tus metas; el sistema te recuerda lo importante mediante notificaciones.',
     },
     {
       icon: '&#128221;',
@@ -39,9 +61,14 @@ window.Onboarding = (() => {
       text: 'Usa los formatos rápidos (p. ej. la Hoja de Visita) y genera documentos oficiales con tu firma digital.',
     },
     {
-      icon: '&#128737;',
-      title: 'Ayuda y soporte',
-      text: 'En el módulo de Ayuda encuentras soporte por WhatsApp, la guía y el cambio de contraseña.',
+      icon: '&#128227;',
+      title: 'Catálogo público',
+      text: 'Publica propiedades en el sitio web, donde tus clientes buscan por zona, tipo, operación y rango de precio.',
+    },
+    {
+      icon: '&#128276;',
+      title: 'Activa las notificaciones',
+      text: 'Recibe los avisos del CRM al instante en este dispositivo, aunque la app esté cerrada. Si lo prefieres después, puedes activarlas desde tu Perfil.',
     },
     {
       icon: '&#127881;',
@@ -52,6 +79,7 @@ window.Onboarding = (() => {
 
   let active = false;
   let presented = false;
+  let pendingOnFinish = null;
 
   function isNewUser() {
     const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
@@ -130,6 +158,11 @@ window.Onboarding = (() => {
           }
         } catch (e) { /* sin conexión: se reintenta la próxima vez */ }
       }
+      // Al terminar (o saltar) la guía, se invoca el callback encadenado. En la
+      // primera sesión se usa para invitar a activar las notificaciones.
+      if (opts && typeof opts.onFinish === 'function') {
+        try { opts.onFinish(); } catch (e) { /* noop */ }
+      }
     };
 
     const close = async () => {
@@ -151,7 +184,11 @@ window.Onboarding = (() => {
   }
 
   // Muestra automáticamente solo a usuarios nuevos que aún no culminan la guía.
-  function maybeShow() {
+  function maybeShow(opts) {
+    // El callback encadenado (p. ej. invitar a activar notificaciones) se guarda
+    // aunque la guía se abra después del mensaje de bienvenida, para no perderlo
+    // si la apertura automática ya había quedado en espera.
+    if (opts && typeof opts.onFinish === 'function') pendingOnFinish = opts.onFinish;
     if (presented) return;
     presented = true;
     if (!isNewUser()) return;
@@ -170,13 +207,13 @@ window.Onboarding = (() => {
       return;
     }
     markShownThisSession();
-    openGuide({ firstLogin: true });
+    openGuide({ firstLogin: true, onFinish: pendingOnFinish });
   }
 
   // Forzado desde el botón (?) o Ayuda: siempre abierto, sin condición de nuevo usuario.
-  function show() {
+  function show(opts) {
     presented = true;
-    openGuide();
+    openGuide(opts || {});
   }
 
   return { show, maybeShow };

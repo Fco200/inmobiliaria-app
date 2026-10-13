@@ -812,13 +812,30 @@ window.AppShell = (() => {
     script.onload = () => {
       if (!window.PushNotify) return;
       window.PushNotify.syncAfterLogin().catch(() => {});
-      // En cada sesión nueva se pregunta si quiere activar las notificaciones
-      // (una vez por pestaña). Si dice que no, se le recuerda activarlas más
-      // tarde desde su Perfil.
+      // En la PRIMERA sesión de un usuario nuevo el aviso de notificaciones se
+      // muestra al terminar la guía de bienvenida (bienvenida -> guía ->
+      // notificaciones). Para el resto de usuarios se pregunta aquí mismo.
+      const user = window.ApiClient.getStoredUser() || {};
+      if (!user.hasCompletedOnboarding) return;
       if (typeof window.PushNotify.askOnNewSession === 'function') {
         window.PushNotify.askOnNewSession();
       }
     };
+    document.head.appendChild(script);
+  }
+
+  // Invita a activar las notificaciones. Se usa al terminar la guía de la
+  // primera sesión; si push.js aún no está cargado, lo carga y pregunta luego.
+  function askPushNotifications() {
+    const run = () => {
+      if (window.PushNotify && typeof window.PushNotify.askOnNewSession === 'function') {
+        window.PushNotify.askOnNewSession();
+      }
+    };
+    if (window.PushNotify || document.getElementById('push-loaded')) { run(); return; }
+    const script = document.createElement('script');
+    script.src = 'js/push.js';
+    script.onload = run;
     document.head.appendChild(script);
   }
 
@@ -838,14 +855,14 @@ window.AppShell = (() => {
   // Carga el módulo de onboarding (guía rápida de bienvenida). Se inyecta al
   // vuelo; cuando el script está listo, se llama inmediatamente a maybeShow()
   // para no perder la oportunidad si init() terminó antes de la carga.
-  function loadOnboarding(forceShow) {
+  function loadOnboarding(forceShow, onFinish) {
     if (!window.ApiClient.isAuthenticated()) return;
     const script = document.createElement('script');
     script.src = 'js/onboarding.js';
     script.onload = () => {
       if (!window.Onboarding) return;
-      if (forceShow) window.Onboarding.show();
-      else window.Onboarding.maybeShow();
+      if (forceShow) window.Onboarding.show({ onFinish });
+      else window.Onboarding.maybeShow({ onFinish });
     };
     document.head.appendChild(script);
   }
@@ -878,9 +895,13 @@ window.AppShell = (() => {
         onClose: () => {
           const user = window.ApiClient.getStoredUser() || {};
           const isNew = !user.hasCompletedOnboarding;
-          if (isNew) {
-            if (window.Onboarding) window.Onboarding.maybeShow();
-            else loadOnboarding();
+          if (!isNew) return;
+          // Primera vez: tras el mensaje de bienvenida se muestra la guía y,
+          // al terminarla (o saltarla), se invita a activar las notificaciones.
+          if (window.Onboarding) {
+            window.Onboarding.maybeShow({ firstLogin: true, onFinish: askPushNotifications });
+          } else {
+            loadOnboarding(false, askPushNotifications);
           }
         },
       });
@@ -1201,7 +1222,10 @@ window.AppShell = (() => {
     setTimeout(() => {
       loadMantenimiento();
       loadWelcome();
-      loadOnboarding();
+      // La guía se encadena con la invitación a activar notificaciones cuando el
+      // usuario es nuevo (en la primera sesión se muestra tras el mensaje de
+      // bienvenida; en recargas, tras la propia guía).
+      loadOnboarding(false, askPushNotifications);
       loadPush();
     }, 50);
 

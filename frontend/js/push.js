@@ -233,8 +233,8 @@ window.PushNotify = (() => {
   function showAskSessionModal(iosInstall) {
     if (typeof UI === 'undefined') return;
     const body = iosInstall
-      ? '<p>En iPhone las notificaciones llegan cuando la app está <strong>agregada a la pantalla de inicio</strong>.</p><p class="text-muted" style="margin-bottom:0;">Te mostramos cómo hacerlo paso a paso.</p>'
-      : '<p>Recibe en este dispositivo los avisos del CRM (mensajes, citas, recordatorios), aunque la app esté cerrada.</p>';
+      ? '<p>En iPhone las notificaciones llegan cuando la app está <strong>agregada a la pantalla de inicio</strong>.</p><p class="text-muted" style="margin-bottom:0;">Te mostramos cómo hacerlo paso a paso. Si prefieres, puedes activarlas después desde tu Perfil → Notificaciones.</p>'
+      : '<p>Recibe en este dispositivo los avisos del CRM (mensajes, citas, recordatorios), aunque la app esté cerrada.</p><p class="text-muted" style="margin-bottom:0;">Si dices "Ahora no", podrás activarlas más tarde desde tu <strong>Perfil → Notificaciones</strong>.</p>';
 
     UI.openModal({
       title: '¿Quieres activar las notificaciones?',

@@ -215,7 +215,30 @@ window.Pages.ayuda = {
           body: `
             <p><strong>INMOBLES</strong> es la plataforma de gestión inmobiliaria de la empresa. Te permite administrar <strong>propiedades</strong>, <strong>clientes</strong>, <strong>negocios</strong>, <strong>citas</strong>, <strong>tareas</strong>, <strong>metas</strong>, <strong>gastos</strong> y <strong>documentos</strong> desde un solo lugar, además de comunicarte con tu equipo mediante el <strong>chat interno</strong> y los <strong>avisos</strong>.</p>
             <p>Para acceder, entra desde tu dispositivo (celular, tableta o computadora) e inicia sesión con tu usuario y contraseña. Al ingresar llegarás al <strong>Panel de control (Dashboard)</strong> con un resumen de tu actividad.</p>
+            <h4>La primera vez que entras</h4>
+            <ul>
+              <li>Verás un <strong>mensaje de bienvenida</strong> con tu nombre.</li>
+              <li>Al cerrarlo se abre la <strong>guía rápida</strong> (esta misma que puedes reabrir con el botón <strong>&#63;</strong> del encabezado o desde <em>Ayuda</em>).</li>
+              <li>Al terminar la guía se te invita a <strong>activar las notificaciones</strong>. Si dices <em>"Ahora no"</em>, podrás activarlas cuando quieras desde <em>Perfil → Notificaciones</em>.</li>
+            </ul>
             <p><strong>Consejo:</strong> mantén tu contraseña en secreto y actualízala periódicamente desde <em>Ayuda → Cambiar contraseña</em>. Cierra sesión siempre al terminar en un equipo compartido.</p>
+          `,
+        },
+        {
+          id: 'navegacion',
+          icon: '&#129517;',
+          title: 'Navegación y menú lateral',
+          body: `
+            <p>El <strong>menú lateral</strong> es tu centro de navegación. Agrupa los módulos por secciones (Principal, Comercial, Propiedades, Finanzas y Recursos) para que encuentres todo rápido.</p>
+            <ul>
+              <li><strong>Plegar el menú:</strong> pulsa el botón <strong>&#9776;</strong> dentro del menú para contraerlo y dejar más espacio a tu contenido. Al plegarlo, el logotipo se convierte en el icono de INMOBLES y cada módulo queda como icono; al desplegarlo vuelve el logotipo completo.</li>
+              <li><strong>En el celular:</strong> el menú se abre como <strong>panel deslizante</strong> desde el botón <strong>&#9776;</strong> de la barra superior; tócalo de nuevo o toca fuera para cerrarlo.</li>
+              <li><strong>Accesos rápidos (burbujas a la derecha):</strong> abren <strong>Avisos</strong> y <strong>Chat</strong> en un <strong>panel flotante</strong> dentro de la misma página, sin que pierdas lo que estabas haciendo.</li>
+              <li><strong>Campanario &#128276;:</strong> abre el historial completo de notificaciones.</li>
+              <li><strong>Tu perfil</strong> (arriba a la derecha): datos personales, notificaciones y cierre de sesión.</li>
+              <li><strong>Asistente IA</strong> (botón flotante &#129302;): responde preguntas sobre tu información.</li>
+            </ul>
+            <p>Los avisos de confirmación (por ejemplo, al guardar) aparecen <strong>centrados en la pantalla</strong> para que no los pierdas.</p>
           `,
         },
         {
@@ -226,8 +249,8 @@ window.Pages.ayuda = {
             <p>El <strong>Dashboard</strong> resume tu información más relevante: propiedades activas, clientes, negocios en curso, citas del día, tareas pendientes y avance de metas.</p>
             <ul>
               <li>Las tarjetas con números te dan un vistazo rápido de cada módulo.</li>
-              <li>Usa la barra superior para moverte entre los módulos (menú &#9776; en celular).</li>
-              <li>El campanario &#128276; muestra tus avisos y notificaciones.</li>
+              <li>Usa el <strong>menú lateral</strong> para moverte entre los módulos.</li>
+              <li>El campanario &#128276; y los accesos rápidos &#128172; te mantienen al día con avisos y chat.</li>
             </ul>
             <p>Si tienes permisos de administrador, verás además accesos de <strong>configuración</strong> y <strong>reportes</strong>.</p>
           `,
@@ -246,7 +269,42 @@ window.Pages.ayuda = {
               <li>Sube los <strong>documentos</strong> legales (escrituras, avalúos, etc.) en la pestaña de documentos.</li>
               <li>Elige el <strong>estado</strong>: disponible, apartada, vendida, rentada o en trámite.</li>
             </ol>
-            <p>Marca tu propiedad como <strong>apartada</strong> cuando un cliente la reserve. El mercado la separa en tu panel de inventario general.</p>
+            <p>Marca tu propiedad como <strong>apartada</strong> cuando un cliente la reserve. El <strong>historial de precios</strong> registra cada cambio de precio y el <strong>mercado</strong> te muestra avalúos comparables de la zona para sustentar tus ofertas.</p>
+          `,
+        },
+        {
+          id: 'inventario',
+          icon: '&#128230;',
+          title: 'Mis Propiedades (inventario)',
+          body: `
+            <p><strong>Mis Propiedades</strong> reúne en un solo módulo tu cartera y todo el inventario de la empresa. Tiene dos pestañas:</p>
+            <ul>
+              <li><strong>Mis propiedades:</strong> los inmuebles a tu cargo, con sus estados y datos clave.</li>
+              <li><strong>Inventario general:</strong> todas las propiedades de la empresa (incluidas las de otros asesores), pensado para <strong>captación</strong> y cruce con tus clientes.</li>
+            </ul>
+            <h4>Qué puedes hacer aquí</h4>
+            <ul>
+              <li><strong>Filtrar</strong> por asesor, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
+              <li><strong>Publicar</strong> una propiedad en el catálogo público.</li>
+              <li>Abrir el <strong>detalle</strong> con mercado, historial y fotos.</li>
+              <li><strong>Editar</strong> datos, observaciones y fotos.</li>
+              <li>Agendar una <strong>cita</strong> o registrar un <strong>negocio</strong> desde la ficha.</li>
+              <li>Si eres administrador: <strong>asignar</strong> la propiedad a un asesor y <strong>subir</strong> propiedades existentes al inventario.</li>
+            </ul>
+          `,
+        },
+        {
+          id: 'catalogo',
+          icon: '&#128227;',
+          title: 'Catálogo público en el sitio web',
+          body: `
+            <p>Las propiedades marcadas como <strong>publicadas</strong> aparecen en el <strong>catálogo público</strong> del sitio web, pensado para tus clientes.</p>
+            <ul>
+              <li>Los visitantes pueden <strong>buscar por zona o ciudad, tipo de inmueble y tipo de operación</strong> (venta o renta).</li>
+              <li>Incluye un <strong>filtro por rango de precio</strong> (mínimo y máximo) para acotar resultados.</li>
+              <li>Cada ficha muestra fotos, datos y la forma de contacto.</li>
+            </ul>
+            <p>Mantén tus propiedades publicadas con fotos de calidad y precios actualizados: es tu mejor vitrina digital.</p>
           `,
         },
         {
@@ -303,7 +361,7 @@ window.Pages.ayuda = {
             <ul>
               <li>Crea una tarea con un <strong>título</strong>, <strong>fecha límite</strong> y prioridad.</li>
               <li>Asígnala a un miembro del equipo si corresponde.</li>
-              <li>Marca su estado como <em>pendiente, en proceso u completada</em>.</li>
+              <li>Marca su estado como <em>pendiente, en proceso o completada</em>.</li>
             </ul>
             <p>Si una tarea <strong>venció</strong> y sigue abierta, recibirás un aviso para retomarla.</p>
           `,
@@ -347,20 +405,7 @@ window.Pages.ayuda = {
               <li>Deja documentos en estado <em>pendiente</em> para su validación; el responsable los revisa.</li>
               <li>Un documento pendiente por mucho tiempo genera un <strong>aviso</strong> de recordatorio.</li>
             </ul>
-            <p>Utiliza las <strong>plantillas PDF</strong> disponibles para generar formatos estándar de la empresa.</p>
-          `,
-        },
-        {
-          id: 'inventario',
-          icon: '&#128230;',
-          title: 'Inventario',
-          body: `
-            <p>El <strong>Inventario</strong> te muestra el estado general de todas las propiedades de la empresa, incluso las de otros asesores.</p>
-            <ul>
-              <li>Consulta cuántas propiedades están <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
-              <li>Identifica rápidamente qué inmuebles puedes ofrecer a tus clientes.</li>
-            </ul>
-            <p>Es ideal para la <strong>captación</strong>: sabrás en todo momento qué hay en cartera.</p>
+            <p>Utiliza las <strong>plantillas y formatos rápidos</strong> (por ejemplo, la <strong>Hoja de Visita</strong>) y genera documentos oficiales con tu firma digital.</p>
           `,
         },
         {
@@ -368,14 +413,31 @@ window.Pages.ayuda = {
           icon: '&#128172;',
           title: 'Chat interno y avisos',
           body: `
-            <p>El <strong>Chat interno</strong> te permite comunicarte con el equipo en tiempo real.</p>
+            <p>El <strong>Chat interno</strong> te permite comunicarte con el equipo en tiempo real, y los <strong>Avisos</strong> son anuncios que publica la administración.</p>
+            <h4>Paneles flotantes</h4>
+            <p>Los accesos rápidos (burbujas) de la derecha abren cada uno en un <strong>panel flotante</strong> sobre la página actual:</p>
             <ul>
-              <li>El <strong>Canal general</strong> es el espacio grupal de toda la empresa.</li>
-              <li>También puedes iniciar un <strong>chat 1 a 1</strong> con cualquier compañero.</li>
-              <li>Cuando te llegue un mensaje nuevo, verás el contador en el menú.</li>
+              <li><strong>Avisos &#128276;:</strong> revisa los comunicados recientes y marca los que ya leíste.</li>
+              <li><strong>Chat &#128172;:</strong> habla en el <strong>Canal general</strong> (grupo de la empresa) o en un <strong>chat 1 a 1</strong> con cualquier compañero.</li>
             </ul>
-            <p>Los <strong>Avisos</strong> son anuncios que publica la administración o soporte y se muestran como ventanas emergentes a todo el equipo. Léelos y márcalos como vistos.</p>
-            <p>También llegan notificaciones individuales (citas, tareas vencidas, nuevos prospectos) que puedes consultar en el campanario &#128276;.</p>
+            <p>Cuando te llegue un mensaje nuevo verás el contador en el acceso rápido. En el celular, si escribes, la caja de texto se mantiene visible sobre el teclado.</p>
+          `,
+        },
+        {
+          id: 'notificaciones',
+          icon: '&#128276;',
+          title: 'Notificaciones al teléfono',
+          body: `
+            <p>Puedes recibir los avisos del CRM <strong>directamente en tu dispositivo</strong> (celular o computadora), incluso con la aplicación cerrada.</p>
+            <h4>Activar o desactivar</h4>
+            <ol>
+              <li>Entra a <em>Perfil → Notificaciones</em> (o a <em>Configuración → Alertas</em> si eres administrador).</li>
+              <li>Pulsa <strong>Activar</strong> y acepta el permiso del navegador.</li>
+              <li>Usa <strong>Probar</strong> para confirmar que llegan, o <strong>Desactivar</strong> para detenerlas.</li>
+            </ol>
+            <p>Si el navegador pide permiso al iniciar sesión y dices <em>"Ahora no"</em>, podrás activarlas más tarde desde tu <strong>Perfil → Notificaciones</strong>.</p>
+            <p><strong>iPhone (iOS):</strong> las notificaciones solo funcionan si agregas la app a la <strong>pantalla de inicio</strong> (iOS 16.4 o superior). Desde Perfil verás el botón <em>"Cómo hacerlo"</em> con los pasos.</p>
+            <p>En <em>Perfil → Notificaciones</em> también puedes <strong>borrar el historial de avisos</strong> y el de tu actividad.</p>
           `,
         },
         {
@@ -385,8 +447,10 @@ window.Pages.ayuda = {
           body: `
             <p>En <em>Mi perfil</em> puedes actualizar tus <strong>datos personales</strong> y tu <strong>fotografía</strong>.</p>
             <ul>
-              <li>Cambia tu nombre, teléfono y foto de perfil.</li>
+              <li>Cambia tu nombre, teléfono, semblanza y foto de perfil.</li>
               <li>Tu foto se muestra en el chat y en los reportes del equipo.</li>
+              <li>Gestiona tus <strong>notificaciones</strong> y borra tus historiales de avisos y de actividad.</li>
+              <li>Descarga o comparte tu <strong>carta de presentación digital</strong> (PDF o WhatsApp).</li>
             </ul>
             <p>Para mayor seguridad cambia tu contraseña desde <em>Ayuda → Cambiar contraseña</em>.</p>
           `,
@@ -403,7 +467,7 @@ window.Pages.ayuda = {
               <li><strong>Página oficial</strong>: <a href="https://inmobles.com" target="_blank" rel="noopener" style="color:var(--primary);">inmobles.com</a>.</li>
               <li><strong>Redes sociales</strong> (Facebook e Instagram) si están configuradas.</li>
             </ul>
-            <p>Describe tu problema con el mayor detalle posible (qué hacías, qué mensaje viste) para que podamos ayudarte rápido.</p>
+            <p>Describe tu problema con el mayor detalle posible (qué hacías, qué mensaje viste) para que podamos ayudarte rápido. También puedes reabrir la <strong>guía rápida</strong> con el botón &#63; del encabezado o desde esta página.</p>
           `,
         },
       ];

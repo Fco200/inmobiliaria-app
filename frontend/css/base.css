@@ -3585,7 +3585,15 @@ body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
    Paneles flotantes de Avisos y Chat
    ============================================================ */
 .fab-panels { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
-.fab-panel-backdrop { display: none; }
+/* El atributo [hidden] debe ganar SIEMPRE al display:flex de .fab-panel; si no,
+   ambos paneles (avisos y chat) quedan visibles y el de chat tapa al de avisos. */
+.fab-panel[hidden],
+.fab-panels[hidden] { display: none !important; }
+/* Capa para cerrar al tocar fuera. Solo existe cuando hay un panel abierto
+   (body.fab-panel-open); transparente en escritorio, atenuada en móvil.
+   Necesita pointer-events:auto porque .fab-panels (padre) usa pointer-events:none. */
+.fab-panel-backdrop { display: none; position: fixed; inset: 0; background: transparent; }
+body.fab-panel-open .fab-panel-backdrop { display: block; pointer-events: auto; }
 .fab-panel {
   pointer-events: auto;
   position: fixed;
@@ -3635,7 +3643,7 @@ body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
 
 @media (max-width: 600px) {
   .fab-panel { right: 10px; left: 10px; bottom: 84px; width: auto; max-width: none; height: min(70vh, calc(100dvh - 150px)); }
-  .fab-panel-backdrop { display: block; position: fixed; inset: 0; background: rgba(15, 8, 25, 0.45); }
+  body.fab-panel-open .fab-panel-backdrop { background: rgba(15, 8, 25, 0.45); }
 }
 body.page-chat .fab-panels { display: none !important; }
 

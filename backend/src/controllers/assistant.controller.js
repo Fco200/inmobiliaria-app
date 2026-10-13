@@ -19,6 +19,8 @@ const CAPABILITIES = [
   '• Avisos: "¿tengo avisos sin leer?"',
   '• Prospección: "¿cómo va la prospección?"',
   '• Guía: "¿cómo creo una propiedad?" o "¿qué es el inventario?"',
+  '• Navegación: "¿dónde está el menú?" o "¿dónde veo el chat?"',
+  '• Notificaciones: "¿cómo activo las notificaciones?"',
 ];
 
 const MODULES = [
@@ -27,7 +29,7 @@ const MODULES = [
   '• Negociaciones: ofertas y contraofertas.',
   '• Clientes: prospectos y su embudo de ventas.',
   '• Propiedades: cartera de inmuebles.',
-  '• Inventario: publicar propiedades al catálogo público.',
+  '• Mis Propiedades (Inventario): tu cartera y el inventario general; publicar al catálogo público.',
   '• Negocios: operaciones y pipeline.',
   '• Citas: agenda de visitas y reuniones.',
   '• Tareas: pendientes del día.',
@@ -37,6 +39,7 @@ const MODULES = [
   '• Avisos: notificaciones y recordatorios.',
   '• Mis reportes: exportar Excel/PDF y analizar.',
   '• Reportes gerencia: panorama ejecutivo (solo admin/gerencia).',
+  '• Ayuda: soporte, guía y cambio de contraseña.',
   '• Configuración: usuarios, permisos y catálogo público (solo admin/gerencia).',
 ];
 
@@ -52,36 +55,44 @@ const GUIDE = {
   reporte: 'Para exportar información:\n1. Entra al módulo Mis reportes.\n2. Filtra por fechas o asesor.\n3. Usa "Exportar Excel" o "Exportar PDF".\nEn Reportes gerencia (solo admin/gerencia) tienes el panorama ejecutivo del equipo.',
   negociacion: 'Las negociaciones guardan ofertas y contraofertas de un negocio:\n1. Ve al módulo Negociaciones.\n2. Crea una oferta vinculada al negocio.\n3. Registra montos y estado hasta llegar a un acuerdo.',
   documento: 'Para subir documentos:\n1. Ve al módulo Documentación.\n2. Pulsa "Subir archivo".\n3. Adjunta contratos o expedientes y vincúlalos a un cliente o negocio.\n4. Podrás descargarlos cuando los necesites.',
-  inventario: 'El inventario funciona así:\n1. Solo administración y gerencia agregan propiedades (Inventario → Agregar), les asignan asesor y las publican.\n2. Al publicar, la propiedad aparece en el catálogo público con su botón de WhatsApp.\n3. Los asesores ven las publicadas y las que les asignaron: abren el detalle, editan notas, agendan citas y crean negocios desde la propiedad.',
-  aviso: 'Para activar recordatorios:\n1. Ve a Configuración y activa los recordatorios (o permite las notificaciones del navegador).\n2. El sistema te avisará de citas y tareas próximas.\n3. También puedes consultar todo en el módulo Avisos.',
+  inventario: 'El inventario funciona así:\n1. "Mis Propiedades" tiene dos pestañas: tu cartera (Mis propiedades) y el inventario general de la empresa.\n2. Filtra por asesor, estado y texto; abre el detalle con mercado, historial y fotos.\n3. Publica una propiedad para que aparezca en el catálogo público (con su botón de WhatsApp).\n4. Admin/gerencia pueden asignar asesor, subir propiedades y publicar; el asesor edita notas, agenda citas y crea negocios desde la ficha.',
+  aviso: 'Sobre avisos y notificaciones:\n1. La campana 🔔 (arriba a la derecha o en los accesos de la derecha) abre el panel de Avisos.\n2. Puedes activar las notificaciones al teléfono en Perfil → Notificaciones (o Configuración → Alertas si eres admin).\n3. Recibirás avisos de citas, tareas vencidas, mensajes y recordatorios, aunque la app esté cerrada.\n4. Si el navegador te pide permiso y dices "Ahora no", actívalas luego desde tu Perfil.',
   prospeccion: 'Para registrar prospección:\n1. Ve al módulo Prospección.\n2. Registra actividades de captación con su inversión y prospectos obtenidos.\n3. Así mides el costo de adquisición de tu cartera.',
-  precio: 'Para ver el historial de precios:\n1. Abre la propiedad en Propiedades.\n2. Pulsa el botón del historial / mercado.\n3. Verás la evolución del precio y el valor de mercado estimado.',
+  precio: 'Para ver el historial de precios:\n1. Abre la propiedad en Propiedades o en Mis Propiedades.\n2. Pulsa el botón del historial / mercado.\n3. Verás la evolución del precio y el valor de mercado estimado.',
   tema: 'Para cambiar el tema:\n1. Usa el botón de luna/sol en la barra superior.\n2. El cambio se guarda en tu dispositivo. También está disponible desde el login.',
   login: 'Para iniciar sesión:\n1. Usa tu identificador o correo y contraseña.\n2. También puedes entrar con tu cuenta de Google.\n3. Si olvidaste tu contraseña, el administrador puede restablecerla desde Configuración → Usuarios.',
   instalar: 'Para instalar la app:\n1. Pulsa "Instalar app" en el menú lateral.\n2. O usa "Agregar a pantalla de inicio" en tu navegador.\n3. La app funciona sin conexión gracias al service worker.',
   configuracion: 'En Configuración (solo admin/gerencia) puedes:\n• Gestionar usuarios, roles y permisos.\n• Editar el catálogo público (WhatsApp, textos, nombre).\n• Activar recordatorios y otras opciones.',
+  navegacion: 'Así te mueves por el sistema:\n1. Usa el menú lateral (botón ☰) para ir entre módulos, agrupados por secciones.\n2. Púlsalo de nuevo para plegarlo y ganar espacio (el logo se vuelve icono).\n3. En el celular se abre como panel deslizante.\n4. Los accesos rápidos de la derecha (campana y burbuja) abren Avisos y Chat en un panel flotante, sin salir de la página; se cierran con la (X), tocando fuera o con Escape.\n5. El botón (?) del encabezado reabre esta guía rápida.',
+  perfil: 'En Mi perfil puedes:\n1. Actualizar tus datos personales y foto.\n2. Activar o desactivar las notificaciones (Perfil → Notificaciones).\n3. Borrar tus historiales de avisos y de actividad.\n4. Descargar o compartir tu carta de presentación (PDF o WhatsApp).',
+  seguridad: 'Para tu seguridad:\n1. Cambia tu contraseña desde Ayuda → Cambiar contraseña (mínimo 8 caracteres, con mayúscula, minúscula y número).\n2. No compartas tu usuario ni tu contraseña.\n3. Cierra sesión al terminar en un equipo compartido (menú de tu perfil).',
+  soporte: 'Si necesitas ayuda:\n1. Abre el módulo de Ayuda.\n2. Escríbenos por WhatsApp (lo más rápido), correo o redes sociales.\n3. Describe qué hacías y qué mensaje viste, para ayudarte rápido.\n4. También puedes reabrir la guía con el botón (?) del encabezado.',
 };
 
 const GUIDE_TOPICS = [
-  { key: 'dashboard', words: ['dashboard', 'indicador', 'grafica', 'grafico', 'panel', 'resumen'] },
-  { key: 'cliente', words: ['cliente', 'prospecto', 'comprador', 'contacto nuevo'] },
-  { key: 'inventario', words: ['inventario', 'publicar', 'publico', 'publica', 'catalogo', 'publicacion'] },
-  { key: 'propiedad', words: ['propiedad', 'inmueble', 'registrar una casa', 'casa', 'terreno', 'departamento'] },
-  { key: 'negocio', words: ['negocio', 'operacion', 'vender', 'venta', 'registrar'] },
-  { key: 'cita', words: ['cita', 'visita', 'agendar', 'reunion', 'agenda'] },
-  { key: 'tarea', words: ['tarea', 'pendiente'] },
-  { key: 'meta', words: ['meta', 'objetivo'] },
-  { key: 'gasto', words: ['gasto', 'egreso'] },
-  { key: 'reporte', words: ['reporte', 'exportar', 'excel', 'pdf'] },
-  { key: 'negociacion', words: ['negociacion', 'oferta', 'contraoferta'] },
-  { key: 'documento', words: ['documento', 'archivo', 'contrato', 'subir archivo'] },
-  { key: 'aviso', words: ['aviso', 'recordatorio', 'notificacion', 'alerta'] },
-  { key: 'prospeccion', words: ['prospeccion', 'captacion'] },
-  { key: 'precio', words: ['precio', 'historial', 'mercado'] },
-  { key: 'tema', words: ['tema', 'oscuro', 'claro', 'dark', 'light'] },
-  { key: 'login', words: ['login', 'sesion', 'contraseña', 'password', 'google', 'acceder', 'entrar'] },
-  { key: 'instalar', words: ['instalar', 'pwa', 'aplicacion', 'pantalla de inicio', 'app'] },
-  { key: 'configuracion', words: ['configuracion', 'ajustes', 'permisos', 'usuarios', 'catalogo publico'] },
+  { key: 'navegacion', words: ['menu', 'menu lateral', 'sidebar', 'navegacion', 'navegar', 'hamburguesa', 'plegar', 'panel flotante', 'burbuja', 'accesos rapidos', 'mover por'] },
+  { key: 'dashboard', words: ['dashboard', 'indicador', 'grafica', 'grafico', 'panel de control', 'resumen', 'inicio'] },
+  { key: 'cliente', words: ['cliente', 'clientes', 'prospecto', 'prospectos', 'comprador', 'vendedor', 'lead', 'contacto nuevo'] },
+  { key: 'inventario', words: ['inventario', 'publicar', 'publico', 'publica', 'catalogo', 'publicacion', 'mis propiedades', 'catalogo publico'] },
+  { key: 'propiedad', words: ['propiedad', 'propiedades', 'inmueble', 'casa', 'terreno', 'departamento', 'vivienda', 'registrar una casa'] },
+  { key: 'negocio', words: ['negocio', 'negocios', 'operacion', 'vender', 'venta', 'promesa', 'cierre', 'comision', 'contrato de venta'] },
+  { key: 'cita', words: ['cita', 'citas', 'visita', 'agendar', 'reunion', 'agenda', 'calendario'] },
+  { key: 'tarea', words: ['tarea', 'tareas', 'pendiente', 'pendientes', 'por hacer'] },
+  { key: 'meta', words: ['meta', 'metas', 'objetivo', 'objetivos', 'kpi'] },
+  { key: 'gasto', words: ['gasto', 'gastos', 'egreso', 'egresos', 'comprobante'] },
+  { key: 'reporte', words: ['reporte', 'reportes', 'exportar', 'excel', 'pdf', 'informe', 'estadistica'] },
+  { key: 'negociacion', words: ['negociacion', 'negociaciones', 'oferta', 'contraoferta'] },
+  { key: 'documento', words: ['documento', 'documentos', 'documentacion', 'archivo', 'contrato', 'subir archivo', 'expediente'] },
+  { key: 'aviso', words: ['aviso', 'avisos', 'notificacion', 'notificaciones', 'push', 'recordatorio', 'alerta', 'campana'] },
+  { key: 'prospeccion', words: ['prospeccion', 'prospecciones', 'captacion'] },
+  { key: 'precio', words: ['precio', 'precios', 'historial', 'mercado', 'valuacion'] },
+  { key: 'tema', words: ['tema', 'oscuro', 'claro', 'dark', 'light', 'colores'] },
+  { key: 'seguridad', words: ['seguridad', 'contraseña', 'contrasena', 'password', 'clave', 'cambiar contraseña', 'cerrar sesion', 'cerrar la sesion'] },
+  { key: 'login', words: ['login', 'iniciar sesion', 'sesion', 'google', 'acceder', 'entrar', 'cuenta', 'correo'] },
+  { key: 'perfil', words: ['perfil', 'mi cuenta', 'mi perfil', 'foto', 'semblanza', 'carta de presentacion'] },
+  { key: 'instalar', words: ['instalar', 'instalacion', 'pwa', 'aplicacion', 'pantalla de inicio', 'app', 'descargar app'] },
+  { key: 'configuracion', words: ['configuracion', 'configurar', 'ajustes', 'permisos', 'usuarios', 'catalogo publico'] },
+  { key: 'soporte', words: ['soporte', 'ayuda tecnica', 'whatsapp', 'problema', 'error', 'no funciona'] },
 ];
 
 const GUIDE_HINTS = [
@@ -90,7 +101,9 @@ const GUIDE_HINTS = [
   'como entro', 'como uso', 'como se usa', 'como subo', 'como agrego', 'como doy de alta', 'como registrar',
   'como edito', 'como elimino', 'como genero', 'como consulto', 'paso a paso', 'guia', 'tutorial', 'ayudame a',
   'ayudame como', 'explicame como', 'explicame que', 'para que sirve', 'que es', 'que son', 'como funciona',
-  'como puedo', 'como configuro', 'como veo', 'como se',
+  'como puedo', 'como configuro', 'como veo', 'como se', 'quiero saber', 'quiero aprender', 'necesito saber',
+  'dime como', 'ensename', 'muestrame', 'no se como', 'no se usar', 'no se donde', 'donde esta', 'donde encuentro',
+  'donde puedo', 'donde veo', 'como llego', 'informacion sobre', 'acerca de',
 ];
 
 function normalize(text) {
@@ -138,18 +151,23 @@ const ask = asyncHandler(async (req, res) => {
   const name = req.user.name || req.user.username || '';
 
   // ---------- Saludo ----------
-  if (has(text, 'hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'que tal', 'saludos')) {
+  if (has(text, 'hola', 'holaa', 'holi', 'hey', 'buenas', 'buenos dias', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'que onda', 'saludos', 'hi', 'hello')) {
     return res.json({ success: true, data: { answer: `¡Hola${name ? ', ' + name : ''}! Soy tu asistente del CRM. Puedo resolver tus dudas sobre los datos y enseñarte a usar el sistema.\n\n${CAPABILITIES.join('\n')}` } });
   }
 
   // ---------- Presentación ----------
-  if (has(text, 'como te llamas', 'quien eres', 'que eres', 'que eres tu', 'presentate')) {
+  if (has(text, 'como te llamas', 'quien eres', 'que eres', 'que eres tu', 'presentate', 'eres un bot', 'eres humano', 'como funcionas')) {
     return res.json({ success: true, data: { answer: 'Soy el asistente inteligente de tu CRM Inmobiliaria. Consulto tu información en tiempo real y respondo al instante, además de guiarte paso a paso por todos los módulos.' } });
   }
 
   // ---------- Gracias ----------
-  if (has(text, 'gracias', 'te agradezco')) {
+  if (has(text, 'gracias', 'te agradezco', 'muchas gracias', 'mil gracias')) {
     return res.json({ success: true, data: { answer: '¡Con gusto! Estoy aquí cuando me necesites. Si quieres aprender a usar algo, pregunta "¿cómo creo una meta?" por ejemplo.' } });
+  }
+
+  // ---------- Despedida ----------
+  if (has(text, 'adios', 'chao', 'hasta luego', 'nos vemos', 'bye', 'me voy', 'hasta pronto')) {
+    return res.json({ success: true, data: { answer: '¡Éxito con tus operaciones! Aquí estaré cuando me necesites. 🏡' } });
   }
 
   // ---------- Guía de uso ----------
@@ -163,6 +181,26 @@ const ask = asyncHandler(async (req, res) => {
   // ---------- Módulos del sistema ----------
   if (has(text, 'que modulos', 'cuales son los modulos', 'modulos del sistema', 'que tiene el sistema', 'secciones', 'funciones del sistema', 'menu', 'como es el sistema', 'que hace la app')) {
     return res.json({ success: true, data: { answer: 'El sistema está organizado en estos módulos:\n\n' + MODULES.join('\n') } });
+  }
+
+  // ---------- Navegación: ¿dónde está...? ----------
+  if (has(text, 'donde esta', 'donde encuentro', 'donde puedo', 'donde veo', 'como llego', 'como me muevo', 'no encuentro', 'no se donde', 'ubicar', 'ubicacion de')) {
+    return res.json({
+      success: true,
+      data: {
+        answer: 'Te ubico rápido:\n• Módulos → menú lateral (☰).\n• Avisos → campana 🔔 de los accesos de la derecha (panel flotante) o el módulo Avisos.\n• Chat → burbuja 💬 de los accesos de la derecha (panel flotante).\n• Tu perfil y cerrar sesión → arriba a la derecha.\n• Guía rápida → botón (?) del encabezado.\n• Tema claro/oscuro → botón luna/sol de arriba.\n\nLos paneles flotantes se cierran con la (X), tocando fuera o con la tecla Escape.',
+      },
+    });
+  }
+
+  // ---------- Activar notificaciones ----------
+  if (has(text, 'activar las notificaciones', 'activar notificaciones', 'notificaciones push', 'notificaciones al telefono', 'activar push', 'permiso de notificaciones', 'recibir notificaciones')) {
+    return res.json({
+      success: true,
+      data: {
+        answer: 'Para activar las notificaciones:\n1. Ve a Perfil → Notificaciones (o Configuración → Alertas si eres admin).\n2. Pulsa "Activar" y acepta el permiso del navegador.\n3. Usa "Probar" para confirmar que llegan; "Desactivar" para detenerlas.\n\nEn iPhone deben agregarse a la pantalla de inicio (iOS 16.4 o superior); verás el botón "Cómo hacerlo". Si dijiste "Ahora no" al iniciar sesión, puedes activarlas luego desde tu Perfil.',
+      },
+    });
   }
 
   // ---------- Roles y permisos ----------
@@ -328,7 +366,7 @@ Appointment.find({ user: uid, status: { $in: ['pendiente', 'confirmada'] }, date
   return res.json({
     success: true,
     data: {
-      answer: 'Aún no estoy seguro de cómo responder eso. Prueba con frases como:\n\n' + CAPABILITIES.join('\n') + '\n\nO pregúntame cómo usar algo: "¿cómo creo una cita?", "¿qué es el inventario?".',
+      answer: 'Aún no estoy seguro de cómo responder eso. Prueba con frases como:\n\n' + CAPABILITIES.join('\n') + '\n\nPuedes preguntarme por tus datos (clientes, propiedades, citas, tareas, metas, ingresos, gastos, negocios, avisos), pedir una guía ("¿cómo creo una cita?", "¿qué es el inventario?", "¿cómo activo las notificaciones?") o ubicar algo ("¿dónde está el chat?").',
     },
   });
 });

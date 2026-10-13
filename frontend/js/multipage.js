@@ -353,6 +353,9 @@ window.AppShell = (() => {
     root.querySelectorAll('[data-fab-close]').forEach((btn) => btn.addEventListener('click', () => closeFabPanels()));
     const backdrop = root.querySelector('#fab-panel-backdrop');
     if (backdrop) backdrop.addEventListener('click', () => closeFabPanels());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && fabPanelOpen) closeFabPanels();
+    });
     const readAll = root.querySelector('[data-notif-readall]');
     if (readAll) readAll.addEventListener('click', async () => {
       try {

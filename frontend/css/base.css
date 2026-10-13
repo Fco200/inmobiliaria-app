@@ -3429,9 +3429,10 @@ body.sidebar-collapsed { --sidebar-w: 78px; }
 /* El menú horizontal del topnav queda oculto: ahora vive en el sidebar. */
 .topnav-nav { display: none !important; }
 
-@media (min-width: 901px) {
-  .topnav-hamburger { display: inline-flex !important; }
-}
+/* Un solo control por tamaño de pantalla:
+   - Escritorio (>900px): la hamburguesa vive DENTRO del sidebar (.app-sidebar-collapse).
+   - Móvil (<=900px): la hamburguesa del topnav abre el drawer lateral.
+   Así nunca se ven dos hamburguesas a la vez. */
 
 .app-sidebar {
   position: sticky;

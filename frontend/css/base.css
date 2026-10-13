@@ -3420,6 +3420,7 @@ body.page-chat .assistant-panel {
   grid-template-rows: auto 1fr;
   min-height: 100vh;
   align-items: start;
+  transition: grid-template-columns 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app.has-sidebar > .topnav { grid-column: 1 / -1; grid-row: 1; }
 .app.has-sidebar > .app-sidebar { grid-column: 1; grid-row: 2; }
@@ -3446,16 +3447,38 @@ body.sidebar-collapsed { --sidebar-w: 78px; }
   flex-direction: column;
   padding: 12px 10px 10px;
   z-index: 40;
-  transition: width 0.18s ease;
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1), padding 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app-sidebar-top {
   display: flex; align-items: center; gap: 8px;
   padding: 2px 6px 12px; margin-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
-.app-sidebar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; text-decoration: none; color: var(--text); }
-.app-sidebar-logo { height: 32px; width: auto; border-radius: 8px; flex-shrink: 0; }
-.app-sidebar-brandname { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.app-sidebar-brand { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1; text-decoration: none; color: var(--text); }
+
+/* Intercambio de logo con animación: cuando el menú está expandido se ve el
+   logotipo largo (logoinmobles.png); al colapsar, el largo se funde y se
+   reduce mientras aparece el icono cuadrado (LOGOICONO.jpeg). */
+.app-sidebar-logo-wide {
+  height: 32px; width: auto; max-width: 170px;
+  flex-shrink: 0; object-fit: contain; border-radius: 8px;
+  margin-right: 10px;
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-sidebar-logo-icon {
+  height: 34px; width: 34px; max-width: 0;
+  flex-shrink: 0; object-fit: contain; border-radius: 9px;
+  opacity: 0; overflow: hidden; transform: scale(0.85);
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.sidebar-collapsed .app-sidebar-logo-wide { max-width: 0; opacity: 0; margin-right: 0; }
+body.sidebar-collapsed .app-sidebar-logo-icon { max-width: 34px; opacity: 1; transform: scale(1); }
+
+.app-sidebar-brandname {
+  font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; max-width: 160px;
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+}
 .app-sidebar-collapse {
   width: 34px; height: 34px; flex-shrink: 0;
   border-radius: 10px; border: 1px solid var(--border);
@@ -3469,29 +3492,40 @@ body.sidebar-collapsed { --sidebar-w: 78px; }
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.12em; color: var(--text-muted);
   padding: 14px 12px 4px;
+  max-height: 40px; opacity: 1; overflow: hidden;
+  transition: max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease, padding 0.28s ease;
 }
 .app-sidebar-link {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 0;
   padding: 9px 12px; border-radius: 10px;
   color: var(--text); text-decoration: none;
   font-size: 13.5px; font-weight: 500;
   white-space: nowrap; overflow: hidden;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, padding 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app-sidebar-link:hover { background: var(--icon-bg); color: var(--primary); }
 .app-sidebar-link.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
-.app-sidebar-ico { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; }
-.app-sidebar-label { overflow: hidden; text-overflow: ellipsis; }
+.app-sidebar-ico {
+  width: 20px; text-align: center; font-size: 16px; flex-shrink: 0;
+  margin-right: 12px;
+  transition: margin-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-sidebar-label {
+  overflow: hidden; text-overflow: ellipsis;
+  max-width: 200px; opacity: 1;
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+}
 .app-sidebar-foot { margin-top: 8px; padding: 10px 12px 2px; border-top: 1px solid var(--border); }
-.app-sidebar-credit { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.02em; }
+.app-sidebar-credit { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.02em; transition: opacity 0.18s ease; }
 
-body.sidebar-collapsed .app-sidebar-brandname,
-body.sidebar-collapsed .app-sidebar-label,
-body.sidebar-collapsed .app-sidebar-section,
-body.sidebar-collapsed .app-sidebar-credit { display: none; }
+body.sidebar-collapsed .app-sidebar-brandname { max-width: 0; opacity: 0; }
+body.sidebar-collapsed .app-sidebar-label { max-width: 0; opacity: 0; }
+body.sidebar-collapsed .app-sidebar-section { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
+body.sidebar-collapsed .app-sidebar-credit { opacity: 0; }
+body.sidebar-collapsed .app-sidebar-ico { margin-right: 0; }
 body.sidebar-collapsed .app-sidebar { padding-left: 8px; padding-right: 8px; }
 body.sidebar-collapsed .app-sidebar-link { justify-content: center; padding: 10px 8px; }
-body.sidebar-collapsed .app-sidebar-brand { justify-content: center; }
+body.sidebar-collapsed .app-sidebar-brand { justify-content: center; flex: 0 0 auto; }
 body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
 
 .app-sidebar-backdrop { display: none; }

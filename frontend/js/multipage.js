@@ -73,7 +73,8 @@ window.AppShell = (() => {
     aside.innerHTML = `
       <div class="app-sidebar-top">
         <a class="app-sidebar-brand" href="home.html" title="INMOBLES">
-          <img src="logoinmobles.png" alt="INMOBLES" class="app-sidebar-logo">
+          <img src="logoinmobles.png" alt="INMOBLES" class="app-sidebar-logo-wide">
+          <img src="LOGOICONO.jpeg" alt="INMOBLES" class="app-sidebar-logo-icon">
           <span class="app-sidebar-brandname">INMOBLES</span>
         </a>
         <button class="app-sidebar-collapse" id="app-sidebar-collapse" type="button" title="Colapsar menú" aria-label="Colapsar menú">&#9776;</button>

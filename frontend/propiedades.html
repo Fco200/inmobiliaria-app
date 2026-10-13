@@ -81,6 +81,14 @@
           <option value="otro">Otro</option>
         </select>
       </div>
+      <div class="search-field search-field-range">
+        <label>Precio (MXN)</label>
+        <div class="search-range">
+          <input class="form-control" id="search-min-price" type="number" min="0" step="1000" inputmode="numeric" placeholder="Mínimo" aria-label="Precio mínimo" />
+          <span class="search-range-sep">&ndash;</span>
+          <input class="form-control" id="search-max-price" type="number" min="0" step="1000" inputmode="numeric" placeholder="Máximo" aria-label="Precio máximo" />
+        </div>
+      </div>
       <button class="btn btn-primary btn-search" type="submit">&#128269; Buscar propiedades</button>
     </form>
   </section>

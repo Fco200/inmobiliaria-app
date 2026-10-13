@@ -7,6 +7,29 @@ window.Pages.chat = {
 
   async render(container) {
     document.body.classList.add('page-chat');
+    const isEmbed = /[?&]embed=1\b/.test(window.location.search);
+    if (isEmbed) document.body.classList.add('is-embed');
+
+    // En móvil el teclado del sistema redimensiona el "visual viewport" sin
+    // cambiar 100vh. Se publican dos variables (alto y desplazamiento reales)
+    // para que la conversación abierta quede siempre encima del teclado y la
+    // barra de escritura no se pierda detrás de él.
+    (function bindChatViewport() {
+      const vv = window.visualViewport;
+      const apply = () => {
+        const h = vv ? vv.height : window.innerHeight;
+        const top = vv ? vv.offsetTop : 0;
+        document.documentElement.style.setProperty('--chat-vh', Math.round(h) + 'px');
+        document.documentElement.style.setProperty('--chat-top', Math.round(top) + 'px');
+      };
+      apply();
+      if (vv) {
+        vv.addEventListener('resize', apply);
+        vv.addEventListener('scroll', apply);
+      }
+      window.addEventListener('resize', apply);
+      window.addEventListener('orientationchange', () => setTimeout(apply, 250));
+    })();
 
     // El layout se inyecta ANTES de consultar los elementos para evitar
     // errores "cannot read properties of null". Todas las consultas se
@@ -392,6 +415,8 @@ window.Pages.chat = {
     // regresa al módulo desde el que se entró; sin módulo de origen, al inicio.
     function exitToModules() {
       closeConversation();
+      // Embebido en el panel flotante: no se navega fuera del módulo actual.
+      if (isEmbed) return;
       let referrer = null;
       try {
         referrer = document.referrer ? new URL(document.referrer) : null;

@@ -11,6 +11,8 @@ window.PropiedadesPage = (() => {
     type: '',
     operationType: '',
     city: '',
+    minPrice: '',
+    maxPrice: '',
     asesorId: '',
     activeAsesor: null,
     propId: '',
@@ -109,6 +111,8 @@ window.PropiedadesPage = (() => {
         operationType: state.operationType,
         city: state.city,
       };
+      if (state.minPrice !== '' && state.minPrice != null) params.minPrice = state.minPrice;
+      if (state.maxPrice !== '' && state.maxPrice != null) params.maxPrice = state.maxPrice;
       if (state.asesorId) params.asesorId = state.asesorId;
       const result = await window.API.public.properties(params);
       const meta = result.meta || {};
@@ -304,6 +308,8 @@ window.PropiedadesPage = (() => {
     state.type = (url.get('type') || '').trim();
     state.operationType = (url.get('operationType') || '').trim();
     state.city = (url.get('city') || '').trim();
+    state.minPrice = (url.get('minPrice') || '').trim();
+    state.maxPrice = (url.get('maxPrice') || '').trim();
 
     const setValue = (id, value) => {
       const el = document.getElementById(id);
@@ -313,6 +319,8 @@ window.PropiedadesPage = (() => {
     setValue('search-type', state.type);
     setValue('search-operation', state.operationType);
     setValue('search-city', state.city);
+    setValue('search-min-price', state.minPrice);
+    setValue('search-max-price', state.maxPrice);
 
     if (state.asesorId) {
       try {
@@ -330,12 +338,21 @@ window.PropiedadesPage = (() => {
         state.operationType = document.getElementById('search-operation').value;
         state.type = document.getElementById('search-type').value;
         state.city = document.getElementById('search-city').value;
+        state.minPrice = (document.getElementById('search-min-price') ? document.getElementById('search-min-price').value : '').trim();
+        state.maxPrice = (document.getElementById('search-max-price') ? document.getElementById('search-max-price').value : '').trim();
+        if (state.minPrice && state.maxPrice && Number(state.minPrice) > Number(state.maxPrice)) {
+          const tmp = state.minPrice;
+          state.minPrice = state.maxPrice;
+          state.maxPrice = tmp;
+        }
         state.page = 1;
         const qs = [
           state.q ? `q=${encodeURIComponent(state.q)}` : '',
           state.operationType ? `operationType=${encodeURIComponent(state.operationType)}` : '',
           state.type ? `type=${encodeURIComponent(state.type)}` : '',
           state.city ? `city=${encodeURIComponent(state.city)}` : '',
+          state.minPrice ? `minPrice=${encodeURIComponent(state.minPrice)}` : '',
+          state.maxPrice ? `maxPrice=${encodeURIComponent(state.maxPrice)}` : '',
           state.asesorId ? `asesorId=${encodeURIComponent(state.asesorId)}` : '',
         ].filter(Boolean).join('&');
         history.replaceState(null, '', `propiedades.html${qs ? '?' + qs : ''}`);

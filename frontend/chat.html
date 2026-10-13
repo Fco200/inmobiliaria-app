@@ -14,12 +14,20 @@
   <link rel="apple-touch-icon" sizes="192x192" href="LOGOICONO.jpeg">
   <link rel="stylesheet" href="css/base.css">
   <style>
-    /* El chat ocupa exactamente lo que queda debajo del topnav (y de la
-       fila de padding del contenido) sin depender de cálculos con vh: la
-       página deja de hacer scroll propio y el alto real lo da el flex. */
-    body.page-chat .app { height: 100vh; overflow: hidden; }
+    /* El chat ocupa exactamente lo que queda bajo el topnav sin depender de
+       cálculos con vh: la página no hace scroll propio y el alto lo da el
+       flex. Se usa 100dvh (alto dinámico) para que en el móvil el teclado no
+       "empuje" la barra de escritura fuera de la pantalla. */
+    body.page-chat .app { height: 100dvh; overflow: hidden; }
     body.page-chat .main { min-height: 0; overflow: hidden; }
-    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; }
+    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+    /* Modo embebido (chat dentro del panel flotante): sin cabecera ni bordes. */
+    body.is-embed .topnav { display: none !important; }
+    body.is-embed .content { padding: 0 !important; }
+    body.is-embed .chat-wrap { border-radius: 0; border: none; }
+    body.is-embed #btn-exit-modules,
+    body.is-embed #btn-exit-header { display: none !important; }
     .chat-wrap { display: flex; flex: 1; min-height: 0; gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
     .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; }
     .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; }
@@ -73,12 +81,19 @@
       .chat-wrap { border-radius: 0; border-left: none; border-right: none; }
       .chat-sidebar { width: 100%; }
       .chat-main { display: none; }
+      /* La conversación abierta ocupa la ventana VISIBLE real (visualViewport),
+         de modo que al abrir el teclado del móvil la barra de escritura sigue
+         pegada al borde inferior y la lista de mensajes se desplaza arriba. */
       .chat-main.active {
-        display: flex; position: fixed; inset: 0; top: 0; z-index: 200;
+        display: flex; position: fixed; left: 0; right: 0;
+        top: var(--chat-top, 0px);
+        height: var(--chat-vh, 100dvh);
+        z-index: 200;
         box-shadow: 0 0 40px rgba(0,0,0,0.3);
       }
-      .chat-header { position: sticky; top: 0; z-index: 5; background: var(--white); }
-      .chat-input-bar { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+      .chat-header { position: sticky; top: 0; z-index: 5; background: var(--white); flex-shrink: 0; }
+      .chat-messages { flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
+      .chat-input-bar { flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
       .chat-sidebar-head { flex-wrap: wrap; }
       .chat-item-preview { max-width: 100%; }
       .unread-badge { min-width: 20px; height: 20px; font-size: 11px; }

@@ -2,28 +2,27 @@
 
 window.AppShell = (() => {
   const NAV = [
-    { key: 'home', label: 'Inicio', href: 'home.html', icon: '&#127969;' },
-    { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9638;' },
-    { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;' },
-    { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;' },
-{ key: 'properties', label: 'Captar Propiedades', href: 'properties.html', icon: '&#127968;' },
-    { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;' },
-    { key: 'inventory-general', label: 'Inventario General', href: 'inventory-general.html', icon: '&#128203;' },
-    { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;' },
-    { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;' },
-    { key: 'calendar', label: 'Calendario', href: 'calendar.html', icon: '&#128467;' },
-    { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;' },
-    { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;' },
-    { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;' },
-    { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;' },
-    { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;' },
-    { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;' },
-      { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;' },
-    { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;' },
-    { key: 'directorio', label: 'Directorio', href: 'directorio.html', icon: '&#128101;' },
-    { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;' },
-    { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;' },
-    { key: 'settings', label: 'Config', href: 'settings.html', icon: '&#9881;' },
+    { key: 'home', label: 'Inicio', href: 'home.html', icon: '&#127969;', section: 'Principal' },
+    { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9638;', section: 'Principal' },
+    { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;', section: 'Comercial' },
+    { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;', section: 'Comercial' },
+    { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;', section: 'Comercial' },
+    { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;', section: 'Comercial' },
+    { key: 'calendar', label: 'Calendario', href: 'calendar.html', icon: '&#128467;', section: 'Comercial' },
+    { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;', section: 'Comercial' },
+    { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;', section: 'Comercial' },
+    { key: 'properties', label: 'Captar Propiedades', href: 'properties.html', icon: '&#127968;', section: 'Propiedades' },
+    { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;', section: 'Propiedades' },
+    { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;', section: 'Finanzas' },
+    { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;', section: 'Finanzas' },
+    { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;', section: 'Finanzas' },
+    { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;', section: 'Recursos' },
+    { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;', section: 'Recursos' },
+    { key: 'directorio', label: 'Directorio', href: 'directorio.html', icon: '&#128101;', section: 'Recursos' },
+    { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;', section: 'Recursos' },
+    { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;', section: 'Sistema' },
+    { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;', section: 'Sistema' },
+    { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema' },
   ];
 
   function currentUserRole() {
@@ -60,16 +59,95 @@ window.AppShell = (() => {
     return window.Pages && window.Pages[currentKey()];
   }
 
+  // Construye el menú lateral (sidebar) a partir de NAV, agrupado por
+  // secciones. El sidebar vive fuera del topnav para que el perfil, el tema,
+  // el botón de actualización y salir sigan SIEMPRE visibles arriba.
+  function buildSidebar() {
+    const app = document.querySelector('.app');
+    if (!app || document.getElementById('app-sidebar')) return;
+    app.classList.add('has-sidebar');
+
+    const aside = document.createElement('aside');
+    aside.id = 'app-sidebar';
+    aside.className = 'app-sidebar';
+    aside.innerHTML = `
+      <div class="app-sidebar-top">
+        <a class="app-sidebar-brand" href="home.html" title="INMOBLES">
+          <img src="logoinmobles.png" alt="INMOBLES" class="app-sidebar-logo">
+          <span class="app-sidebar-brandname">INMOBLES</span>
+        </a>
+        <button class="app-sidebar-collapse" id="app-sidebar-collapse" type="button" title="Colapsar menú" aria-label="Colapsar menú">&#9776;</button>
+      </div>
+      <nav class="app-sidebar-nav" id="app-sidebar-nav" aria-label="Módulos"></nav>
+      <div class="app-sidebar-foot">
+        <span class="app-sidebar-credit">INMOBLES &times; FV DIGITAL</span>
+      </div>`;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'app-sidebar-backdrop';
+    backdrop.id = 'app-sidebar-backdrop';
+
+    // El sidebar se inserta justo antes del <main> para que el grid lo coloque
+    // en la primera columna, debajo de la cabecera.
+    const main = app.querySelector('.main');
+    if (main) app.insertBefore(aside, main); else app.appendChild(aside);
+    app.appendChild(backdrop);
+
+    wireSidebar();
+    renderNav();
+  }
+
+  function closeMobileSidebar() {
+    document.body.classList.remove('sidebar-open');
+  }
+
+  function isMobileSidebar() {
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+
+  function wireSidebar() {
+    const collapse = document.getElementById('app-sidebar-collapse');
+    if (collapse) {
+      collapse.addEventListener('click', () => {
+        if (isMobileSidebar()) closeMobileSidebar();
+        else document.body.classList.toggle('sidebar-collapsed');
+      });
+    }
+    const backdrop = document.getElementById('app-sidebar-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeMobileSidebar);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMobileSidebar();
+    });
+  }
+
+  function toggleSidebar() {
+    if (isMobileSidebar()) document.body.classList.toggle('sidebar-open');
+    else document.body.classList.toggle('sidebar-collapsed');
+  }
+
   function renderNav() {
-    const nav = document.getElementById('topnav-nav');
+    const nav = document.getElementById('app-sidebar-nav') || document.getElementById('topnav-nav');
     if (!nav) return;
     const active = currentKey();
     const items = visibleNav();
-    nav.innerHTML = items.map(
-      (item) =>
-        `<a class="topnav-link ${item.key === active ? 'active' : ''}" href="${item.href}">` +
-        `<span class="nav-icon">${item.icon}</span><span>${item.label}</span></a>`
-    ).join('');
+    let html = '';
+    let lastSection = null;
+    items.forEach((item) => {
+      const section = item.section || '';
+      if (section && section !== lastSection) {
+        html += `<div class="app-sidebar-section">${UI.escapeHtml(section)}</div>`;
+        lastSection = section;
+      }
+      html +=
+        `<a class="app-sidebar-link ${item.key === active ? 'active' : ''}" href="${item.href}" title="${UI.escapeHtml(item.label)}">` +
+        `<span class="app-sidebar-ico">${item.icon}</span>` +
+        `<span class="app-sidebar-label">${UI.escapeHtml(item.label)}</span></a>`;
+    });
+    nav.innerHTML = html;
+    // En móvil, al tocar un módulo se cierra el menú para no tapar la página.
+    nav.querySelectorAll('.app-sidebar-link').forEach((link) => {
+      link.addEventListener('click', closeMobileSidebar);
+    });
   }
 
   function updateTopnavUser() {
@@ -216,7 +294,9 @@ window.AppShell = (() => {
   }
 
   // Botones flotantes de acceso rápido: chat del equipo y avisos (notificaciones),
-  // cada uno con su contador de no leídos. Visible en todas las páginas.
+  // cada uno con su contador de no leídos. Al pulsarlos NO se navega: se abre un
+  // panel flotante en la misma página (los avisos se listan en vivo y el chat
+  // corre embebido en un iframe), para no perder el contexto del módulo.
   function injectActivityFab() {
     if (!window.ApiClient || !window.ApiClient.isAuthenticated()) return;
     if (document.getElementById('activity-fab')) return;
@@ -224,10 +304,166 @@ window.AppShell = (() => {
     fab.id = 'activity-fab';
     fab.className = 'activity-fab';
     fab.innerHTML = `
-      <a class="activity-fab-btn" href="notifications.html" title="Avisos y notificaciones" aria-label="Avisos y notificaciones">&#128276;<span class="activity-badge" data-badge="notifications"></span></a>
-      <a class="activity-fab-btn activity-fab-chat" href="chat.html" title="Chat del equipo" aria-label="Chat del equipo">&#128172;<span class="activity-badge" data-badge="chat"></span></a>
+      <button class="activity-fab-btn" type="button" data-panel="notifications" title="Avisos y notificaciones" aria-label="Avisos y notificaciones">&#128276;<span class="activity-badge" data-badge="notifications"></span></button>
+      <button class="activity-fab-btn activity-fab-chat" type="button" data-panel="chat" title="Chat del equipo" aria-label="Chat del equipo">&#128172;<span class="activity-badge" data-badge="chat"></span></button>
     `;
     document.body.appendChild(fab);
+    fab.querySelector('[data-panel="notifications"]').addEventListener('click', () => toggleFabPanel('notifications'));
+    fab.querySelector('[data-panel="chat"]').addEventListener('click', () => toggleFabPanel('chat'));
+  }
+
+  // ── Paneles flotantes de Avisos y Chat ────────────────────────────────────
+  let fabPanelOpen = null;
+
+  function buildFabPanels() {
+    if (document.getElementById('fab-panels')) return;
+    const root = document.createElement('div');
+    root.id = 'fab-panels';
+    root.className = 'fab-panels';
+    root.innerHTML = `
+      <div class="fab-panel-backdrop" id="fab-panel-backdrop"></div>
+      <section class="fab-panel" id="fab-panel-notifications" hidden aria-label="Avisos">
+        <header class="fab-panel-head">
+          <span>&#128276; Avisos</span>
+          <span class="fab-panel-head-actions">
+            <button class="fab-panel-link" type="button" data-notif-readall>Marcar leídas</button>
+            <a class="fab-panel-link" href="notifications.html">Ver todas</a>
+            <button class="fab-panel-x" type="button" data-fab-close aria-label="Cerrar">&#10005;</button>
+          </span>
+        </header>
+        <div class="fab-panel-body" id="fab-notif-body">
+          <div class="loading">Cargando avisos...</div>
+        </div>
+      </section>
+      <section class="fab-panel fab-panel-chat" id="fab-panel-chat" hidden aria-label="Chat del equipo">
+        <header class="fab-panel-head">
+          <span>&#128172; Chat del equipo</span>
+          <span class="fab-panel-head-actions">
+            <a class="fab-panel-link" href="chat.html">Abrir completo</a>
+            <button class="fab-panel-x" type="button" data-fab-close aria-label="Cerrar">&#10005;</button>
+          </span>
+        </header>
+        <div class="fab-panel-body fab-panel-body-chat">
+          <iframe id="fab-chat-frame" title="Chat del equipo" src="about:blank" loading="lazy"></iframe>
+        </div>
+      </section>`;
+    document.body.appendChild(root);
+
+    root.querySelectorAll('[data-fab-close]').forEach((btn) => btn.addEventListener('click', () => closeFabPanels()));
+    const backdrop = root.querySelector('#fab-panel-backdrop');
+    if (backdrop) backdrop.addEventListener('click', () => closeFabPanels());
+    const readAll = root.querySelector('[data-notif-readall]');
+    if (readAll) readAll.addEventListener('click', async () => {
+      try {
+        await window.API.notifications.markAllRead();
+        UI.toast('Avisos marcados como leídos', 'success');
+        loadNotificationsPanel();
+        refreshNotificationBadge();
+      } catch (error) {
+        UI.toast(error.message, 'error');
+      }
+    });
+  }
+
+  function openFabPanel(name) {
+    buildFabPanels();
+    fabPanelOpen = name;
+    const notif = document.getElementById('fab-panel-notifications');
+    const chat = document.getElementById('fab-panel-chat');
+    if (notif) notif.hidden = name !== 'notifications';
+    if (chat) chat.hidden = name !== 'chat';
+    document.body.classList.add('fab-panel-open');
+    if (name === 'notifications') loadNotificationsPanel();
+    if (name === 'chat') {
+      const frame = document.getElementById('fab-chat-frame');
+      if (frame && (!frame.dataset.loaded || frame.getAttribute('src') === 'about:blank')) {
+        frame.dataset.loaded = '1';
+        frame.src = 'chat.html?embed=1';
+      } else if (frame) {
+        try { frame.contentWindow.focus(); } catch (e) {}
+      }
+    }
+  }
+
+  function closeFabPanels() {
+    fabPanelOpen = null;
+    document.body.classList.remove('fab-panel-open');
+    const notif = document.getElementById('fab-panel-notifications');
+    const chat = document.getElementById('fab-panel-chat');
+    if (notif) notif.hidden = true;
+    if (chat) chat.hidden = true;
+  }
+
+  function toggleFabPanel(name) {
+    if (fabPanelOpen === name) closeFabPanels();
+    else openFabPanel(name);
+  }
+
+  function notifIcon(type) {
+    const map = {
+      task: '&#9745;', appointment: '&#128197;', business: '&#128179;', goal: '&#127919;',
+      property: '&#127968;', client: '&#128101;', prospect: '&#128269;', chat: '&#128172;',
+    };
+    return map[type] || '&#128276;';
+  }
+
+  async function loadNotificationsPanel() {
+    const body = document.getElementById('fab-notif-body');
+    if (!body) return;
+    body.innerHTML = '<div class="loading">Cargando avisos...</div>';
+    try {
+      const res = await window.API.notifications.list({ limit: 20 });
+      const raw = res && typeof res === 'object' && Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+      if (!raw.length) {
+        body.innerHTML = '<div class="fab-panel-empty">No tienes avisos por ahora. &#10024;</div>';
+        return;
+      }
+      body.innerHTML = raw.map((n) => {
+        const unread = !n.read && !n.isRead;
+        const when = n.createdAt && window.Format ? Format.dateTime(n.createdAt) : '';
+        return `<button class="fab-notif${unread ? ' is-unread' : ''}" type="button" data-id="${UI.escapeHtml(String(n._id))}">
+          <span class="fab-notif-ico">${notifIcon(n.type)}</span>
+          <span class="fab-notif-txt">
+            <strong>${UI.escapeHtml(n.title || 'Aviso')}</strong>
+            <span class="fab-notif-msg">${UI.escapeHtml(n.message || '')}</span>
+            ${when ? `<span class="fab-notif-time">${UI.escapeHtml(when)}</span>` : ''}
+          </span>
+        </button>`;
+      }).join('');
+      body.querySelectorAll('[data-id]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const item = raw.find((n) => String(n._id) === btn.dataset.id);
+          if (!item) return;
+          btn.classList.remove('is-unread');
+          try {
+            if (window.API.notifications.markRead) await window.API.notifications.markRead(item._id);
+          } catch (e) { /* ignore */ }
+          refreshNotificationBadge();
+          openNotificationDetail(item);
+        });
+      });
+    } catch (error) {
+      body.innerHTML = '<div class="fab-panel-empty">No se pudieron cargar los avisos.</div>';
+    }
+  }
+
+  function openNotificationDetail(item) {
+    if (typeof UI === 'undefined') return;
+    const when = item.createdAt && window.Format ? Format.dateTime(item.createdAt) : '';
+    UI.openModal({
+      title: 'Aviso',
+      size: 500,
+      body: `
+        <h3 style="margin:0 0 12px;font-size:18px;line-height:1.35;">${UI.escapeHtml(item.title || 'Aviso')}</h3>
+        <p style="margin:0 0 14px;font-size:14px;line-height:1.7;white-space:pre-wrap;">${UI.escapeHtml(item.message || '')}</p>
+        ${when ? `<div class="text-muted" style="font-size:12px;">${UI.escapeHtml(when)}</div>` : ''}`,
+      footer: '<button class="btn btn-primary" type="button" data-ok-modal>Cerrar</button>',
+    });
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      const ok = overlay.querySelector('[data-ok-modal]');
+      if (ok) ok.addEventListener('click', () => UI.closeModal());
+    }
   }
 
   async function refreshNotificationBadge() {
@@ -255,13 +491,10 @@ window.AppShell = (() => {
       .catch(() => {});
   }
 
+  // El chat ya no vive en el menú: se abre desde el botón flotante, así que el
+  // contador de no leídos se refleja únicamente en el badge del FAB.
   function refreshChatBadge() {
     injectActivityFab();
-    const chatLink = document.querySelector('.topnav-link[href="chat.html"]');
-    if (chatLink) {
-      const existing = chatLink.querySelector('.badge-dot');
-      if (existing) existing.remove();
-    }
     if (!window.ApiClient.isAuthenticated()) return Promise.resolve();
     return window.API.chats.unreadCount()
       .then((data) => {
@@ -270,12 +503,6 @@ window.AppShell = (() => {
           : undefined;
         const count = Number(raw) || 0;
         updateFabBadge('chat', count);
-        if (chatLink && count) {
-          const dot = document.createElement('span');
-          dot.className = 'badge-dot';
-          dot.textContent = count > 99 ? '99+' : count;
-          chatLink.appendChild(dot);
-        }
       })
       .catch(() => {});
   }
@@ -906,34 +1133,47 @@ window.AppShell = (() => {
     window.addEventListener('unhandledrejection', (e) => { const err = e.reason; console.error('[AppShell] Promesa rechazada:', err); if (UI && err && err.message) UI.toast(err.message, 'error'); });
   }
 
+  // Detecta el modo embebido (chat dentro del panel flotante). En ese modo el
+  // shell no pinta cabecera, sidebar, FAB, asistente ni animaciones: solo
+  // renderiza el módulo a pantalla completa dentro del iframe.
+  function isEmbed() {
+    try {
+      return /[?&]embed=1\b/.test(window.location.search);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function init() {
     installErrorHandlers();
     applyTheme();
 
     if (!window.ApiClient.requireAuth()) { hideGlobalLoader(); return; }
 
-    registerServiceWorker();
-    renderNav();
-    updateTopnavUser();
-    injectBrandCollab();
-    injectBrandProfile();
-    injectThemeButton();
-    injectGuideButton();
-    injectUpdateButton();
-    loadAppVersion();
-    startClock();
-    injectAssistant();
-    loadSounds();
-    loadRealtime();
-    injectActivityFab();
+    const embed = isEmbed();
+    if (embed) document.body.classList.add('is-embed');
 
-    // Hamburger toggle para mobile
-    const hamburger = document.getElementById('topnav-hamburger');
-    const navMenu = document.getElementById('topnav-nav');
-    if (hamburger && navMenu) {
-      hamburger.addEventListener('click', () => navMenu.classList.toggle('open'));
-      navMenu.querySelectorAll('.topnav-link').forEach((link) => link.addEventListener('click', () => navMenu.classList.remove('open')));
+    if (!embed) {
+      registerServiceWorker();
+      buildSidebar();
+      updateTopnavUser();
+      injectBrandCollab();
+      injectBrandProfile();
+      injectThemeButton();
+      injectGuideButton();
+      injectUpdateButton();
+      loadAppVersion();
+      startClock();
+      injectAssistant();
+      loadSounds();
+      loadRealtime();
+      injectActivityFab();
     }
+
+    // La hamburguesa abre/cierra el menú lateral (plegable en escritorio,
+    // drawer deslizante en móvil).
+    const hamburger = document.getElementById('topnav-hamburger');
+    if (hamburger) hamburger.addEventListener('click', toggleSidebar);
 
     const btnNotif = document.getElementById('btn-notifications');
     if (btnNotif) btnNotif.addEventListener('click', () => { window.location.href = 'notifications.html'; });
@@ -941,14 +1181,18 @@ window.AppShell = (() => {
     const logoutBtn = document.getElementById('btn-logout');
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
 
-    if (window.AppInstall) window.AppInstall.init();
+    if (!embed && window.AppInstall) window.AppInstall.init();
 
-    refreshAllBadges();
-    setInterval(refreshAllBadges, 120000);
-    initReminders();
-    initIdleTimeout();
+    if (!embed) {
+      refreshAllBadges();
+      setInterval(refreshAllBadges, 120000);
+      initReminders();
+      initIdleTimeout();
+    }
 
     renderPage().finally(() => hideGlobalLoader());
+
+    if (embed) return;
 
     // Se difieren los módulos no críticos (mantenimiento, onboarding,
     // bienvenida) hasta después del primer render para que la página
@@ -969,7 +1213,7 @@ window.AppShell = (() => {
 
   window.App = { refreshNotificationBadge, refreshChatBadge, remindersEnabled, setRemindersEnabled, startClock, reopenOnboarding };
 
-  return { init, showGlobalLoader, showUpdateLoader, hideGlobalLoader, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage };
+  return { init, showGlobalLoader, showUpdateLoader, hideGlobalLoader, refreshNotificationBadge, refreshChatBadge, currentKey, currentPage, renderPage, openPanel: openFabPanel, closePanels: closeFabPanels };
 })();
 
 // ---- Auto-inicialización del shell ----
@@ -985,9 +1229,13 @@ window.AppShell = (() => {
   if (window.AppShell && window.ApiClient && window.ApiClient.isAuthenticated()) {
     // Muestra la animación de carga a pantalla completa en cuanto el shell está
     // disponible, antes de renderizar el módulo, para tapar el "flash" blanco.
-    const boot = () => window.AppShell.showGlobalLoader();
-    if (document.body) boot();
-    else document.addEventListener('DOMContentLoaded', boot);
+    // En el modo embebido (chat en panel flotante) no se usa el loader global.
+    const isEmbed = /[?&]embed=1\b/.test(window.location.search);
+    if (!isEmbed) {
+      const boot = () => window.AppShell.showGlobalLoader();
+      if (document.body) boot();
+      else document.addEventListener('DOMContentLoaded', boot);
+    }
     const run = () => window.AppShell.init();
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', run);

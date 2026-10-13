@@ -26,10 +26,10 @@
       "icons": [{ "src": "LOGOICONO.jpeg", "sizes": "192x192" }]
     },
     {
-      "name": "Inventario General",
-      "short_name": "Inventario",
-      "description": "Propiedades de todos los asesores",
-      "url": "inventory-general.html",
+      "name": "Mis Propiedades",
+      "short_name": "Propiedades",
+      "description": "Tu cartera e inventario general de propiedades",
+      "url": "inventory.html",
       "icons": [{ "src": "LOGOICONO.jpeg", "sizes": "192x192" }]
     },
     {

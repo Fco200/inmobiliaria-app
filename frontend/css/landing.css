@@ -234,6 +234,25 @@
   font-size: 14px;
 }
 
+.search-field-range { min-width: 200px; }
+
+.search-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-range .form-control {
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.search-range-sep {
+  color: var(--text-muted);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .btn-search {
   padding: 12px 24px;
   white-space: nowrap;

@@ -95,20 +95,23 @@ window.Realtime = (() => {
       holder = document.createElement('div');
       holder.id = 'toast-holder';
       holder.style.cssText =
-        'position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:1000;display:flex;flex-direction:column;gap:8px;';
+        'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4000;display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:min(460px,calc(100vw - 32px));pointer-events:none;';
       document.body.appendChild(holder);
     }
     const el = document.createElement('div');
     el.style.cssText =
-      'padding:12px 16px;border-radius:10px;color:#fff;font-size:13px;' +
-      'box-shadow:0 6px 18px rgba(0,0,0,0.25);min-width:220px;max-width:340px;cursor:pointer;' +
+      'padding:13px 18px;border-radius:12px;color:#fff;font-size:13px;text-align:center;' +
+      'box-shadow:0 16px 40px rgba(0,0,0,0.3);max-width:100%;cursor:pointer;pointer-events:auto;' +
       'background:linear-gradient(135deg,#5B2D8E,#7B3FBF);animation:toastSlideIn 0.3s ease-out;';
     el.innerHTML = `
       <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;">&#128172; ${UI.escapeHtml(senderName)}</div>
       <div style="margin-top:2px;color:rgba(255,255,255,0.92);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">${UI.escapeHtml(text)}</div>
     `;
     el.title = `Mensaje de ${senderName} - haz clic para abrir el chat`;
-    el.addEventListener('click', () => { window.location.href = 'chat.html'; });
+    el.addEventListener('click', () => {
+      if (window.AppShell && typeof window.AppShell.openPanel === 'function') window.AppShell.openPanel('chat');
+      else window.location.href = 'chat.html';
+    });
     holder.appendChild(el);
     setTimeout(() => {
       el.style.animation = 'toastSlideOut 0.3s ease-in forwards';

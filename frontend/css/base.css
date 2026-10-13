@@ -3404,3 +3404,248 @@ body.page-chat .assistant-panel {
   .updates-signature { flex-direction: column; gap: 4px; }
 }
 
+
+/* ============================================================
+   INMOBLES · Menú lateral, paneles flotantes, toasts centrados,
+   chat responsivo y mejoras del login
+   (bloque añadido al final para ganar en cascada)
+   ============================================================ */
+
+:root { --sidebar-w: 264px; --topnav-h: 56px; }
+
+/* ---- Layout con menú lateral ---- */
+.app.has-sidebar {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  align-items: start;
+}
+.app.has-sidebar > .topnav { grid-column: 1 / -1; grid-row: 1; }
+.app.has-sidebar > .app-sidebar { grid-column: 1; grid-row: 2; }
+.app.has-sidebar > .main { grid-column: 2; grid-row: 2; min-width: 0; }
+body.sidebar-collapsed { --sidebar-w: 78px; }
+
+/* El menú horizontal del topnav queda oculto: ahora vive en el sidebar. */
+.topnav-nav { display: none !important; }
+
+@media (min-width: 901px) {
+  .topnav-hamburger { display: inline-flex !important; }
+}
+
+.app-sidebar {
+  position: sticky;
+  top: calc(var(--topnav-h) + env(safe-area-inset-top));
+  height: calc(100vh - var(--topnav-h) - env(safe-area-inset-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--white);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 10px 10px;
+  z-index: 40;
+  transition: width 0.18s ease;
+}
+.app-sidebar-top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 6px 12px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.app-sidebar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; text-decoration: none; color: var(--text); }
+.app-sidebar-logo { height: 32px; width: auto; border-radius: 8px; flex-shrink: 0; }
+.app-sidebar-brandname { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.app-sidebar-collapse {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--icon-bg); color: var(--primary);
+  cursor: pointer; font-size: 16px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.app-sidebar-collapse:hover { background: var(--primary-light); }
+.app-sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.app-sidebar-section {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--text-muted);
+  padding: 14px 12px 4px;
+}
+.app-sidebar-link {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: 10px;
+  color: var(--text); text-decoration: none;
+  font-size: 13.5px; font-weight: 500;
+  white-space: nowrap; overflow: hidden;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.app-sidebar-link:hover { background: var(--icon-bg); color: var(--primary); }
+.app-sidebar-link.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+.app-sidebar-ico { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; }
+.app-sidebar-label { overflow: hidden; text-overflow: ellipsis; }
+.app-sidebar-foot { margin-top: 8px; padding: 10px 12px 2px; border-top: 1px solid var(--border); }
+.app-sidebar-credit { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.02em; }
+
+body.sidebar-collapsed .app-sidebar-brandname,
+body.sidebar-collapsed .app-sidebar-label,
+body.sidebar-collapsed .app-sidebar-section,
+body.sidebar-collapsed .app-sidebar-credit { display: none; }
+body.sidebar-collapsed .app-sidebar { padding-left: 8px; padding-right: 8px; }
+body.sidebar-collapsed .app-sidebar-link { justify-content: center; padding: 10px 8px; }
+body.sidebar-collapsed .app-sidebar-brand { justify-content: center; }
+body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
+
+.app-sidebar-backdrop { display: none; }
+
+/* ---- Menú lateral en móvil: drawer deslizante ---- */
+@media (max-width: 900px) {
+  .app.has-sidebar { display: flex; flex-direction: column; }
+  .app-sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: min(280px, 86vw); height: 100dvh;
+    transform: translateX(-105%);
+    transition: transform 0.26s ease;
+    box-shadow: 0 0 44px rgba(0, 0, 0, 0.4);
+    z-index: 260;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  body.sidebar-open .app-sidebar { transform: translateX(0); }
+  .app-sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 255;
+    background: rgba(15, 8, 25, 0.5);
+    opacity: 0; visibility: hidden; transition: opacity 0.26s ease;
+  }
+  body.sidebar-open .app-sidebar-backdrop { opacity: 1; visibility: visible; }
+  body.sidebar-open { overflow: hidden; }
+  .app-sidebar-collapse { display: none; }
+}
+
+/* ============================================================
+   Toasts / avisos centrados en pantalla
+   ============================================================ */
+@keyframes toastSlideIn { from { opacity: 0; transform: scale(0.9) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes toastSlideOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.94); } }
+
+#toast-holder {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: max-content !important;
+  max-width: min(460px, calc(100vw - 32px)) !important;
+  pointer-events: none !important;
+  z-index: 4000 !important;
+}
+#toast-holder > * {
+  pointer-events: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  text-align: center;
+}
+
+/* ============================================================
+   Paneles flotantes de Avisos y Chat
+   ============================================================ */
+.fab-panels { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+.fab-panel-backdrop { display: none; }
+.fab-panel {
+  pointer-events: auto;
+  position: fixed;
+  right: 22px;
+  bottom: 96px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: min(560px, calc(100vh - 160px));
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fabPanelIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes fabPanelIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.fab-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  background: var(--white); font-weight: 700; font-size: 14px; color: var(--text);
+}
+.fab-panel-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+.fab-panel-link { font-size: 12px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 2px 4px; text-decoration: none; }
+.fab-panel-link:hover { text-decoration: underline; }
+.fab-panel-x { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--icon-bg); color: var(--text); cursor: pointer; font-size: 14px; line-height: 1; }
+.fab-panel-x:hover { background: var(--primary-light); color: var(--primary); }
+.fab-panel-body { flex: 1; min-height: 0; overflow-y: auto; }
+.fab-panel-body-chat { overflow: hidden; }
+.fab-panel-body-chat iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
+.fab-panel-empty { padding: 28px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+.fab-notif {
+  display: flex; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 14px; border: none; border-bottom: 1px solid var(--border);
+  background: var(--white); cursor: pointer; color: var(--text);
+  transition: background 0.15s ease;
+}
+.fab-notif:hover { background: var(--icon-bg); }
+.fab-notif.is-unread { background: var(--primary-light); }
+.fab-notif-ico { font-size: 18px; flex-shrink: 0; }
+.fab-notif-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fab-notif-txt strong { font-size: 13.5px; }
+.fab-notif-msg { font-size: 12.5px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fab-notif-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+@media (max-width: 600px) {
+  .fab-panel { right: 10px; left: 10px; bottom: 84px; width: auto; max-width: none; height: min(70vh, calc(100dvh - 150px)); }
+  .fab-panel-backdrop { display: block; position: fixed; inset: 0; background: rgba(15, 8, 25, 0.45); }
+}
+body.page-chat .fab-panels { display: none !important; }
+
+/* ============================================================
+   Chat en móvil + modo embebido (panel flotante)
+   ============================================================ */
+body.is-embed .topnav,
+body.is-embed .app-sidebar,
+body.is-embed .app-sidebar-backdrop,
+body.is-embed .activity-fab,
+body.is-embed .assistant-fab,
+body.is-embed .assistant-panel,
+body.is-embed .fab-panels {
+  display: none !important;
+}
+body.is-embed .content { padding: 0 !important; }
+body.is-embed .app-loader { display: none !important; }
+
+/* ============================================================
+   Login · pulido visual (mantiene el flujo intacto)
+   ============================================================ */
+.login-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.login-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 5px;
+  background: linear-gradient(90deg, #7B3FA0, #5B2D8E, #E0A526);
+}
+.login-logo-img { filter: drop-shadow(0 6px 16px rgba(91, 45, 142, 0.4)); }
+.login-form .form-control { height: 46px; border-radius: 12px; }
+.login-form .password-wrap .form-control { padding-right: 44px; }
+.login-card .btn-block,
+#btn-login { height: 48px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+.login-card .btn-primary { box-shadow: 0 10px 26px rgba(91, 45, 142, 0.35); }
+.login-status-pill { font-weight: 600; }
+
+[data-theme="dark"] .app-sidebar { background: #1b1226; border-color: #30223f; }
+[data-theme="dark"] .app-sidebar-link { color: #d9cfe8; }
+[data-theme="dark"] .app-sidebar-link.active { background: #2c1f3f; }
+[data-theme="dark"] .fab-panel,
+[data-theme="dark"] .fab-panel-head { background: #1b1226; border-color: #30223f; }
+[data-theme="dark"] .fab-notif { background: #1b1226; border-color: #30223f; }
+[data-theme="dark"] .fab-notif:hover { background: #241a33; }
+[data-theme="dark"] .fab-notif.is-unread { background: #2c1f3f; }

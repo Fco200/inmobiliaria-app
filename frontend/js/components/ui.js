@@ -12,17 +12,15 @@ const UI = (() => {
     if (!holder) {
       holder = document.createElement('div');
       holder.id = 'toast-holder';
-      // Los toasts se anclan arriba a la derecha; en iOS la safe area del
-      // notch/barra de estado debe sumarse para que no queden tapados.
-      // env() vale 0 fuera de dispositivos con notch, así que no afecta al
-      // resto de navegadores (equivalente a `top:16px` de antes).
+      // Los avisos aparecen CENTRADOS en la pantalla (no en una esquina), para
+      // que confirmaciones y errores no pasen desapercibidos.
       holder.style.cssText =
-        'position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;z-index:1000;display:flex;flex-direction:column;gap:8px;';
+        'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4000;display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:min(460px,calc(100vw - 32px));pointer-events:none;';
       document.body.appendChild(holder);
     }
     const el = document.createElement('div');
     el.style.cssText =
-      'padding:12px 16px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);min-width:220px;max-width:360px;animation:toastSlideIn 0.3s ease-out;';
+      'padding:13px 20px;border-radius:12px;color:#fff;font-size:14px;line-height:1.4;text-align:center;box-shadow:0 16px 40px rgba(0,0,0,0.3);max-width:100%;pointer-events:auto;animation:toastSlideIn 0.3s ease-out;';
     const colors = { success: '#1f9d55', error: '#dc2626', warning: '#d97706', info: '#5B2D8E' };
     el.style.background = colors[type] || colors.info;
     el.textContent = message;

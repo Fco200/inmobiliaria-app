@@ -2,6 +2,11 @@
 
 window.Pages = window.Pages || {};
 
+// "Mis Propiedades" e "Inventario general" ahora son DOS PESTAÑAS de la misma
+// página (antes eran dos módulos separados). Se conservó lo mejor de cada uno:
+//   - Mis propiedades: edición, observaciones, citas, negocios y métricas.
+//   - Inventario general: buscador, filtro por asesor/publicación, subida de
+//     propiedades nuevas y administración de fotos en línea.
 window.Pages.inventory = {
   title: 'Mis Propiedades',
 
@@ -21,13 +26,10 @@ window.Pages.inventory = {
     const TIPOS_INMUEBLE = ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'];
     const ESTADOS_PROPIEDAD = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
 
-    // `vista` separa explícitamente las dos carteras para que no se mezclen:
-    //   'mine'    → SOLO las propiedades captadas por este asesor en su sesión
-    //                (asignadas a él o de las que es responsable). GET /inventory?mine=true
-    //   'general' → TODO el inventario de la agencia. GET /inventory/general
-    // No existe una etiqueta intermedia tipo "MI INVENTARIO": son dos vistas
-    // distintas y cada una llama a su propio endpoint.
-    const state = { page: 1, filter: '', vista: 'mine' };
+    // `vista` separa las dos carteras para que no se mezclen:
+    //   'mine'    → SOLO las propiedades de este asesor (GET /inventory?mine=true)
+    //   'general' → TODO el inventario de la agencia (GET /inventory/general)
+    const state = { page: 1, vista: 'mine', q: '', agent: '', published: '' };
 
     const stored = window.ApiClient.getStoredUser();
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
@@ -43,7 +45,7 @@ window.Pages.inventory = {
     try {
       const [m, u, c] = await Promise.all([
         API.auth.me().catch(() => null),
-        API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
+        API.users.list({ limit: 200 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
       ]);
       me = m;
@@ -55,25 +57,29 @@ window.Pages.inventory = {
       clients = [];
     }
 
+    // Asesores y jefes que pueden verse como responsables.
+    const agents = users.filter((u) => u && u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role));
     const myId = (me && me._id) || (stored && stored._id) || '';
 
     const propertyLabel = (prop) => {
       if (!prop) return '—';
-      return `${prop.zone || ''} ${prop.city || ''}`.trim() || prop.address || 'Propiedad';
+      return [prop.zone, prop.city].filter(Boolean).join(' ').trim() || prop.address || 'Propiedad';
     };
 
     // ---- Detalle de la propiedad (con mercado e historial) ----
 
     function openDetailModal(item) {
       const prop = item.property;
-      const isMine = isBoss || String(item.assignedAgent ? item.assignedAgent._id || item.assignedAgent : '') === String(myId);
+      const canEditPhotos = isBoss
+        || String((prop.responsibleUser && (prop.responsibleUser._id || prop.responsibleUser)) || '') === String(myId);
+      const isMine = isBoss || String(item.assignedAgent ? (item.assignedAgent._id || item.assignedAgent) : '') === String(myId);
 
       const modal = UI.openModal({
         title: `Inventario — ${propertyLabel(prop)}`,
         body: '<div class="loading">Cargando...</div>',
         size: 860,
         footer: `
-          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;width:100%;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
@@ -113,7 +119,7 @@ window.Pages.inventory = {
         const position = current && mk.min != null && mk.max > mk.min
           ? Math.max(2, Math.min(100, ((current - mk.min) / (mk.max - mk.min)) * 100))
           : 50;
-        const photo = (prop.photos || []).find(Boolean);
+        const photos = (prop.photos || []).filter(Boolean);
         const characteristics = (prop.characteristics || [])
           .map((c) => `<li><strong>${UI.escapeHtml(c.name)}:</strong> ${UI.escapeHtml(c.value)}</li>`)
           .join('');
@@ -121,7 +127,19 @@ window.Pages.inventory = {
         modal.bodyEl.innerHTML = `
           <div class="grid grid-2" style="align-items:start;">
             <div>
-              <img data-photo-cover src="${(photo ? window.AppConfig.resolveUrl(photo) : window.AppConfig.FALLBACK_IMG).replace(/"/g, '&quot;')}" alt="${photo ? '' : 'Sin foto'}" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:10px;${photo ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>
+              ${photos.length
+                ? `<div class="detail-photos">
+                    ${photos.map((p) => `
+                      <div class="detail-photo">
+                        <img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy" data-full="${UI.escapeHtml(p)}">
+                        ${canEditPhotos ? `<button type="button" class="detail-photo-x" data-photo-remove="${UI.escapeHtml(p)}" title="Quitar foto">&times;</button>` : ''}
+                      </div>`).join('')}
+                  </div>`
+                : '<p class="text-muted" style="font-size:13px;">Sin fotos todavía.</p>'}
+              <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-gallery>Ver todas (${photos.length})</button>` : ''}
+                ${canEditPhotos ? `<label class="btn btn-secondary btn-sm" style="cursor:pointer;">+ Añadir fotos<input type="file" accept="image/*" multiple style="display:none" data-photos-input></label>` : ''}
+              </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
@@ -157,14 +175,44 @@ window.Pages.inventory = {
             </div>
           </div>`;
 
-        // La portada abre el visor de fotos sin sacar al asesor del CRM. El
-        // listener se registra AQUÍ, después de pintar: antes se buscaba el
-        // <img> antes de que existiera y el clic nunca respondía (el asesor
-        // tenía que cerrar y volver a abrir la propiedad).
-        const coverEl = modal.bodyEl.querySelector('[data-photo-cover]');
-        if (coverEl && (prop.photos || []).length) {
-          coverEl.addEventListener('click', () => UI.showImages(prop.photos || [], 'Fotos de la propiedad'));
+        // Ampliar una foto usa el visor interno: nunca se abre otra pestaña.
+        modal.bodyEl.querySelectorAll('[data-full]').forEach((img) => {
+          img.addEventListener('click', () => UI.showImages([img.getAttribute('src')], `Foto — ${propertyLabel(prop)}`));
+        });
+        const galleryBtn = modal.bodyEl.querySelector('[data-gallery]');
+        if (galleryBtn) {
+          galleryBtn.addEventListener('click', () => UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`));
         }
+        const photosInput = modal.bodyEl.querySelector('[data-photos-input]');
+        if (photosInput) {
+          photosInput.addEventListener('change', async () => {
+            if (!photosInput.files || !photosInput.files.length) return;
+            try {
+              await API.properties.uploadPhotos(prop._id, photosInput.files);
+              UI.toast('Fotos agregadas', 'success');
+              paint();
+            } catch (photoError) {
+              UI.toast(photoError.message, 'error');
+            }
+          });
+        }
+        modal.bodyEl.querySelectorAll('[data-photo-remove]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const url = btn.getAttribute('data-photo-remove');
+            UI.confirm('¿Quitar esta foto?').then(async (ok) => {
+              if (!ok) return;
+              try {
+                await API.properties.update(prop._id, {
+                  photos: (prop.photos || []).filter((p) => p !== url),
+                });
+                UI.toast('Foto eliminada', 'success');
+                paint();
+              } catch (photoError) {
+                UI.toast(photoError.message, 'error');
+              }
+            });
+          });
+        });
       };
       paint().catch((error) => {
         modal.bodyEl.innerHTML = UI.errorAlert(error.message);
@@ -249,7 +297,7 @@ window.Pages.inventory = {
         body: `
           <div class="form-group">
             <label>Nombre del negocio</label>
-            <input class="form-control" data-name value="Venta ${prop.type || ''} ${prop.zone || ''} ${prop.city || ''}".trim()>
+            <input class="form-control" data-name value="Venta ${UI.escapeHtml(String(prop.type || ''))} ${UI.escapeHtml(String(prop.zone || ''))} ${UI.escapeHtml(String(prop.city || ''))}">
           </div>
           <div class="form-group">
             <label>Cliente comprador</label>
@@ -334,12 +382,12 @@ window.Pages.inventory = {
       });
     }
 
-    // ---- Editar propiedad (desde el inventario) ----
+    // ---- Editar propiedad ----
 
     function openEditModal(item) {
       const prop = item.property || {};
       const opts = (list, current) => list.map((v) => `<option value="${v}" ${String(current) === v ? 'selected' : ''}>${v}</option>`).join('');
-      const agentOptions = users.map((u) => `<option value="${u._id}" ${prop.responsibleUser && String(prop.responsibleUser._id || prop.responsibleUser) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
+      const agentOptions = agents.map((u) => `<option value="${u._id}" ${prop.responsibleUser && String(prop.responsibleUser._id || prop.responsibleUser) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
       const modal = UI.openModal({
         title: `Editar propiedad — ${propertyLabel(prop)}`,
         body: `
@@ -454,7 +502,7 @@ window.Pages.inventory = {
     // ---- Asignar asesor (solo jefes) ----
 
     function openAssignModal(item) {
-      const options = users.map((u) => `<option value="${u._id}" ${String(item.assignedAgent && item.assignedAgent._id) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
+      const options = agents.map((u) => `<option value="${u._id}" ${String(item.assignedAgent && item.assignedAgent._id) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
       const modal = UI.openModal({
         title: `Asignar asesor — ${propertyLabel(item.property)}`,
         body: `
@@ -487,171 +535,150 @@ window.Pages.inventory = {
       });
     }
 
-    // ---- Header ----
+    // ---- Subir propiedad nueva al inventario ----
 
-    function renderHeader() {
-      const el = document.createElement('div');
-      el.className = 'page-header';
-      const esGeneral = state.vista === 'general';
-      el.innerHTML = `
-        <div>
-          <h2>${esGeneral ? 'Inventario general' : 'Mis propiedades'}</h2>
-          <p class="text-muted" style="margin:4px 0 0;">
-            ${esGeneral
-              ? (isBoss
-                  ? 'Todo el inventario de la agencia. Administra qué propiedades se publican y a qué asesor se asignan.'
-                  : 'Todas las propiedades que la agencia tiene en su inventario. Usa "Mis propiedades" para ver solo las tuyas.')
-              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
-          </p>
-        </div>
-        ${isBoss ? '<button class="btn btn-primary" type="button" data-add>Agregar propiedad</button>' : ''}
-      `;
-      const add = el.querySelector('[data-add]');
-      if (add) add.addEventListener('click', openAddModal);
-      return el;
-    }
-
-    function renderToolbar() {
-      const el = document.createElement('div');
-      el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;';
-      el.innerHTML = `
-        <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
-          <button class="process-tab${state.vista === 'mine' ? ' active' : ''}" type="button" data-view="mine">Mis propiedades</button>
-          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Inventario general</button>
-        </div>
-      `;
-      el.querySelectorAll('.process-tab').forEach((tab) => {
-        tab.addEventListener('click', () => {
-          el.querySelectorAll('.process-tab').forEach((t) => t.classList.remove('active'));
-          tab.classList.add('active');
-          state.vista = tab.dataset.view === 'general' ? 'general' : 'mine';
-          state.filter = '';
-          state.page = 1;
-          load();
-        });
+    function openUploadModal() {
+      const agentOptions = agents.map((u) => `<option value="${u._id}">${UI.escapeHtml(u.name)}</option>`).join('');
+      const modal = UI.openModal({
+        title: 'Subir propiedad al inventario',
+        size: 720,
+        body: `
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Tipo de inmueble</label>
+              <select class="form-control" data-type required>
+                <option value="">— Selecciona —</option>
+                <option value="casa">Casa</option>
+                <option value="departamento">Departamento</option>
+                <option value="local">Local</option>
+                <option value="bodega">Bodega</option>
+                <option value="rancho">Rancho</option>
+                <option value="terreno">Terreno</option>
+                <option value="playa">Playa</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Operación</label>
+              <select class="form-control" data-operation required>
+                <option value="">— Selecciona —</option>
+                <option value="venta">Venta</option>
+                <option value="renta">Renta</option>
+              </select>
+            </div>
+            ${isBoss ? `
+            <div class="form-group">
+              <label>Asesor asignado</label>
+              <select class="form-control" data-agent>
+                <option value="">— Sin asignar —</option>
+                ${agentOptions}
+              </select>
+            </div>` : ''}
+            ${!isBoss ? '<p class="text-muted" style="font-size:13px;margin:0;">Se asignará a ti automáticamente y quedará <strong>sin publicar</strong> hasta que administración la revise.</p>' : ''}
+            <div class="form-group">
+              <label>Folio</label>
+              <input class="form-control" type="text" placeholder="Se genera automáticamente" disabled>
+            </div>
+            <div class="form-group">
+              <label>Dirección</label>
+              <input class="form-control" data-address placeholder="Calle y número">
+            </div>
+            <div class="form-group">
+              <label>Colonia / Zona</label>
+              <input class="form-control" data-zone>
+            </div>
+            <div class="form-group">
+              <label>Ciudad</label>
+              <input class="form-control" data-city>
+            </div>
+            <div class="form-group">
+              <label>Estado</label>
+              <input class="form-control" data-state>
+            </div>
+            <div class="form-group">
+              <label>Precio (MXN)</label>
+              <input class="form-control" type="number" min="0" step="0.01" data-price>
+            </div>
+            <div class="form-group">
+              <label>Valor de ticket (MXN)</label>
+              <input class="form-control" type="number" min="0" step="0.01" data-ticket>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea class="form-control textarea-tall" data-description rows="10" placeholder="Detalles del inmueble: medidas, espacios, amenidades, estado de conservación, servicios…"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Fotos <span class="text-danger">*</span></label>
+            <input class="form-control" type="file" accept="image/*" multiple data-photos required>
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Obligatorio: al menos una fotografía. Se subirán al crear la propiedad.</p>
+          </div>
+          ${isBoss ? `
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="inv-publish" data-publish>
+            <label for="inv-publish" style="margin:0;">Publicar de inmediato en el catálogo</label>
+          </div>` : ''}
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>${isBoss ? 'Subir propiedad' : 'Subir mi propiedad'}</button>`,
       });
+      const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+      if (!overlay) return;
+      overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+      overlay.querySelector('[data-ok]').addEventListener('click', async () => {
+        const typeEl = overlay.querySelector('[data-type]');
+        const type = typeEl.value;
+        const operationType = overlay.querySelector('[data-operation]').value;
+        if (!type || !operationType) return UI.toast('Selecciona el tipo y la operación', 'warning');
+        const photosInput = overlay.querySelector('[data-photos]');
+        if (!photosInput || !photosInput.files || !photosInput.files.length) return UI.toast('Agrega al menos una fotografía', 'warning');
+        const btn = overlay.querySelector('[data-ok]');
+        btn.disabled = true;
+        btn.textContent = 'Subiendo...';
+        try {
+          const agentEl = overlay.querySelector('[data-agent]');
+          const publishEl = overlay.querySelector('[data-publish]');
+          const created = await API.inventory.uploadProperty({
+            type,
+            operationType,
+            assignedAgent: agentEl ? agentEl.value || null : null,
+            address: overlay.querySelector('[data-address]').value.trim(),
+            zone: overlay.querySelector('[data-zone]').value.trim(),
+            city: overlay.querySelector('[data-city]').value.trim(),
+            state: overlay.querySelector('[data-state]').value.trim(),
+            price: Number(overlay.querySelector('[data-price]').value) || 0,
+            ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
+            description: [
+              overlay.querySelector('[data-description]').value.trim(),
+              UI.otrosText ? UI.otrosText(typeEl) : '',
+            ].filter(Boolean).join(' — '),
+            isPublished: publishEl ? publishEl.checked : false,
+          });
 
-      // Solo tiene sentido el filtro de publicación sobre el inventario general.
-      if (isBoss) {
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'display:flex;gap:8px;align-items:center;';
-        wrap.innerHTML = `
-          <select class="form-control" data-filter style="max-width:240px;">
-            <option value="">Todas</option>
-            <option value="true">Solo publicadas</option>
-            <option value="false">Solo sin publicar</option>
-          </select>
-        `;
-        const filterSel = wrap.querySelector('[data-filter]');
-        filterSel.value = state.filter;
-        filterSel.addEventListener('change', (e) => {
-          state.filter = e.target.value;
-          state.page = 1;
-          load();
-        });
-        el.appendChild(wrap);
-      }
-      return el;
-    }
-
-    // ---- Tabla ----
-
-    function renderTable(items) {
-      const wrap = document.createElement('div');
-      wrap.className = 'table-wrapper card';
-      if (!items.length) {
-        const esGeneral = state.vista === 'general';
-        wrap.innerHTML = esGeneral
-          ? (isBoss
-            ? '<div class="empty-state"><p>El inventario general está vacío.</p><p class="text-muted">Agrega una propiedad para publicarla y asignarla a un asesor.</p></div>'
-            : '<div class="empty-state"><p>Aún no hay propiedades en el inventario general.</p><p class="text-muted">Cuando se carguen, aparecerán aquí.</p></div>')
-          : '<div class="empty-state"><p>No tienes propiedades en tu cartera todavía.</p><p class="text-muted">Cuando publiques una propiedad o te asignen una, aparecerá aquí.</p></div>';
-        return wrap;
-      }
-
-      const rows = items.map((item, index) => {
-        const prop = item.property;
-        return `
-          <tr>
-            <td>
-              ${(() => {
-                const hasPhoto = Boolean(prop && prop.photos && prop.photos.length);
-                const src = hasPhoto
-                  ? window.AppConfig.resolveUrl(prop.photos[0])
-                  : window.AppConfig.FALLBACK_IMG;
-                return `<img ${hasPhoto ? `data-thumb-id="${UI.escapeHtml(String(item._id))}"` : ''} src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;${hasPhoto ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>`;
-              })()}
-            </td>
-            <td>${UI.escapeHtml(propertyLabel(prop))}</td>
-            <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
-            <td>${prop ? Format.currency(prop.price) : '—'}</td>
-            <td>${prop && prop.ticketValue ? Format.currency(prop.ticketValue) : '—'}</td>
-            <td>${item.isPublished ? UI.badge('Publicado', 'success') : UI.badge('Sin publicar', 'muted')}</td>
-            <td>${UI.escapeHtml(item.assignedAgent ? item.assignedAgent.name : '—')}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
-              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>
-              ${item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
-              ${!isBoss ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>` : ''}
-              ${!isBoss ? `<button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>` : ''}
-              ${!item.isPublished ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Publicar</button>` : ''}
-              ${item.isPublished ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Despublicar</button>` : ''}
-              ${isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="assign" style="margin-left:6px;">Asignar</button>` : ''}
-              ${isBoss ? `<button class="btn btn-danger btn-sm" data-action data-index="${index}" data-kind="remove" style="margin-left:6px;">Quitar</button>` : ''}
-            </td>
-          </tr>`;
-      }).join('');
-
-      wrap.innerHTML = `
-        <table class="table">
-          <thead><tr>
-            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Precio</th><th>Valor ticket</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-
-      wrap.querySelectorAll('[data-thumb-id]').forEach((thumb) => {
-        thumb.addEventListener('click', () => {
-          const item = items.find((i) => String(i._id) === thumb.dataset.thumbId);
-          if (item) UI.showImages(item.property && item.property.photos || [], 'Fotos de la propiedad');
-        });
-      });
-
-      wrap.querySelectorAll('[data-action]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const item = items[Number(btn.dataset.index)];
-          if (!item) return;
-          const kind = btn.dataset.kind;
-          if (kind === 'view') openDetailModal(item);
-          else if (kind === 'edit') openEditModal(item);
-          else if (kind === 'obs') openObservationsModal(item);
-          else if (kind === 'appointment') openAppointmentModal(item);
-          else if (kind === 'business') openBusinessModal(item);
-          else if (kind === 'assign') openAssignModal(item);
-          else if (kind === 'publish') {
-            API.inventory.publish(item._id, { isPublished: !item.isPublished })
-              .then(() => { UI.toast('Inventario actualizado', 'success'); load(); })
-              .catch((error) => UI.toast(error.message, 'error'));
-          } else if (kind === 'remove') {
-            UI.confirm('¿Quitar esta propiedad del inventario?').then((ok) => {
-              if (!ok) return;
-              API.inventory.remove(item._id)
-                .then(() => { UI.toast('Eliminado del inventario', 'success'); load(); })
-                .catch((error) => UI.toast(error.message, 'error'));
-            });
+          const propId = created && created.data && created.data.property ? created.data.property._id : null;
+          if (photosInput && photosInput.files && photosInput.files.length && propId) {
+            try {
+              await API.properties.uploadPhotos(propId, photosInput.files);
+            } catch (photoError) {
+              UI.toast(`Propiedad creada, pero las fotos no se subieron: ${photoError.message}`, 'warning');
+            }
           }
-        });
-      });
 
-      return wrap;
+          UI.toast('Propiedad subida al inventario', 'success');
+          UI.closeModal();
+          load();
+        } catch (error) {
+          btn.disabled = false;
+          btn.textContent = isBoss ? 'Subir propiedad' : 'Subir mi propiedad';
+          UI.toast(error.message, 'error');
+        }
+      });
     }
+
+    // ---- Agregar una propiedad EXISTENTE al inventario (solo jefes) ----
 
     function openAddModal() {
-      const footer = `
-        <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-        <button class="btn btn-primary" type="button" data-ok>Agregar</button>
-      `;
       const modal = UI.openModal({
         title: 'Agregar propiedad al inventario',
         body: `
@@ -669,7 +696,9 @@ window.Pages.inventory = {
             </select>
           </div>
         `,
-        footer,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>Agregar</button>`,
       });
 
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
@@ -677,7 +706,8 @@ window.Pages.inventory = {
       if (!overlay || !propSel) return;
       API.properties.list({ limit: 100, status: 'disponible' })
         .then((res) => {
-          propSel.innerHTML = '<option value="">Selecciona una propiedad</option>' + res.data
+          const list = (res && res.data) || [];
+          propSel.innerHTML = '<option value="">Selecciona una propiedad</option>' + list
             .map((p) => `<option value="${p._id}">${UI.escapeHtml(p.type)} — ${UI.escapeHtml(propertyLabel(p))} — ${Format.currency(p.price)}</option>`)
             .join('');
         })
@@ -704,6 +734,182 @@ window.Pages.inventory = {
       });
     }
 
+    // ---- Encabezado ----
+
+    function renderHeader(meta) {
+      const el = document.createElement('div');
+      el.className = 'page-header';
+      const esGeneral = state.vista === 'general';
+      el.innerHTML = `
+        <div>
+          <h2>${esGeneral ? 'Inventario general' : 'Mis propiedades'}</h2>
+          <p class="text-muted" style="margin:4px 0 0;">
+            ${esGeneral
+              ? (isBoss
+                  ? 'Todo el inventario de la agencia. Sube, publica, asigna y quita propiedades del equipo.'
+                  : 'Todas las propiedades de la agencia. Abre cualquiera para ver el detalle, agendar citas o crear negocios, o sube tus propias captaciones.')
+              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
+          </p>
+          ${meta ? `<div class="home-stats" style="margin-top:14px;">
+            <div class="home-stat"><span class="home-stat-icon">&#128230;</span><div><strong>${meta.total}</strong><small>${esGeneral ? 'Propiedades' : 'En tu cartera'}</small></div></div>
+            <div class="home-stat"><span class="home-stat-icon">&#129333;</span><div><strong>${agents.length}</strong><small>Asesores</small></div></div>
+          </div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" type="button" data-upload>+ Subir propiedad</button>
+          ${isBoss ? '<button class="btn btn-secondary" type="button" data-add>Agregar existente</button>' : ''}
+        </div>
+      `;
+      const upload = el.querySelector('[data-upload]');
+      if (upload) upload.addEventListener('click', openUploadModal);
+      const add = el.querySelector('[data-add]');
+      if (add) add.addEventListener('click', openAddModal);
+      return el;
+    }
+
+    function renderToolbar() {
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
+      const esGeneral = state.vista === 'general';
+      el.innerHTML = `
+        <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
+          <button class="process-tab${state.vista === 'mine' ? ' active' : ''}" type="button" data-view="mine">Mis propiedades</button>
+          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Inventario general</button>
+        </div>
+        ${esGeneral ? `
+          <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}" style="max-width:260px;">
+          <select class="form-control" data-agent-filter style="max-width:220px;">
+            <option value="">Todos los asesores</option>
+            ${agents.map((u) => `<option value="${u._id}" ${state.agent === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
+          </select>
+          <select class="form-control" data-published style="max-width:170px;">
+            <option value="">Publicación</option>
+            <option value="true" ${state.published === 'true' ? 'selected' : ''}>Publicadas</option>
+            <option value="false" ${state.published === 'false' ? 'selected' : ''}>Sin publicar</option>
+          </select>
+          <button class="btn btn-primary" type="button" data-search>Buscar</button>
+          <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
+        ` : ''}
+      `;
+      el.querySelectorAll('.process-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          state.vista = tab.dataset.view === 'general' ? 'general' : 'mine';
+          state.filter = '';
+          state.q = '';
+          state.agent = '';
+          state.published = '';
+          state.page = 1;
+          load();
+        });
+      });
+      if (esGeneral) {
+        const run = () => {
+          state.q = (el.querySelector('[data-q]').value || '').trim();
+          state.agent = el.querySelector('[data-agent-filter]').value;
+          state.published = el.querySelector('[data-published]').value;
+          state.page = 1;
+          load();
+        };
+        el.querySelector('[data-search]').addEventListener('click', run);
+        el.querySelector('[data-q]').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+        el.querySelector('[data-clear]').addEventListener('click', () => {
+          state.q = ''; state.agent = ''; state.published = ''; state.page = 1; load();
+        });
+      }
+      return el;
+    }
+
+    // ---- Tabla ----
+
+    function renderTable(items) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrapper card';
+      if (!items.length) {
+        const esGeneral = state.vista === 'general';
+        wrap.innerHTML = esGeneral
+          ? (isBoss
+            ? '<div class="empty-state"><p>El inventario general está vacío.</p><p class="text-muted">Sube una propiedad para publicarla y asignarla a un asesor.</p></div>'
+            : '<div class="empty-state"><p>Aún no hay propiedades en el inventario general.</p><p class="text-muted">Cuando se carguen, aparecerán aquí.</p></div>')
+          : '<div class="empty-state"><p>No tienes propiedades en tu cartera todavía.</p><p class="text-muted">Cuando publiques una propiedad o te asignen una, aparecerá aquí.</p></div>';
+        return wrap;
+      }
+
+      const rows = items.map((item, index) => {
+        const prop = item.property;
+        const agentName = item.assignedAgent ? (item.assignedAgent.name || 'Usuario') : 'Sin asignar';
+        return `
+          <tr>
+            <td>
+              ${(() => {
+                const hasPhoto = Boolean(prop && prop.photos && prop.photos.length);
+                const src = hasPhoto ? window.AppConfig.resolveUrl(prop.photos[0]) : window.AppConfig.FALLBACK_IMG;
+                return `<img ${hasPhoto ? `data-thumb-id="${UI.escapeHtml(String(item._id))}"` : ''} src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;${hasPhoto ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>`;
+              })()}
+            </td>
+            <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}</td>
+            <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
+            <td>${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
+            <td>${prop ? Format.currency(prop.price) : '—'}</td>
+            <td>${item.isPublished ? UI.badge('Publicado', 'success') : UI.badge('Sin publicar', 'muted')}</td>
+            <td>${UI.escapeHtml(agentName)}</td>
+            <td>
+              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
+              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>
+              ${item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
+              <button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>
+              <button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>
+              ${!item.isPublished ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Publicar</button>` : `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Despublicar</button>`}
+              ${isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="assign" style="margin-left:6px;">Asignar</button>` : ''}
+              ${isBoss ? `<button class="btn btn-danger btn-sm" data-action data-index="${index}" data-kind="remove" style="margin-left:6px;">Quitar</button>` : ''}
+            </td>
+          </tr>`;
+      }).join('');
+
+      wrap.innerHTML = `
+        <table class="table">
+          <thead><tr>
+            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+
+      wrap.querySelectorAll('[data-thumb-id]').forEach((thumb) => {
+        thumb.addEventListener('click', () => {
+          const item = items.find((i) => String(i._id) === thumb.dataset.thumbId);
+          if (item) UI.showImages((item.property && item.property.photos) || [], 'Fotos de la propiedad');
+        });
+      });
+
+      wrap.querySelectorAll('[data-action]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const item = items[Number(btn.dataset.index)];
+          if (!item) return;
+          const kind = btn.dataset.kind;
+          if (kind === 'view') openDetailModal(item);
+          else if (kind === 'edit') openEditModal(item);
+          else if (kind === 'obs') openObservationsModal(item);
+          else if (kind === 'appointment') openAppointmentModal(item);
+          else if (kind === 'business') openBusinessModal(item);
+          else if (kind === 'assign') openAssignModal(item);
+          else if (kind === 'publish') {
+            API.inventory.publish(item._id, { isPublished: !item.isPublished })
+              .then(() => { UI.toast('Inventario actualizado', 'success'); load(); })
+              .catch((error) => UI.toast(error.message, 'error'));
+          } else if (kind === 'remove') {
+            UI.confirm('¿Quitar esta propiedad del inventario?').then((ok) => {
+              if (!ok) return;
+              API.inventory.remove(item._id)
+                .then(() => { UI.toast('Quitada del inventario', 'success'); load(); })
+                .catch((error) => UI.toast(error.message, 'error'));
+            });
+          }
+        });
+      });
+
+      return wrap;
+    }
+
     function renderIntegrationCard() {
       if (!isBoss) return null;
       const el = document.createElement('div');
@@ -713,9 +919,6 @@ window.Pages.inventory = {
         <p class="text-muted" style="margin:0 0 10px;">
           Solo administración y gerencia agregan, asignan y publican propiedades. Los asesores trabajan sobre lo publicado
           y lo que les asignes: ven el detalle, editan notas, agendan citas y crean negocios desde cada propiedad.
-        </p>
-        <p class="text-muted" style="margin:0 0 10px;">
-          La página pública del catálogo consume esta API sin necesidad de credenciales (solo propiedades publicadas):
         </p>
         <code style="background:#f3f4f6;padding:8px 12px;border-radius:6px;display:inline-block;margin-bottom:10px;">
           GET ${window.AppConfig.API_URL}/inventory/public
@@ -729,29 +932,34 @@ window.Pages.inventory = {
 
     async function load() {
       container.innerHTML = '';
-      container.appendChild(renderHeader());
+      let meta = null;
+      container.appendChild(renderHeader(meta));
       container.appendChild(renderToolbar());
 
       const loading = document.createElement('div');
       loading.className = 'loading';
-      loading.textContent = 'Cargando...';
+      loading.textContent = state.vista === 'general' ? 'Cargando inventario general...' : 'Cargando tus propiedades...';
       container.appendChild(loading);
 
       try {
         let result;
         if (state.vista === 'general') {
-          // Inventario general: propiedades de toda la agencia (endpoint dedicado).
           const params = { page: state.page, limit: 15 };
-          if (state.filter !== '') params.isPublished = state.filter;
+          if (state.q) params.q = state.q;
+          if (state.agent) params.assignedAgent = state.agent;
+          if (state.published !== '') params.isPublished = state.published;
           result = await API.inventory.general(params);
         } else {
-          // Mis propiedades: solo lo captado/asignado a este asesor.
           result = await API.inventory.list({ page: state.page, limit: 15, mine: 'true' });
         }
+        meta = result.meta;
         loading.remove();
+        container.innerHTML = '';
+        container.appendChild(renderHeader(meta));
+        container.appendChild(renderToolbar());
         container.appendChild(renderTable(result.data || []));
-        if (result.meta && result.meta.pages > 1) {
-          container.appendChild(UI.pagination(result.meta, (page) => { state.page = page; load(); }));
+        if (meta && meta.pages > 1) {
+          container.appendChild(UI.pagination(meta, (page) => { state.page = page; load(); }));
         }
       } catch (error) {
         loading.remove();

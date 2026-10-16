@@ -306,6 +306,11 @@ window.Pages.settings = {
       return window.location.origin + '/GUIA.HTML';
     }
 
+    // Guía pensada solo para asesores/usuarios (sin la parte de administrador).
+    function userGuideUrl() {
+      return window.location.origin + '/GUIAUSUARIO.HTML';
+    }
+
     function guideMessage() {
       return `📖 Guía de uso de INMOBLES (administradores y usuarios):\n${guideUrl()}\n\nGuárdala y compártela con el equipo.`;
     }
@@ -313,6 +318,16 @@ window.Pages.settings = {
     function copyGuideLink() {
       const url = guideUrl();
       const done = () => UI.toast('Enlace de la guía copiado', 'success');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(() => UI.toast(url, 'info'));
+      } else {
+        UI.toast(url, 'info');
+      }
+    }
+
+    function copyUserGuideLink() {
+      const url = userGuideUrl();
+      const done = () => UI.toast('Enlace de la guía de usuarios copiado', 'success');
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(done).catch(() => UI.toast(url, 'info'));
       } else {
@@ -369,6 +384,7 @@ window.Pages.settings = {
 
     function renderGuide() {
       const url = guideUrl();
+      const userUrl = userGuideUrl();
       tabContent.innerHTML = `
         <div class="card">
           <h3 style="margin-top:0;">&#128214;&nbsp; Guía de uso del sistema</h3>
@@ -378,7 +394,7 @@ window.Pages.settings = {
             paso a paso). Cualquiera puede abrirla <strong>sin iniciar sesión</strong>.
           </p>
           <div class="form-group">
-            <label for="guide-link">Enlace para compartir</label>
+            <label for="guide-link">Enlace de la guía completa (admin&nbsp;+&nbsp;usuarios)</label>
             <input class="form-control" id="guide-link" type="text" readonly value="${UI.escapeHtml(url)}">
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
@@ -386,6 +402,14 @@ window.Pages.settings = {
             <button class="btn btn-secondary" type="button" data-guide-copy>&#128279;&nbsp; Copiar enlace</button>
             <button class="btn btn-primary" type="button" data-guide-chat>&#128172;&nbsp; Compartir en el chat</button>
             <a class="btn btn-secondary" id="guide-wa" href="#" target="_blank" rel="noopener" style="background:#25d366;color:#fff;border-color:#128C7A;">&#128172;&nbsp; Enviar por WhatsApp</a>
+          </div>
+          <div class="form-group" style="margin-top:16px;">
+            <label for="guide-user-link">Enlace de la guía para usuarios (sin la parte de administrador)</label>
+            <input class="form-control" id="guide-user-link" type="text" readonly value="${UI.escapeHtml(userUrl)}">
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+            <a class="btn btn-primary" href="GUIAUSUARIO.HTML" target="_blank" rel="noopener">&#128100;&nbsp; Abrir guía de usuarios</a>
+            <button class="btn btn-secondary" type="button" data-guide-copy-user>&#128279;&nbsp; Copiar enlace</button>
           </div>
         </div>
 
@@ -395,7 +419,8 @@ window.Pages.settings = {
             <li>Presiona <strong>Compartir en el chat</strong> y elige el <strong>Canal general</strong> (todo el equipo) o <strong>Soporte</strong>: el enlace llega como mensaje.</li>
             <li>Cualquiera lo abre con un toque, desde el celular o la computadora, y desde ahí regresa a la app.</li>
             <li>También puedes <strong>Copiar el enlace</strong> para pegarlo donde quieras, o enviarlo directo por WhatsApp.</li>
-            <li>Para mandar solo una guía, agrega <code>?g=admin</code> o <code>?g=usuario</code> al final del enlace.</li>
+            <li>Para los asesores usa la <strong>guía para usuarios</strong> (sin la parte de administrador); tú siempre puedes ver la guía completa.</li>
+            <li>Para mandar solo una guía desde el enlace completo, agrega <code>?g=admin</code> o <code>?g=usuario</code> al final.</li>
           </ol>
         </div>
       `;
@@ -410,8 +435,18 @@ window.Pages.settings = {
         linkInput.addEventListener('click', selectAll);
       }
 
+      const userLinkInput = tabContent.querySelector('#guide-user-link');
+      if (userLinkInput) {
+        const selectAll = () => userLinkInput.select();
+        userLinkInput.addEventListener('focus', selectAll);
+        userLinkInput.addEventListener('click', selectAll);
+      }
+
       const copyBtn = tabContent.querySelector('[data-guide-copy]');
       if (copyBtn) copyBtn.addEventListener('click', copyGuideLink);
+
+      const copyUserBtn = tabContent.querySelector('[data-guide-copy-user]');
+      if (copyUserBtn) copyUserBtn.addEventListener('click', copyUserGuideLink);
 
       const chatBtn = tabContent.querySelector('[data-guide-chat]');
       if (chatBtn) chatBtn.addEventListener('click', shareGuideChatModal);

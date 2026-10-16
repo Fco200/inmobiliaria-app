@@ -7,6 +7,8 @@ window.Pages.home = {
     const user = window.ApiClient.getStoredUser();
     const name = (user && (user.name || user.username)) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';
+    const roleCode = user && user.role ? (typeof user.role === 'object' ? (user.role.code || '') : String(user.role)) : '';
+    const isBoss = roleCode === 'admin' || roleCode === 'gerencia';
 
     const now = new Date();
     const hour = now.getHours();
@@ -86,7 +88,7 @@ window.Pages.home = {
       { key: 'settings', label: 'Configuración', desc: 'Opciones del sistema', href: 'settings.html', icon: '&#9881;' },
       { key: 'profile', label: 'Mi perfil', desc: 'Datos de tu cuenta', href: 'profile.html', icon: '&#128100;' },
       { key: 'ayuda', label: 'Ayuda y soporte', desc: 'Soporte, guía y contraseña', href: 'ayuda.html', icon: '&#128172;' },
-      { key: 'guia', label: 'Guía de uso', desc: 'Manual para admin y usuarios', href: 'GUIA.HTML', icon: '&#128214;' },
+      { key: 'guia', label: isBoss ? 'Guía del sistema' : 'Guía de uso', desc: isBoss ? 'Manual del administrador' : 'Cómo usar cada módulo', href: isBoss ? 'GUIA.HTML' : 'GUIAUSUARIO.HTML', icon: '&#128214;' },
     ];
 
     const kpiCards = KPIS.map(

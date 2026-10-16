@@ -15,15 +15,16 @@ window.AppShell = (() => {
     { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;', section: 'Propiedades' },
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;', section: 'Finanzas' },
     { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;', section: 'Finanzas' },
-    { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;', section: 'Finanzas' },
+    { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;', section: 'Finanzas', boss: true },
     { key: 'documents', label: 'Formatos', href: 'documents.html', icon: '&#128196;', section: 'Recursos' },
     { key: 'notifications', label: 'Avisos', href: 'notifications.html', icon: '&#128276;', section: 'Recursos' },
     { key: 'directorio', label: 'Directorio', href: 'directorio.html', icon: '&#128101;', section: 'Recursos' },
     { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;', section: 'Recursos' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;', section: 'Sistema' },
     { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;', section: 'Sistema' },
-    { key: 'guia', label: 'Guía', href: 'GUIA.HTML', icon: '&#128214;', section: 'Sistema' },
-    { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema' },
+    { key: 'guia', label: 'Guía del sistema', href: 'GUIA.HTML', icon: '&#128214;', section: 'Sistema', boss: true },
+    { key: 'guiausuario', label: 'Guía de uso', href: 'GUIAUSUARIO.HTML', icon: '&#128214;', section: 'Sistema', user: true },
+    { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema', boss: true },
   ];
 
   function currentUserRole() {
@@ -40,8 +41,12 @@ window.AppShell = (() => {
   }
 
   function visibleNav() {
-    if (isBoss()) return NAV;
-    return NAV.filter((n) => n.key !== 'settings' && n.key !== 'management');
+    const boss = isBoss();
+    return NAV.filter((n) => {
+      if (n.boss && !boss) return false;   // p. ej. Configuración, Gerencia, guía del admin
+      if (n.user && boss) return false;    // guía de usuarios solo para no-admin
+      return true;
+    });
   }
 
   function currentKey() {

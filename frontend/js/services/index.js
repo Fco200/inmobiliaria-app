@@ -272,6 +272,8 @@ window.API = {
     get: (id) => ApiClient.get(`/chats/${id}`),
     create: (body) => ApiClient.post('/chats', body),
     sendMessage: (id, body) => ApiClient.post(`/chats/${id}/messages`, body),
+    // Borra TODO el historial de mensajes del chat.
+    clearMessages: (id) => ApiClient.remove(`/chats/${id}/messages`),
     markRead: (id) => ApiClient.patch(`/chats/${id}/read`),
     unreadCount: () => ApiClient.get('/chats/unread-count'),
   },
@@ -281,6 +283,8 @@ window.API = {
     create: (body) => ApiClient.post('/announcements', body),
     markRead: (id) => ApiClient.patch(`/announcements/${id}/read`),
     remove: (id) => ApiClient.remove(`/announcements/${id}`),
+    // Borra TODOS los avisos del equipo (solo admin/gerencia).
+    clearAll: () => ApiClient.remove('/announcements/all'),
   },
 
   config: {

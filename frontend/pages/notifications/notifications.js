@@ -8,6 +8,7 @@ window.Pages.notifications = {
   async render(container) {
     const user = ApiClient.getStoredUser();
     const isBoss = Boolean(user && user.role && ['admin', 'gerencia'].includes(user.role.code || user.role));
+    const myId = user && (user._id || user.id);
 
     container.innerHTML = `
       <div class="page-header">
@@ -16,6 +17,8 @@ window.Pages.notifications = {
           ${isBoss ? '<button class="btn btn-primary" type="button" data-write-ann>&#128227; Redactar aviso</button>' : ''}
           <button class="btn btn-secondary" type="button" data-generate>Generar avisos</button>
           <button class="btn btn-secondary" type="button" data-read-all>Marcar todas como leídas</button>
+          <button class="btn btn-danger" type="button" data-clear-notifs>&#128465; Borrar historial</button>
+          ${isBoss ? '<button class="btn btn-danger" type="button" data-clear-anns>&#128465; Borrar avisos del equipo</button>' : ''}
         </div>
       </div>
       <div id="notif-filter" style="margin-bottom:16px;">
@@ -26,6 +29,10 @@ window.Pages.notifications = {
       <div id="notif-list"><div class="loading">Cargando avisos...</div></div>
 
       <h3 style="margin:28px 0 12px;">&#128276; Avisos del equipo</h3>
+      <p class="text-muted" style="font-size:13px;margin:0 0 10px;">
+        Marca <strong>Ocultar</strong> en un aviso para que no vuelva a aparecer en tu cuenta.
+        ${isBoss ? 'Como administrador también puedes <strong>eliminarlo para todo el equipo</strong>.' : ''}
+      </p>
       <div id="ann-list"><div class="loading">Cargando avisos...</div></div>
     `;
 
@@ -105,13 +112,18 @@ window.Pages.notifications = {
     }
 
     // ------- Avisos del equipo (comunicados de admin / gerencia) -------
+    const annReadByMe = (a) => Array.isArray(a.readBy) && a.readBy.some((r) => String(r && (r._id || r)) === String(myId));
+
     async function loadAnnouncements() {
       try {
         const result = await API.announcements.list();
         // ApiClient.unwrap desenrolla {data:[...]} → arreglo directo (avalúo);
         // se aceptan ambos formatos para no depender de paginación/meta.
         const raw = result && typeof result === 'object' && result.data !== undefined && result.meta !== undefined ? result.data : result;
-        const anns = Array.isArray(raw) ? raw : [];
+        let anns = Array.isArray(raw) ? raw : [];
+        // El asesor que “oculta” (marca leído) un aviso ya no lo vuelve a ver.
+        // El admin/gerencia siempre los ve para poder gestionarlos.
+        if (!isBoss) anns = anns.filter((a) => !annReadByMe(a));
         if (!anns.length) {
           annListEl.innerHTML = '<div class="card"><div class="empty-state"><p>No hay avisos publicados.</p></div></div>';
           return;
@@ -132,9 +144,41 @@ window.Pages.notifications = {
                   <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">
                     ${a.author ? UI.escapeHtml(a.author.name) : 'Administración'} · ${Format.dateTime(a.createdAt)}
                   </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                    <button class="btn btn-secondary btn-sm" type="button" data-hide-ann="${a._id}">&#128683; Ocultar</button>
+                    ${isBoss ? `<button class="btn btn-danger btn-sm" type="button" data-del-ann="${a._id}">&#128465; Eliminar para todos</button>` : ''}
+                  </div>
                 </div>`;
             }).join('')}
           </div>`;
+
+        annListEl.querySelectorAll('[data-hide-ann]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+              await API.announcements.markRead(btn.dataset.hideAnn);
+              loadAnnouncements();
+            } catch (error) {
+              btn.disabled = false;
+              UI.toast(error.message || 'No se pudo ocultar', 'error');
+            }
+          });
+        });
+        annListEl.querySelectorAll('[data-del-ann]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const ok = window.confirm('¿Eliminar este aviso para todo el equipo?');
+            if (!ok) return;
+            btn.disabled = true;
+            try {
+              await API.announcements.remove(btn.dataset.delAnn);
+              UI.toast('Aviso eliminado', 'success');
+              loadAnnouncements();
+            } catch (error) {
+              btn.disabled = false;
+              UI.toast(error.message || 'No se pudo eliminar', 'error');
+            }
+          });
+        });
       } catch (error) {
         annListEl.innerHTML = UI.errorAlert(error.message);
       }
@@ -212,6 +256,36 @@ window.Pages.notifications = {
         window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
       } catch (error) {
         UI.toast(error.message, 'error');
+      }
+    });
+
+    // Borra el historial de avisos/notificaciones personales (de mi cuenta).
+    const clearNotifsBtn = container.querySelector('[data-clear-notifs]');
+    if (clearNotifsBtn) clearNotifsBtn.addEventListener('click', async () => {
+      const ok = window.confirm('¿Borrar todo tu historial de avisos y notificaciones? Esta acción no se puede deshacer.');
+      if (!ok) return;
+      try {
+        await API.notifications.clearAll();
+        UI.toast('Historial borrado', 'success');
+        load();
+        window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
+      } catch (error) {
+        UI.toast(error.message || 'No se pudo borrar el historial', 'error');
+      }
+    });
+
+    // Borra TODOS los avisos del equipo (solo admin/gerencia) para que dejen de
+    // aparecer en cada inicio de sesión de los asesores.
+    const clearAnnsBtn = container.querySelector('[data-clear-anns]');
+    if (clearAnnsBtn) clearAnnsBtn.addEventListener('click', async () => {
+      const ok = window.confirm('¿Eliminar TODOS los avisos del equipo para todos los usuarios?');
+      if (!ok) return;
+      try {
+        await API.announcements.clearAll();
+        UI.toast('Avisos del equipo eliminados', 'success');
+        loadAnnouncements();
+      } catch (error) {
+        UI.toast(error.message || 'No se pudieron eliminar los avisos', 'error');
       }
     });
 

@@ -1992,7 +1992,9 @@ body.lightbox-open {
   .assistant-fab { right: 14px; bottom: 14px; }
   .process-tab { padding: 7px 12px; font-size: 12px; }
   .chat-sidebar { width: 100%; }
-  .chat-main.active { position: fixed; inset: 0; z-index: 50; }
+  /* La posición/altura de la conversación a pantalla completa se define en
+     chat.html (usa --chat-vh/--chat-top). No se fija aquí para evitar reglas
+     contradictorias que rompían el chat en móvil. */
   .msg-bubble { max-width: 85%; }
   .template-field-row { grid-template-columns: 1fr !important; }
 }
@@ -3532,7 +3534,7 @@ body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
 
 /* ---- Menú lateral en móvil: drawer deslizante ---- */
 @media (max-width: 900px) {
-  .app.has-sidebar { display: flex; flex-direction: column; }
+  .app.has-sidebar { display: flex; flex-direction: column; align-items: stretch; }
   .app-sidebar {
     position: fixed; top: 0; left: 0; bottom: 0;
     width: min(280px, 86vw); height: 100dvh;

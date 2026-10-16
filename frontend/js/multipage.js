@@ -553,6 +553,23 @@ window.AppShell = (() => {
     right.insertBefore(btn, right.querySelector('#btn-notifications'));
   }
 
+  // Botón "Descargar app" en la barra superior. En Android/PC instala la PWA de
+  // un toque (o guía); en iOS abre las instrucciones de "Añadir a pantalla de
+  // inicio". Se oculta solo si la app ya está instalada (install.js).
+  function injectDownloadButton() {
+    if (!window.AppInstall) return;
+    const right = document.querySelector('.topnav-right');
+    if (!right || right.querySelector('[data-download-app]')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-btn';
+    btn.setAttribute('data-download-app', '');
+    btn.title = 'Descargar la app';
+    btn.setAttribute('aria-label', 'Descargar la app');
+    btn.innerHTML = '&#128229;';
+    right.insertBefore(btn, right.firstChild);
+  }
+
   // Botón de actualización de la aplicación en la barra superior (sustituye a
   // la antigua calculadora). Lleva al módulo de Actualizaciones y muestra un
   // punto cuando hay una versión nueva disponible.
@@ -905,12 +922,14 @@ window.AppShell = (() => {
           const user = window.ApiClient.getStoredUser() || {};
           const isNew = !user.hasCompletedOnboarding;
           if (!isNew) return;
-          // Primera vez: tras el mensaje de bienvenida se muestra la guía y,
-          // al terminarla (o saltarla), se invita a activar las notificaciones.
+          // Flujo de la PRIMERA sesión: mensaje de bienvenida -> guía de inicio
+          // -> avisos del equipo (si hay) -> invitación a activar notificaciones.
+          const afterAvisos = () => { askPushNotifications(); };
+          const afterGuide = () => { showAvisosModal(afterAvisos); };
           if (window.Onboarding) {
-            window.Onboarding.maybeShow({ firstLogin: true, onFinish: askPushNotifications });
+            window.Onboarding.maybeShow({ firstLogin: true, onFinish: afterGuide });
           } else {
-            loadOnboarding(false, askPushNotifications);
+            loadOnboarding(false, afterGuide);
           }
         },
       });
@@ -932,6 +951,20 @@ window.AppShell = (() => {
   async function maybeShowAnnouncementBanner() {
     if (!window.ApiClient.isAuthenticated()) return;
     if (document.getElementById('announcement-banner')) return;
+    // En la PRIMERA sesión (usuario nuevo) los avisos se muestran al final del
+    // flujo bienvenida -> guía -> avisos (ver showAvisosModal), no como banner.
+    const stored = window.ApiClient.getStoredUser() || {};
+    if (stored && !stored.hasCompletedOnboarding) return;
+    // No competir con la bienvenida ni con un modal abierto: se reintenta más
+    // tarde (deja de intentar tras ~30s para no quedar en bucle).
+    if (document.getElementById('welcome-overlay') || document.getElementById('modal-overlay')) {
+      clearTimeout(maybeShowAnnouncementBanner._t);
+      const tries = (maybeShowAnnouncementBanner._tries || 0) + 1;
+      maybeShowAnnouncementBanner._tries = tries;
+      if (tries <= 40) maybeShowAnnouncementBanner._t = setTimeout(maybeShowAnnouncementBanner, 800);
+      return;
+    }
+    maybeShowAnnouncementBanner._tries = 0;
     const me = window.ApiClient.getStoredUser() || {};
     const myId = me && (me._id || me.id);
     let list = [];
@@ -944,8 +977,11 @@ window.AppShell = (() => {
     }
     if (!list.length) return;
     const alerted = alertBannerStore();
+    const readByMe = (a) => Array.isArray(a.readBy) && a.readBy.some((r) => String(r && (r._id || r)) === String(myId));
     const unseen = list.filter((a) => {
       if (!a || !a._id || alerted.includes(a._id)) return false;
+      // Ya marcado como leído por mí (en este o cualquier dispositivo) → no reaparece.
+      if (readByMe(a)) return false;
       const author = a.author || {};
       const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
       return !(myId && authorId && String(authorId) === String(myId));
@@ -980,10 +1016,83 @@ window.AppShell = (() => {
         next.push(chosen._id);
         saveAlertBannerStore(next);
       }
+      // Marca leído en el servidor para que no vuelva a aparecer en otro
+      // dispositivo ni en el próximo inicio de sesión.
+      try { if (window.API && API.announcements) API.announcements.markRead(chosen._id).catch(() => {}); } catch (e) {}
       banner.remove();
     });
     const content = document.getElementById('app-content');
     if (content) content.insertBefore(banner, content.firstChild);
+  }
+
+  // Modal con los avisos del equipo pendientes. Se usa al FINAL del flujo de
+  // primera sesión (bienvenida -> guía -> avisos) y también para mostrarlos si
+  // el usuario los abre a mano. Al cerrar, marca todos como leídos.
+  async function showAvisosModal(done) {
+    const finish = () => { if (typeof done === 'function') done(); };
+    if (!window.ApiClient.isAuthenticated() || typeof UI === 'undefined') return finish();
+    const me = window.ApiClient.getStoredUser() || {};
+    const myId = me && (me._id || me.id);
+    let list = [];
+    try {
+      const res = await window.API.announcements.list();
+      const raw = res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res;
+      list = Array.isArray(raw) ? raw : [];
+    } catch (error) {
+      return finish();
+    }
+    const palette = {
+      urgente: { color: '#dc2626', soft: '#fee2e2' },
+      importante: { color: '#d97706', soft: '#fef3c7' },
+      normal: { color: '#5B2D8E', soft: '#f3e8ff' },
+    };
+    const readByMe = (a) => Array.isArray(a.readBy) && a.readBy.some((r) => String(r && (r._id || r)) === String(myId));
+    const pending = list.filter((a) => {
+      if (!a || !a._id || readByMe(a)) return false;
+      const author = a.author || {};
+      const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
+      return !(myId && authorId && String(authorId) === String(myId));
+    });
+    if (!pending.length) return finish();
+
+    const itemsHtml = pending.map((a) => {
+      const p = palette[a.priority] || palette.normal;
+      return `
+        <div style="padding:12px 14px;border-radius:10px;background:${p.soft};border-left:4px solid ${p.color};margin-bottom:10px;">
+          <strong style="display:block;font-size:14px;">${UI.escapeHtml(a.title || 'Aviso del equipo')}</strong>
+          <div style="font-size:13px;margin-top:4px;white-space:pre-wrap;">${UI.escapeHtml(a.message || '')}</div>
+        </div>`;
+    }).join('');
+
+    const modal = UI.openModal({
+      title: '&#128276;&nbsp; Avisos del equipo',
+      body: `
+        <p class="text-muted" style="margin-top:0;">Estos son los avisos pendientes. Al cerrar esta ventana quedarán como leídos y no volverán a aparecer.</p>
+        ${itemsHtml}
+      `,
+      footer: '<button class="btn btn-primary" type="button" data-ok>Entendido</button>',
+      size: 520,
+    });
+
+    // Al cerrar de CUALQUIER forma (Entendido, X o clic fuera) se marcan los
+    // avisos como leídos y se continúa la cadena. Un guard evita hacerlo dos veces.
+    let finalized = false;
+    const finalize = async () => {
+      if (finalized) return;
+      finalized = true;
+      try {
+        await Promise.all(pending.map((a) => API.announcements.markRead(a._id).catch(() => {})));
+      } catch (error) { /* sin conexión: se reintenta la próxima vez */ }
+      finish();
+    };
+    const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+    if (!overlay) { finalize(); return; }
+    const okBtn = overlay.querySelector('[data-ok]');
+    if (okBtn) okBtn.addEventListener('click', () => { UI.closeModal(); finalize(); });
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById('modal-overlay')) { observer.disconnect(); finalize(); }
+    });
+    observer.observe(document.body, { childList: true });
   }
 
   // Reabre la guía rápida de bienvenida cuando el usuario la pide desde
@@ -1193,6 +1302,7 @@ window.AppShell = (() => {
       injectThemeButton();
       injectGuideButton();
       injectUpdateButton();
+      injectDownloadButton();
       loadAppVersion();
       startClock();
       injectAssistant();
@@ -1231,10 +1341,10 @@ window.AppShell = (() => {
     setTimeout(() => {
       loadMantenimiento();
       loadWelcome();
-      // La guía se encadena con la invitación a activar notificaciones cuando el
-      // usuario es nuevo (en la primera sesión se muestra tras el mensaje de
-      // bienvenida; en recargas, tras la propia guía).
-      loadOnboarding(false, askPushNotifications);
+      // La guía se encadena con los avisos y la invitación a activar
+      // notificaciones cuando el usuario es nuevo (primera sesión:
+      // bienvenida -> guía -> avisos -> notificaciones).
+      loadOnboarding(false, () => showAvisosModal(askPushNotifications));
       loadPush();
     }, 50);
 

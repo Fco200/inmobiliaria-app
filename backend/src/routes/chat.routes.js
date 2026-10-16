@@ -10,6 +10,7 @@ const {
   sendMessage,
   markAsRead,
   unreadCount,
+  clearMessages,
   general,
   supportChat,
 } = require('../controllers/chat.controller');
@@ -23,6 +24,7 @@ router.get('/unread-count', unreadCount);
 router.post('/', createChat);
 router.get('/:id', getChat);
 router.post('/:id/messages', sendMessage);
+router.delete('/:id/messages', clearMessages);
 router.patch('/:id/read', markAsRead);
 
 module.exports = router;

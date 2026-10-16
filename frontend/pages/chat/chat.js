@@ -13,23 +13,29 @@ window.Pages.chat = {
     // En móvil el teclado del sistema redimensiona el "visual viewport" sin
     // cambiar 100vh. Se publican dos variables (alto y desplazamiento reales)
     // para que la conversación abierta quede siempre encima del teclado y la
-    // barra de escritura no se pierda detrás de él.
-    (function bindChatViewport() {
-      const vv = window.visualViewport;
-      const apply = () => {
-        const h = vv ? vv.height : window.innerHeight;
-        const top = vv ? vv.offsetTop : 0;
-        document.documentElement.style.setProperty('--chat-vh', Math.round(h) + 'px');
-        document.documentElement.style.setProperty('--chat-top', Math.round(top) + 'px');
-      };
-      apply();
+    // barra de escritura no se pierda detrás de él. Se enlaza UNA sola vez por
+    // documento (render() puede volver a ejecutarse desde el shell).
+    const applyChatViewport = () => {
+      // Dentro del panel flotante (iframe) el visualViewport pertenece a la
+      // página padre y da valores erróneos: en ese caso se usa el tamaño real
+      // del propio iframe.
+      const vv = isEmbed ? null : window.visualViewport;
+      const h = vv ? vv.height : window.innerHeight;
+      const top = vv ? vv.offsetTop : 0;
+      document.documentElement.style.setProperty('--chat-vh', Math.round(h) + 'px');
+      document.documentElement.style.setProperty('--chat-top', Math.round(top) + 'px');
+    };
+    applyChatViewport();
+    if (!window.__chatViewportBound) {
+      window.__chatViewportBound = true;
+      const vv = isEmbed ? null : window.visualViewport;
       if (vv) {
-        vv.addEventListener('resize', apply);
-        vv.addEventListener('scroll', apply);
+        vv.addEventListener('resize', applyChatViewport);
+        vv.addEventListener('scroll', applyChatViewport);
       }
-      window.addEventListener('resize', apply);
-      window.addEventListener('orientationchange', () => setTimeout(apply, 250));
-    })();
+      window.addEventListener('resize', applyChatViewport);
+      window.addEventListener('orientationchange', () => setTimeout(applyChatViewport, 250));
+    }
 
     // El layout se inyecta ANTES de consultar los elementos para evitar
     // errores "cannot read properties of null". Todas las consultas se
@@ -103,6 +109,7 @@ window.Pages.chat = {
               <div id="chat-title" style="font-weight:600;">Selecciona un chat</div>
               <div id="chat-participants" style="font-size:12px;color:var(--text-muted);"></div>
             </div>
+            <button class="icon-btn" id="btn-clear-chat" type="button" title="Borrar historial de la conversación" aria-label="Borrar historial" style="display:none;">&#128465;</button>
             <button class="icon-btn" id="btn-exit-header" type="button" title="Cambiar de módulo" aria-label="Cambiar de módulo">&#9776;</button>
           </div>
           <div class="chat-messages" id="chat-messages">
@@ -131,6 +138,7 @@ window.Pages.chat = {
     const btnSend = $('#btn-send');
     const btnExit = $('#btn-exit-modules');
     const btnExitHeader = $('#btn-exit-header');
+    const btnClearChat = $('#btn-clear-chat');
     const chatMain = $('#chat-main');
     let currentChat = null;
     let chats = [];
@@ -172,6 +180,16 @@ window.Pages.chat = {
       // la gestiona el módulo global Realtime (js/realtime.js).
       socket.on('new-announcement', () => {
         loadAnnouncements();
+      });
+
+      // Alguien (p. ej. el admin) borró el historial del chat abierto.
+      socket.on('chat-cleared', (data) => {
+        const id = data && data.chatId;
+        if (currentChat && String(currentChat._id) === String(id)) {
+          currentChat.messages = [];
+          renderMessages();
+        }
+        loadChats();
       });
     }
 
@@ -320,6 +338,12 @@ window.Pages.chat = {
         }).join(', ');
         chatInput.style.display = 'flex';
         btnBack.style.display = 'inline-flex';
+        // El borrado de historial de los canales del equipo (General/Soporte)
+        // queda reservado a admin/gerencia; en los chats 1:1 cualquiera.
+        if (btnClearChat) {
+          const canClear = currentChat.type !== 'grupal' || isAdmin;
+          btnClearChat.style.display = canClear ? 'inline-flex' : 'none';
+        }
         chatMain.classList.add('active');
         renderMessages();
         joinChat(chatId);
@@ -423,6 +447,7 @@ window.Pages.chat = {
     function closeConversation() {
       if (currentChat) leaveChat(currentChat._id);
       currentChat = null;
+      if (btnClearChat) btnClearChat.style.display = 'none';
       chatMain.classList.remove('active');
     }
 
@@ -448,6 +473,23 @@ window.Pages.chat = {
     btnBack.addEventListener('click', closeConversation);
     if (btnExit) btnExit.addEventListener('click', exitToModules);
     if (btnExitHeader) btnExitHeader.addEventListener('click', exitToModules);
+
+    // Borra el historial de la conversación abierta (con confirmación).
+    if (btnClearChat) btnClearChat.addEventListener('click', async () => {
+      if (!currentChat) return;
+      const ok = window.confirm('¿Borrar todo el historial de esta conversación? Esta acción no se puede deshacer.');
+      if (!ok) return;
+      btnClearChat.disabled = true;
+      try {
+        await API.chats.clearMessages(currentChat._id);
+        currentChat.messages = [];
+        renderMessages();
+        UI.toast('Historial borrado', 'success');
+      } catch (e) {
+        UI.toast(e.message || 'No se pudo borrar el historial', 'error');
+      }
+      btnClearChat.disabled = false;
+    });
 
     // Tecla Escape (PC): cierra la conversación. No actúa con modales abiertos
     // para no pisar el cierre de confirmaciones y formularios.

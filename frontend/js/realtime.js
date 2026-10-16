@@ -332,6 +332,13 @@ window.Realtime = (() => {
     socket.on('delete-announcement', () => {
       refreshBadges();
     });
+    // El admin borró TODOS los avisos del equipo: se retira el banner activo
+    // (si lo hay) para que desaparezca también en las sesiones abiertas.
+    socket.on('clear-announcements', () => {
+      const banner = document.getElementById('announcement-banner');
+      if (banner) banner.remove();
+      refreshBadges();
+    });
     socket.on('new-notification', (item) => {
       showNotification(item);
       refreshBadges();

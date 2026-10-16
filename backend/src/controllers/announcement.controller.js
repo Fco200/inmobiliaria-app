@@ -124,9 +124,30 @@ const deleteAnnouncement = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Aviso eliminado' });
 });
 
+// Borra TODOS los avisos del equipo. Solo admin/gerencia. Se usa para que los
+// avisos ya leídos dejen de aparecer en cada inicio de sesión.
+const clearAnnouncements = asyncHandler(async (req, res) => {
+  if (!req.user || !req.user._id) {
+    return res.status(401).json({ success: false, message: 'No autorizado' });
+  }
+  if (!isBossRole(req.user)) {
+    return res.status(403).json({ success: false, message: 'No autorizado' });
+  }
+
+  const result = await Announcement.deleteMany({});
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('clear-announcements');
+  }
+
+  res.json({ success: true, message: 'Avisos eliminados', data: { deleted: result.deletedCount || 0 } });
+});
+
 module.exports = {
   listAnnouncements,
   createAnnouncement,
   markAnnouncementRead,
   deleteAnnouncement,
+  clearAnnouncements,
 };

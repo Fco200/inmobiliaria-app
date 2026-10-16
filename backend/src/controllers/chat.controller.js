@@ -369,6 +369,49 @@ const unreadCount = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { unread: totalUnread } });
 });
 
+// Borra TODO el historial de mensajes de un chat.
+// - En los canales grupales del equipo (General/Soporte) solo admin/gerencia
+//   pueden vaciarlos, para que un asesor no borre la conversación de todos.
+// - En un chat 1:1 cualquiera de sus participantes puede vaciar el suyo.
+const clearMessages = asyncHandler(async (req, res) => {
+  const chatId = req.params.id;
+  const userId = req.user._id;
+
+  const chat = await Chat.findById(chatId);
+  if (!chat) {
+    return res.status(404).json({ success: false, message: 'Chat no encontrado' });
+  }
+
+  const isParticipant = chat.participants.some((p) => p && p.toString() === String(userId));
+  if (!isParticipant) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
+  }
+
+  const role = req.user.role && typeof req.user.role === 'object' ? (req.user.role.code || '') : req.user.role;
+  const isBoss = role === 'admin' || role === 'gerencia';
+
+  if (chat.type === 'grupal' && !isBoss) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo administradores y gerencia pueden borrar el historial de este canal',
+    });
+  }
+
+  chat.messages = [];
+  chat.lastMessage = '';
+  chat.lastMessageAt = null;
+  await chat.save();
+
+  const io = req.app.get('io');
+  if (io) {
+    const payload = { chatId: String(chat._id) };
+    io.to(`chat:${chat._id}`).emit('chat-cleared', payload);
+    if (chat.type === 'grupal') io.to('general').emit('chat-cleared', payload);
+  }
+
+  res.json({ success: true, message: 'Historial de chat borrado' });
+});
+
 module.exports = {
   listChats,
   getChat,
@@ -376,6 +419,7 @@ module.exports = {
   sendMessage,
   markAsRead,
   unreadCount,
+  clearMessages,
   general,
   supportChat,
   getOrCreateGeneralChat,

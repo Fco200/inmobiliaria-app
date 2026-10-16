@@ -9,6 +9,7 @@ window.AppInstall = (() => {
     (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isAndroid = /android/i.test(navigator.userAgent);
+  const isDesktop = !isIOS && !isAndroid;
   const isStandalone =
     window.matchMedia('(display-mode: standalone)').matches ||
     window.matchMedia('(display-mode: minimal-ui)').matches ||
@@ -17,6 +18,13 @@ window.AppInstall = (() => {
   function visibleButtons(show) {
     document.querySelectorAll('[data-install]').forEach((btn) => {
       btn.classList.toggle('visible', show);
+    });
+  }
+
+  // Botones "Descargar app" (siempre visibles). Se ocultan si ya está instalada.
+  function hideDownloadButtons() {
+    document.querySelectorAll('[data-download-app]').forEach((btn) => {
+      btn.style.display = 'none';
     });
   }
 
@@ -121,19 +129,35 @@ window.AppInstall = (() => {
     showDesktopInstructions();
   }
 
-  function init() {
-    // App ya instalada → no mostrar botones.
-    if (isStandalone || installed) return;
+  // Ejecuta el flujo correcto al pulsar el botón: instalación nativa (Android/
+  // PC con Chrome/Edge) si el navegador la ofreció; si no, instrucciones según
+  // la plataforma. En iOS nunca hay prompt nativo: siempre instrucciones.
+  async function runInstallFlow() {
+    if (isIOS) {
+      showIosInstructions();
+      return;
+    }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      try {
+        await deferredPrompt.userChoice;
+      } catch (error) { /* el usuario cerró el diálogo */ }
+      deferredPrompt = null;
+      return;
+    }
+    showManualHint();
+  }
 
-    // iOS: no existe beforeinstallprompt; el botón abre las instrucciones.
+  function init() {
+    // App ya instalada → no mostrar botones de instalación.
+    if (isStandalone || installed) {
+      hideDownloadButtons();
+      return;
+    }
+
+    // iOS: no existe beforeinstallprompt; el/los botones abren instrucciones.
     if (isIOS) {
       visibleButtons(true);
-      document.addEventListener('click', (event) => {
-        if (!event.target.closest('[data-install]')) return;
-        event.preventDefault();
-        showIosInstructions();
-      });
-      return;
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
@@ -149,27 +173,21 @@ window.AppInstall = (() => {
       installed = true;
       deferredPrompt = null;
       visibleButtons(false);
+      hideDownloadButtons();
       if (typeof UI !== 'undefined') {
         UI.toast(isAndroid ? 'Aplicación instalada. Búscala en tus apps.' : 'Aplicación instalada correctamente.', 'success');
       }
     });
 
-    document.addEventListener('click', async (event) => {
-      const btn = event.target.closest('[data-install]');
+    // Un único manejador para ambos botones: "Instalar app" ([data-install]) y
+    // "Descargar app" ([data-download-app]).
+    document.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-install], [data-download-app]');
       if (!btn) return;
       event.preventDefault();
-
-      if (!deferredPrompt) {
-        showManualHint();
-        return;
-      }
-      deferredPrompt.prompt();
-      try {
-        await deferredPrompt.userChoice;
-      } catch (error) { /* el usuario cerró el diálogo */ }
-      deferredPrompt = null;
+      runInstallFlow();
     });
   }
 
-  return { init };
+  return { init, isIOS, isAndroid, isDesktop, isStandalone };
 })();

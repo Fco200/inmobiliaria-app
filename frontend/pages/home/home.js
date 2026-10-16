@@ -123,6 +123,7 @@ window.Pages.home = {
         <div class="home-hero-text">
           <h2>${greeting}${name ? `, ${UI.escapeHtml(name)}` : ''}.</h2>
           <p>${todayLabel} · Así va tu cartera en este momento.</p>
+          <button class="btn btn-primary" type="button" data-download-app style="margin-top:12px;">&#128229;&nbsp; Descargar la app</button>
         </div>
         ${role ? `<span class="home-role-badge">${UI.escapeHtml(role)}</span>` : ''}
       </section>

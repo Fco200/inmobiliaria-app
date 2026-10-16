@@ -60,6 +60,9 @@
     .msg-support .msg-sender { color: var(--primary); opacity: 1; }
     .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; opacity: 0.8; }
     .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
+    /* Enlaces compartidos en un mensaje: clicables y con salto de línea. */
+    .msg-bubble a { color: var(--primary); text-decoration: underline; word-break: break-all; }
+    .msg-sent a { color: #ffe9a8; }
     .unread-badge { background: var(--danger); color: #fff; border-radius: 50%; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
     .chat-empty { text-align: center; color: var(--text-muted); margin: auto; padding: 40px; }
     .announcement-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--primary); }

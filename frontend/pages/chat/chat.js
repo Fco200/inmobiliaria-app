@@ -330,6 +330,21 @@ window.Pages.chat = {
       }
     }
 
+    // Convierte los enlaces del mensaje en anclas clicables (se escapa TODO el
+    // texto primero y solo después se envuelven las URLs, por lo que no se
+    // permite inyectar HTML desde un mensaje).
+    function linkify(text) {
+      const escaped = UI.escapeHtml(String(text || ''));
+      return escaped.replace(/(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi, (raw) => {
+        // La puntuación final ("frase." o "enlace),") no forma parte del enlace.
+        const tail = raw.match(/[.,;:!?)\]}¿¡]+$/);
+        const url = tail ? raw.slice(0, raw.length - tail[0].length) : raw;
+        if (!url) return raw;
+        const href = /^https?:/i.test(url) ? url : 'https://' + url;
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>${tail ? tail[0] : ''}`;
+      });
+    }
+
     function renderMessages() {
       if (!currentChat || !currentChat.messages || !currentChat.messages.length) {
         chatMessages.innerHTML = '<div class="chat-empty">Sin mensajes</div>';
@@ -349,7 +364,7 @@ window.Pages.chat = {
         const extra = (!isMine && supportMsg) ? ' msg-support' : '';
         return `<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}${extra}">
           ${!isMine ? `<div class="msg-sender">${supportMsg ? '&#128736;&#65039; ' : ''}${UI.escapeHtml(senderName)}</div>` : ''}
-          <div>${UI.escapeHtml(String(m.message || ''))}</div>
+          <div>${linkify(m.message)}</div>
           <div class="msg-time">${Format.time(m.createdAt)}</div>
         </div>`;
       }).join('');

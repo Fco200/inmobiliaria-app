@@ -22,6 +22,7 @@ window.AppShell = (() => {
     { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;', section: 'Recursos' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;', section: 'Sistema' },
     { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;', section: 'Sistema' },
+    { key: 'guia', label: 'Guía', href: 'GUIA.HTML', icon: '&#128214;', section: 'Sistema' },
     { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema' },
   ];
 

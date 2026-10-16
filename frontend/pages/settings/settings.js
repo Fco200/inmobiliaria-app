@@ -41,6 +41,7 @@ window.Pages.settings = {
         <button class="btn btn-secondary" data-tab="alerts" type="button">&#128276;&nbsp; Avisos</button>
         <button class="btn btn-secondary" data-tab="sessions" type="button">&#128275;&nbsp; Sesiones</button>
         <button class="btn btn-secondary" data-tab="catalog" type="button">&#127760;&nbsp; Catálogo público</button>
+        <button class="btn btn-secondary" data-tab="guide" type="button">&#128214;&nbsp; Guía del sistema</button>
         <button class="btn btn-secondary" data-tab="activity" type="button">&#128221;&nbsp; Actividad del sistema</button>
       </div>
       <div id="tab-content"></div>
@@ -69,6 +70,7 @@ window.Pages.settings = {
         else if (btn.dataset.tab === 'alerts') renderAlerts();
         else if (btn.dataset.tab === 'sessions') renderSessions();
         else if (btn.dataset.tab === 'catalog') renderCatalog();
+        else if (btn.dataset.tab === 'guide') renderGuide();
         else renderActivity();
       });
     });
@@ -296,6 +298,123 @@ window.Pages.settings = {
         .catch((error) => {
           tabContent.innerHTML = UI.errorAlert(error.message);
         });
+    }
+
+    // Enlace absoluto a la guía ilustrada (GUIA.HTML vive en la raíz del
+    // frontend y se puede abrir sin iniciar sesión).
+    function guideUrl() {
+      return window.location.origin + '/GUIA.HTML';
+    }
+
+    function guideMessage() {
+      return `📖 Guía de uso de INMOBLES (administradores y usuarios):\n${guideUrl()}\n\nGuárdala y compártela con el equipo.`;
+    }
+
+    function copyGuideLink() {
+      const url = guideUrl();
+      const done = () => UI.toast('Enlace de la guía copiado', 'success');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(() => UI.toast(url, 'info'));
+      } else {
+        UI.toast(url, 'info');
+      }
+    }
+
+    // Envía el enlace de la guía a un canal del chat del sistema.
+    async function shareGuideToChat(channel) {
+      const getChat = channel === 'soporte' ? API.chats.soporte() : API.chats.general();
+      const res = await getChat;
+      const chat = res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res;
+      if (!chat || !chat._id) throw new Error('Canal no disponible');
+      await API.chats.sendMessage(chat._id, { message: guideMessage() });
+    }
+
+    function shareGuideChatModal() {
+      const modal = UI.openModal({
+        title: '&#128172;&nbsp; Compartir guía en el chat',
+        size: 440,
+        body: `
+          <p class="text-muted" style="margin-top:0;">Elige el canal donde quieres publicar el enlace de la guía.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+            <button class="btn btn-primary" type="button" data-share-channel="general">&#128172;&nbsp; Canal general (todo el equipo)</button>
+            <button class="btn btn-secondary" type="button" data-share-channel="soporte">&#128736;&#65039;&nbsp; Soporte técnico</button>
+          </div>
+          <div id="share-guide-error" class="alert alert-error" style="display:none;margin-top:12px;"></div>
+        `,
+        footer: `<button class="btn btn-secondary" data-cancel type="button">Cancelar</button>`,
+      });
+
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+      const errBox = bodyEl.querySelector('#share-guide-error');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+
+      bodyEl.querySelectorAll('[data-share-channel]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            await shareGuideToChat(btn.dataset.shareChannel);
+            UI.closeModal();
+            UI.toast('Guía compartida en el chat', 'success');
+          } catch (error) {
+            btn.disabled = false;
+            errBox.style.display = 'block';
+            errBox.textContent = error.message || 'No se pudo compartir la guía.';
+          }
+        });
+      });
+    }
+
+    function renderGuide() {
+      const url = guideUrl();
+      tabContent.innerHTML = `
+        <div class="card">
+          <h3 style="margin-top:0;">&#128214;&nbsp; Guía de uso del sistema</h3>
+          <p class="text-muted" style="font-size:13px;">
+            Guía ilustrada con dos versiones: <strong>para el administrador</strong> (cómo agregar usuarios, roles,
+            catálogo, avisos y seguridad) y <strong>para todos los usuarios</strong> (qué pueden hacer en cada módulo,
+            paso a paso). Cualquiera puede abrirla <strong>sin iniciar sesión</strong>.
+          </p>
+          <div class="form-group">
+            <label for="guide-link">Enlace para compartir</label>
+            <input class="form-control" id="guide-link" type="text" readonly value="${UI.escapeHtml(url)}">
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+            <a class="btn btn-primary" href="GUIA.HTML" target="_blank" rel="noopener">&#128214;&nbsp; Abrir guía</a>
+            <button class="btn btn-secondary" type="button" data-guide-copy>&#128279;&nbsp; Copiar enlace</button>
+            <button class="btn btn-primary" type="button" data-guide-chat>&#128172;&nbsp; Compartir en el chat</button>
+            <a class="btn btn-secondary" id="guide-wa" href="#" target="_blank" rel="noopener" style="background:#25d366;color:#fff;border-color:#128C7A;">&#128172;&nbsp; Enviar por WhatsApp</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">&#128238;&nbsp; Cómo compartirla con tu equipo</h3>
+          <ol style="margin:8px 0 0;padding-left:20px;font-size:14px;line-height:1.9;">
+            <li>Presiona <strong>Compartir en el chat</strong> y elige el <strong>Canal general</strong> (todo el equipo) o <strong>Soporte</strong>: el enlace llega como mensaje.</li>
+            <li>Cualquiera lo abre con un toque, desde el celular o la computadora, y desde ahí regresa a la app.</li>
+            <li>También puedes <strong>Copiar el enlace</strong> para pegarlo donde quieras, o enviarlo directo por WhatsApp.</li>
+            <li>Para mandar solo una guía, agrega <code>?g=admin</code> o <code>?g=usuario</code> al final del enlace.</li>
+          </ol>
+        </div>
+      `;
+
+      const wa = tabContent.querySelector('#guide-wa');
+      if (wa) wa.href = `https://wa.me/?text=${encodeURIComponent(guideMessage())}`;
+
+      const linkInput = tabContent.querySelector('#guide-link');
+      if (linkInput) {
+        const selectAll = () => linkInput.select();
+        linkInput.addEventListener('focus', selectAll);
+        linkInput.addEventListener('click', selectAll);
+      }
+
+      const copyBtn = tabContent.querySelector('[data-guide-copy]');
+      if (copyBtn) copyBtn.addEventListener('click', copyGuideLink);
+
+      const chatBtn = tabContent.querySelector('[data-guide-chat]');
+      if (chatBtn) chatBtn.addEventListener('click', shareGuideChatModal);
     }
 
     function renderUsers() {

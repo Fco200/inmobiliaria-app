@@ -86,6 +86,7 @@ window.Pages.home = {
       { key: 'settings', label: 'Configuración', desc: 'Opciones del sistema', href: 'settings.html', icon: '&#9881;' },
       { key: 'profile', label: 'Mi perfil', desc: 'Datos de tu cuenta', href: 'profile.html', icon: '&#128100;' },
       { key: 'ayuda', label: 'Ayuda y soporte', desc: 'Soporte, guía y contraseña', href: 'ayuda.html', icon: '&#128172;' },
+      { key: 'guia', label: 'Guía de uso', desc: 'Manual para admin y usuarios', href: 'GUIA.HTML', icon: '&#128214;' },
     ];
 
     const kpiCards = KPIS.map(

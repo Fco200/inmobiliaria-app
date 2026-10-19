@@ -60,8 +60,10 @@ const clientSchema = new Schema(
     tipoPropiedadOtro: { type: String, trim: true, default: '' },
     queBusca: { type: String, trim: true, default: '' },
     zona: { type: String, trim: true, default: '' },
-    // Texto libre por diseño: Contado, Infonavit, Fovissste, Bancario, etc.
-    formaPago: { type: String, trim: true, default: 'Contado' },
+    // Texto libre por diseño: Contado, Infonavit, Banco, Fovissste, Otro.
+    // Es OPCIONAL: se deja vacío cuando el asesor aún no la conoce (se
+    // presenta como "Pendiente / por confirmar" en la interfaz).
+    formaPago: { type: String, trim: true, default: '' },
     // Texto libre escrito cuando la forma de pago es "Otro".
     formaPagoOtro: { type: String, trim: true, default: '' },
     capacidad: { type: Number, min: 0, default: 0 },

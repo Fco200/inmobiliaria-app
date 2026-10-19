@@ -2,9 +2,9 @@
   "version": "2.14",
   "channel": "estable",
   "title": "Actualización 2.14",
-  "date": "2026-10-18",
+  "date": "2026-10-19",
   "notes": [
-    "Clientes: la forma de compra ahora es opcional (puede quedar Pendiente) y si el cliente viene a Vender se ocultan automáticamente la forma de pago y la capacidad de pago.",
+    "Clientes: la forma de compra ahora es opcional (Contado, Infonavit, Banco, Fovissste u Otros, o bien Pendiente) y si el cliente viene a Vender se ocultan automáticamente la forma de pago y la capacidad de pago.",
     "Inventario: en Mis propiedades decides con un interruptor si publicas o no cada propiedad en el inventario general.",
     "Inventario: en Propiedades los asesores solo consultan; pueden ver el detalle, agendar citas, crear negocios y compartir por WhatsApp.",
     "Compartir por WhatsApp: el PDF ahora lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y las viñetas con su sangría original.",

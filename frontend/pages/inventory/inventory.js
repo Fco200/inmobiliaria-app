@@ -457,7 +457,8 @@ window.Pages.inventory = {
             <div class="form-group" style="grid-column:1/-1;">
               <label>Fotografías</label>
               <div data-photos-manager></div>
-            </div>            <div class="form-group" style="grid-column:1/-1;">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
               <label>Descripción</label>
               <textarea class="form-control" data-description rows="3">${UI.escapeHtml(prop.description || '')}</textarea>
             </div>

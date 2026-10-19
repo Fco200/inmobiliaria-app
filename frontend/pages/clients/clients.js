@@ -32,13 +32,18 @@ const CLIENT_FORMAS_PAGO = ['Contado', 'Infonavit', 'Banco', 'Fovissste', 'Otro'
 // select nunca muestre vacío un dato que ya existe.
 const FORMAS_PAGO_LEGADAS = ['Bancario'];
 
+// Etiquetas visibles del catálogo de formas de pago. El valor interno sigue
+// siendo 'Otro' (para el campo de texto libre), pero al asesor se le muestra
+// como "Otros", tal como se pidió.
+const FORMA_PAGO_LABELS = { Otro: 'Otros' };
+
 // Opciones del select de forma de pago, incluyendo el valor legado del
 // registro cuando no pertenece al catálogo vigente.
 function opcionesFormaPago(current) {
   const list = CLIENT_FORMAS_PAGO.slice();
   const value = String(current || '').trim();
   if (value && !list.includes(value) && FORMAS_PAGO_LEGADAS.includes(value)) list.push(value);
-  return list.map((f) => ({ value: f, label: f }));
+  return list.map((f) => ({ value: f, label: FORMA_PAGO_LABELS[f] || f }));
 }
 const CLIENT_TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro'];
 // Sin alias de etapa: "PERFILADO" volvió a ser una etapa real del embudo.
@@ -448,12 +453,16 @@ window.Pages.clients = {
       const discarded = c.etapaActual === 'DESCARTADO';
       const canBack = previousOf(c.etapaActual);
       const canNext = nextOf(c.etapaActual);
+      // Forma de pago y capacidad de pago solo aplican a quien COMPRA. En un
+      // cliente que viene a VENDER no se muestran (aunque un registro viejo
+      // los conserve), para no confundir al asesor.
+      const aplicaPago = c.servicio !== 'Vender';
       const perfil = [
         c.servicio ? { label: 'Operación', value: c.servicio === 'Otro' ? (c.servicioOtro || 'Otro') : c.servicio } : null,
         c.tipoPropiedad ? { label: 'Propiedad', value: c.tipoPropiedad === 'Otro' ? (c.tipoPropiedadOtro || 'Otro') : c.tipoPropiedad } : null,
         c.zona ? { label: 'Zona', value: c.zona } : null,
-        c.capacidad ? { label: 'Capacidad', value: Format.currency(c.capacidad) } : null,
-        c.formaPago ? { label: 'Pago', value: c.formaPago === 'Otro' ? (c.formaPagoOtro || 'Otro') : c.formaPago } : null,
+        aplicaPago && c.capacidad ? { label: 'Capacidad', value: Format.currency(c.capacidad) } : null,
+        aplicaPago && c.formaPago ? { label: 'Pago', value: c.formaPago === 'Otro' ? (c.formaPagoOtro || 'Otro') : c.formaPago } : null,
       ].filter(Boolean);
       return `
         <article class="client-card" style="--stage-color:${stage.color};">
@@ -562,7 +571,7 @@ window.Pages.clients = {
               })}
               <div id="pago-compra-box" style="display:contents;">
                 ${fieldConOtro('formaPago', 'Forma de compra / pago (opcional)', {
-                  options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f }))],
+                  options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago('')],
                   placeholder: 'Ej. Pago mixto, préstamo familiar…',
                 })}
                 ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', placeholder: 'Pendiente / por confirmar' })}

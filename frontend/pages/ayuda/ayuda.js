@@ -277,18 +277,18 @@ window.Pages.ayuda = {
           icon: '&#128230;',
           title: 'Mis Propiedades (inventario)',
           body: `
-            <p><strong>Mis Propiedades</strong> reúne en un solo módulo tu cartera y todo el inventario de la empresa. Tiene dos pestañas:</p>
+            <p><strong>Mis Propiedades</strong> reúne tu cartera y el inventario de la empresa en dos pestañas:</p>
             <ul>
-              <li><strong>Mis propiedades:</strong> los inmuebles a tu cargo, con sus estados y datos clave.</li>
-              <li><strong>Inventario general:</strong> todas las propiedades de la empresa (incluidas las de otros asesores), pensado para <strong>captación</strong> y cruce con tus clientes.</li>
+              <li><strong>Mis propiedades:</strong> es tu espacio. Aquí capturas, subes fotos, completas la información y decides con un <strong>interruptor</strong> si la propiedad se publica o no en el inventario general.</li>
+              <li><strong>Propiedades (inventario general):</strong> todas las propiedades del equipo, incluidas las externas de otras inmobiliarias o asesores. Es un espacio de <strong>consulta</strong>.</li>
             </ul>
             <h4>Qué puedes hacer aquí</h4>
             <ul>
-              <li><strong>Filtrar</strong> por asesor, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
-              <li><strong>Publicar</strong> una propiedad en el catálogo público.</li>
+              <li>En <strong>Mis propiedades</strong>: editar datos, observaciones y fotos, y publicar o despublicar con el interruptor.</li>
+              <li>En <strong>Propiedades</strong> (inventario general) los asesores solo consultan: pueden ver el detalle, <strong>agendar una cita</strong>, <strong>crear un negocio</strong> y <strong>compartir por WhatsApp</strong>. No se elimina ni se modifica la ficha principal.</li>
+              <li>La eliminación y la administración del inventario general quedan para <strong>administración y gerencia</strong>.</li>
+              <li><strong>Filtrar</strong> por asesor, publicación, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
               <li>Abrir el <strong>detalle</strong> con mercado, historial y fotos.</li>
-              <li><strong>Editar</strong> datos, observaciones y fotos.</li>
-              <li>Agendar una <strong>cita</strong> o registrar un <strong>negocio</strong> desde la ficha.</li>
               <li>Si eres administrador: <strong>asignar</strong> la propiedad a un asesor y <strong>subir</strong> propiedades existentes al inventario.</li>
             </ul>
           `,
@@ -315,6 +315,7 @@ window.Pages.ayuda = {
             <p>El módulo de <strong>Clientes</strong> concentra tus prospectos y clientes activos.</p>
             <ul>
               <li><strong>Capta</strong> un prospecto desde el menú correspondiente al registrar su nombre y datos de contacto.</li>
+              <li>Indica su <strong>operación</strong> (Comprar, Vender, Rentar, Alquilar u Otro). La <strong>forma de compra</strong> (Contado, Infonavit, Banco, Fovissste u Otros) es <strong>opcional</strong>: puede quedar como <em>Pendiente</em> si aún no la conoces. Si el cliente viene a <strong>Vender</strong>, la forma de pago y la capacidad de pago se ocultan automáticamente.</li>
               <li>Asígnalo a un <strong>usuario responsable</strong> para darle seguimiento.</li>
               <li>Registra <strong>interacciones</strong> (llamadas, mensajes, visitas) para llevar el historial.</li>
               <li>Convierte un prospecto en <strong>cliente</strong> cuando avance a tu cartera.</li>

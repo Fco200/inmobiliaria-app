@@ -70,7 +70,7 @@ async function build() {
 
   // Clave de detección de cambios para el FRONTEND: se combina la versión
   // publicada (version.json) con el hash del commit. Así un salto de versión
-  // (p. ej. 2.12 → 2.13) dispara el aviso "nueva versión disponible" en
+  // (p. ej. 2.13 → 2.14) dispara el aviso "nueva versión disponible" en
   // todas las sesiones aunque no se haya hecho un commit nuevo.
   const detectionHash = [meta.version ? String(meta.version) : '', hash || '']
     .filter(Boolean)

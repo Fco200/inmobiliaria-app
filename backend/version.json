@@ -1,14 +1,14 @@
 {
-  "version": "2.13",
+  "version": "2.14",
   "channel": "estable",
-  "title": "Actualización 2.13",
+  "title": "Actualización 2.14",
   "date": "2026-10-18",
   "notes": [
-    "Clientes: la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro) ya es obligatoria en el alta y al perfilar; el sistema ya no la omite al avanzar de etapa.",
-    "Compartir por WhatsApp: ahora se envía un PDF con las fotos, la descripción completa y tus datos de contacto, sin incluir el valor ticket.",
-    "Editor de fotos: elige la portada con la estrella o arrastra para ordenar las imágenes de cada propiedad.",
-    "Inventario: la pestaña Propiedades muestra todo el inventario del equipo, incluidas las propiedades externas de otras inmobiliarias o asesores.",
-    "Descripciones: los saltos de línea ya se conservan al ver una propiedad en cualquier módulo.",
-    "Negocios: comprador, vendedor y asesor compartido aceptan nombres externos (Otro / Externo) y el alta quedó más rápida."
+    "Clientes: la forma de compra ahora es opcional (puede quedar Pendiente) y si el cliente viene a Vender se ocultan automáticamente la forma de pago y la capacidad de pago.",
+    "Inventario: en Mis propiedades decides con un interruptor si publicas o no cada propiedad en el inventario general.",
+    "Inventario: en Propiedades los asesores solo consultan; pueden ver el detalle, agendar citas, crear negocios y compartir por WhatsApp.",
+    "Compartir por WhatsApp: el PDF ahora lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y las viñetas con su sangría original.",
+    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar también las fotos nuevas para ordenarlas.",
+    "Negocios: se quitaron montos redundantes entre etapas; quedan valor de la operación, propuesta inicial, fechas, comisión y notas."
   ]
 }

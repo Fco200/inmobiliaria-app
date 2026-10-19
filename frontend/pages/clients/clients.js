@@ -225,6 +225,28 @@ window.Pages.clients = {
       return values;
     }
 
+    // La forma de compra y la capacidad de pago aplican a un cliente que
+    // COMPRA. Si su operación es "Vender" no tienen sentido: se ocultan
+    // automáticamente del formulario y NO se envían al servidor.
+    // El bloque de esos dos campos se marca con `id="pago-compra-box"` y
+    // `display:contents` para que sus hijos sigan fluyendo en la rejilla.
+    function wirePagoPorServicio(form) {
+      const box = form.querySelector('#pago-compra-box');
+      const sel = form.querySelector('select[name="servicio"]');
+      if (!box || !sel) return;
+      const sync = () => { box.style.display = sel.value === 'Vender' ? 'none' : 'contents'; };
+      sel.addEventListener('change', sync);
+      sync();
+    }
+
+    function limpiarPagoSiVende(values) {
+      if (values.servicio === 'Vender') {
+        delete values.formaPago;
+        delete values.formaPagoOtro;
+        delete values.capacidad;
+      }
+    }
+
     // Texto del medio para presentar en tarjeta: "Otro" muestra lo escrito y
     // "Recomendación" lo anexa sólo si escribió algo.
     function medioLabel(c) {
@@ -517,8 +539,9 @@ window.Pages.clients = {
     /* ── Registro rápido (nuevo cliente) ─────────────────────────────── */
     // Alta pensada para una llamada telefónica: todos los campos esenciales
     // del perfil inmobiliario en un solo paso. La fecha de registro es
-    // automática y la forma de compra NUNCA se omite (era el campo que el
-    // sistema saltaba al avanzar de etapa).
+    // automática. La forma de compra es OPCIONAL (puede quedar "Pendiente")
+    // y, si el cliente VIENE A VENDER, se ocultan forma de compra y
+    // capacidad de pago porque no aplican a un vendedor.
     function openQuickCreate() {
       const hoy = Format.date(new Date());
       const modal = UI.openModal({
@@ -537,12 +560,13 @@ window.Pages.clients = {
                 options: [{ value: '', label: '— Selecciona una operación —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))],
                 placeholder: 'Ej. Permuta, herencia, ampliación…',
               })}
-              ${fieldConOtro('formaPago', '¿Cómo va a pagar / forma de compra?', {
-                required: true,
-                options: [{ value: '', label: '— Selecciona una forma —' }, ...CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f }))],
-                placeholder: 'Ej. Pago mixto, préstamo familiar…',
-              })}
-              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', placeholder: 'Pendiente / por confirmar' })}
+              <div id="pago-compra-box" style="display:contents;">
+                ${fieldConOtro('formaPago', 'Forma de compra / pago (opcional)', {
+                  options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f }))],
+                  placeholder: 'Ej. Pago mixto, préstamo familiar…',
+                })}
+                ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', placeholder: 'Pendiente / por confirmar' })}
+              </div>
               ${fieldConOtro('tipoPropiedad', '¿Qué tipo de propiedad busca?', {
                 options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))],
                 placeholder: 'Ej. Penthouse, predio industrial…',
@@ -574,6 +598,7 @@ window.Pages.clients = {
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-quick-form') : null;
       if (form) {
         wireOtros(form);
+        wirePagoPorServicio(form);
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const values = UI.collectForm(e.target);
@@ -593,11 +618,9 @@ window.Pages.clients = {
             UI.toast('Escribe qué operación quiere hacer el cliente', 'warning');
             return;
           }
-          // Forma de compra: campo crítico, siempre con valor explícito.
-          if (!values.formaPago) {
-            UI.toast('Selecciona la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro)', 'warning');
-            return;
-          }
+          // Forma de compra: OPCIONAL (puede quedar "Pendiente"). Solo se
+          // exige texto cuando se eligió "Otro". Si el cliente viene a
+          // VENDER, el bloque ni se muestra y no se envía al servidor.
           if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
             UI.toast('Especifica la forma de pago del cliente', 'warning');
             return;
@@ -614,6 +637,7 @@ window.Pages.clients = {
           if (values.tipoPropiedad && !CLIENT_TIPOS_PROPIEDAD.includes(values.tipoPropiedad)) values.tipoPropiedad = 'Otro';
           // Capacidad de pago vacía = pendiente: no se envía (no se guarda 0).
           if (values.capacidad === null || values.capacidad === undefined) delete values.capacidad;
+          limpiarPagoSiVende(values);
           limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad', 'medio'], e.target);
           try {
             const created = await API.clients.create(values);
@@ -642,8 +666,10 @@ window.Pages.clients = {
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
-              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
-              ${fieldConOtro('formaPago', 'Forma de compra / pago', { value: record.formaPago || 'Contado', otroValue: record.formaPagoOtro || '', options: opcionesFormaPago(record.formaPago), required: true, placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
+              <div id="pago-compra-box" style="display:contents;">
+                ${fieldConOtro('formaPago', 'Forma de compra / pago (opcional)', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
+                ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
+              </div>
               ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 6, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
               ${UI.field('notasGenerales', 'Notas', { type: 'textarea', rows: 4, value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
             </div>
@@ -663,6 +689,7 @@ window.Pages.clients = {
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-profile-form') : null;
       if (form) {
         wireOtros(form);
+        wirePagoPorServicio(form);
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const values = UI.collectForm(e.target);
@@ -679,10 +706,6 @@ window.Pages.clients = {
               : 'Escribe cómo te contactó el cliente', 'warning');
             return;
           }
-          if (!values.formaPago) {
-            UI.toast('Selecciona la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro)', 'warning');
-            return;
-          }
           if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
             UI.toast('Especifica la forma de pago del cliente', 'warning');
             return;
@@ -690,6 +713,7 @@ window.Pages.clients = {
           if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
           if (values.tipoPropiedad !== null && values.tipoPropiedad !== undefined
             && !CLIENT_TIPOS_PROPIEDAD.includes(values.tipoPropiedad)) values.tipoPropiedad = 'Otro';
+          limpiarPagoSiVende(values);
           limpiarOtros(values, ['servicio', 'tipoPropiedad', 'formaPago', 'medio'], e.target);
           // `vigencia` ya no existe en el modelo.
           delete values.vigencia;
@@ -744,10 +768,12 @@ window.Pages.clients = {
         extraFields = `
           <div class="stage-input-grid">
             ${fieldConOtro('servicio', 'Operación', { value: record.servicio || '', otroValue: record.servicioOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))], placeholder: 'Ej. Permuta, herencia…' })}
-            ${fieldConOtro('formaPago', 'Forma de compra', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
+            <div id="pago-compra-box" style="display:contents;">
+              ${fieldConOtro('formaPago', 'Forma de compra (opcional)', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
+              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
+            </div>
             ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, predio industrial…' })}
             ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
-            ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
             ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 3, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
           </div>`;
       } else if (target === 'SEGUIMIENTO') {
@@ -798,6 +824,7 @@ window.Pages.clients = {
       const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-stage-form') : null;
       if (form) {
         wireOtros(form);
+        wirePagoPorServicio(form);
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const values = UI.collectForm(e.target);
@@ -813,6 +840,7 @@ window.Pages.clients = {
             if (value !== null && value !== undefined && String(value).trim() !== '') datosEtapa[key] = value;
           };
           if (target === 'PERFILADO') {
+            limpiarPagoSiVende(values);
             limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad'], e.target);
             ['servicio', 'servicioOtro', 'formaPago', 'formaPagoOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
           } else if (target === 'CITA') {

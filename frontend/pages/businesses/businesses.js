@@ -261,16 +261,17 @@ window.Pages.businesses = {
           { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...users.map((x) => ({ value: x._id, label: x.name })), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez de Inmobiliaria Centro', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
-          { name: 'negotiation_counterOffer', label: 'Contraoferta', type: 'number', value: (r) => (r.negotiation || {}).counterOffer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
-          { name: 'closing_promiseAmount', label: 'Cantidad de promesa', type: 'number', value: (r) => (r.closing || {}).promiseAmount || 0 },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
-          { name: 'closing_closingAmount', label: 'Monto de cierre', type: 'number', value: (r) => (r.closing || {}).closingAmount || 0 },
           { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate) },
           { name: 'closing_commission', label: 'Comisión', type: 'number', value: (r) => (r.closing || {}).commission || 0 },
         ],
-        formData(values) {
-          const { negotiation_offer, negotiation_counterOffer, negotiation_notes, closing_promiseAmount, closing_promiseDate, closing_closingAmount, closing_closingDate, closing_commission, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = values;
+        // Montos: solo los esenciales (valor de la operación, propuesta
+        // inicial y comisión). Contraoferta, monto de promesa y monto de
+        // cierre se quitaron del formulario por ser redundantes entre
+        // etapas; los que ya estaban guardados se conservan tal cual.
+        formData(values, record) {
+          const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = values;
 
           // "Otro / Externo": el ObjectId queda vacío y el nombre viaja en el
           // campo de texto libre correspondiente.
@@ -291,17 +292,20 @@ window.Pages.businesses = {
           rest.partnerAdvisor = partner.id;
           rest.partnerAdvisorName = partner.nombre;
 
+          const negPrevio = (record && record.negotiation) || {};
+          const closePrevio = (record && record.closing) || {};
+
           return {
             ...rest,
             negotiation: {
               offer: negotiation_offer || 0,
-              counterOffer: negotiation_counterOffer || 0,
+              counterOffer: negPrevio.counterOffer || 0,
               notes: negotiation_notes || '',
             },
             closing: {
-              promiseAmount: closing_promiseAmount || 0,
+              promiseAmount: closePrevio.promiseAmount || 0,
               promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
-              closingAmount: closing_closingAmount || 0,
+              closingAmount: closePrevio.closingAmount || 0,
               closingDate: closing_closingDate ? new Date(closing_closingDate).toISOString() : null,
               commission: closing_commission || 0,
             },
@@ -519,10 +523,7 @@ window.Pages.businesses = {
         { name: 'stage', label: 'Etapa', type: 'select', options: stagesFor(business.processType || 'comprador'), value: business.currentStage },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number', value: business.valueOperation || 0 },
         { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: neg.offer || 0 },
-        { name: 'negotiation_counterOffer', label: 'Contraoferta', type: 'number', value: neg.counterOffer || 0 },
-        { name: 'closing_promiseAmount', label: 'Monto de promesa', type: 'number', value: closing.promiseAmount || 0 },
         { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: Format.toLocalInput(closing.promiseDate) },
-        { name: 'closing_closingAmount', label: 'Monto de cierre', type: 'number', value: closing.closingAmount || 0 },
         { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate) },
         { name: 'closing_commission', label: 'Comisión', type: 'number', value: closing.commission || 0 },
         { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : (business.partnerAdvisorName ? '__externo__' : '') },
@@ -571,7 +572,9 @@ window.Pages.businesses = {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const v = UI.collectForm(e.target);
-          const { negotiation_offer, negotiation_counterOffer, negotiation_notes, closing_promiseAmount, closing_promiseDate, closing_closingAmount, closing_closingDate, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
+          // Solo se editan los montos no redundantes (propuesta inicial y
+          // comisión); contraoferta/promesa/cierre conservan su valor guardado.
+          const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
           // Asesor externo: ObjectId vacío + nombre en texto libre.
           if (rest.partnerAdvisor === '__externo__') {
             if (!String(partnerAdvisorName || '').trim()) return UI.toast('Escribe el nombre del asesor externo', 'warning');
@@ -585,13 +588,13 @@ window.Pages.businesses = {
             processType,
             negotiation: {
               offer: negotiation_offer || 0,
-              counterOffer: negotiation_counterOffer || 0,
+              counterOffer: neg.counterOffer || 0,
               notes: negotiation_notes || '',
             },
             closing: {
-              promiseAmount: closing_promiseAmount || 0,
+              promiseAmount: closing.promiseAmount || 0,
               promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
-              closingAmount: closing_closingAmount || 0,
+              closingAmount: closing.closingAmount || 0,
               closingDate: closing_closingDate ? new Date(closing_closingDate).toISOString() : null,
               commission: closing_commission || 0,
             },

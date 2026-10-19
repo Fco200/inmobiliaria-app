@@ -156,31 +156,34 @@ window.PhotoManager = (() => {
 
     grid.addEventListener('dragstart', (e) => {
       const tile = e.target.closest('.pm-tile');
-      if (!tile || tile.dataset.kind !== 'photo') { e.preventDefault(); return; }
-      dragSrc = Number(tile.dataset.index);
+      if (!tile) { e.preventDefault(); return; }
+      dragSrc = { kind: tile.dataset.kind, index: Number(tile.dataset.index) };
       tile.classList.add('pm-dragging');
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
     });
     grid.addEventListener('dragover', (e) => {
-      if (dragSrc == null) return;
+      if (!dragSrc) return;
       e.preventDefault();
       const tile = e.target.closest('.pm-tile');
-      if (tile && tile.dataset.kind === 'photo') tile.classList.add('pm-dragover');
+      if (tile && tile.dataset.kind === dragSrc.kind) tile.classList.add('pm-dragover');
     });
     grid.addEventListener('dragleave', (e) => {
       const tile = e.target.closest('.pm-tile');
       if (tile) tile.classList.remove('pm-dragover');
     });
     grid.addEventListener('drop', (e) => {
-      if (dragSrc == null) return;
+      if (!dragSrc) return;
       e.preventDefault();
       const tile = e.target.closest('.pm-tile');
       grid.querySelectorAll('.pm-dragover').forEach((t) => t.classList.remove('pm-dragover'));
-      if (!tile || tile.dataset.kind !== 'photo') { dragSrc = null; return; }
+      // Solo se reordena dentro del mismo grupo (existentes o nuevas); mover
+      // una nueva sobre una existente no aplica y se ignora.
+      if (!tile || tile.dataset.kind !== dragSrc.kind) { dragSrc = null; return; }
       const target = Number(tile.dataset.index);
-      if (target !== dragSrc) {
-        const [moved] = state.photos.splice(dragSrc, 1);
-        state.photos.splice(target, 0, moved);
+      if (target !== dragSrc.index) {
+        const list = dragSrc.kind === 'photo' ? state.photos : state.files;
+        const [moved] = list.splice(dragSrc.index, 1);
+        list.splice(target, 0, moved);
         render();
         onChange();
       }

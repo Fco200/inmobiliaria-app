@@ -72,24 +72,28 @@ window.AppVersion = (() => {
     if (el) el.remove();
   }
 
-  // Modal de aviso que se muestra al iniciar sesión (una sola vez por sesión)
-  // cuando hay una versión nueva: presenta la versión y sus novedades con
-  // acceso directo al módulo de Actualizaciones. El banner de arriba y el
-  // punto del botón permanecen hasta que el usuario actualice.
-  const MODAL_SESSION_KEY = 'crm_update_modal_shown';
+  // Modal de aviso: se muestra al INICIAR SESIÓN la primera vez que aparece
+  // una versión nueva (saludo + novedades con acceso a Actualizaciones).
+  // Se registra en localStorage: si el usuario ya lo vio, o ya actualizó, el
+  // aviso NO se vuelve a mostrar en ninguna otra sesión. El banner de arriba
+  // y el punto del botón permanecen hasta que el usuario actualice.
+  const MODAL_SHOWN_KEY = 'crm_update_modal_shown';
 
-  function sessionModalShown() {
-    try { return sessionStorage.getItem(MODAL_SESSION_KEY) === String(latest && latest.hash ? latest.hash : ''); } catch (e) { return false; }
+  function modalShown() {
+    try {
+      const hash = String(latest && latest.hash ? latest.hash : '');
+      return hash !== '' && localStorage.getItem(MODAL_SHOWN_KEY) === hash;
+    } catch (e) { return false; }
   }
 
-  function markSessionModalShown() {
-    try { sessionStorage.setItem(MODAL_SESSION_KEY, String(latest && latest.hash ? latest.hash : '')); } catch (e) { /* noop */ }
+  function markModalShown() {
+    try { localStorage.setItem(MODAL_SHOWN_KEY, String(latest && latest.hash ? latest.hash : '')); } catch (e) { /* noop */ }
   }
 
   function showUpdateModal() {
-    if (!isUpdateAvailable() || sessionModalShown()) return;
+    if (!isUpdateAvailable() || modalShown()) return;
     if (!window.UI || typeof UI.openModal !== 'function') return;
-    markSessionModalShown();
+    markModalShown();
 
     const notes = latest && Array.isArray(latest.notes) && latest.notes.length
       ? latest.notes.slice(0, 6)
@@ -150,7 +154,8 @@ window.AppVersion = (() => {
 
   // Notifica al usuario que hay una versión nueva. La usa este módulo y el
   // handler del Service Worker (SW_UPDATED). Muestra el modal de bienvenida
-  // (solo una vez por sesión) + el banner y el punto del botón.
+  // (solo la primera vez que aparece la versión) + el banner y el punto del
+  // botón.
   function notifyUpdate() {
     updateBadge();
     showBanner();

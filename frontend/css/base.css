@@ -3208,6 +3208,26 @@ body.page-chat .assistant-panel {
   display: flex; align-items: center; justify-content: center;
 }
 .pm-cover-btn:hover { background: var(--primary); color: #fff; }
+/* Interruptor (switch) de publicación en el inventario: el asesor decide
+   desde "Mis propiedades" si la ficha se muestra en el inventario general. */
+.inv-switch {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  vertical-align: middle; user-select: none;
+}
+.inv-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.inv-switch-track {
+  position: relative; width: 36px; height: 20px; border-radius: 999px;
+  background: #cbd5e1; transition: background 0.18s ease; flex: none;
+}
+.inv-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.18s ease;
+}
+.inv-switch input:checked + .inv-switch-track { background: var(--success, #16a34a); }
+.inv-switch input:checked + .inv-switch-track::after { transform: translateX(16px); }
+.inv-switch input:focus-visible + .inv-switch-track { outline: 2px solid var(--primary); outline-offset: 2px; }
+.inv-switch-label { font-size: 12px; color: var(--text-muted); }
 /* Textos donde los saltos de línea del original deben conservarse
    (descripciones de propiedades, notas, etc.). */
 .preserve-lines { white-space: pre-line; }

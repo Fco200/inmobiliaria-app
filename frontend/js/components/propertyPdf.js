@@ -48,6 +48,33 @@ window.PropertyPdf = (() => {
       .filter(Boolean);
   }
 
+  // Logo de la inmobiliaria para el encabezado del PDF. Se carga una sola vez
+  // (se cachea) y se convierte a PNG data-URL para conservar la transparencia.
+  // Si no está disponible, el PDF se genera igual sin logo.
+  let logoCache;
+  function loadLogo() {
+    if (logoCache !== undefined) return Promise.resolve(logoCache);
+    return new Promise((resolve) => {
+      let url = 'icons/logoinmobles.png';
+      try { url = new URL('icons/logoinmobles.png', document.baseURI).href; } catch (e) { /* relativo */ }
+      const img = new Image();
+      const timer = setTimeout(() => { logoCache = null; resolve(null); }, 8000);
+      img.onload = () => {
+        clearTimeout(timer);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || 300;
+          canvas.height = img.naturalHeight || 300;
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          logoCache = { data: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
+          resolve(logoCache);
+        } catch (e) { logoCache = null; resolve(null); }
+      };
+      img.onerror = () => { clearTimeout(timer); logoCache = null; resolve(null); };
+      img.src = url;
+    });
+  }
+
   // Los formatos HEIC/HEIF (típicos de iPhone) casi nunca se pueden
   // decodificar en el navegador: se omiten de inmediato para no esperar el
   // timeout de cada foto y dejar colgado el botón de "Generando PDF…".
@@ -163,28 +190,42 @@ window.PropertyPdf = (() => {
     return results.filter(Boolean);
   }
 
-  // Divide un bloque de texto en líneas que quepan en `maxWidth` (pt),
-  // respetando los saltos de línea originales del párrafo.
+  // Divide un bloque de texto en líneas que quepan en `maxWidth` (pt).
+  // `prefix` se usa para medir con la sangría de las viñetas.
+  function wrapWords(doc, text, maxWidth, prefix = '') {
+    const words = String(text || '').split(' ').filter((w) => w !== '');
+    const lines = [];
+    let current = '';
+    words.forEach((word) => {
+      const candidate = current ? `${current} ${word}` : word;
+      if (doc.getTextWidth(prefix + candidate) > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    });
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  // Divide un bloque de texto respetando los saltos de línea ORIGINALES. Las
+  // viñetas y listas numeradas conservan su marcador y las líneas siguientes
+  // se sangran (sangría francesa) para que el texto no se amontone debajo.
   function wrapText(doc, text, maxWidth) {
     const out = [];
     String(text || '').split(/\r?\n/).forEach((rawLine) => {
       const line = rawLine.replace(/\s+/g, ' ').trim();
-      if (!line) {
-        out.push('');
+      if (!line) { out.push(''); return; }
+      const bullet = line.match(/^([•·▪◦‣∙*]\s+|[-–—]\s+|\d{1,2}[.)]\s+)/);
+      if (bullet) {
+        const head = bullet[1];
+        const pad = '    ';
+        const lines = wrapWords(doc, line.slice(head.length), maxWidth, pad);
+        lines.forEach((l, i) => out.push(i === 0 ? head + l : pad + l));
         return;
       }
-      const words = line.split(' ');
-      let current = '';
-      words.forEach((word) => {
-        const candidate = current ? `${current} ${word}` : word;
-        if (doc.getTextWidth(candidate) > maxWidth && current) {
-          out.push(current);
-          current = word;
-        } else {
-          current = candidate;
-        }
-      });
-      if (current) out.push(current);
+      wrapWords(doc, line, maxWidth).forEach((l) => out.push(l));
     });
     return out;
   }
@@ -216,13 +257,24 @@ window.PropertyPdf = (() => {
     const asesorTel = (asesor && asesor.phone) || user.phone || '';
     const asesorEmail = (asesor && asesor.email) || user.email || '';
 
-    // ── Encabezado de marca ────────────────────────────────────────────
+    // ── Encabezado de marca (logo + título) ────────────────────────────
     doc.setFillColor(30, 41, 59);
     doc.rect(0, 0, pageW, 54, 'F');
     doc.setTextColor(255, 255, 255);
+
+    const logo = await loadLogo();
+    let titleX = margin;
+    if (logo) {
+      const logoH = 34;
+      const logoW = Math.min(140, logo.width * (logoH / logo.height));
+      try {
+        doc.addImage(logo.data, 'PNG', margin, 10, logoW, logoH);
+        titleX = margin + logoW + 14;
+      } catch (e) { /* sin logo: el encabezado queda igual */ }
+    }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text('Propiedad disponible', margin, 33);
+    doc.setFontSize(15);
+    doc.text('Propiedad disponible', titleX, 33);
     if (prop.folio) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
@@ -239,7 +291,20 @@ window.PropertyPdf = (() => {
       const ratio = Math.min(contentW / dims.width, areaH / dims.height);
       const w = dims.width * ratio;
       const h = dims.height * ratio;
-      doc.addImage(img, 'JPEG', margin + (contentW - w) / 2, y + 10, w, h);
+      const imgX = margin + (contentW - w) / 2;
+      const imgY = y + 10;
+      doc.addImage(img, 'JPEG', imgX, imgY, w, h);
+      // Marco + etiqueta "PORTADA" para que quede clara la foto principal.
+      doc.setDrawColor(30, 41, 59);
+      doc.setLineWidth(1.2);
+      doc.rect(imgX, imgY, w, h, 'S');
+      doc.setFillColor(30, 41, 59);
+      doc.rect(imgX, imgY, 62, 16, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text('PORTADA', imgX + 7, imgY + 11);
+      doc.setLineWidth(0.2);
       y += 10 + h + 14;
     } else {
       y += 16;

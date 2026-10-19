@@ -70,8 +70,13 @@ window.Pages.inventory = {
 
     function openDetailModal(item) {
       const prop = item.property;
-      const canEditPhotos = isBoss
-        || String((prop.responsibleUser && (prop.responsibleUser._id || prop.responsibleUser)) || '') === String(myId);
+      // En el inventario general ("Propiedades") el asesor solo consulta:
+      // agenda citas, crea negocios y comparte. No edita fotos, notas ni la
+      // propiedad principal (eso se hace en "Mis propiedades").
+      const esGeneral = state.vista === 'general';
+      const puedeModificar = !esGeneral || isBoss;
+      const canEditPhotos = puedeModificar && (isBoss
+        || String((prop.responsibleUser && (prop.responsibleUser._id || prop.responsibleUser)) || '') === String(myId));
       const isMine = isBoss || String(item.assignedAgent ? (item.assignedAgent._id || item.assignedAgent) : '') === String(myId);
 
       const modal = UI.openModal({
@@ -84,7 +89,7 @@ window.Pages.inventory = {
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
               <button class="btn btn-success" type="button" data-whatsapp>WhatsApp</button>
-              ${isMine ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
+              ${puedeModificar && isMine ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
             </div>
             <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
           </div>`,
@@ -414,6 +419,14 @@ window.Pages.inventory = {
               <label>Estado</label>
               <select class="form-control" data-status>${opts(ESTADOS_PROPIEDAD, prop.status)}</select>
             </div>
+            <div class="form-group">
+              <label>Publicación en el inventario general</label>
+              <label class="inv-switch" style="margin-top:6px;" title="El asesor decide aquí si la propiedad se muestra en el inventario general.">
+                <input type="checkbox" data-published ${item.isPublished ? 'checked' : ''}>
+                <span class="inv-switch-track" aria-hidden="true"></span>
+                <span class="inv-switch-label">Publicar</span>
+              </label>
+            </div>
             ${isBoss ? `<div class="form-group">
               <label>Responsable</label>
               <select class="form-control" data-responsible>
@@ -444,8 +457,7 @@ window.Pages.inventory = {
             <div class="form-group" style="grid-column:1/-1;">
               <label>Fotografías</label>
               <div data-photos-manager></div>
-            </div>
-            <div class="form-group" style="grid-column:1/-1;">
+            </div>            <div class="form-group" style="grid-column:1/-1;">
               <label>Descripción</label>
               <textarea class="form-control" data-description rows="3">${UI.escapeHtml(prop.description || '')}</textarea>
             </div>
@@ -515,6 +527,18 @@ window.Pages.inventory = {
             }
             if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
           }
+
+          // Interruptor de publicación: el asesor decide si la propiedad se
+          // muestra en el inventario general del equipo.
+          const publishEl = overlay.querySelector('[data-published]');
+          if (publishEl && publishEl.checked !== Boolean(item.isPublished)) {
+            try {
+              await API.inventory.publish(item._id, { isPublished: publishEl.checked });
+            } catch (publishError) {
+              UI.toast(publishError.message, 'warning');
+            }
+          }
+
           UI.toast('Propiedad actualizada', 'success');
           UI.closeModal();
           load();
@@ -888,6 +912,14 @@ window.Pages.inventory = {
         return wrap;
       }
 
+      const esGeneral = state.vista === 'general';
+      // En el inventario general ("Propiedades") el asesor solo CONSULTA:
+      // puede ver el detalle, agendar citas, crear negocios y compartir por
+      // WhatsApp. Editar, publicar, notas y eliminar quedan reservados a
+      // administración/gerencia (el asesor administra lo suyo en "Mis
+      // propiedades").
+      const puedeAdministrar = !esGeneral || isBoss;
+
       const rows = items.map((item, index) => {
         const prop = item.property;
         const agentName = item.assignedAgent ? (item.assignedAgent.name || 'Usuario') : 'Sin asignar';
@@ -908,11 +940,16 @@ window.Pages.inventory = {
             <td>${UI.escapeHtml(agentName)}</td>
             <td>
               <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
-              <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>
-              ${item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
+              ${puedeAdministrar ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>` : ''}
+              ${puedeAdministrar && item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
               <button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>
               <button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>
-              ${!item.isPublished ? `<button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Publicar</button>` : `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="publish" style="margin-left:6px;">Despublicar</button>`}
+              ${puedeAdministrar ? `
+                <label class="inv-switch" style="margin-left:6px;" title="${item.isPublished ? 'Visible en el inventario general. Toca para despublicar.' : 'Oculta del inventario general. Toca para publicar.'}">
+                  <input type="checkbox" data-action data-index="${index}" data-kind="publish" ${item.isPublished ? 'checked' : ''}>
+                  <span class="inv-switch-track" aria-hidden="true"></span>
+                  <span class="inv-switch-label">Publicar</span>
+                </label>` : ''}
               ${isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="assign" style="margin-left:6px;">Asignar</button>` : ''}
               ${isBoss ? `<button class="btn btn-danger btn-sm" data-action data-index="${index}" data-kind="remove" style="margin-left:6px;">Quitar</button>` : ''}
             </td>
@@ -949,7 +986,7 @@ window.Pages.inventory = {
           else if (kind === 'publish') {
             API.inventory.publish(item._id, { isPublished: !item.isPublished })
               .then(() => { UI.toast('Inventario actualizado', 'success'); load(); })
-              .catch((error) => UI.toast(error.message, 'error'));
+              .catch((error) => { UI.toast(error.message, 'error'); load(); });
           } else if (kind === 'remove') {
             UI.confirm('¿Quitar esta propiedad del inventario?').then((ok) => {
               if (!ok) return;
@@ -962,26 +999,6 @@ window.Pages.inventory = {
       });
 
       return wrap;
-    }
-
-    function renderIntegrationCard() {
-      if (!isBoss) return null;
-      const el = document.createElement('div');
-      el.className = 'card mt-2';
-      el.innerHTML = `
-        <h3 style="margin-top:0;">Cómo funciona el inventario</h3>
-        <p class="text-muted" style="margin:0 0 10px;">
-          Solo administración y gerencia agregan, asignan y publican propiedades. Los asesores trabajan sobre lo publicado
-          y lo que les asignes: ven el detalle, editan notas, agendan citas y crean negocios desde cada propiedad.
-        </p>
-        <code style="background:#f3f4f6;padding:8px 12px;border-radius:6px;display:inline-block;margin-bottom:10px;">
-          GET ${window.AppConfig.API_URL}/inventory/public
-        </code>
-        <p class="text-muted" style="margin:8px 0 0;">
-          Filtros opcionales: type, operationType, city, zone, minPrice y maxPrice.
-        </p>
-      `;
-      return el;
     }
 
     async function load() {
@@ -1021,9 +1038,6 @@ window.Pages.inventory = {
         alertEl.innerHTML = UI.errorAlert(error.message);
         container.appendChild(alertEl.firstChild || alertEl);
       }
-
-      const integration = renderIntegrationCard();
-      if (integration) container.appendChild(integration);
     }
 
     load();

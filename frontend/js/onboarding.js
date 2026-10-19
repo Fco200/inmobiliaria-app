@@ -43,7 +43,7 @@ window.Onboarding = (() => {
     {
       icon: '&#128230;',
       title: 'Propiedades',
-      text: 'Consulta el inventario general del equipo: filtra por asesor o texto, revisa el mercado y el historial, y abre cualquier propiedad para agendar citas, crear negocios o compartir por WhatsApp.',
+      text: 'Consulta las propiedades que el equipo comparte: filtra por asesor o texto, revisa el mercado y el historial, y abre cualquiera para agendar citas, crear negocios o compartir por WhatsApp. Desde aquí no se publica: eso se hace al captar.',
     },
     {
       icon: '&#129309;',

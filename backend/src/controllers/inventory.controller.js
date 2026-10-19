@@ -68,18 +68,18 @@ const list = asyncHandler(async (req, res) => {
   });
 });
 
-// Inventario General: propiedades de TODOS los asesores. Disponible para
-// cualquier usuario autenticado (los jefes la administran; el equipo la
-// consulta) con filtros por asesor, publicación y texto.
+// Inventario General: propiedades que los asesores COMPARTIERON desde "Captar
+// Propiedades" (isPublished). El filtro por publicación se retiró del módulo:
+// solo aparece lo compartido. Disponible para cualquier usuario autenticado
+// (los jefes la administran; el equipo la consulta) con filtros por asesor y
+// texto.
 const generalList = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
-  const filter = {};
+  // Solo se muestran las propiedades compartidas al inventario general.
+  const filter = { isPublished: true };
 
   if (req.query.assignedAgent) filter.assignedAgent = req.query.assignedAgent;
-  if (req.query.isPublished !== undefined && req.query.isPublished !== '') {
-    filter.isPublished = req.query.isPublished === 'true';
-  }
 
   if (req.query.q) {
     const propIds = await Property.find(

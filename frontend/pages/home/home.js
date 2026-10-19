@@ -70,7 +70,7 @@ window.Pages.home = {
     const MODULES = [
       { key: 'dashboard', label: 'Dashboard', desc: 'Indicadores y gráficas', href: 'dashboard.html', icon: '&#9638;' },
       { key: 'clients', label: 'Clientes', desc: 'Gestiona tus prospectos', href: 'clients.html', icon: '&#128101;' },
-      { key: 'properties', label: 'Captar Propiedades', desc: 'Alta y edición de inmuebles', href: 'properties.html', icon: '&#127968;' },
+      { key: 'properties', label: 'Captar Propiedades', desc: 'Captación: aquí decides si compartes al inventario', href: 'properties.html', icon: '&#127968;' },
       { key: 'businesses', label: 'Negocios', desc: 'Operaciones y pipeline', href: 'businesses.html', icon: '&#128179;' },
       { key: 'appointments', label: 'Citas', desc: 'Agenda y visitas', href: 'appointments.html', icon: '&#128197;' },
       { key: 'calendar', label: 'Calendario', desc: 'Vista mes, semana y día', href: 'calendar.html', icon: '&#128467;' },

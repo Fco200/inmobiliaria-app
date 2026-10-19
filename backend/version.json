@@ -1,15 +1,15 @@
 {
-  "version": "2.15",
+  "version": "2.16",
   "channel": "estable",
-  "title": "Actualización 2.15",
+  "title": "Actualización 2.16",
   "date": "2026-10-19",
   "notes": [
+    "Propiedades: el módulo (antes 'Mis Propiedades') es el inventario general del equipo y ya no permite publicar ni despublicar. Ahí solo se consulta: ver el detalle, agendar citas, crear negocios y compartir por WhatsApp.",
+    "Captar Propiedades: es donde el asesor que capta decide, con el botón Publicar, si su propiedad se sube o no al inventario general para que los demás asesores puedan verla y crear a partir de ella.",
+    "Propiedades: solo aparecen las propiedades que los asesores comparten desde 'Captar Propiedades' (ya no se muestran todas).",
     "Clientes: la forma de compra ahora es opcional (Contado, Infonavit, Banco, Fovissste u Otros, o bien Pendiente). Si el cliente viene a Vender, se ocultan automáticamente la forma de pago y la capacidad de pago.",
-    "Inventario: 'Mis Propiedades' ahora se llama 'Propiedades' y es un único inventario general del equipo. Se quitó el interruptor de publicación.",
-    "Inventario: los asesores y el personal solo consultan; pueden ver el detalle, agendar citas, crear negocios y compartir por WhatsApp. No se cambia ni se edita la información de las propiedades (eso queda para administración y gerencia).",
     "Negocios: al crear un negocio con una propiedad se avisa al resto del equipo con una nota en el chat interno, y al abrir una propiedad con negocios abiertos se muestra un aviso.",
     "Compartir por WhatsApp: el PDF lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y la descripción con sus viñetas y saltos de línea.",
-    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar las fotos para ordenarlas.",
-    "Negocios: se quitaron montos redundantes entre etapas; quedan valor de la operación, propuesta inicial, fechas, comisión y notas."
+    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar las fotos para ordenarlas."
   ]
 }

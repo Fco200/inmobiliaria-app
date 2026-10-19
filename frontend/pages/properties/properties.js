@@ -117,7 +117,7 @@ window.Pages.properties = {
               ${UI.badge(UI.escapeHtml(record.type || '—'), 'info')}
               ${UI.statusBadge(record.status)}
               ${UI.badge(UI.escapeHtml((record.operationType || '').toUpperCase()), 'primary')}
-              ${record.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')}
+              ${record.isPublished ? UI.badge('Compartida al inventario', 'success') : UI.badge('Privada', 'muted')}
             </div>
           </div>
           <div style="position:relative;margin:10px 0;">
@@ -380,7 +380,7 @@ window.Pages.properties = {
         { key: 'ticketValue', label: 'Valor ticket', render: (r) => (r.ticketValue ? Format.currency(r.ticketValue) : '—') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         { key: 'responsibleUser', label: 'Asesor', render: (r) => UI.escapeHtml(r.responsibleUser ? (r.responsibleUser.name || r.responsibleUser) : '—') },
-        { key: 'isPublished', label: 'Publicación', render: (r) => (r.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')) },
+        { key: 'isPublished', label: 'Inventario general', render: (r) => (r.isPublished ? UI.badge('Compartida', 'success') : UI.badge('Privada', 'muted')) },
         { key: 'isExternal', label: 'Origen', render: (r) => (r.isExternal ? `${UI.badge('Externa', 'warning')}${r.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(r.externalAdvisor)}</div>` : ''}` : '<span class="text-muted" style="font-size:12px;">Equipo</span>') },
       ],
       fields: [
@@ -407,7 +407,7 @@ window.Pages.properties = {
           { value: 'otro', label: 'Otro (especificar)' },
         ], hint: 'Formas de pago que se aceptan para esta propiedad.' },
         { name: 'paymentMethodsOther', label: 'Otra forma de pago', type: 'text', placeholder: 'Ej. Pago mixto, crédito FOVISSSTE + enganche…' },
-        { name: 'isPublished', label: 'Publicar en el catálogo (visible en la landing)', type: 'checkbox', full: true, hint: 'Si no está marcado, la propiedad queda oculta hasta publicarla.' },
+        { name: 'isPublished', label: 'Compartir al inventario general', type: 'checkbox', full: true, hint: 'Si lo marcas, la propiedad aparece en el módulo "Propiedades" (inventario general) para que los demás asesores la vean y creen a partir de ella. Si no, queda privada hasta que la compartas.' },
         { name: 'description', label: 'Descripción', type: 'textarea', rows: 10, full: true, hint: 'Describe medidas, espacios, amenidades y estado. Mientras más detalle, mejor aparece en el catálogo y en las búsquedas. El campo es amplio (10 renglones) y se puede arrastrar para hacerlo más grande.' },
       ],
       formData(values, record, form) {
@@ -490,8 +490,8 @@ window.Pages.properties = {
           out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos="1" data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
         }
         const pub = record.isPublished
-          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Quitar del inventario">Despublicar</button>`
-          : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Agregar al inventario">Publicar</button>`;
+          ? `<button class="btn btn-secondary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Dejar de compartir en el inventario general">Dejar de compartir</button>`
+          : `<button class="btn btn-primary btn-sm" data-extra data-toggle-pub="1" data-record="${record._id}" style="margin-left:6px;" title="Compartir en el inventario general para los demás asesores">Compartir al inventario</button>`;
         return out + pub +
           `<button class="btn btn-secondary btn-sm" data-extra data-property-history="1" data-record="${record._id}" style="margin-left:6px;">Historial</button>` +
           `<button class="btn btn-secondary btn-sm" data-extra data-price-market="1" data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>` +
@@ -523,7 +523,7 @@ window.Pages.properties = {
         API.properties
           .publish(record._id, { isPublished: !record.isPublished })
           .then(() => {
-            ctx.toast(record.isPublished ? 'Propiedad despublicada' : 'Propiedad publicada en inventario', 'success');
+            ctx.toast(record.isPublished ? 'Ya no se comparte en el inventario general' : 'Compartida en el inventario general', 'success');
             ctx.reload();
           })
           .catch((error) => ctx.toast(error.message, 'error'));

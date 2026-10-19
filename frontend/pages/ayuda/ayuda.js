@@ -277,15 +277,15 @@ window.Pages.ayuda = {
           icon: '&#128230;',
           title: 'Propiedades (inventario general)',
           body: `
-            <p><strong>Propiedades</strong> es el <strong>inventario general</strong> del equipo: reúne todas las propiedades, incluidas las externas de otras inmobiliarias o asesores.</p>
+            <p><strong>Propiedades</strong> es el <strong>inventario general</strong> del equipo: aquí aparecen las propiedades que los asesores <strong>comparten</strong> desde "Captar Propiedades", incluidas las externas de otras inmobiliarias o asesores.</p>
             <h4>Qué puedes hacer aquí</h4>
             <ul>
               <li>Los <strong>asesores y el personal</strong> solo <strong>consultan</strong>: ven el detalle, <strong>agendan una cita</strong>, <strong>crean un negocio</strong> y <strong>comparten por WhatsApp</strong>. No se cambia ni se edita la información de la propiedad.</li>
+              <li>Quien <strong>capta</strong> la propiedad decide en "Captar Propiedades" si la <strong>comparte</strong> al inventario general (con el botón Publicar) para que los demás asesores puedan verla y crear a partir de ella.</li>
               <li>Si una propiedad ya tiene un <strong>negocio abierto</strong> con otro compañero, verás un aviso; al crear un negocio se deja una nota automática en el <strong>chat interno</strong> para avisar al equipo.</li>
-              <li><strong>Filtrar</strong> por asesor, publicación en el catálogo público, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
+              <li><strong>Filtrar</strong> por asesor, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
               <li>Abrir el <strong>detalle</strong> con mercado, historial y fotos.</li>
-              <li>Puedes <strong>subir</strong> tus propias propiedades al inventario.</li>
-              <li>Editar, asignar, publicar en el catálogo y quitar propiedades queda para <strong>administración y gerencia</strong>.</li>
+              <li>Editar, asignar y quitar propiedades queda para <strong>administración y gerencia</strong>.</li>
             </ul>
           `,
         },

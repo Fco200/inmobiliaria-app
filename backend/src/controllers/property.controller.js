@@ -104,6 +104,28 @@ async function notifyNewsletter(property) {
   }
 }
 
+// Sincroniza la publicación de una propiedad con el inventario general:
+//  - al publicar/compartir → se crea (o actualiza) su registro de inventario,
+//    y así aparece en el módulo "Propiedades" para todo el equipo.
+//  - al despublicar → se marca como no compartida y desaparece del inventario.
+// La decisión de compartir vive en "Captar Propiedades" (aquí).
+async function syncInventoryOnPublish(property, isPublished, assignedAgent) {
+  if (isPublished) {
+    const update = { isPublished: true, publishedAt: new Date() };
+    if (assignedAgent) update.assignedAgent = assignedAgent;
+    await Inventory.findOneAndUpdate(
+      { property: property._id },
+      { $set: update },
+      { upsert: true, new: true }
+    );
+  } else {
+    await Inventory.findOneAndUpdate(
+      { property: property._id },
+      { $set: { isPublished: false, unpublishedAt: new Date() } }
+    );
+  }
+}
+
 const create = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (body.photos !== undefined) body.photos = normalizePhotos(body.photos);
@@ -125,6 +147,12 @@ const create = asyncHandler(async (req, res) => {
   });
   await notifyInterestedClients(property);
   await notifyNewsletter(property);
+
+  // Si se registró ya compartida, aparece de inmediato en el inventario general.
+  if (property.isPublished) {
+    await syncInventoryOnPublish(property, true, property.responsibleUser);
+  }
+
   res.status(201).json({ success: true, data: property });
 });
 
@@ -153,8 +181,8 @@ const update = asyncHandler(async (req, res) => {
   await property.save();
 
   const nowPublished = Boolean(property.isPublished);
-  if (nowPublished && !previousPublished) {
-    await notifyNewsletter(property);
+  if (nowPublished !== previousPublished) {
+    await syncInventoryOnPublish(property, nowPublished, req.body.assignedAgent || property.responsibleUser);
   }
 
   if (req.body.status && req.body.status !== previousStatus) {
@@ -215,17 +243,10 @@ const togglePublish = asyncHandler(async (req, res) => {
   property.isPublished = isPublished;
   await property.save();
 
-  if (isPublished) {
-    await Inventory.findOneAndUpdate(
-      { property: property._id },
-      { $set: { isPublished: true, publishedAt: new Date(), assignedAgent: req.body.assignedAgent || null } },
-      { upsert: true, new: true }
-    );
-  } else {
-    await Inventory.findOneAndUpdate(
-      { property: property._id },
-      { $set: { isPublished: false, unpublishedAt: new Date() } }
-    );
+  await syncInventoryOnPublish(property, isPublished, req.body.assignedAgent || null);
+
+  if (isPublished && !Boolean(previousPublished)) {
+    await notifyNewsletter(property);
   }
 
   await logActivity({

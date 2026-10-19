@@ -2,13 +2,16 @@
 
 window.Pages = window.Pages || {};
 
-// "Mis Propiedades" e "Inventario general" ahora son DOS PESTAÑAS de la misma
-// página (antes eran dos módulos separados). Se conservó lo mejor de cada uno:
-//   - Mis propiedades: edición, observaciones, citas, negocios y métricas.
-//   - Inventario general: buscador, filtro por asesor/publicación, subida de
-//     propiedades nuevas y administración de fotos en línea.
+// Módulo "Propiedades": es el INVENTARIO GENERAL del equipo (antes se llamaba
+// "Mis Propiedades" y tenía dos pestañas). Ahora hay un solo listado con TODAS
+// las propiedades, incluidas las externas de otras inmobiliarias o asesores.
+//   - Asesores y personal: solo consultan (detalle, citas, negocios y
+//     WhatsApp). No editan, publican ni eliminan la ficha de la propiedad.
+//   - Administración/gerencia: además administran (editar, asignar, quitar).
+// El interruptor de publicación se retiró: la publicación al catálogo público
+// se controla desde el módulo "Captar Propiedades".
 window.Pages.inventory = {
-  title: 'Mis Propiedades',
+  title: 'Propiedades',
 
   async render(container) {
     // Tipos de cita en el orden del formulario (compartido con Citas).
@@ -26,18 +29,12 @@ window.Pages.inventory = {
     const TIPOS_INMUEBLE = ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'];
     const ESTADOS_PROPIEDAD = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
 
-    // `vista` separa las dos carteras para que no se mezclen:
-    //   'mine'    → SOLO las propiedades de este asesor (GET /inventory?mine=true)
-    //   'general' → TODO el inventario de la agencia (GET /inventory/general)
-    const state = { page: 1, vista: 'mine', q: '', agent: '', published: '' };
+    // Único listado: el inventario general del equipo.
+    const state = { page: 1, q: '', agent: '', published: '' };
 
     const stored = window.ApiClient.getStoredUser();
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
     const isBoss = role === 'admin' || role === 'gerencia';
-
-    // Para jefes la vista inicial es el inventario completo (administran todo);
-    // para el asesor arranca en "Mis propiedades".
-    state.vista = isBoss ? 'general' : 'mine';
 
     let me = null;
     let users = [];
@@ -70,14 +67,11 @@ window.Pages.inventory = {
 
     function openDetailModal(item) {
       const prop = item.property;
-      // En el inventario general ("Propiedades") el asesor solo consulta:
-      // agenda citas, crea negocios y comparte. No edita fotos, notas ni la
-      // propiedad principal (eso se hace en "Mis propiedades").
-      const esGeneral = state.vista === 'general';
-      const puedeModificar = !esGeneral || isBoss;
-      const canEditPhotos = puedeModificar && (isBoss
-        || String((prop.responsibleUser && (prop.responsibleUser._id || prop.responsibleUser)) || '') === String(myId));
-      const isMine = isBoss || String(item.assignedAgent ? (item.assignedAgent._id || item.assignedAgent) : '') === String(myId);
+      // Inventario general de consulta: asesores y personal solo ven el
+      // detalle, agendan citas, crean negocios y comparten. Editar fotos, notas
+      // o la ficha queda reservado a administración/gerencia.
+      const puedeModificar = isBoss;
+      const canEditPhotos = isBoss;
 
       const modal = UI.openModal({
         title: `Inventario — ${propertyLabel(prop)}`,
@@ -89,7 +83,7 @@ window.Pages.inventory = {
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
               <button class="btn btn-success" type="button" data-whatsapp>WhatsApp</button>
-              ${puedeModificar && isMine ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
+              ${puedeModificar ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
             </div>
             <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
           </div>`,
@@ -118,6 +112,28 @@ window.Pages.inventory = {
       const paint = async () => {
         let market = {};
         try { market = await API.properties.market(prop._id); } catch (error) { market = {}; }
+        // Negocios abiertos de esta propiedad: se muestran sin importar quién
+        // sea el dueño, para avisar que un compañero ya la está trabajando.
+        let negocios = [];
+        try {
+          const resNeg = await API.businesses.byProperty(prop._id);
+          negocios = (resNeg && resNeg.data) || [];
+        } catch (error) { negocios = []; }
+        const negociosHtml = negocios.length
+          ? `<div class="alert alert-info" style="margin:0 0 14px;align-items:flex-start;display:flex;gap:10px;">
+              <span style="font-size:18px;">&#9888;&#65039;</span>
+              <div>
+                <strong>Esta propiedad ya tiene ${negocios.length === 1 ? 'un negocio abierto' : `${negocios.length} negocios abiertos`}.</strong>
+                <ul style="margin:6px 0 0;padding-left:18px;font-size:13px;">
+                  ${negocios.map((b) => {
+                    const asesor = b.mainAdvisor && b.mainAdvisor.name ? b.mainAdvisor.name : 'Sin asesor';
+                    const etapa = String(b.currentStage || '').replace(/_/g, ' ');
+                    return `<li>${UI.escapeHtml(b.name || 'Negocio')} — ${UI.escapeHtml(asesor)}${etapa ? ` (${UI.escapeHtml(etapa)})` : ''}</li>`;
+                  }).join('')}
+                </ul>
+              </div>
+            </div>`
+          : '';
         const mk = market || {};
         const history = prop.priceHistory || [];
         const current = Number(prop.price) || 0;
@@ -130,6 +146,7 @@ window.Pages.inventory = {
           .join('');
 
         modal.bodyEl.innerHTML = `
+          ${negociosHtml}
           <div class="grid grid-2" style="align-items:start;">
             <div>
               ${photos.length
@@ -148,7 +165,7 @@ window.Pages.inventory = {
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
-                ${item.isPublished ? UI.badge('Publicado', 'success') : UI.badge('Sin publicar', 'muted')}
+                ${item.isPublished ? UI.badge('En catálogo público', 'success') : UI.badge('Fuera del catálogo', 'muted')}
                 ${prop.status ? UI.badge(String(prop.status).replace(/_/g, ' '), 'warning') : ''}
                 ${prop.isExternal ? UI.badge('Externa', 'warning') : ''}
               </div>
@@ -419,14 +436,6 @@ window.Pages.inventory = {
               <label>Estado</label>
               <select class="form-control" data-status>${opts(ESTADOS_PROPIEDAD, prop.status)}</select>
             </div>
-            <div class="form-group">
-              <label>Publicación en el inventario general</label>
-              <label class="inv-switch" style="margin-top:6px;" title="El asesor decide aquí si la propiedad se muestra en el inventario general.">
-                <input type="checkbox" data-published ${item.isPublished ? 'checked' : ''}>
-                <span class="inv-switch-track" aria-hidden="true"></span>
-                <span class="inv-switch-label">Publicar</span>
-              </label>
-            </div>
             ${isBoss ? `<div class="form-group">
               <label>Responsable</label>
               <select class="form-control" data-responsible>
@@ -529,17 +538,6 @@ window.Pages.inventory = {
             if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
           }
 
-          // Interruptor de publicación: el asesor decide si la propiedad se
-          // muestra en el inventario general del equipo.
-          const publishEl = overlay.querySelector('[data-published]');
-          if (publishEl && publishEl.checked !== Boolean(item.isPublished)) {
-            try {
-              await API.inventory.publish(item._id, { isPublished: publishEl.checked });
-            } catch (publishError) {
-              UI.toast(publishError.message, 'warning');
-            }
-          }
-
           UI.toast('Propiedad actualizada', 'success');
           UI.closeModal();
           load();
@@ -625,7 +623,7 @@ window.Pages.inventory = {
                 ${agentOptions}
               </select>
             </div>` : ''}
-            ${!isBoss ? '<p class="text-muted" style="font-size:13px;margin:0;">Se asignará a ti automáticamente y quedará <strong>sin publicar</strong> hasta que administración la revise.</p>' : ''}
+            ${!isBoss ? '<p class="text-muted" style="font-size:13px;margin:0;">Se asignará a ti automáticamente y quedará en el inventario general. Administración decide si se publica en el catálogo público.</p>' : ''}
             <div class="form-group">
               <label>Folio</label>
               <input class="form-control" type="text" placeholder="Se genera automáticamente" disabled>
@@ -672,7 +670,7 @@ window.Pages.inventory = {
           <div class="form-group" data-external-wrap style="display:none;">
             <label>Asesor / inmobiliaria externa</label>
             <input class="form-control" data-external-advisor placeholder="Ej. Inmobiliaria Centro, Asesor Juan Pérez…">
-            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Aparecerá en el inventario general con la etiqueta <strong>Externa</strong>, nunca en "Mis propiedades".</p>
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Aparecerá en el inventario general con la etiqueta <strong>Externa</strong>.</p>
           </div>
           <div class="form-group" style="display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="inv-publish" data-publish>
@@ -818,19 +816,17 @@ window.Pages.inventory = {
     function renderHeader(meta) {
       const el = document.createElement('div');
       el.className = 'page-header';
-      const esGeneral = state.vista === 'general';
       el.innerHTML = `
         <div>
-          <h2>${esGeneral ? 'Propiedades' : 'Mis propiedades'}</h2>
+          <h2>Propiedades</h2>
           <p class="text-muted" style="margin:4px 0 0;">
-            ${esGeneral
-              ? (isBoss
-                  ? 'Todo el inventario del equipo, incluyendo propiedades externas de otras inmobiliarias o asesores. Sube, publica, asigna y quita propiedades.'
-                  : 'Todas las propiedades del equipo, incluyendo externas. Abre cualquiera para ver el detalle, agendar citas o crear negocios, o sube tus propias captaciones.')
-              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios. Las propiedades externas no aparecen aquí.'}
+            Inventario general del equipo, incluidas las propiedades externas de otras inmobiliarias o asesores.
+            ${isBoss
+              ? 'Edita, asigna, publica o quita propiedades desde aquí.'
+              : 'Abre cualquiera para ver el detalle, agendar una cita, crear un negocio o compartir por WhatsApp. La ficha de la propiedad no se modifica desde este módulo.'}
           </p>
           ${meta ? `<div class="home-stats" style="margin-top:14px;">
-            <div class="home-stat"><span class="home-stat-icon">&#128230;</span><div><strong>${meta.total}</strong><small>${esGeneral ? 'Propiedades' : 'En tu cartera'}</small></div></div>
+            <div class="home-stat"><span class="home-stat-icon">&#128230;</span><div><strong>${meta.total}</strong><small>Propiedades</small></div></div>
             <div class="home-stat"><span class="home-stat-icon">&#129333;</span><div><strong>${agents.length}</strong><small>Asesores</small></div></div>
           </div>` : ''}
         </div>
@@ -849,52 +845,32 @@ window.Pages.inventory = {
     function renderToolbar() {
       const el = document.createElement('div');
       el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
-      const esGeneral = state.vista === 'general';
       el.innerHTML = `
-        <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
-          <button class="process-tab${state.vista === 'mine' ? ' active' : ''}" type="button" data-view="mine">Mis propiedades</button>
-          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Propiedades</button>
-        </div>
-        ${esGeneral ? `
-          <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}" style="max-width:260px;">
-          <select class="form-control" data-agent-filter style="max-width:220px;">
-            <option value="">Todos los asesores</option>
-            ${agents.map((u) => `<option value="${u._id}" ${state.agent === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
-          </select>
-          <select class="form-control" data-published style="max-width:170px;">
-            <option value="">Publicación</option>
-            <option value="true" ${state.published === 'true' ? 'selected' : ''}>Publicadas</option>
-            <option value="false" ${state.published === 'false' ? 'selected' : ''}>Sin publicar</option>
-          </select>
-          <button class="btn btn-primary" type="button" data-search>Buscar</button>
-          <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
-        ` : ''}
+        <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}" style="max-width:260px;">
+        <select class="form-control" data-agent-filter style="max-width:220px;">
+          <option value="">Todos los asesores</option>
+          ${agents.map((u) => `<option value="${u._id}" ${state.agent === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
+        </select>
+        <select class="form-control" data-published style="max-width:190px;">
+          <option value="">Catálogo público</option>
+          <option value="true" ${state.published === 'true' ? 'selected' : ''}>Publicadas</option>
+          <option value="false" ${state.published === 'false' ? 'selected' : ''}>Sin publicar</option>
+        </select>
+        <button class="btn btn-primary" type="button" data-search>Buscar</button>
+        <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
       `;
-      el.querySelectorAll('.process-tab').forEach((tab) => {
-        tab.addEventListener('click', () => {
-          state.vista = tab.dataset.view === 'general' ? 'general' : 'mine';
-          state.filter = '';
-          state.q = '';
-          state.agent = '';
-          state.published = '';
-          state.page = 1;
-          load();
-        });
+      const run = () => {
+        state.q = (el.querySelector('[data-q]').value || '').trim();
+        state.agent = el.querySelector('[data-agent-filter]').value;
+        state.published = el.querySelector('[data-published]').value;
+        state.page = 1;
+        load();
+      };
+      el.querySelector('[data-search]').addEventListener('click', run);
+      el.querySelector('[data-q]').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+      el.querySelector('[data-clear]').addEventListener('click', () => {
+        state.q = ''; state.agent = ''; state.published = ''; state.page = 1; load();
       });
-      if (esGeneral) {
-        const run = () => {
-          state.q = (el.querySelector('[data-q]').value || '').trim();
-          state.agent = el.querySelector('[data-agent-filter]').value;
-          state.published = el.querySelector('[data-published]').value;
-          state.page = 1;
-          load();
-        };
-        el.querySelector('[data-search]').addEventListener('click', run);
-        el.querySelector('[data-q]').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
-        el.querySelector('[data-clear]').addEventListener('click', () => {
-          state.q = ''; state.agent = ''; state.published = ''; state.page = 1; load();
-        });
-      }
       return el;
     }
 
@@ -904,22 +880,16 @@ window.Pages.inventory = {
       const wrap = document.createElement('div');
       wrap.className = 'table-wrapper card';
       if (!items.length) {
-        const esGeneral = state.vista === 'general';
-        wrap.innerHTML = esGeneral
-          ? (isBoss
-            ? '<div class="empty-state"><p>El inventario general está vacío.</p><p class="text-muted">Sube una propiedad para publicarla y asignarla a un asesor.</p></div>'
-            : '<div class="empty-state"><p>Aún no hay propiedades en el inventario general.</p><p class="text-muted">Cuando se carguen, aparecerán aquí.</p></div>')
-          : '<div class="empty-state"><p>No tienes propiedades en tu cartera todavía.</p><p class="text-muted">Cuando publiques una propiedad o te asignen una, aparecerá aquí.</p></div>';
+        wrap.innerHTML = isBoss
+          ? '<div class="empty-state"><p>El inventario general está vacío.</p><p class="text-muted">Sube una propiedad para agregarla y asignarla a un asesor.</p></div>'
+          : '<div class="empty-state"><p>Aún no hay propiedades en el inventario general.</p><p class="text-muted">Cuando se carguen, aparecerán aquí.</p></div>';
         return wrap;
       }
 
-      const esGeneral = state.vista === 'general';
-      // En el inventario general ("Propiedades") el asesor solo CONSULTA:
-      // puede ver el detalle, agendar citas, crear negocios y compartir por
-      // WhatsApp. Editar, publicar, notas y eliminar quedan reservados a
-      // administración/gerencia (el asesor administra lo suyo en "Mis
-      // propiedades").
-      const puedeAdministrar = !esGeneral || isBoss;
+      // Inventario general de consulta: el asesor solo ve el detalle, agenda
+      // citas, crea negocios y comparte. Editar, publicar, notas y eliminar
+      // quedan reservados a administración/gerencia.
+      const puedeAdministrar = isBoss;
 
       const rows = items.map((item, index) => {
         const prop = item.property;
@@ -945,12 +915,6 @@ window.Pages.inventory = {
               ${puedeAdministrar && item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
               <button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>
               <button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>
-              ${puedeAdministrar ? `
-                <label class="inv-switch" style="margin-left:6px;" title="${item.isPublished ? 'Visible en el inventario general. Toca para despublicar.' : 'Oculta del inventario general. Toca para publicar.'}">
-                  <input type="checkbox" data-action data-index="${index}" data-kind="publish" ${item.isPublished ? 'checked' : ''}>
-                  <span class="inv-switch-track" aria-hidden="true"></span>
-                  <span class="inv-switch-label">Publicar</span>
-                </label>` : ''}
               ${isBoss ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="assign" style="margin-left:6px;">Asignar</button>` : ''}
               ${isBoss ? `<button class="btn btn-danger btn-sm" data-action data-index="${index}" data-kind="remove" style="margin-left:6px;">Quitar</button>` : ''}
             </td>
@@ -960,7 +924,7 @@ window.Pages.inventory = {
       wrap.innerHTML = `
         <table class="table">
           <thead><tr>
-            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Estado</th><th>Asesor</th><th>Acciones</th>
+            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Catálogo</th><th>Asesor</th><th>Acciones</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -984,11 +948,7 @@ window.Pages.inventory = {
           else if (kind === 'appointment') openAppointmentModal(item);
           else if (kind === 'business') openBusinessModal(item);
           else if (kind === 'assign') openAssignModal(item);
-          else if (kind === 'publish') {
-            API.inventory.publish(item._id, { isPublished: !item.isPublished })
-              .then(() => { UI.toast('Inventario actualizado', 'success'); load(); })
-              .catch((error) => { UI.toast(error.message, 'error'); load(); });
-          } else if (kind === 'remove') {
+          else if (kind === 'remove') {
             UI.confirm('¿Quitar esta propiedad del inventario?').then((ok) => {
               if (!ok) return;
               API.inventory.remove(item._id)
@@ -1010,20 +970,15 @@ window.Pages.inventory = {
 
       const loading = document.createElement('div');
       loading.className = 'loading';
-      loading.textContent = state.vista === 'general' ? 'Cargando inventario general...' : 'Cargando tus propiedades...';
+      loading.textContent = 'Cargando inventario...';
       container.appendChild(loading);
 
       try {
-        let result;
-        if (state.vista === 'general') {
-          const params = { page: state.page, limit: 15 };
-          if (state.q) params.q = state.q;
-          if (state.agent) params.assignedAgent = state.agent;
-          if (state.published !== '') params.isPublished = state.published;
-          result = await API.inventory.general(params);
-        } else {
-          result = await API.inventory.list({ page: state.page, limit: 15, mine: 'true' });
-        }
+        const params = { page: state.page, limit: 15 };
+        if (state.q) params.q = state.q;
+        if (state.agent) params.assignedAgent = state.agent;
+        if (state.published !== '') params.isPublished = state.published;
+        const result = await API.inventory.general(params);
         meta = result.meta;
         loading.remove();
         container.innerHTML = '';

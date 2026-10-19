@@ -62,8 +62,7 @@ const propertySchema = new mongoose.Schema(
     },
     isPublished: { type: Boolean, default: false },
     // Propiedad externa: inmueble ajeno al equipo (referido de otra inmobiliaria,
-    // agencia colaboradora, etc.). Se muestra en el inventario general pero
-    // nunca dentro de "Mis propiedades".
+    // agencia colaboradora, etc.). Se muestra en el inventario general del equipo.
     isExternal: { type: Boolean, default: false },
     // Nombre del asesor/empresa externa que la ofrece (solo si isExternal).
     externalAdvisor: { type: String, trim: true, default: '' },

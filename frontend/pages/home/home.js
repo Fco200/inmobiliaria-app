@@ -79,7 +79,7 @@ window.Pages.home = {
       { key: 'expenses', label: 'Gastos', desc: 'Control de egresos', href: 'expenses.html', icon: '&#128184;' },
       { key: 'prospecting', label: 'Prospección', desc: 'Captación de cartera', href: 'prospecting.html', icon: '&#128269;' },
       { key: 'negotiations', label: 'Negociaciones', desc: 'Ofertas y contraofertas', href: 'negotiations.html', icon: '&#129309;' },
-      { key: 'inventory', label: 'Mis Propiedades', desc: 'Propiedades captadas por ti', href: 'inventory.html', icon: '&#128230;' },
+      { key: 'inventory', label: 'Propiedades', desc: 'Inventario general del equipo', href: 'inventory.html', icon: '&#128230;' },
       { key: 'documents', label: 'Formatos', desc: 'Documentos y formatos', href: 'documents.html', icon: '&#128196;' },
       { key: 'chat', label: 'Chat', desc: 'Mensajería interna', href: 'chat.html', icon: '&#128172;' },
       { key: 'notifications', label: 'Avisos', desc: 'Notificaciones y recordatorios', href: 'notifications.html', icon: '&#128276;' },

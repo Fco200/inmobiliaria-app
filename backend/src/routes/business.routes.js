@@ -11,6 +11,7 @@ router.use(protect);
 
 router.get('/', businessController.list);
 router.get('/stages', businessController.stages);
+router.get('/property/:propertyId', businessController.propertyBusinesses);
 router.post('/', businessRules, businessController.create);
 router.get('/:id', businessIdParam, businessController.get);
 router.put('/:id', businessIdParam, businessUpdateRules, businessController.update);

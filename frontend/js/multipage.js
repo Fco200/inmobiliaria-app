@@ -12,7 +12,7 @@ window.AppShell = (() => {
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;', section: 'Comercial' },
     { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;', section: 'Comercial' },
     { key: 'properties', label: 'Captar Propiedades', href: 'properties.html', icon: '&#127968;', section: 'Propiedades' },
-    { key: 'inventory', label: 'Mis Propiedades', href: 'inventory.html', icon: '&#128230;', section: 'Propiedades' },
+    { key: 'inventory', label: 'Propiedades', href: 'inventory.html', icon: '&#128230;', section: 'Propiedades' },
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;', section: 'Finanzas' },
     { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;', section: 'Finanzas' },
     { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;', section: 'Finanzas', boss: true },

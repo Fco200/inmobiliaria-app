@@ -275,21 +275,17 @@ window.Pages.ayuda = {
         {
           id: 'inventario',
           icon: '&#128230;',
-          title: 'Mis Propiedades (inventario)',
+          title: 'Propiedades (inventario general)',
           body: `
-            <p><strong>Mis Propiedades</strong> reúne tu cartera y el inventario de la empresa en dos pestañas:</p>
-            <ul>
-              <li><strong>Mis propiedades:</strong> es tu espacio. Aquí capturas, subes fotos, completas la información y decides con un <strong>interruptor</strong> si la propiedad se publica o no en el inventario general.</li>
-              <li><strong>Propiedades (inventario general):</strong> todas las propiedades del equipo, incluidas las externas de otras inmobiliarias o asesores. Es un espacio de <strong>consulta</strong>.</li>
-            </ul>
+            <p><strong>Propiedades</strong> es el <strong>inventario general</strong> del equipo: reúne todas las propiedades, incluidas las externas de otras inmobiliarias o asesores.</p>
             <h4>Qué puedes hacer aquí</h4>
             <ul>
-              <li>En <strong>Mis propiedades</strong>: editar datos, observaciones y fotos, y publicar o despublicar con el interruptor.</li>
-              <li>En <strong>Propiedades</strong> (inventario general) los asesores solo consultan: pueden ver el detalle, <strong>agendar una cita</strong>, <strong>crear un negocio</strong> y <strong>compartir por WhatsApp</strong>. No se elimina ni se modifica la ficha principal.</li>
-              <li>La eliminación y la administración del inventario general quedan para <strong>administración y gerencia</strong>.</li>
-              <li><strong>Filtrar</strong> por asesor, publicación, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
+              <li>Los <strong>asesores y el personal</strong> solo <strong>consultan</strong>: ven el detalle, <strong>agendan una cita</strong>, <strong>crean un negocio</strong> y <strong>comparten por WhatsApp</strong>. No se cambia ni se edita la información de la propiedad.</li>
+              <li>Si una propiedad ya tiene un <strong>negocio abierto</strong> con otro compañero, verás un aviso; al crear un negocio se deja una nota automática en el <strong>chat interno</strong> para avisar al equipo.</li>
+              <li><strong>Filtrar</strong> por asesor, publicación en el catálogo público, estado y texto; ver <em>disponibles, apartadas, vendidas o rentadas</em>.</li>
               <li>Abrir el <strong>detalle</strong> con mercado, historial y fotos.</li>
-              <li>Si eres administrador: <strong>asignar</strong> la propiedad a un asesor y <strong>subir</strong> propiedades existentes al inventario.</li>
+              <li>Puedes <strong>subir</strong> tus propias propiedades al inventario.</li>
+              <li>Editar, asignar, publicar en el catálogo y quitar propiedades queda para <strong>administración y gerencia</strong>.</li>
             </ul>
           `,
         },

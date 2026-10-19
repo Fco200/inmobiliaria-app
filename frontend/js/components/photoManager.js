@@ -5,7 +5,7 @@
 // Reemplaza el antiguo campo de texto con URLs: muestra miniaturas de las
 // fotos actuales, permite quitar cada una, agregar archivos nuevos (con vista
 // previa) y reordenarlas arrastrando (la primera es la portada). Se usa en
-// Propiedades, Mis Propiedades e Inventario General.
+// Captar Propiedades y en el inventario general "Propiedades".
 //
 // Uso:
 //   const pm = PhotoManager.create({ photos: record.photos });

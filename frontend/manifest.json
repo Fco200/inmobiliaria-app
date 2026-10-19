@@ -26,9 +26,9 @@
       "icons": [{ "src": "LOGOICONO.jpeg", "sizes": "192x192" }]
     },
     {
-      "name": "Mis Propiedades",
+      "name": "Propiedades",
       "short_name": "Propiedades",
-      "description": "Tu cartera e inventario general de propiedades",
+      "description": "Inventario general de propiedades del equipo",
       "url": "inventory.html",
       "icons": [{ "src": "LOGOICONO.jpeg", "sizes": "192x192" }]
     },

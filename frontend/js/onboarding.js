@@ -42,8 +42,8 @@ window.Onboarding = (() => {
     },
     {
       icon: '&#128230;',
-      title: 'Mis Propiedades',
-      text: 'Consulta tu inventario completo: filtra por asesor y estado, revisa el mercado y el historial, y publica o asigna propiedades desde un mismo módulo.',
+      title: 'Propiedades',
+      text: 'Consulta el inventario general del equipo: filtra por asesor o texto, revisa el mercado y el historial, y abre cualquier propiedad para agendar citas, crear negocios o compartir por WhatsApp.',
     },
     {
       icon: '&#129309;',

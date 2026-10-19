@@ -3208,8 +3208,9 @@ body.page-chat .assistant-panel {
   display: flex; align-items: center; justify-content: center;
 }
 .pm-cover-btn:hover { background: var(--primary); color: #fff; }
-/* Interruptor (switch) de publicación en el inventario: el asesor decide
-   desde "Mis propiedades" si la ficha se muestra en el inventario general. */
+/* Interruptor (switch) genérico de inventario. El interruptor de publicación
+   se retiró del módulo "Propiedades": la publicación al catálogo público se
+   administra desde "Captar Propiedades". */
 .inv-switch {
   display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
   vertical-align: middle; user-select: none;

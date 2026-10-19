@@ -1,14 +1,15 @@
 {
-  "version": "2.14",
+  "version": "2.15",
   "channel": "estable",
-  "title": "Actualización 2.14",
+  "title": "Actualización 2.15",
   "date": "2026-10-19",
   "notes": [
-    "Clientes: la forma de compra ahora es opcional (Contado, Infonavit, Banco, Fovissste u Otros, o bien Pendiente) y si el cliente viene a Vender se ocultan automáticamente la forma de pago y la capacidad de pago.",
-    "Inventario: en Mis propiedades decides con un interruptor si publicas o no cada propiedad en el inventario general.",
-    "Inventario: en Propiedades los asesores solo consultan; pueden ver el detalle, agendar citas, crear negocios y compartir por WhatsApp.",
-    "Compartir por WhatsApp: el PDF ahora lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y las viñetas con su sangría original.",
-    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar también las fotos nuevas para ordenarlas.",
+    "Clientes: la forma de compra ahora es opcional (Contado, Infonavit, Banco, Fovissste u Otros, o bien Pendiente). Si el cliente viene a Vender, se ocultan automáticamente la forma de pago y la capacidad de pago.",
+    "Inventario: 'Mis Propiedades' ahora se llama 'Propiedades' y es un único inventario general del equipo. Se quitó el interruptor de publicación.",
+    "Inventario: los asesores y el personal solo consultan; pueden ver el detalle, agendar citas, crear negocios y compartir por WhatsApp. No se cambia ni se edita la información de las propiedades (eso queda para administración y gerencia).",
+    "Negocios: al crear un negocio con una propiedad se avisa al resto del equipo con una nota en el chat interno, y al abrir una propiedad con negocios abiertos se muestra un aviso.",
+    "Compartir por WhatsApp: el PDF lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y la descripción con sus viñetas y saltos de línea.",
+    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar las fotos para ordenarlas.",
     "Negocios: se quitaron montos redundantes entre etapas; quedan valor de la operación, propuesta inicial, fechas, comisión y notas."
   ]
 }

@@ -6,6 +6,29 @@ const { isBoss } = require('../utils/scope');
 const { Business, BusinessStage, Client } = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
 const { ensure } = require('../services/notification.service');
+const { getOrCreateGeneralChat, persistAndBroadcast } = require('./chat.controller');
+
+// Cuando se abre un negocio con una propiedad, el resto del equipo debe saberlo
+// para no duplicar trabajo. Se deja una nota automática en el chat interno
+// general; además, ese canal dispara el push nativo a los demás participantes.
+// El aviso es informativo: nunca debe impedir que el negocio se cree.
+async function notifyTeamPropertyBusiness(req, business) {
+  try {
+    const prop = business && business.property;
+    if (!prop || !prop._id) return;
+    const place = [prop.zone, prop.city].filter(Boolean).join(' ')
+      || prop.address
+      || String(prop.type || '').replace(/_/g, ' ')
+      || 'una propiedad';
+    const actorName = (req.user && (req.user.name || req.user.username)) || 'Un asesor';
+    const text = `🏠 ${actorName} creó el negocio "${business.name}" con la propiedad ${place}.`;
+    const io = req.app && typeof req.app.get === 'function' ? req.app.get('io') : null;
+    const chat = await getOrCreateGeneralChat();
+    await persistAndBroadcast(io, chat._id, req.user._id, actorName, text);
+  } catch (error) {
+    // Silencioso a propósito: la nota es un extra, no parte de la operación.
+  }
+}
 
 // Proceso de ventas para un comprador: captación del prospecto hasta la entrega del inmueble.
 const BUYER_STAGES = [
@@ -270,6 +293,12 @@ const create = asyncHandler(async (req, res) => {
 
   await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor']);
 
+  // Nota en el chat interno + aviso al resto del equipo (solo si el negocio va
+  // ligado a una propiedad). No bloquea ni condiciona la respuesta.
+  if (business.property) {
+    notifyTeamPropertyBusiness(req, business);
+  }
+
   res.status(201).json({ success: true, data: business });
 });
 
@@ -485,4 +514,20 @@ const history = asyncHandler(async (req, res) => {
   res.json({ success: true, data: stages });
 });
 
-module.exports = { list, get, create, update, remove, changeStage, history, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };
+// Negocios ABIERTOS ligados a una propiedad. Se consulta desde el inventario
+// general para avisar, sin importar quién sea el dueño del negocio, que la
+// propiedad ya está trabajada por un compañero.
+const propertyBusinesses = asyncHandler(async (req, res) => {
+  const propertyId = req.params.propertyId;
+  if (!propertyId) {
+    return res.status(400).json({ success: false, message: 'Se requiere la propiedad' });
+  }
+  const items = await Business.find({ property: propertyId, status: 'activo' })
+    .select('name currentStage processType mainAdvisor createdAt')
+    .populate('mainAdvisor', 'name')
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json({ success: true, data: items });
+});
+
+module.exports = { list, get, create, update, remove, changeStage, history, propertyBusinesses, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };

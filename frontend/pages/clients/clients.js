@@ -24,8 +24,22 @@ const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmo
 const MEDIO_OTROS = ['Otro', 'Recomendación'];
 // Cinco operaciones exactas: "Alquilar" antes de "Otro".
 const CLIENT_SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
-// "Efectivo" se retiró: queda "Contado" como pago contra entrega.
-const CLIENT_FORMAS_PAGO = ['Contado', 'Infonavit', 'Fovissste', 'Bancario', 'Otro'];
+// Formas de compra/crédito explícitas que pidió el equipo comercial. El campo
+// es texto libre en el backend, así que aquí se ofrece el catálogo oficial.
+const CLIENT_FORMAS_PAGO = ['Contado', 'Infonavit', 'Banco', 'Fovissste', 'Otro'];
+// Valores antiguos que siguen guardados en clientes previos (p. ej.
+// "Bancario"): se agregan como opción extra en modo edición para que el
+// select nunca muestre vacío un dato que ya existe.
+const FORMAS_PAGO_LEGADAS = ['Bancario'];
+
+// Opciones del select de forma de pago, incluyendo el valor legado del
+// registro cuando no pertenece al catálogo vigente.
+function opcionesFormaPago(current) {
+  const list = CLIENT_FORMAS_PAGO.slice();
+  const value = String(current || '').trim();
+  if (value && !list.includes(value) && FORMAS_PAGO_LEGADAS.includes(value)) list.push(value);
+  return list.map((f) => ({ value: f, label: f }));
+}
 const CLIENT_TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro'];
 // Sin alias de etapa: "PERFILADO" volvió a ser una etapa real del embudo.
 const STAGE_ALIASES = {};
@@ -501,36 +515,56 @@ window.Pages.clients = {
     }
 
     /* ── Registro rápido (nuevo cliente) ─────────────────────────────── */
+    // Alta pensada para una llamada telefónica: todos los campos esenciales
+    // del perfil inmobiliario en un solo paso. La fecha de registro es
+    // automática y la forma de compra NUNCA se omite (era el campo que el
+    // sistema saltaba al avanzar de etapa).
     function openQuickCreate() {
+      const hoy = Format.date(new Date());
       const modal = UI.openModal({
         title: 'Nuevo cliente',
         body: `
           <form id="client-quick-form" novalidate>
             <div class="stage-input-grid">
+              <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Fecha de registro</label>
+                <input class="form-control" type="text" value="${UI.escapeHtml(hoy)} (automática)" disabled>
+              </div>
               ${UI.field('nombre', 'Nombre completo', { required: true, full: true, placeholder: 'Ej. María López' })}
+              ${UI.field('telefono', 'Número de teléfono', { type: 'tel', required: true, placeholder: 'Ej. 6121234567' })}
               ${fieldConOtro('servicio', '¿Qué quiere hacer el cliente?', {
                 required: true,
-                full: true,
                 options: [{ value: '', label: '— Selecciona una operación —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))],
                 placeholder: 'Ej. Permuta, herencia, ampliación…',
               })}
-              ${UI.field('telefono', 'Teléfono (con lada)', { type: 'tel', placeholder: '6121234567' })}
-              ${fieldConOtro('medio', '¿Cómo nos contactó?', {
+              ${fieldConOtro('formaPago', '¿Cómo va a pagar / forma de compra?', {
+                required: true,
+                options: [{ value: '', label: '— Selecciona una forma —' }, ...CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f }))],
+                placeholder: 'Ej. Pago mixto, préstamo familiar…',
+              })}
+              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', placeholder: 'Pendiente / por confirmar' })}
+              ${fieldConOtro('tipoPropiedad', '¿Qué tipo de propiedad busca?', {
+                options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))],
+                placeholder: 'Ej. Penthouse, predio industrial…',
+              })}
+              ${UI.field('zona', 'Zona de interés', { placeholder: 'Ej. Zona norte, cerca del centro…' })}
+              ${fieldConOtro('medio', '¿Cómo se enteró de nosotros?', {
                 options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })),
                 otroWhen: MEDIO_OTROS,
-                requiredWhen: ['Otro'],
-                placeholder: 'Ej. Referido por Juan Pérez…',
+                requiredWhen: ['Otro', 'Recomendación'],
+                placeholder: 'Ej. Recomendado por el asesor Juan Pérez…',
               })}
+              ${UI.field('notasGenerales', 'Notas / observaciones de la plática', { type: 'textarea', rows: 3, full: true, placeholder: 'Qué platicaron, compromisos, seguimiento acordado…' })}
               ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
             </div>
-            <p class="text-muted" style="font-size:12px;margin:0;">El correo y el resto del perfil inmobiliario se completan después desde <strong>Editar perfil</strong>.</p>
+            <p class="text-muted" style="font-size:12px;margin:0;">El correo y los detalles finales pueden completarse después desde <strong>Editar perfil</strong>.</p>
           </form>
         `,
         footer: `
           <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
           <button class="btn btn-primary" type="submit" form="client-quick-form">Guardar cliente</button>
         `,
-        size: 640,
+        size: 760,
       });
 
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
@@ -547,6 +581,10 @@ window.Pages.clients = {
             UI.toast('Escribe el nombre del cliente', 'warning');
             return;
           }
+          if (!String(values.telefono || '').trim()) {
+            UI.toast('Escribe el número de teléfono del cliente', 'warning');
+            return;
+          }
           if (!values.servicio) {
             UI.toast('Selecciona si el cliente quiere comprar, vender, rentar o alquilar', 'warning');
             return;
@@ -555,14 +593,28 @@ window.Pages.clients = {
             UI.toast('Escribe qué operación quiere hacer el cliente', 'warning');
             return;
           }
+          // Forma de compra: campo crítico, siempre con valor explícito.
+          if (!values.formaPago) {
+            UI.toast('Selecciona la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro)', 'warning');
+            return;
+          }
+          if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
+            UI.toast('Especifica la forma de pago del cliente', 'warning');
+            return;
+          }
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-          if (values.medio === 'Otro' && !String(values.medioOtro || '').trim()) {
-            UI.toast('Escribe cómo te contactó el cliente', 'warning');
+          if ((values.medio === 'Otro' || values.medio === 'Recomendación') && !String(values.medioOtro || '').trim()) {
+            UI.toast(values.medio === 'Recomendación'
+              ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
+              : 'Escribe cómo te contactó el cliente', 'warning');
             return;
           }
           if (!CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
-          limpiarOtros(values, ['servicio', 'medio'], e.target);
+          if (values.tipoPropiedad && !CLIENT_TIPOS_PROPIEDAD.includes(values.tipoPropiedad)) values.tipoPropiedad = 'Otro';
+          // Capacidad de pago vacía = pendiente: no se envía (no se guarda 0).
+          if (values.capacidad === null || values.capacidad === undefined) delete values.capacidad;
+          limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad', 'medio'], e.target);
           try {
             const created = await API.clients.create(values);
             UI.closeModal();
@@ -586,12 +638,12 @@ window.Pages.clients = {
             <div class="stage-input-grid">
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
-              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro'], placeholder: 'Ej. Referido por Juan Pérez…' })}
+              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro', 'Recomendación'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…' })}
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
-              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || 0 })}
-              ${fieldConOtro('formaPago', 'Forma de pago', { value: record.formaPago || 'Contado', otroValue: record.formaPagoOtro || '', options: CLIENT_FORMAS_PAGO.map((f) => ({ value: f, label: f })), placeholder: 'Ej. Pago mixto, uro, préstamo familiar…' })}
+              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
+              ${fieldConOtro('formaPago', 'Forma de compra / pago', { value: record.formaPago || 'Contado', otroValue: record.formaPagoOtro || '', options: opcionesFormaPago(record.formaPago), required: true, placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
               ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 6, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
               ${UI.field('notasGenerales', 'Notas', { type: 'textarea', rows: 4, value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
             </div>
@@ -621,8 +673,18 @@ window.Pages.clients = {
             if (values[key] === null) delete values[key];
           });
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-          if (values.medio === 'Otro' && !String(values.medioOtro || '').trim()) {
-            UI.toast('Escribe cómo te contactó el cliente', 'warning');
+          if ((values.medio === 'Otro' || values.medio === 'Recomendación') && !String(values.medioOtro || '').trim()) {
+            UI.toast(values.medio === 'Recomendación'
+              ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
+              : 'Escribe cómo te contactó el cliente', 'warning');
+            return;
+          }
+          if (!values.formaPago) {
+            UI.toast('Selecciona la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro)', 'warning');
+            return;
+          }
+          if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
+            UI.toast('Especifica la forma de pago del cliente', 'warning');
             return;
           }
           if (values.servicio && !CLIENT_SERVICIOS.includes(values.servicio)) values.servicio = 'Otro';
@@ -682,8 +744,10 @@ window.Pages.clients = {
         extraFields = `
           <div class="stage-input-grid">
             ${fieldConOtro('servicio', 'Operación', { value: record.servicio || '', otroValue: record.servicioOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))], placeholder: 'Ej. Permuta, herencia…' })}
+            ${fieldConOtro('formaPago', 'Forma de compra', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
+            ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, predio industrial…' })}
             ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
-            ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || 0 })}
+            ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
             ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 3, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
           </div>`;
       } else if (target === 'SEGUIMIENTO') {
@@ -749,8 +813,8 @@ window.Pages.clients = {
             if (value !== null && value !== undefined && String(value).trim() !== '') datosEtapa[key] = value;
           };
           if (target === 'PERFILADO') {
-            limpiarOtros(values, ['servicio'], e.target);
-            ['servicio', 'servicioOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
+            limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad'], e.target);
+            ['servicio', 'servicioOtro', 'formaPago', 'formaPagoOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
           } else if (target === 'CITA') {
             ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach(putIfFilled);
           } else if (target === 'NEGOCIACION_CIERRE' && values.capacidad !== undefined && values.capacidad !== null && String(values.capacidad).trim() !== '') {

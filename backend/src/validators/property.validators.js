@@ -18,6 +18,8 @@ const propertyRules = [
   body('paymentMethods').optional({ values: 'falsy' }).isArray().withMessage('Formas de pago no válidas'),
   body('paymentMethods.*').optional({ values: 'falsy' }).isIn(PROPERTY_PAYMENT_METHODS).withMessage('Forma de pago no válida'),
   body('paymentMethodsOther').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('La forma de pago "otra" es demasiado larga'),
+  // Propiedad externa: asesor/empresa dueña del inmueble (texto libre).
+  body('externalAdvisor').optional({ values: 'falsy' }).isString().isLength({ max: 140 }).withMessage('El nombre del asesor externo es demasiado largo'),
 ];
 
 const propertyIdParam = [param('id').isMongoId().withMessage('Identificador no válido')];

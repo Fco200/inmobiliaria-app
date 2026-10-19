@@ -3200,6 +3200,17 @@ body.page-chat .assistant-panel {
   display: flex; align-items: center; justify-content: center;
 }
 .pm-x:hover { background: var(--danger); }
+/* Botón "Hacer portada" (★): mueve la foto al inicio del orden. */
+.pm-cover-btn {
+  position: absolute; right: 4px; bottom: 4px; z-index: 3;
+  width: 24px; height: 24px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(0, 0, 0, 0.6); color: #fbbf24; font-size: 14px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.pm-cover-btn:hover { background: var(--primary); color: #fff; }
+/* Textos donde los saltos de línea del original deben conservarse
+   (descripciones de propiedades, notas, etc.). */
+.preserve-lines { white-space: pre-line; }
 .pm-empty {
   grid-column: 1 / -1; padding: 20px; text-align: center; font-size: 13px;
   color: var(--text-muted); border: 1px dashed var(--border); border-radius: var(--radius);

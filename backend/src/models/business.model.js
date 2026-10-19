@@ -14,11 +14,15 @@ const businessSchema = new mongoose.Schema(
       ref: 'Client',
       default: null,
     },
+    // Nombre libre cuando el comprador NO está en la cartera de clientes
+    // (opción "Otro / Externo" en el formulario).
+    buyerExternalName: { type: String, trim: true, default: '' },
     sellerClient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Client',
       default: null,
     },
+    sellerExternalName: { type: String, trim: true, default: '' },
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Property',
@@ -34,6 +38,8 @@ const businessSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Asor externo (otra inmobiliaria / colaborador sin cuenta en el CRM).
+    partnerAdvisorName: { type: String, trim: true, default: '' },
     partnerBusiness: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Business',

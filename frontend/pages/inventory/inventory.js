@@ -145,11 +145,13 @@ window.Pages.inventory = {
                 ${UI.badge(String(prop.operationType || ''), 'primary')}
                 ${item.isPublished ? UI.badge('Publicado', 'success') : UI.badge('Sin publicar', 'muted')}
                 ${prop.status ? UI.badge(String(prop.status).replace(/_/g, ' '), 'warning') : ''}
+                ${prop.isExternal ? UI.badge('Externa', 'warning') : ''}
               </div>
+              ${prop.isExternal && prop.externalAdvisor ? `<p class="text-muted" style="font-size:13px;margin:0 0 6px;">Propiedad externa ofrecida por: <strong>${UI.escapeHtml(prop.externalAdvisor)}</strong></p>` : ''}
               <p class="text-muted" style="margin:0 0 4px;">${UI.escapeHtml([prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ') || 'Sin ubicación')}</p>
               <p style="font-size:20px;font-weight:700;margin:6px 0;">${Format.currency(current)}</p>
               <p class="text-muted" style="font-size:13px;margin:0 0 8px;">Valor de ticket: ${Format.currency(prop.ticketValue || 0)}</p>
-              ${prop.description ? `<p style="font-size:13px;">${UI.escapeHtml(prop.description)}</p>` : ''}
+              ${prop.description ? `<p class="preserve-lines" style="font-size:13px;">${UI.escapeHtml(prop.description)}</p>` : ''}
               ${characteristics ? `<ul style="font-size:13px;margin:8px 0;padding-left:18px;">${characteristics}</ul>` : ''}
               <p class="text-muted" style="font-size:13px;margin:8px 0 0;">
                 Asesor asignado: <strong>${UI.escapeHtml(item.assignedAgent ? item.assignedAgent.name : 'Sin asignar')}</strong>
@@ -419,6 +421,14 @@ window.Pages.inventory = {
                 ${agentOptions}
               </select>
             </div>` : ''}
+            ${isBoss ? `<div class="form-group" style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="edit-external" data-external ${prop.isExternal ? 'checked' : ''}>
+              <label for="edit-external" style="margin:0;">Propiedad externa (ajena al equipo)</label>
+            </div>
+            <div class="form-group" data-external-wrap style="${prop.isExternal ? '' : 'display:none;'}">
+              <label>Asesor / inmobiliaria externa</label>
+              <input class="form-control" data-external-advisor value="${UI.escapeHtml(prop.externalAdvisor || '')}" placeholder="Ej. Inmobiliaria Centro…">
+            </div>` : ''}
             <div class="form-group">
               <label>Calle / dirección</label>
               <input class="form-control" data-address value="${UI.escapeHtml(prop.address || '')}">
@@ -450,6 +460,15 @@ window.Pages.inventory = {
       const cancelBtn = overlay.querySelector('[data-cancel]');
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
+      // Propiedad externa: mostrar/ocultar el campo del asesor externo.
+      const externalEl = overlay.querySelector('[data-external]');
+      const externalWrap = overlay.querySelector('[data-external-wrap]');
+      if (externalEl && externalWrap) {
+        externalEl.addEventListener('change', () => {
+          externalWrap.style.display = externalEl.checked ? '' : 'none';
+        });
+      }
+
       // Editor visual de fotografías (agregar / quitar / reordenar).
       const pmMount = overlay.querySelector('[data-photos-manager]');
       const photoManager = (window.PhotoManager && pmMount)
@@ -475,6 +494,13 @@ window.Pages.inventory = {
           };
           const responsibleEl = overlay.querySelector('[data-responsible]');
           if (responsibleEl) body.responsibleUser = responsibleEl.value || null;
+          const extEl = overlay.querySelector('[data-external]');
+          if (extEl) {
+            body.isExternal = extEl.checked;
+            body.externalAdvisor = extEl.checked
+              ? String(overlay.querySelector('[data-external-advisor]').value || '').trim()
+              : '';
+          }
           if (photoManager) body.photos = photoManager.getPhotos();
           await API.properties.update(prop._id, body);
 
@@ -615,6 +641,15 @@ window.Pages.inventory = {
           </div>
           ${isBoss ? `
           <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="inv-external" data-external>
+            <label for="inv-external" style="margin:0;">Propiedad externa (ajena al equipo / de otra inmobiliaria)</label>
+          </div>
+          <div class="form-group" data-external-wrap style="display:none;">
+            <label>Asesor / inmobiliaria externa</label>
+            <input class="form-control" data-external-advisor placeholder="Ej. Inmobiliaria Centro, Asesor Juan Pérez…">
+            <p class="text-muted" style="font-size:12px;margin:4px 0 0;">Aparecerá en el inventario general con la etiqueta <strong>Externa</strong>, nunca en "Mis propiedades".</p>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="inv-publish" data-publish>
             <label for="inv-publish" style="margin:0;">Publicar de inmediato en el catálogo</label>
           </div>` : ''}
@@ -626,6 +661,16 @@ window.Pages.inventory = {
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
       if (!overlay) return;
       overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+
+      // Propiedad externa: al marcarla se revela el campo del asesor externo.
+      const externalEl = overlay.querySelector('[data-external]');
+      const externalWrap = overlay.querySelector('[data-external-wrap]');
+      if (externalEl && externalWrap) {
+        externalEl.addEventListener('change', () => {
+          externalWrap.style.display = externalEl.checked ? '' : 'none';
+        });
+      }
+
       overlay.querySelector('[data-ok]').addEventListener('click', async () => {
         const typeEl = overlay.querySelector('[data-type]');
         const type = typeEl.value;
@@ -639,6 +684,13 @@ window.Pages.inventory = {
         try {
           const agentEl = overlay.querySelector('[data-agent]');
           const publishEl = overlay.querySelector('[data-publish]');
+          const isExternal = externalEl ? externalEl.checked : false;
+          const externalAdvisorEl = overlay.querySelector('[data-external-advisor]');
+          if (isExternal && !String(externalAdvisorEl ? externalAdvisorEl.value : '').trim()) {
+            btn.disabled = false;
+            btn.textContent = isBoss ? 'Subir propiedad' : 'Subir mi propiedad';
+            return UI.toast('Escribe el nombre del asesor o inmobiliaria externa', 'warning');
+          }
           const created = await API.inventory.uploadProperty({
             type,
             operationType,
@@ -649,6 +701,8 @@ window.Pages.inventory = {
             state: overlay.querySelector('[data-state]').value.trim(),
             price: Number(overlay.querySelector('[data-price]').value) || 0,
             ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
+            isExternal,
+            externalAdvisor: isExternal ? String(externalAdvisorEl.value).trim() : '',
             description: [
               overlay.querySelector('[data-description]').value.trim(),
               UI.otrosText ? UI.otrosText(typeEl) : '',
@@ -742,13 +796,13 @@ window.Pages.inventory = {
       const esGeneral = state.vista === 'general';
       el.innerHTML = `
         <div>
-          <h2>${esGeneral ? 'Inventario general' : 'Mis propiedades'}</h2>
+          <h2>${esGeneral ? 'Propiedades' : 'Mis propiedades'}</h2>
           <p class="text-muted" style="margin:4px 0 0;">
             ${esGeneral
               ? (isBoss
-                  ? 'Todo el inventario de la agencia. Sube, publica, asigna y quita propiedades del equipo.'
-                  : 'Todas las propiedades de la agencia. Abre cualquiera para ver el detalle, agendar citas o crear negocios, o sube tus propias captaciones.')
-              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios.'}
+                  ? 'Todo el inventario del equipo, incluyendo propiedades externas de otras inmobiliarias o asesores. Sube, publica, asigna y quita propiedades.'
+                  : 'Todas las propiedades del equipo, incluyendo externas. Abre cualquiera para ver el detalle, agendar citas o crear negocios, o sube tus propias captaciones.')
+              : 'Propiedades captadas por ti o que te fueron asignadas. Ábrelas para ver el detalle, agendar citas o crear negocios. Las propiedades externas no aparecen aquí.'}
           </p>
           ${meta ? `<div class="home-stats" style="margin-top:14px;">
             <div class="home-stat"><span class="home-stat-icon">&#128230;</span><div><strong>${meta.total}</strong><small>${esGeneral ? 'Propiedades' : 'En tu cartera'}</small></div></div>
@@ -774,7 +828,7 @@ window.Pages.inventory = {
       el.innerHTML = `
         <div class="process-tabs" role="tablist" aria-label="Vista de inventario">
           <button class="process-tab${state.vista === 'mine' ? ' active' : ''}" type="button" data-view="mine">Mis propiedades</button>
-          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Inventario general</button>
+          <button class="process-tab${state.vista === 'general' ? ' active' : ''}" type="button" data-view="general">Propiedades</button>
         </div>
         ${esGeneral ? `
           <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}" style="max-width:260px;">
@@ -846,7 +900,7 @@ window.Pages.inventory = {
                 return `<img ${hasPhoto ? `data-thumb-id="${UI.escapeHtml(String(item._id))}"` : ''} src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;${hasPhoto ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>`;
               })()}
             </td>
-            <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}</td>
+            <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}${prop && prop.isExternal ? ` ${UI.badge('Externa', 'warning')}${prop.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.externalAdvisor)}</div>` : ''}` : ''}</td>
             <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
             <td>${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
             <td>${prop ? Format.currency(prop.price) : '—'}</td>

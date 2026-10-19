@@ -1,14 +1,14 @@
 {
-  "version": "2.11",
+  "version": "2.13",
   "channel": "estable",
-  "title": "Actualización de la aplicación",
-  "date": "2026-10-12",
+  "title": "Actualización 2.13",
+  "date": "2026-10-18",
   "notes": [
-    "Recordatorios al celular: la app avisa antes de tus tareas y citas, y te alerta de citas vencidas sin cerrar.",
-    "Alertas de inventario: recibes un aviso cuando una propiedad asignada lleva una semana sin publicar.",
-    "Historial de cambios del cliente: consulta quién cambió cada dato y cuándo, además de los movimientos de etapa.",
-    "Firma digital en Formatos: la firma capturada en pantalla ahora queda estampada en el PDF generado.",
-    "Metas con avance: las metas atrasadas se marcan con una advertencia para ubicarlas de inmediato.",
-    "Exporta a CSV desde Clientes, Gastos, Actividad y el Reporte de gerencia para tu análisis externo."
+    "Clientes: la forma de compra (Contado, Infonavit, Banco, Fovissste u Otro) ya es obligatoria en el alta y al perfilar; el sistema ya no la omite al avanzar de etapa.",
+    "Compartir por WhatsApp: ahora se envía un PDF con las fotos, la descripción completa y tus datos de contacto, sin incluir el valor ticket.",
+    "Editor de fotos: elige la portada con la estrella o arrastra para ordenar las imágenes de cada propiedad.",
+    "Inventario: la pestaña Propiedades muestra todo el inventario del equipo, incluidas las propiedades externas de otras inmobiliarias o asesores.",
+    "Descripciones: los saltos de línea ya se conservan al ver una propiedad en cualquier módulo.",
+    "Negocios: comprador, vendedor y asesor compartido aceptan nombres externos (Otro / Externo) y el alta quedó más rápida."
   ]
 }

@@ -80,6 +80,9 @@ window.Pages.properties = {
       return num ? `https://wa.me/${num}?text=${encodeURIComponent(text)}` : '';
     };
 
+    // Enlace wa.me de respaldo para una propiedad (solo si no hay PDF).
+    const waHref = (record) => waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
+
     // Imagen por defecto (SVG) cuando una propiedad no tiene fotografías.
     const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">' +
@@ -137,16 +140,17 @@ window.Pages.properties = {
                 ${detailRow('Estado', UI.escapeHtml(record.state || '—'))}
                 ${detailRow('Precio', Format.currency(record.price))}
                 ${detailRow('Valor ticket', record.ticketValue ? Format.currency(record.ticketValue) : '—')}
+                ${detailRow('Origen', record.isExternal ? `Externa${record.externalAdvisor ? ` — ofrecida por ${UI.escapeHtml(record.externalAdvisor)}` : ''}` : 'Captación del equipo')}
                 ${detailRow('Asesor', record.responsibleUser ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser) : '—')}
                 ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.name || record.owner) : UI.escapeHtml(record.ownerName || '—'))}
                 ${detailRow('Se puede vender con', paymentMethodsLabel(record))}
               </tbody>
             </table>
           </div>
-          ${record.description ? `<div class="card" style="margin-top:12px;"><h4 style="margin:0 0 6px;">Descripción</h4><p style="margin:0;">${UI.escapeHtml(record.description)}</p></div>` : ''}
+          ${record.description ? `<div class="card" style="margin-top:12px;"><h4 style="margin:0 0 6px;">Descripción</h4><p class="preserve-lines" style="margin:0;">${UI.escapeHtml(record.description)}</p></div>` : ''}
         `,
         footer: `
-          ${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : ''}
+          ${window.WhatsAppGenerator ? '<button class="btn btn-success" type="button" data-share-wa>&#128172;&nbsp; Compartir por WhatsApp (PDF)</button>' : (waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : '')}
           ${photos.length > 1 ? `<button class="btn btn-secondary" type="button" data-gallery>Fotografías</button>` : ''}
           <button class="btn btn-secondary" type="button" data-history>Historial</button>
           ${openPropertyForm ? `<button class="btn btn-primary" type="button" data-edit-detail>Editar</button>` : ''}
@@ -188,6 +192,10 @@ window.Pages.properties = {
 
       const cancelBtn = overlay.querySelector('[data-cancel]');
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      const shareWaBtn = overlay.querySelector('[data-share-wa]');
+      if (shareWaBtn) shareWaBtn.addEventListener('click', () => {
+        WhatsAppGenerator.open({ property: record });
+      });
       const galleryBtn = overlay.querySelector('[data-gallery]');
       if (galleryBtn) galleryBtn.addEventListener('click', () => UI.showImages(photos, name));
       const historyBtn = overlay.querySelector('[data-history]');
@@ -373,6 +381,7 @@ window.Pages.properties = {
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         { key: 'responsibleUser', label: 'Asesor', render: (r) => UI.escapeHtml(r.responsibleUser ? (r.responsibleUser.name || r.responsibleUser) : '—') },
         { key: 'isPublished', label: 'Publicación', render: (r) => (r.isPublished ? UI.badge('Publicada', 'success') : UI.badge('Sin publicar', 'muted')) },
+        { key: 'isExternal', label: 'Origen', render: (r) => (r.isExternal ? `${UI.badge('Externa', 'warning')}${r.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(r.externalAdvisor)}</div>` : ''}` : '<span class="text-muted" style="font-size:12px;">Equipo</span>') },
       ],
       fields: [
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
@@ -387,6 +396,8 @@ window.Pages.properties = {
         { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
+        { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },
+        { name: 'externalAdvisor', label: 'Asesor / inmobiliaria externa', type: 'text', placeholder: 'Ej. Inmobiliaria Centro, Asesor Juan Pérez…', hint: 'Solo si la propiedad es externa.' },
         { name: 'paymentMethods', label: 'Se puede vender con', type: 'checkboxGroup', full: true, options: [
           { value: 'contado', label: 'Contado' },
           { value: 'infonavit', label: 'Infonavit' },
@@ -430,6 +441,11 @@ window.Pages.properties = {
         } else {
           body.paymentMethodsOther = '';
         }
+
+        // Propiedad externa: el nombre del asesor externo solo viaja si está
+        // marcada; si no, se limpia para no dejar datos huérfanos.
+        body.isExternal = values.isExternal === true;
+        body.externalAdvisor = body.isExternal ? String(values.externalAdvisor || '').trim() : '';
         return body;
       },
       onFormMount(form, record) {
@@ -457,9 +473,18 @@ window.Pages.properties = {
         };
         boxes.forEach((b) => b.addEventListener('change', syncPay));
         syncPay();
+
+        // Propiedad externa: el nombre del asesor externo solo se muestra
+        // cuando la casilla "externa" está marcada.
+        const extCheck = form.querySelector('#fld-isExternal');
+        const extWrap = wrapOf('#fld-externalAdvisor');
+        const syncExt = () => {
+          if (extWrap) extWrap.style.display = extCheck && extCheck.checked ? '' : 'none';
+        };
+        if (extCheck) extCheck.addEventListener('change', syncExt);
+        syncExt();
       },
       extraActions(record) {
-        const waHref = waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
         let out = `<button class="btn btn-secondary btn-sm" data-extra data-detail="1" data-record="${record._id}" style="margin-left:6px;" title="Ver detalle completo">Detalle</button>`;
         if (record.photos && record.photos.length) {
           out += `<button class="btn btn-secondary btn-sm" data-extra data-show-photos="1" data-record="${record._id}" style="margin-left:6px;" title="Ver fotografías">&#128247;&nbsp; Fotos (${record.photos.length})</button>`;
@@ -470,11 +495,17 @@ window.Pages.properties = {
         return out + pub +
           `<button class="btn btn-secondary btn-sm" data-extra data-property-history="1" data-record="${record._id}" style="margin-left:6px;">Historial</button>` +
           `<button class="btn btn-secondary btn-sm" data-extra data-price-market="1" data-record="${record._id}" style="margin-left:6px;">Precio y mercado</button>` +
-          (waHref ? `<a class="btn btn-sm crm-btn-wa" style="margin-left:6px;" target="_blank" rel="noopener" href="${waHref}" title="Enviar WhatsApp">&#128172;&nbsp; WhatsApp</a>` : '');
+          (window.WhatsAppGenerator
+            ? `<button class="btn btn-sm crm-btn-wa" data-extra data-share-wa="1" data-record="${record._id}" style="margin-left:6px;" title="Compartir por WhatsApp con PDF">&#128172;&nbsp; Compartir</button>`
+            : (waHref(record) ? `<a class="btn btn-sm crm-btn-wa" style="margin-left:6px;" target="_blank" rel="noopener" href="${waHref(record)}" title="Enviar WhatsApp">&#128172;&nbsp; WhatsApp</a>` : ''));
       },
       onExtraAction(record, btn, ctx) {
         if (btn.dataset.detail) {
           openDetail(record);
+          return;
+        }
+        if (btn.dataset.shareWa) {
+          WhatsAppGenerator.open({ property: record });
           return;
         }
         if (btn.dataset.showPhotos) {

@@ -83,7 +83,7 @@ window.AsesorPage = (() => {
           <h3>${Format.currency(record.price)}</h3>
           <p class="text-muted">${UI.escapeHtml(place)}</p>
           ${PS.characteristicsText(record) ? `<p><strong>Características:</strong> ${UI.escapeHtml(PS.characteristicsText(record))}</p>` : ''}
-          ${record.description ? `<p>${UI.escapeHtml(record.description)}</p>` : ''}
+          ${record.description ? `<p class="preserve-lines">${UI.escapeHtml(record.description)}</p>` : ''}
 
           <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;">
             <p style="margin:0 0 10px;font-weight:700;">&#128198;&nbsp; Agenda una visita</p>

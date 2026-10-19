@@ -33,12 +33,15 @@ const list = asyncHandler(async (req, res) => {
     // Los asesores trabajan sobre lo publicado + lo que les fue asignado.
     if (req.query.mine === 'true') {
       // "Mi inventario": propiedades donde el asesor es responsable de la
-      // propiedad o tiene el inventario asignado.
+      // propiedad o tiene el inventario asignado. Las propiedades EXTERNAS
+      // (ajenas al equipo) nunca aparecen aquí, solo en el inventario general.
       const props = await Property.find(
-        { responsibleUser: req.user._id },
+        { responsibleUser: req.user._id, isExternal: { $ne: true } },
         '_id'
       ).lean();
       const minePropIds = props.map((p) => p._id);
+      const externals = await Property.find({ isExternal: true }).select('_id').lean();
+      filter.property = { $nin: externals.map((p) => p._id) };
       filter.$or = [
         { assignedAgent: req.user._id },
         { property: minePropIds.length ? { $in: minePropIds } : { $in: [] } },
@@ -88,6 +91,7 @@ const generalList = asyncHandler(async (req, res) => {
           { city: { $regex: req.query.q, $options: 'i' } },
           { type: { $regex: req.query.q, $options: 'i' } },
           { description: { $regex: req.query.q, $options: 'i' } },
+          { externalAdvisor: { $regex: req.query.q, $options: 'i' } },
         ],
       },
       '_id'
@@ -166,6 +170,10 @@ const uploadProperty = asyncHandler(async (req, res) => {
     responsibleUser: assignedAgent || req.user._id,
     status: req.body.status || 'disponible',
     isPublished,
+    // Propiedad externa (ajena al equipo): solo administración/gerencia puede
+    // marcarla; los asesores siempre suben captaciones propias.
+    isExternal: boss ? req.body.isExternal === true : false,
+    externalAdvisor: boss && req.body.isExternal === true ? (req.body.externalAdvisor || '') : '',
   });
 
   const inventory = await Inventory.create({

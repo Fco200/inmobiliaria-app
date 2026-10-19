@@ -77,6 +77,7 @@ window.PhotoManager = (() => {
         tile.innerHTML = `
           <img src="${String(resolve(src)).replace(/"/g, '&quot;')}" alt="" loading="lazy">
           ${tileIndex === coverIndex ? '<span class="pm-cover">Portada</span>' : ''}
+          ${tileIndex === coverIndex ? '' : '<button type="button" class="pm-cover-btn" data-cover title="Hacer portada">&#9733;</button>'}
           <button type="button" class="pm-x" data-remove title="Quitar foto">&times;</button>
         `;
         grid.appendChild(tile);
@@ -93,6 +94,7 @@ window.PhotoManager = (() => {
           ${u ? `<img src="${u}" alt="" loading="lazy">` : '<div class="pm-noimg">&#128247;</div>'}
           <span class="pm-new-badge">Nueva</span>
           ${tileIndex === coverIndex ? '<span class="pm-cover">Portada</span>' : ''}
+          ${tileIndex === coverIndex || state.photos.length ? '' : '<button type="button" class="pm-cover-btn" data-cover title="Hacer portada">&#9733;</button>'}
           <button type="button" class="pm-x" data-remove title="Quitar foto">&times;</button>
         `;
         grid.appendChild(tile);
@@ -104,11 +106,33 @@ window.PhotoManager = (() => {
       }
 
       hint.textContent = tileIndex
-        ? 'Arrastra para reordenar. La primera foto es la portada. Toca una foto para verla.'
+        ? 'Arrastra para reordenar, o toca ★ para hacer portada. La primera foto es la portada. Toca una foto para verla.'
         : 'Agrega las fotos de la propiedad (JPG, PNG, GIF, WebP…).';
     }
 
+    // Mueve la foto elegida al inicio: la primera posición define la portada
+    // (tanto en el CRM como en el PDF que se comparte por WhatsApp).
+    function makeCover(kind, index) {
+      if (kind === 'photo') {
+        if (index <= 0) return;
+        const [moved] = state.photos.splice(index, 1);
+        state.photos.unshift(moved);
+      } else {
+        const [moved] = state.files.splice(index, 1);
+        state.files.unshift(moved);
+      }
+      render();
+      onChange();
+    }
+
     grid.addEventListener('click', (e) => {
+      const coverBtn = e.target.closest('[data-cover]');
+      if (coverBtn) {
+        e.stopPropagation();
+        const tile = coverBtn.closest('.pm-tile');
+        makeCover(tile.dataset.kind, Number(tile.dataset.index));
+        return;
+      }
       const removeBtn = e.target.closest('[data-remove]');
       if (removeBtn) {
         e.stopPropagation();

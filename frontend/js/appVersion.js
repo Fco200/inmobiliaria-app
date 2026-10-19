@@ -72,6 +72,55 @@ window.AppVersion = (() => {
     if (el) el.remove();
   }
 
+  // Modal de aviso que se muestra al iniciar sesión (una sola vez por sesión)
+  // cuando hay una versión nueva: presenta la versión y sus novedades con
+  // acceso directo al módulo de Actualizaciones. El banner de arriba y el
+  // punto del botón permanecen hasta que el usuario actualice.
+  const MODAL_SESSION_KEY = 'crm_update_modal_shown';
+
+  function sessionModalShown() {
+    try { return sessionStorage.getItem(MODAL_SESSION_KEY) === String(latest && latest.hash ? latest.hash : ''); } catch (e) { return false; }
+  }
+
+  function markSessionModalShown() {
+    try { sessionStorage.setItem(MODAL_SESSION_KEY, String(latest && latest.hash ? latest.hash : '')); } catch (e) { /* noop */ }
+  }
+
+  function showUpdateModal() {
+    if (!isUpdateAvailable() || sessionModalShown()) return;
+    if (!window.UI || typeof UI.openModal !== 'function') return;
+    markSessionModalShown();
+
+    const notes = latest && Array.isArray(latest.notes) && latest.notes.length
+      ? latest.notes.slice(0, 6)
+      : [];
+    const versionText = latest && latest.version ? UI.escapeHtml(String(latest.version)) : '';
+
+    const modal = UI.openModal({
+      title: `🎉 Nueva versión disponible${versionText ? ` — v${versionText}` : ''}`,
+      body: `
+        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, tu CRM se acaba de actualizar. Estas son las novedades:</p>
+        ${notes.length
+          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
+              ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
+             </ul>`
+          : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
+        <p class="text-muted" style="font-size:12px;margin:14px 0 0;">Si notas algo raro, ve a <strong>Actualizaciones</strong> y pulsa "Actualizar ahora" para refrescar la app.</p>
+      `,
+      footer: `
+        <button class="btn btn-secondary" type="button" data-update-later>Después</button>
+        <a class="btn btn-primary" href="actualizaciones.html" data-update-go>Ver mejoras</a>
+      `,
+    });
+
+    const overlay = modal && modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+    if (!overlay) return;
+    const laterBtn = overlay.querySelector('[data-update-later]');
+    if (laterBtn) laterBtn.addEventListener('click', () => UI.closeModal());
+    const goBtn = overlay.querySelector('[data-update-go]');
+    if (goBtn) goBtn.addEventListener('click', () => UI.closeModal());
+  }
+
   function showBanner() {
     if (!isUpdateAvailable()) return;
     if (document.getElementById('version-banner')) return;
@@ -100,10 +149,12 @@ window.AppVersion = (() => {
   }
 
   // Notifica al usuario que hay una versión nueva. La usa este módulo y el
-  // handler del Service Worker (SW_UPDATED).
+  // handler del Service Worker (SW_UPDATED). Muestra el modal de bienvenida
+  // (solo una vez por sesión) + el banner y el punto del botón.
   function notifyUpdate() {
     updateBadge();
     showBanner();
+    showUpdateModal();
   }
 
   function markSeen() {

@@ -71,8 +71,19 @@ const list = asyncHandler(async (req, res) => {
 // Inventario General: propiedades que los asesores COMPARTIERON desde "Captar
 // Propiedades" (isPublished). El filtro por publicación se retiró del módulo:
 // solo aparece lo compartido. Disponible para cualquier usuario autenticado
-// (los jefes la administran; el equipo la consulta) con filtros por asesor y
-// texto.
+// (los jefes la administran; el equipo la consulta) con filtros por asesor,
+// tipo, operación, estado y rango de precio.
+const PROPERTY_TYPE_VALUES = ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'];
+const PROPERTY_STATUS_VALUES = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
+const PROPERTY_PAYMENT_VALUES = ['contado', 'infonavit', 'banco', 'fovissste', 'todos', 'otro'];
+
+function toList(value) {
+  return String(value == null ? '' : value)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
 const generalList = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
@@ -81,21 +92,53 @@ const generalList = asyncHandler(async (req, res) => {
 
   if (req.query.assignedAgent) filter.assignedAgent = req.query.assignedAgent;
 
-  if (req.query.q) {
-    const propIds = await Property.find(
-      {
-        $or: [
-          { folio: { $regex: req.query.q, $options: 'i' } },
-          { address: { $regex: req.query.q, $options: 'i' } },
-          { zone: { $regex: req.query.q, $options: 'i' } },
-          { city: { $regex: req.query.q, $options: 'i' } },
-          { type: { $regex: req.query.q, $options: 'i' } },
-          { description: { $regex: req.query.q, $options: 'i' } },
-          { externalAdvisor: { $regex: req.query.q, $options: 'i' } },
-        ],
-      },
-      '_id'
-    ).lean();
+  // Filtros de la PROPIEDAD (viven en el documento Property, no en Inventory):
+  // se resuelven primero los IDs que cumplen y se acotan sobre `property`.
+  const propFilter = {};
+  const propConditions = [];
+
+  const types = toList(req.query.type).filter((t) => PROPERTY_TYPE_VALUES.includes(t));
+  if (types.length) propConditions.push({ type: types.length > 1 ? { $in: types } : types[0] });
+
+  const operations = toList(req.query.operationType);
+  if (operations.length) propConditions.push({ operationType: operations.length > 1 ? { $in: operations } : operations[0] });
+
+  const statuses = toList(req.query.status).filter((s) => PROPERTY_STATUS_VALUES.includes(s));
+  if (statuses.length) propConditions.push({ status: statuses.length > 1 ? { $in: statuses } : statuses[0] });
+
+  // Forma de financiamiento: Infonavit, Fovissste, Banco, Contado, etc.
+  const payments = toList(req.query.paymentMethod).filter((p) => PROPERTY_PAYMENT_VALUES.includes(p));
+  if (payments.length) propConditions.push({ paymentMethods: { $in: payments } });
+
+  // Rango de precio "de X a Y".
+  const min = parseFloat(req.query.minPrice);
+  const max = parseFloat(req.query.maxPrice);
+  const priceFilter = {};
+  if (Number.isFinite(min)) priceFilter.$gte = min;
+  if (Number.isFinite(max)) priceFilter.$lte = max;
+  if (Object.keys(priceFilter).length) propConditions.push({ price: priceFilter });
+
+  // Búsqueda de texto libre (folio, ubicación, tipo, descripción, asesor externo).
+  const q = String(req.query.q || '').trim();
+  const esc = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (q) {
+    const term = esc(q);
+    propConditions.push({
+      $or: [
+        { folio: { $regex: term, $options: 'i' } },
+        { address: { $regex: term, $options: 'i' } },
+        { zone: { $regex: term, $options: 'i' } },
+        { city: { $regex: term, $options: 'i' } },
+        { type: { $regex: term, $options: 'i' } },
+        { description: { $regex: term, $options: 'i' } },
+        { externalAdvisor: { $regex: term, $options: 'i' } },
+      ],
+    });
+  }
+
+  if (propConditions.length) {
+    propFilter.$and = propConditions;
+    const propIds = await Property.find(propFilter, '_id').lean();
     const ids = propIds.map((p) => p._id);
     filter.property = ids.length ? { $in: ids } : { $in: [] };
   }
@@ -103,11 +146,14 @@ const generalList = asyncHandler(async (req, res) => {
   const [total, items] = await Promise.all([
     Inventory.countDocuments(filter),
     Inventory.find(filter)
-      .populate('property')
-      .populate('assignedAgent')
+      // Proyección: la tarjeta solo necesita los campos que se muestran en la
+      // lista y el detalle, no el documento completo ni los historiales.
+      .populate('property', 'folio type operationType price ticketValue zone city state address photos description characteristics paymentMethods paymentMethodsOther status isExternal externalAdvisor isPublished owner ownerName responsibleUser')
+      .populate('assignedAgent', 'name photo')
       .skip((page - 1) * limit)
       .limit(limit)
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: -1 })
+      .lean(),
   ]);
 
   res.json({
@@ -339,22 +385,33 @@ const togglePublish = asyncHandler(async (req, res) => {
 });
 
 const publicList = asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(60, parseInt(req.query.limit, 10) || 24);
   const filter = { isPublished: true };
   if (req.query.operationType) filter.operationType = req.query.operationType;
   if (req.query.type) filter.type = req.query.type;
   if (req.query.city) filter.city = req.query.city;
   if (req.query.zone) filter.zone = req.query.zone;
+  if (req.query.paymentMethod) filter.paymentMethods = { $in: toList(req.query.paymentMethod) };
 
   const query = {};
   if (req.query.minPrice) query.price = { $gte: Number(req.query.minPrice) };
   if (req.query.maxPrice) query.price = { ...(query.price || {}), $lte: Number(req.query.maxPrice) };
 
-  const items = await Inventory.find(filter)
-    .populate({
-      path: 'property',
-      match: query.price ? { price: query.price } : {},
-    })
-    .lean();
+  const [total, items] = await Promise.all([
+    Inventory.countDocuments(filter),
+    Inventory.find(filter)
+      // Proyección: el catálogo público solo necesita los campos visibles.
+      .populate({
+        path: 'property',
+        select: 'type operationType price ticketValue zone city state description photos address characteristics paymentMethods',
+        match: query.price ? { price: query.price } : {},
+      })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .lean(),
+  ]);
 
   const properties = items
     .filter((item) => item.property)
@@ -373,7 +430,11 @@ const publicList = asyncHandler(async (req, res) => {
       characteristics: item.property.characteristics,
     }));
 
-  res.json({ success: true, data: properties });
+  res.json({
+    success: true,
+    data: properties,
+    meta: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
 });
 
 module.exports = { list, generalList, get, create, uploadProperty, update, remove, togglePublish, publicList };

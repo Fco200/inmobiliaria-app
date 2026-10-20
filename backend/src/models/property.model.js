@@ -85,6 +85,10 @@ propertySchema.index({ zone: 1, city: 1 });
 propertySchema.index({ price: 1 });
 propertySchema.index({ responsibleUser: 1 });
 propertySchema.index({ isPublished: 1 });
+// Filtros del inventario general: tipo/operación/estado + financiamiento.
+propertySchema.index({ isPublished: 1, operationType: 1, type: 1 });
+propertySchema.index({ isPublished: 1, status: 1 });
+propertySchema.index({ paymentMethods: 1 });
 // folio ya define índice único en el esquema (unique: true).
 
 module.exports = mongoose.model('Property', propertySchema);

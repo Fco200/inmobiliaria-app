@@ -74,13 +74,28 @@ if (!isProduction) {
   app.use(morgan('dev'));
 }
 
+// Límite de peticiones para una operación de oficina corporativa. El equipo
+// navega rápido entre módulos (listados, filtros, detalle) y cada pantalla
+// dispara varias peticiones, por lo que 300/15min era insuficiente y producía
+// bloqueos del tipo "Demasiadas peticiones, intenta más tarde".
+//  - Se eleva a 1500 por IP cada 15 min (~100/min sostenido), suficiente para
+//    30+ usuarios simultáneos sin permitir abuso.
+//  - `skipSuccessfulRequests` NO se usa (queremos contar todo), pero se
+//    excluyen del conteo los preflight CORS (OPTIONS), que no son peticiones
+//    de datos reales.
+//  - Se usa el store en memoria por defecto; con `trust proxy` la IP real del
+//    cliente se respeta detrás de Render/Nginx.
+const API_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
+const API_RATE_MAX = Number(process.env.API_RATE_MAX || 1500);
+
 app.use(
   '/api',
   rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
+    windowMs: API_WINDOW_MS,
+    max: API_RATE_MAX,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.method === 'OPTIONS',
     message: { success: false, message: 'Demasiadas peticiones, intenta más tarde' },
   })
 );

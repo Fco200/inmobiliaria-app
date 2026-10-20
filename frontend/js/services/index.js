@@ -1,5 +1,14 @@
 'use strict';
 
+// Envoltura segura de la caché: si por alguna razón la página no cargó
+// js/utils/cache.js, se ejecuta la petición directamente sin cachear (mejor
+// pecar de más peticiones que romper la pantalla por un ReferenceError).
+const Cache = window.AppCache || {
+  wrap: (key, ttl, factory) => Promise.resolve().then(factory),
+  invalidate: () => {},
+  clear: () => {},
+};
+
 window.API = {
   // Descarga un CSV desde el backend y dispara la descarga en el navegador.
   downloadCsv: async (path, filename, params) => {
@@ -41,7 +50,8 @@ window.API = {
   },
 
   settings: {
-    public: () => ApiClient.get('/settings/public'),
+    // Catálogos de configuración: cambian poco, se cachean 2 min en memoria.
+    public: () => Cache.wrap('settings:public', 120000, () => ApiClient.get('/settings/public')),
     getRoleKey: () => ApiClient.get('/settings/role-key'),
     setRoleKey: (body) => ApiClient.put('/settings/role-key', body),
     setGoogleClientId: (body) => ApiClient.put('/settings/google-client-id', body),
@@ -69,9 +79,15 @@ window.API = {
 
   clients: {
     list: (params) => ApiClient.get('/clients', params),
-    create: (body) => ApiClient.post('/clients', body),
-    update: (id, body) => ApiClient.put(`/clients/${id}`, body),
-    remove: (id) => ApiClient.remove(`/clients/${id}`),
+    // Catálogo ligero (id + nombre) para selects con búsqueda, cacheado 60s.
+    options: (params) => Cache.wrap(
+      `clients:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/clients/options', params)
+    ),
+    create: (body) => { Cache.invalidate('clients'); return ApiClient.post('/clients', body); },
+    update: (id, body) => { Cache.invalidate('clients'); return ApiClient.put(`/clients/${id}`, body); },
+    remove: (id) => { Cache.invalidate('clients'); return ApiClient.remove(`/clients/${id}`); },
     changeEtapa: (id, body) => ApiClient.post(`/clients/${id}/cambiar-etapa`, body),
     registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
     historial: (id) => ApiClient.get(`/clients/${id}/historial`),

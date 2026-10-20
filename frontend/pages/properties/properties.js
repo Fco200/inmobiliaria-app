@@ -211,7 +211,10 @@ window.Pages.properties = {
     try {
       const [u, o] = await Promise.all([
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
-        API.clients.list({ limit: 100, type: 'vendedor' }).catch(() => ({ data: [] })),
+        // El propietario puede ser cualquier cliente de la cartera (no solo
+        // quienes venden): se usa el catálogo ligero con búsqueda, que además
+        // admite escribir para filtrar y no obliga a recorrer todo el listado.
+        API.clients.options({ limit: 50 }).catch(() => ({ data: [] })),
       ]);
       users = u.data;
       owners = o.data;
@@ -221,7 +224,10 @@ window.Pages.properties = {
     }
 
     const userOptions = users.map((x) => ({ value: x._id, label: x.name }));
-    const ownerOptions = owners.map((x) => ({ value: x._id, label: x.name }));
+    const ownerOptions = owners.map((x) => ({
+      value: x._id,
+      label: `${x.nombre || 'Cliente'}${x.telefono ? ` — ${x.telefono}` : ''}`,
+    }));
 
     const typeLabel = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—');
 
@@ -393,7 +399,7 @@ window.Pages.properties = {
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
         { name: 'city', label: 'Ciudad', type: 'text' },
         { name: 'state', label: 'Estado', type: 'text' },
-        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
+        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Buscar propietario por nombre o teléfono…', options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },

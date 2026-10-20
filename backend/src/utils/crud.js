@@ -24,6 +24,11 @@ function ownerIdOf(doc, ownerField) {
  *    afterUpdate(doc, req, previous) recibe el documento previo (objeto plano)
  *    para comparar cambios; afterRemove(doc, req) recibe el documento eliminado.
  *  - extraFilters: { paramDeQuery => nombreDelCampo } filtros exactos adicionales.
+ *    Si el parámetro llega separado por comas (?type=casa,local) se aplica $in,
+ *    lo que permite filtrar por varios valores a la vez sin tocar el controlador.
+ *  - publicationFilter: campo booleano de publicación. Acepta
+ *    ?isPublished=true|false y, si se indica `publishedParam`, un atajo
+ *    ?published=true|false.
  *  - textFilters: { paramDeQuery => nombreDelCampo } búsqueda parcial sin
  *    distinguir mayúsculas (se escapan los caracteres de regex).
  *  - rangeFilters: { paramMin => campo, paramMax => campo } rangos numéricos.
@@ -31,6 +36,16 @@ function ownerIdOf(doc, ownerField) {
  */
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Normaliza un parámetro de query que puede venir como valor único
+// (?type=casa) o como lista separada por comas (?type=casa,local,bodega).
+// Devuelve siempre un arreglo de strings no vacíos.
+function toList(value) {
+  return String(value == null ? '' : value)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 function buildCrud(model, {
@@ -48,6 +63,7 @@ function buildCrud(model, {
   rangeFilters = null,
   priceField = null,
   baseFilter = null,
+  publicationFilter = null,
 } = {}) {
   function assertOwnership(req, doc) {
     if (isBoss(req)) return true;
@@ -78,18 +94,41 @@ function buildCrud(model, {
       const staticFilter = typeof baseFilter === 'function' ? await baseFilter(req) : baseFilter;
       if (staticFilter) Object.assign(filter, staticFilter);
 
+      // Búsqueda libre. Se escapan los caracteres de regex para evitar
+      // patrones costosos o inválidos (ReDoS) que saturen MongoDB bajo carga.
       if (req.query.q && searchFields.length) {
-        filter.$or = searchFields.map((field) => ({
-          [field]: { $regex: req.query.q, $options: 'i' },
-        }));
+        const term = escapeRegex(String(req.query.q).trim());
+        if (term) {
+          filter.$or = searchFields.map((field) => ({
+            [field]: { $regex: term, $options: 'i' },
+          }));
+        }
       }
 
-      if (req.query.status) filter.status = req.query.status;
+      if (req.query.status) {
+        const statuses = toList(req.query.status);
+        if (statuses.length > 1) filter.status = { $in: statuses };
+        else if (statuses.length === 1) filter.status = statuses[0];
+      }
 
-      // Filtros exactos adicionales configurables (?param => campo).
+      // Filtros exactos adicionales configurables (?param => campo). Admite
+      // varios valores separados por comas (?type=casa,local → { $in: [...] }).
       if (extraFilters) {
         for (const [queryParam, field] of Object.entries(extraFilters)) {
-          if (req.query[queryParam] !== undefined) filter[field] = req.query[queryParam];
+          if (req.query[queryParam] === undefined) continue;
+          const values = toList(req.query[queryParam]);
+          if (!values.length) continue;
+          filter[field] = values.length > 1 ? { $in: values } : values[0];
+        }
+      }
+
+      // Estado de publicación (?isPublished=true|false o ?published=true|false).
+      if (publicationFilter) {
+        const raw = req.query.isPublished !== undefined
+          ? req.query.isPublished
+          : (req.query.published !== undefined ? req.query.published : undefined);
+        if (raw !== undefined && raw !== '') {
+          filter[publicationFilter] = raw === 'true' || raw === true;
         }
       }
 

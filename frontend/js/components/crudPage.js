@@ -343,6 +343,9 @@ ${rowXml}
       const value = record
         ? (typeof f.value === 'function' ? f.value(record) : record[f.name])
         : (typeof f.value === 'function' ? '' : (f.value || ''));
+      // Los campos marcados con `search: true` se dibujan como select con
+      // buscador (para listas largas como clientes/propiedades).
+      if (f.search) return UI.searchSelect(f.name, f.label, { ...f, value });
       return UI.field(f.name, f.label, { ...f, value });
     });
 
@@ -365,6 +368,7 @@ ${rowXml}
       size: config.modalSize || 720,
       onMount(bodyEl) {
         const form = bodyEl.querySelector('#crud-form');
+        if (typeof UI !== 'undefined' && UI.wireSearchSelects) UI.wireSearchSelects(form || bodyEl);
         if (config.onFormMount) config.onFormMount(form, record, bodyEl);
         if (opts.mount) opts.mount(form, record, bodyEl);
         if (typeof UI !== 'undefined' && UI.syncOtros) UI.syncOtros(form);

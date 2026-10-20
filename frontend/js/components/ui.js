@@ -651,6 +651,54 @@ function showImages(images, title = 'Galería de imágenes') {
   document.addEventListener('change', delegateOtros);
   document.addEventListener('input', delegateOtros);
 
+  // Select con BUSCADOR (autocompletado) para listas largas de registros
+  // (clientes, propiedades…). Es un <select> real (compatible con
+  // UI.collectForm y con el envío de formularios) precedido por un buscador que
+  // filtra las opciones por texto, sin tener que desplazarse por todo el listado.
+  //
+  // Uso:
+  //   ${UI.searchSelect('owner', 'Propietario', { options, value, placeholder })}
+  //   UI.wireSearchSelects(form);   // una sola vez tras montar el modal
+  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false } = {}) {
+    const id = `fld-${name}`;
+    const searchId = `search-${id}`;
+    const valStr = String(value == null ? '' : value);
+    const opts = options.map((o) => {
+      const optValue = typeof o === 'object' ? o.value : o;
+      const optLabel = typeof o === 'object' ? o.label : o;
+      const selected = valStr === String(optValue) ? ' selected' : '';
+      return `<option value="${escapeHtml(optValue)}"${selected} data-search-text="${escapeHtml(String(optLabel).toLowerCase())}">${escapeHtml(optLabel)}</option>`;
+    }).join('');
+    return `
+      <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;" data-search-select>
+        <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(label)}${required ? ' *' : ''}</label>
+        <input class="form-control" id="${searchId}" type="search" placeholder="${escapeHtml(placeholder)}" autocomplete="off" style="margin-bottom:6px;">
+        <select class="form-control" id="${id}" name="${name}" ${required ? 'required' : ''}>${opts}</select>
+        ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
+      </div>`;
+  }
+
+  // Conecta los buscadores de los searchSelect presentes en `root`. Filtra las
+  // <option> por coincidencia de texto y preserva la selección actual.
+  function wireSearchSelects(root) {
+    const scope = root || document;
+    scope.querySelectorAll('[data-search-select]').forEach((wrap) => {
+      const searchEl = wrap.querySelector('input[type="search"]');
+      const select = wrap.querySelector('select');
+      if (!searchEl || !select || searchEl.dataset.wired) return;
+      searchEl.dataset.wired = '1';
+      searchEl.addEventListener('input', () => {
+        const term = searchEl.value.trim().toLowerCase();
+        Array.from(select.options).forEach((opt) => {
+          // La opción vacía ("— Sin propietario —") siempre visible.
+          const show = !term || opt.value === '' || (opt.dataset.searchText || opt.textContent.toLowerCase()).includes(term);
+          opt.hidden = !show;
+          opt.style.display = show ? '' : 'none';
+        });
+      });
+    });
+  }
+
   return {
     escapeHtml,
     toast,
@@ -662,6 +710,8 @@ function showImages(images, title = 'Galería de imágenes') {
     pagination,
     errorAlert,
     field,
+    searchSelect,
+    wireSearchSelects,
     collectForm,
     toggleOtros,
     syncOtros,

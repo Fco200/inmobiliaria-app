@@ -30,7 +30,18 @@ window.Pages.inventory = {
     const ESTADOS_PROPIEDAD = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
 
     // Único listado: el inventario general del equipo.
-    const state = { page: 1, q: '', agent: '' };
+    const state = {
+      page: 1,
+      q: '',
+      agent: '',
+      type: '',
+      operation: '',
+      status: '',
+      payment: '',
+      minPrice: '',
+      maxPrice: '',
+      limit: 15,
+    };
 
     const stored = window.ApiClient.getStoredUser();
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
@@ -61,6 +72,24 @@ window.Pages.inventory = {
     const propertyLabel = (prop) => {
       if (!prop) return '—';
       return [prop.zone, prop.city].filter(Boolean).join(' ').trim() || prop.address || 'Propiedad';
+    };
+
+    // Etiquetas legibles del financiamiento aceptado por la propiedad.
+    const PAYMENT_LABELS = {
+      contado: 'Contado',
+      infonavit: 'Infonavit',
+      fovissste: 'Fovissste',
+      banco: 'Banco',
+      todos: 'Todos',
+      otro: 'Otro',
+    };
+    const paymentLabel = (prop) => {
+      const list = Array.isArray(prop && prop.paymentMethods) ? prop.paymentMethods : [];
+      if (!list.length) return '—';
+      return list.map((m) => {
+        if (m === 'otro' && prop.paymentMethodsOther) return prop.paymentMethodsOther;
+        return PAYMENT_LABELS[m] || m;
+      }).join(', ');
     };
 
     // ---- Detalle de la propiedad (con mercado e historial) ----
@@ -608,26 +637,84 @@ window.Pages.inventory = {
 
     function renderToolbar() {
       const el = document.createElement('div');
-      el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
+      el.className = 'inventory-toolbar';
+      const tipoOpciones = [
+        ['', 'Todos los tipos'],
+        ['casa', 'Casa'],
+        ['departamento', 'Departamento'],
+        ['local', 'Local'],
+        ['bodega', 'Bodega'],
+        ['rancho', 'Rancho'],
+        ['terreno', 'Terreno'],
+        ['playa', 'Playa'],
+        ['otro', 'Otro'],
+      ];
+      const operacionOpciones = [
+        ['', 'Todas las operaciones'],
+        ['venta', 'Venta'],
+        ['renta', 'Renta'],
+      ];
+      const estadoOpciones = [
+        ['', 'Todos los estados'],
+        ['disponible', 'Disponibles'],
+        ['en_proceso', 'En proceso'],
+        ['apartada', 'Apartadas'],
+        ['vendida', 'Vendidas'],
+        ['rentada', 'Rentadas'],
+        ['inactiva', 'Inactivas'],
+      ];
+      const pagoOpciones = [
+        ['', 'Todos los financiamientos'],
+        ['contado', 'Contado'],
+        ['infonavit', 'Infonavit'],
+        ['fovissste', 'Fovissste'],
+        ['banco', 'Banco'],
+        ['todos', 'Todos'],
+        ['otro', 'Otro'],
+      ];
+      const sel = (attr, opciones, valor) => opciones
+        .map(([v, l]) => `<option value="${UI.escapeHtml(v)}" ${String(valor) === String(v) ? 'selected' : ''}>${UI.escapeHtml(l)}</option>`)
+        .join('');
+
       el.innerHTML = `
-        <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}" style="max-width:260px;">
-        <select class="form-control" data-agent-filter style="max-width:220px;">
-          <option value="">Todos los asesores</option>
-          ${agents.map((u) => `<option value="${u._id}" ${state.agent === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
-        </select>
-        <button class="btn btn-primary" type="button" data-search>Buscar</button>
-        <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
+        <div class="inventory-toolbar-row">
+          <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}">
+          <select class="form-control" data-agent-filter>${sel('agent', [['', 'Todos los asesores'], ...agents.map((u) => [u._id, u.name])], state.agent)}</select>
+        </div>
+        <div class="inventory-toolbar-row">
+          <select class="form-control" data-type-filter>${sel('type', tipoOpciones, state.type)}</select>
+          <select class="form-control" data-operation-filter>${sel('operation', operacionOpciones, state.operation)}</select>
+          <select class="form-control" data-status-filter>${sel('status', estadoOpciones, state.status)}</select>
+          <select class="form-control" data-payment-filter>${sel('payment', pagoOpciones, state.payment)}</select>
+        </div>
+        <div class="inventory-toolbar-row">
+          <input class="form-control" data-min-price type="number" min="0" step="1000" placeholder="Precio mínimo" value="${UI.escapeHtml(state.minPrice)}">
+          <input class="form-control" data-max-price type="number" min="0" step="1000" placeholder="Precio máximo" value="${UI.escapeHtml(state.maxPrice)}">
+          <button class="btn btn-primary" type="button" data-search>Buscar</button>
+          <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
+        </div>
       `;
-      const run = () => {
+
+      const readFilters = () => {
         state.q = (el.querySelector('[data-q]').value || '').trim();
         state.agent = el.querySelector('[data-agent-filter]').value;
-        state.page = 1;
-        load();
+        state.type = el.querySelector('[data-type-filter]').value;
+        state.operation = el.querySelector('[data-operation-filter]').value;
+        state.status = el.querySelector('[data-status-filter]').value;
+        state.payment = el.querySelector('[data-payment-filter]').value;
+        state.minPrice = (el.querySelector('[data-min-price]').value || '').trim();
+        state.maxPrice = (el.querySelector('[data-max-price]').value || '').trim();
       };
+      const run = () => { readFilters(); state.page = 1; load(); };
       el.querySelector('[data-search]').addEventListener('click', run);
       el.querySelector('[data-q]').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+      // Los selects y el rango de precio aplican al instante para que filtrar
+      // sea ágil sin obligar a pulsar "Buscar".
+      ['[data-agent-filter]', '[data-type-filter]', '[data-operation-filter]', '[data-status-filter]', '[data-payment-filter]']
+        .forEach((attr) => el.querySelector(attr).addEventListener('change', run));
       el.querySelector('[data-clear]').addEventListener('click', () => {
-        state.q = ''; state.agent = ''; state.page = 1; load();
+        Object.assign(state, { q: '', agent: '', type: '', operation: '', status: '', payment: '', minPrice: '', maxPrice: '', page: 1 });
+        load();
       });
       return el;
     }
@@ -654,19 +741,21 @@ window.Pages.inventory = {
         const agentName = item.assignedAgent ? (item.assignedAgent.name || 'Usuario') : 'Sin asignar';
         return `
           <tr>
-            <td>
+            <td data-label="Foto">
               ${(() => {
                 const hasPhoto = Boolean(prop && prop.photos && prop.photos.length);
                 const src = hasPhoto ? window.AppConfig.resolveUrl(prop.photos[0]) : window.AppConfig.FALLBACK_IMG;
                 return `<img ${hasPhoto ? `data-thumb-id="${UI.escapeHtml(String(item._id))}"` : ''} src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:56px;height:42px;object-fit:cover;border-radius:6px;${hasPhoto ? 'cursor:zoom-in;' : ''}" loading="lazy" ${window.AppConfig.imgFallback}>`;
               })()}
             </td>
-            <td><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}${prop && prop.isExternal ? ` ${UI.badge('Externa', 'warning')}${prop.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.externalAdvisor)}</div>` : ''}` : ''}</td>
-            <td>${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
-            <td>${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
-            <td>${prop ? Format.currency(prop.price) : '—'}</td>
-            <td>${UI.escapeHtml(agentName)}</td>
-            <td>
+            <td data-label="Ubicación"><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}${prop && prop.isExternal ? ` ${UI.badge('Externa', 'warning')}${prop.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.externalAdvisor)}</div>` : ''}` : ''}</td>
+            <td data-label="Tipo">${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
+            <td data-label="Operación">${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
+            <td data-label="Estado">${prop ? UI.statusBadge(prop.status) : '—'}</td>
+            <td data-label="Precio">${prop ? Format.currency(prop.price) : '—'}</td>
+            <td data-label="Financiamiento">${prop ? UI.escapeHtml(paymentLabel(prop)) : '—'}</td>
+            <td data-label="Asesor">${UI.escapeHtml(agentName)}</td>
+            <td data-label="Acciones">
               <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
               ${puedeAdministrar ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>` : ''}
               ${puedeAdministrar && item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
@@ -681,7 +770,7 @@ window.Pages.inventory = {
       wrap.innerHTML = `
         <table class="table">
           <thead><tr>
-            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Precio</th><th>Asesor</th><th>Acciones</th>
+            <th>Foto</th><th>Ubicación</th><th>Tipo</th><th>Operación</th><th>Estado</th><th>Precio</th><th>Financiamiento</th><th>Asesor</th><th>Acciones</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -734,6 +823,12 @@ window.Pages.inventory = {
         const params = { page: state.page, limit: 15 };
         if (state.q) params.q = state.q;
         if (state.agent) params.assignedAgent = state.agent;
+        if (state.type) params.type = state.type;
+        if (state.operation) params.operationType = state.operation;
+        if (state.status) params.status = state.status;
+        if (state.payment) params.paymentMethod = state.payment;
+        if (state.minPrice) params.minPrice = state.minPrice;
+        if (state.maxPrice) params.maxPrice = state.maxPrice;
         const result = await API.inventory.general(params);
         meta = result.meta;
         loading.remove();

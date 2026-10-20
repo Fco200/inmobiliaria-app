@@ -113,13 +113,45 @@ const clientCrud = buildCrud(Client, {
   //  - servicio / tipoPropiedad: tipo de operación y tipo de propiedad.
   //  - zona: coincidencia parcial (zona de interés).
   //  - minCapacity / maxCapacity: rango de presupuesto (capacidad de pago).
-  extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad' },
+  //  - paymentMethod: forma de pago/crédito (Infonavit, Fovissste, Banco…).
+  extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad', formaPago: 'formaPago' },
   textFilters: { zona: 'zona' },
   rangeFilters: { minCapacity: 'capacidad', maxCapacity: 'capacidad' },
 });
 
 const list = clientCrud.list;
 const get = clientCrud.get;
+
+// Catálogo LIGERO de clientes para selects con búsqueda (propietario de una
+// propiedad, comprador/vendedor de un negocio). Devuelve solo _id, nombre,
+// teléfono y asesor para no cargar el documento completo, y acepta ?q para
+// filtrar en el servidor cuando la cartera es grande.
+const options = asyncHandler(async (req, res) => {
+  const filter = {};
+  if (!isBoss(req)) filter.asesorAsignado = req.user._id;
+  else if (req.query.asesor) filter.asesorAsignado = req.query.asesor;
+
+  if (req.query.servicio) filter.servicio = req.query.servicio;
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    const term = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = [
+      { nombre: { $regex: term, $options: 'i' } },
+      { telefono: { $regex: term, $options: 'i' } },
+      { email: { $regex: term, $options: 'i' } },
+    ];
+  }
+
+  const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+  const items = await Client.find(filter)
+    .select('nombre telefono email servicio tipoPropiedad asesorAsignado')
+    .populate('asesorAsignado', 'name')
+    .sort({ nombre: 1 })
+    .limit(limit)
+    .lean();
+
+  res.json({ success: true, data: items });
+});
 
 function assertOwnership(req, client) {
   if (isBoss(req)) return true;
@@ -545,4 +577,4 @@ const exportCsv = asyncHandler(async (req, res) => {
   ]));
 });
 
-module.exports = { list, get, create, update, remove, cambiarEtapa, registrarLlamada, historial, historialCambios, conteoEtapas, exportCsv };
+module.exports = { list, get, options, create, update, remove, cambiarEtapa, registrarLlamada, historial, historialCambios, conteoEtapas, exportCsv };

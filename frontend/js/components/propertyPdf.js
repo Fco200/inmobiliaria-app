@@ -179,7 +179,6 @@ window.PropertyPdf = (() => {
   function resolveSrc(src) {
     return window.AppConfig ? AppConfig.resolveUrl(src) : src;
   }
-
   // Descarga las fotos (portada primero) y regresa solo las que se pudieron
   // cargar. Máximo 6 para mantener el PDF ligero. Se cargan EN PARALELO para
   // que la espera no se multiplique por foto (portada primero en el orden).
@@ -242,7 +241,18 @@ window.PropertyPdf = (() => {
     const JsPDF = jsPDFCtor();
     if (!JsPDF) throw new Error('No se pudo cargar la librería PDF (jsPDF)');
 
-    const prop = property || {};
+    let prop = property || {};
+    // Enriquecido: si el objeto viene parcial (por ejemplo desde una tarjeta de
+    // inventario), se pide la ficha COMPLETA para que el PDF lleve toda la
+    // información de la propiedad (características, propietario, descripción…).
+    const needsFull = prop._id && (prop.characteristics === undefined || prop.owner === undefined || prop.description === undefined);
+    if (needsFull && window.API && window.API.properties && window.API.properties.get) {
+      try {
+        const full = await window.API.properties.get(prop._id);
+        const doc = full && full.data !== undefined ? full.data : full;
+        if (doc) prop = { ...prop, ...doc };
+      } catch (e) { /* se genera con lo que haya */ }
+    }
     const sourcePhotos = fotos || prop.photos || [];
     const rawPhotos = (Array.isArray(sourcePhotos) ? sourcePhotos : []).filter(Boolean);
     const photos = await loadPhotos(rawPhotos);
@@ -340,15 +350,29 @@ window.PropertyPdf = (() => {
     // Primero se calculan las filas para saber la altura del recuadro; el
     // fondo se pinta ANTES del texto (si no, lo taparía).
     const filas = [];
+    if (prop.folio) filas.push({ label: 'Folio', value: prop.folio });
     if (prop.price) filas.push({ label: 'Precio', value: currency(prop.price) });
+    if (prop.ticketValue) filas.push({ label: 'Valor ticket', value: currency(prop.ticketValue) });
+    if (prop.status) filas.push({ label: 'Estado', value: String(prop.status).replace(/_/g, ' ') });
+    if (prop.address) filas.push({ label: 'Dirección', value: prop.address });
+    const zonaTxt = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
+    if (zonaTxt) filas.push({ label: 'Zona / ciudad', value: zonaTxt });
+    if (prop.location && prop.location.lat && prop.location.lng) {
+      filas.push({ label: 'Coordenadas', value: `${prop.location.lat}, ${prop.location.lng}` });
+    }
     const chars = caracteristicas(prop);
     if (chars.length) filas.push({ label: 'Características', value: chars.join(' · ') });
-    if (prop.isExternal && prop.externalAdvisor) filas.push({ label: 'Ofrecida por', value: prop.externalAdvisor });
+    const propietario = (prop.owner && (prop.owner.nombre || prop.owner.name)) || prop.ownerName;
+    if (propietario) filas.push({ label: 'Propietario', value: propietario });
+    const asesorResp = prop.responsibleUser && (prop.responsibleUser.name || prop.responsibleUser);
+    if (asesorResp) filas.push({ label: 'Asesor responsable', value: asesorResp });
+    if (prop.isExternal) {
+      filas.push({ label: 'Origen', value: prop.externalAdvisor ? `Externa — ofrecida por ${prop.externalAdvisor}` : 'Externa (otra inmobiliaria)' });
+    }
     if (prop.paymentMethods && prop.paymentMethods.length) {
       const pm = prop.paymentMethods.map((m) => (m === 'otro' ? (prop.paymentMethodsOther || 'Otro') : m));
       filas.push({ label: 'Se puede vender con', value: pm.join(', ') });
     }
-    if (prop.ownerName) filas.push({ label: 'Propietario', value: prop.ownerName });
 
     const filasRender = [];
     filas.forEach((f) => {

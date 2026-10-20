@@ -16,6 +16,9 @@ router.use(protect);
 
 router.get('/', clientController.list);
 router.get('/export', clientController.exportCsv);
+// Catálogo ligero para selects con búsqueda (propietario de propiedad, etc.).
+// Debe ir antes de "/:id" para no chocar con el parámetro dinámico.
+router.get('/options', clientController.options);
 router.post('/', clientRules, clientController.create);
 
 router.get('/conteo-etapas', clientController.conteoEtapas);

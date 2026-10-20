@@ -167,7 +167,7 @@ window.Pages.clients = {
     // lo que mantiene el valor del select siempre dentro de su enum.
     //   otroWhen:     valores del select donde se MUESTRA el texto libre.
     //   requiredWhen: valores del select donde el texto libre es OBLIGATORIO.
-    function fieldConOtro(name, label, { value = '', otroValue = '', options = [], placeholder = 'Especifica…', full = false, required = false, otroWhen = ['Otro'], requiredWhen = ['Otro'] } = {}) {
+    function fieldConOtro(name, label, { value = '', otroValue = '', options = [], placeholder = 'Especifica…', full = false, required = false, otroWhen = ['Otro'], requiredWhen = ['Otro'], otroLabels = {}, otroPlaceholders = {} } = {}) {
       const id = `fld-${name}`;
       const otrosId = `otros-${id}`;
       const isOtro = otroWhen.includes(value);
@@ -179,7 +179,7 @@ window.Pages.clients = {
       return `
         <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
           <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>
-          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${esc(JSON.stringify(otroWhen))}" data-required-when="${esc(JSON.stringify(requiredWhen))}"${required ? ' required' : ''}>${opts}</select>
+          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${esc(JSON.stringify(otroWhen))}" data-required-when="${esc(JSON.stringify(requiredWhen))}" data-otro-labels="${esc(JSON.stringify(otroLabels))}" data-otro-placeholders="${esc(JSON.stringify(otroPlaceholders))}"${required ? ' required' : ''}>${opts}</select>
           <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${esc(otroValue)}" placeholder="${esc(placeholder)}" style="display:${isOtro ? 'block' : 'none'};margin-top:8px;">
         </div>`;
     }
@@ -192,10 +192,29 @@ window.Pages.clients = {
         if (!input) return;
         const otroWhen = parseWhen(select.dataset.otroWhen, ['Otro']);
         const requiredWhen = parseWhen(select.dataset.requiredWhen, ['Otro']);
+        const otroLabels = parseWhen(select.dataset.otroLabels, {});
+        const otroPlaceholders = parseWhen(select.dataset.otroPlaceholders, {});
+        // Guarda el label del campo para restaurarlo cuando el select no va
+        // acompañado de un texto libre por opción.
+        const labelEl = select.previousElementSibling;
+        const baseLabel = labelEl ? labelEl.textContent : '';
+        const basePlaceholder = input.getAttribute('placeholder') || '';
         const sync = () => {
           const show = otroWhen.includes(select.value);
           input.style.display = show ? 'block' : 'none';
           input.required = show && requiredWhen.includes(select.value) && select.required;
+          // Texto y label específicos por opción: en "Recomendación" el campo
+          // pregunta claramente QUIÉN recomendó (antes solo salía "Otro").
+          if (labelEl && otroLabels[select.value]) {
+            labelEl.textContent = otroLabels[select.value];
+          } else if (labelEl) {
+            labelEl.textContent = baseLabel;
+          }
+          if (otroPlaceholders[select.value]) {
+            input.setAttribute('placeholder', otroPlaceholders[select.value]);
+          } else {
+            input.setAttribute('placeholder', basePlaceholder);
+          }
           if (!show) input.value = '';
         };
         select.addEventListener('change', sync);
@@ -586,6 +605,11 @@ window.Pages.clients = {
                 otroWhen: MEDIO_OTROS,
                 requiredWhen: ['Otro', 'Recomendación'],
                 placeholder: 'Ej. Recomendado por el asesor Juan Pérez…',
+                otroLabels: { Recomendación: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró' },
+                otroPlaceholders: {
+                  Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)',
+                  Otro: 'Ej. Volante, evento, referido por…',
+                },
               })}
               ${UI.field('notasGenerales', 'Notas / observaciones de la plática', { type: 'textarea', rows: 3, full: true, placeholder: 'Qué platicaron, compromisos, seguimiento acordado…' })}
               ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
@@ -671,7 +695,7 @@ window.Pages.clients = {
             <div class="stage-input-grid">
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
-              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro', 'Recomendación'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…' })}
+              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro', 'Recomendación'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…', otroLabels: { Recomendación: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró' }, otroPlaceholders: { Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)', Otro: 'Ej. Volante, evento, referido por…' } })}
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}

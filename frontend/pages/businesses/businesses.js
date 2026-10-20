@@ -49,14 +49,27 @@ window.Pages.businesses = {
       // Los negocios activos se piden de entrada porque un cliente no puede tener
       // dos a la vez: sirven para marcar en el formulario quién ya está
       // ocupado y no llevar al error del backend.
-      const [p, u, c, m, activos] = await Promise.all([
-        API.properties.list({ limit: 100 }).catch(() => ({ data: [] })),
+      const [inv, u, c, m, activos] = await Promise.all([
+        // Propiedades: se toma el INVENTARIO GENERAL del equipo (propiedades
+        // compartidas por cualquier asesor + externas de otras inmobiliarias),
+        // no solo "mis propiedades". Así al crear un negocio aparecen TODAS
+        // las propiedades que están en el inventario.
+        API.inventory.general({ limit: 100 }).catch(() => ({ data: [] })),
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.auth.me().catch(() => null),
         fetchAllBusinesses({ status: 'activo' }).catch(() => []),
       ]);
-      properties = p.data;
+      // El inventario devuelve items { property, assignedAgent }: se normaliza
+      // a la forma de Property que espera el formulario, con respaldo a la
+      // lista propia si el inventario general viniera vacío.
+      properties = (inv.data || [])
+        .map((item) => (item && item.property ? item.property : null))
+        .filter(Boolean);
+      if (!properties.length) {
+        const mine = await API.properties.list({ limit: 100 }).catch(() => ({ data: [] }));
+        properties = mine.data || [];
+      }
       users = u.data;
       clients = c.data;
       me = m;

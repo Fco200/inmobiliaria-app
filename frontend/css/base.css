@@ -2181,6 +2181,33 @@ body.lightbox-open {
   }
   /* Celda de acciones: botones envueltos y alineados a la derecha */
   .table td:last-child { flex-wrap: wrap; }
+
+  /* La primera celda (foto) se centra como portada de la tarjeta: así en el
+     celular se ve la imagen de la propiedad y no solo un cuadro con el nombre. */
+  .table td:first-child::before { content: ''; display: none; }
+  .table td:first-child {
+    justify-content: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+  .table td:first-child img {
+    width: 100% !important;
+    max-width: 320px;
+    height: 180px !important;
+    object-fit: cover;
+    border-radius: 10px;
+  }
+
+  /* El listado del inventario usa tarjetas: se apilan bien en el celular. */
+  .inventory-toolbar-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .inventory-toolbar-row .form-control { flex: 1 1 140px; min-width: 0; }
+
   .page-header { flex-direction: column; align-items: stretch; gap: 10px; }
   .page-header h2 { font-size: 20px; }
 }

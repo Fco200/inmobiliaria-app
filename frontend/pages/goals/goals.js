@@ -83,7 +83,7 @@ window.Pages.goals = {
         { name: 'ticketsObjective', label: 'Tickets objetivo', type: 'number' },
         { name: 'ticketsGenerated', label: 'Tickets generados', type: 'number' },
         { name: 'ticketsCollected', label: 'Tickets cobrados', type: 'number' },
-        { name: 'user', label: 'Asesor', type: 'select', value: me ? me._id : '', options: users.map((x) => ({ value: x._id, label: x.name })) },
+        { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: me ? me._id : '', options: users.map((x) => ({ value: x._id, label: x.name })) },
         { name: 'status', label: 'Estado', type: 'select', options: ['activa', 'cumplida', 'vencida', 'cancelada'] },
       ],
       formData(values) {

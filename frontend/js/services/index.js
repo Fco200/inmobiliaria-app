@@ -98,6 +98,13 @@ window.API = {
 
   properties: {
     list: (params) => ApiClient.get('/properties', params),
+    // Catálogo ligero (id + folio/ubicación) para selects con búsqueda remota,
+    // cacheado 60s. Evita desplegar toda la cartera en cada selector.
+    options: (params) => Cache.wrap(
+      `properties:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/properties/options', params)
+    ),
     get: (id) => ApiClient.get(`/properties/${id}`),
     create: (body) => ApiClient.post('/properties', body),
     update: (id, body) => ApiClient.put(`/properties/${id}`, body),
@@ -167,6 +174,12 @@ window.API = {
 
   businesses: {
     list: (params) => ApiClient.get('/businesses', params),
+    // Catálogo ligero (id + nombre/etapa) para selects con búsqueda remota.
+    options: (params) => Cache.wrap(
+      `businesses:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/businesses/options', params)
+    ),
     stages: () => ApiClient.get('/businesses/stages'),
     byProperty: (propertyId) => ApiClient.get(`/businesses/property/${propertyId}`),
     create: (body) => ApiClient.post('/businesses', body),

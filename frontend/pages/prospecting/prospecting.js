@@ -172,7 +172,7 @@ window.Pages.prospecting = {
         { name: 'contacts', label: 'Contactos generados', type: 'number', value: record ? record.contacts : 0 },
         { name: 'prospectsObtained', label: 'Prospectos obtenidos', type: 'number', value: record ? record.prospectsObtained : 0 },
         { name: 'investment', label: 'Inversión ($)', type: 'number', value: record ? record.investment : 0 },
-        { name: 'user', label: 'Asesor', type: 'select', value: record ? (record.user ? record.user._id : me._id) : (me ? me._id : ''), options: userOptions },
+        { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: record ? (record.user ? record.user._id : me._id) : (me ? me._id : ''), options: userOptions },
         { name: 'observations', label: 'Observaciones', type: 'textarea', full: true, value: record ? record.observations : '' },
       ];
       const modal = UI.openModal({

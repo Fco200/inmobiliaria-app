@@ -26,6 +26,10 @@ window.Pages.calendar = (() => {
     typesMeta: {},
     loaded: false,
     filters: { appointment: true, task: true, business: true, goal: true, prospecting: true, meeting: true },
+    // Admin/gerencia: '' = todo el equipo; si no, el id del asesor a mostrar.
+    scopeUser: '',
+    users: [],
+    scopeAll: false,
   };
 
   let rootEl = null;
@@ -39,11 +43,10 @@ window.Pages.calendar = (() => {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
   }
 
-  function toLocalDate(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  // Rango de fechas a consultar según la vista actual.
+  // Rango de fechas a consultar según la vista actual. Se envían instantes ISO
+  // completos calculados en la zona del navegador (inicio y fin del día local),
+  // para que el servidor no tenga que adivinar la zona y no se pierdan eventos
+  // del borde del rango.
   function rangeForView() {
     const anchor = state.anchor;
     let from;
@@ -59,7 +62,7 @@ window.Pages.calendar = (() => {
       from = startOfDay(anchor);
       to = startOfDay(anchor);
     }
-    return { start: toLocalDate(from), end: toLocalDate(to) };
+    return { start: from.toISOString(), end: endOfDay(to).toISOString() };
   }
 
   function keyToDate(key) {
@@ -73,12 +76,16 @@ window.Pages.calendar = (() => {
 
   async function loadEvents() {
     const range = rangeForView();
+    const params = { start: range.start, end: range.end };
+    // Solo admin/gerencia pueden pedir el calendario de un asesor concreto.
+    if (state.scopeAll && state.scopeUser) params.user = state.scopeUser;
     try {
-      const data = await window.API.calendar.events({ start: range.start, end: range.end });
+      const data = await window.API.calendar.events(params);
       const payload = data && typeof data === 'object' ? data : {};
       const list = Array.isArray(payload.events) ? payload.events : [];
       state.events = list;
       if (payload.types && typeof payload.types === 'object') state.typesMeta = payload.types;
+      if (payload.scope && typeof payload.scope === 'object') state.scopeAll = Boolean(payload.scope.all);
     } catch (error) {
       state.events = [];
       state.typesMeta = {};
@@ -117,6 +124,15 @@ window.Pages.calendar = (() => {
       return `<button class="cal-chip ${active ? 'cal-chip-active' : ''}" data-toggle-type="${k}" style="--chip-color:${meta.color || TYPES[k].color};" type="button">${TYPES[k].label}</button>`;
     }).join('');
 
+    // Selector "ver calendario de" solo para admin/gerencia: permite ver todo el
+    // equipo o el calendario de un asesor concreto.
+    const scopeSelect = state.scopeAll
+      ? `<select class="form-control" data-scope-user style="max-width:240px;">
+          <option value="">&#128101;&nbsp; Todo el equipo</option>
+          ${state.users.map((u) => `<option value="${UI.escapeHtml(u._id)}" ${state.scopeUser === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
+        </select>`
+      : '';
+
     rootEl.innerHTML = `
       <div class="cal-page">
         <div class="cal-header">
@@ -134,6 +150,7 @@ window.Pages.calendar = (() => {
               <button class="btn btn-sm ${state.view === 'week' ? 'btn-primary' : 'btn-secondary'}" type="button" data-view="week">Semana</button>
               <button class="btn btn-sm ${state.view === 'day' ? 'btn-primary' : 'btn-secondary'}" type="button" data-view="day">Día</button>
             </div>
+            ${scopeSelect}
           </div>
         </div>
         <div class="cal-filter-bar">${filterChips}</div>
@@ -141,6 +158,15 @@ window.Pages.calendar = (() => {
         <div class="cal-setup-note">&#128467;&nbsp; Integración con Google Calendar próximamente.</div>
       </div>
     `;
+
+    const scopeEl = rootEl.querySelector('[data-scope-user]');
+    if (scopeEl) {
+      scopeEl.addEventListener('change', async () => {
+        state.scopeUser = scopeEl.value;
+        try { await loadEvents(); } catch (error) { /* se mantiene la vista */ }
+        renderToolbar();
+      });
+    }
 
     rootEl.querySelectorAll('[data-toggle-type]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -418,6 +444,7 @@ window.Pages.calendar = (() => {
     if (e.status) rows.push(`<tr><th>Estado</th><td>${UI.escapeHtml(String(e.status).replace(/_/g, ' '))}</td></tr>`);
     if (e.stage) rows.push(`<tr><th>Etapa</th><td>${UI.escapeHtml(String(e.stage).replace(/_/g, ' '))}</td></tr>`);
     if (e.creator && e.creator.name) rows.push(`<tr><th>Reunión de equipo</th><td>${UI.escapeHtml('Publicada por ' + e.creator.name)}</td></tr>`);
+    if (e.advisor) rows.push(`<tr><th>Asesor</th><td>${UI.escapeHtml(e.advisor)}</td></tr>`);
     if (clientName) rows.push(`<tr><th>Cliente</th><td>${UI.escapeHtml(clientName)}</td></tr>`);
     if (propertyLine) rows.push(`<tr><th>Propiedad</th><td>${UI.escapeHtml(propertyLine)}</td></tr>`);
     if (e.location) rows.push(`<tr><th>Lugar</th><td>${UI.escapeHtml(e.location)}</td></tr>`);
@@ -476,6 +503,16 @@ window.Pages.calendar = (() => {
   async function render(container) {
     rootEl = container;
     rootEl.innerHTML = '<div class="loading">Cargando calendario...</div>';
+    // Carga inicial de usuarios (para el selector "ver calendario de" de los
+    // jefes) y de eventos. Ninguna de las dos debe impedir la vista.
+    if (isBossUser()) {
+      try {
+        const res = await window.API.users.list({ limit: 200 });
+        state.users = (res && res.data) || [];
+      } catch (error) {
+        state.users = [];
+      }
+    }
     try {
       await loadEvents();
     } catch (error) {

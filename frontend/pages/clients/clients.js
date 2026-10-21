@@ -612,7 +612,7 @@ window.Pages.clients = {
                 },
               })}
               ${UI.field('notasGenerales', 'Notas / observaciones de la plática', { type: 'textarea', rows: 3, full: true, placeholder: 'Qué platicaron, compromisos, seguimiento acordado…' })}
-              ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
+              ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', sinOtros: true, options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], hint: 'Solo administración/gerencia puede asignar.' }) : ''}
             </div>
             <p class="text-muted" style="font-size:12px;margin:0;">El correo y los detalles finales pueden completarse después desde <strong>Editar perfil</strong>.</p>
           </form>

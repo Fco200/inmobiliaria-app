@@ -1,15 +1,14 @@
 {
-  "version": "2.19",
+  "version": "2.20",
   "channel": "estable",
-  "title": "Actualización 2.19",
+  "title": "Actualización 2.20",
   "date": "2026-10-21",
   "notes": [
-    "Correo al asesor: cuando publicas o compartes una propiedad, ahora TAMBIÉN te llega un correo de confirmación con los datos clave (folio, precio, estado y número de fotos) y cuántos clientes interesados fueron avisados. Es el mismo aviso que ya reciben los suscriptores del catálogo, pero dirigido a ti.",
-    "Fotos: al subir varias fotos ya no se queda a medias. Se envían por lotes pequeños con progreso (\"Subiendo fotografías… 4/12\") y si un lote falla se reintenta solo, sin perder las que ya entraron. El límite del servidor subió de 10 a 12 archivos por petición.",
-    "Fotos: la limpieza de archivos sin uso sigue activa, así que borrar fotos de una propiedad ya no deja basura ocupando espacio.",
-    "Clientes: en TODO el CRM (propietario de una propiedad, comprador y vendedor de un negocio, citas, tareas y documentos) el selector de clientes ya no despliega la lista completa. Escribe un nombre, teléfono o correo y el sistema filtra al instante contra el servidor, mostrando solo las coincidencias con su leyenda de ayuda.",
-    "PDF de WhatsApp: ahora incluye TODAS las fotografías (hasta 24) en una galería de dos columnas, no solo unas cuantas. Antes se recortaba a 4.",
-    "PDF de WhatsApp: diseño profesional renovado. Portada con marco y sello, encabezado de marca en cada página, recuadro de datos ampliado (operación, tipo, estado, formas de pago, fechas y coordenadas), numeración de páginas y un código QR para abrir la ficha pública.",
-    "PDF de WhatsApp: se agregó el contacto completo de quien comparte (nombre, WhatsApp, correo) y su ID de usuario del CRM, para saber siempre quién envió la ficha."
+    "Calendario: ya se ven TODAS las citas. Antes el calendario solo mostraba los eventos donde tú eras el dueño, por eso al entrar como administración aparecían vacías aunque hubiera citas de los asesores. Ahora administración y gerencia ven el calendario de todo el equipo y pueden filtrarlo por asesor con el selector \"ver calendario de\"; cada asesor sigue viendo lo suyo.",
+    "Calendario: se corrigió un desfase de zona horaria que podía dejar fuera los eventos del primer o último día del rango (vistas de Día y Semana). Ahora los límites se envían como instantes exactos.",
+    "Citas y negocios: al crear una cita el campo Propiedad y el campo Negocio ya aceptan la selección sin marcar \"no válido\". Se quitó de esos desplegables la opción genérica \"Otros (especificar)\", que enviaba un texto que el servidor rechazaba por no ser una propiedad o negocio real.",
+    "Citas, tareas, documentos, negocios y gastos: el mismo ajuste se aplicó a todos los desplegables de cliente, propiedad, negocio y asesor para que nunca más manden un valor que el servidor rechace.",
+    "Propiedades y negocios: los selectores de propiedad y de negocio de todo el CRM (citas, tareas, negocios, documentos, gastos) ahora también buscan contra el servidor conforme escribes (zona, ciudad, folio o nombre) y muestran solo coincidencias con su leyenda. Ya no despliegan la lista completa.",
+    "El calendario muestra el asesor al que pertenece cada cita en el detalle del evento."
   ]
 }

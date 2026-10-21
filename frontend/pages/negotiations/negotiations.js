@@ -180,7 +180,7 @@ window.Pages.negotiations = {
         { name: 'closing_closingAmount', label: 'Monto de cierre', type: 'number', value: closing.closingAmount || 0 },
         { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate) },
         { name: 'closing_commission', label: 'Comisión', type: 'number', value: closing.commission || 0 },
-        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', options: [{ value: '', label: '— Sin compañero —' }, ...userOptions], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : '' },
+        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : '' },
         { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: neg.notes || '' },
       ];
       const modal = UI.openModal({
@@ -244,13 +244,13 @@ window.Pages.negotiations = {
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-        { name: 'buyerClient', label: 'Comprador', type: 'select', options: [{ value: '', label: '— Sin comprador —' }, ...clientOptions] },
-        { name: 'sellerClient', label: 'Vendedor', type: 'select', options: [{ value: '', label: '— Sin vendedor —' }, ...clientOptions] },
-        { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
+        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin comprador —' }, ...clientOptions] },
+        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin vendedor —' }, ...clientOptions] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: { url: '/properties/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe zona, ciudad o folio y la lista se filtra.' }, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
         { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number' },
         { name: 'negotiation_counterOffer', label: 'Contraoferta', type: 'number' },
-        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', options: [{ value: '', label: '— Sin compañero —' }, ...userOptions] },
+        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions] },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
       ];
       const modal = UI.openModal({
@@ -258,7 +258,9 @@ window.Pages.negotiations = {
         body: `
           <form id="new-neg-form" novalidate>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${fields.map((f) => UI.field(f.name, f.label, { ...f, value: f.value || '' })).join('')}
+              ${fields.map((f) => (f.search
+                ? UI.searchSelect(f.name, f.label, { ...f, source: f.searchSource || null, value: f.value || '' })
+                : UI.field(f.name, f.label, { ...f, value: f.value || '' }))).join('')}
             </div>
           </form>
         `,
@@ -269,6 +271,7 @@ window.Pages.negotiations = {
         size: 820,
       });
       const bodyEl = modal.bodyEl;
+      if (UI.wireSearchSelects) UI.wireSearchSelects(bodyEl);
       bodyEl.closest('#modal-overlay').querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
       bodyEl.querySelector('#new-neg-form').addEventListener('submit', async (e) => {
         e.preventDefault();

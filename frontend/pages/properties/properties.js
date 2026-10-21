@@ -420,7 +420,7 @@ window.Pages.properties = {
         { name: 'state', label: 'Estado', type: 'text' },
         { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre, teléfono o correo y la lista se filtra al instante.' }, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
-        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
+        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },
         { name: 'externalAdvisor', label: 'Asesor / inmobiliaria externa', type: 'text', placeholder: 'Ej. Inmobiliaria Centro, Asesor Juan Pérez…', hint: 'Solo si la propiedad es externa.' },
         { name: 'paymentMethods', label: 'Se puede vender con', type: 'checkboxGroup', full: true, options: [

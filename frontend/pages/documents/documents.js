@@ -254,18 +254,21 @@ window.Pages.documents = {
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: record ? record.name : '' },
         { name: 'type', label: 'Tipo', type: 'select', options: TYPES, value: record ? record.type : 'formato' },
         { name: 'status', label: 'Estado', type: 'select', options: STATUS, value: record ? record.status : 'pendiente' },
-        { name: 'client', label: 'Cliente', type: 'select', search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
-        { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
-        { name: 'business', label: 'Negocio', type: 'select', options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: { url: '/properties/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe zona, ciudad o folio y la lista se filtra.' }, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
+        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: { url: '/businesses/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe el nombre del negocio y la lista se filtra.' }, options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
         { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },
         { name: 'observations', label: 'Observaciones', type: 'textarea', full: true, value: record ? record.observations : '' },
       ];
+      const renderField = (f) => (f.search
+        ? UI.searchSelect(f.name, f.label, { ...f, source: f.searchSource || null, value: f.value })
+        : UI.field(f.name, f.label, { ...f, value: f.value }));
       const modal = UI.openModal({
         title: isEdit ? 'Editar formato' : 'Subir formato',
         body: `
           <form id="doc-form" novalidate>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${fields.map((f) => UI.field(f.name, f.label, { ...f, value: f.value })).join('')}
+              ${fields.map(renderField).join('')}
             </div>
             ${record && record.fileUrl ? `<p class="text-muted" style="font-size:12px;">Archivo actual: <a href="${window.AppConfig.resolveUrl(record.fileUrl)}" target="_blank" rel="noopener">${UI.escapeHtml(record.fileName || record.fileUrl)}</a></p>` : ''}
           </form>
@@ -284,6 +287,7 @@ window.Pages.documents = {
       }
       const form = bodyEl ? bodyEl.querySelector('#doc-form') : null;
       if (form) {
+        if (UI.wireSearchSelects) UI.wireSearchSelects(form);
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const values = UI.collectForm(e.target);
@@ -475,7 +479,7 @@ window.Pages.documents = {
               ${UI.field('correo', 'Correo electrónico', { type: 'email' })}
               ${UI.field('fecha_visita', 'Fecha de la visita', { type: 'date', required: true })}
               ${UI.field('para_visita', 'Motivo de la visita', { type: 'select', options: VISITA_MOTIVOS })}
-              ${UI.field('propiedad', 'Propiedad', { type: 'select', options: [{ value: '', label: '— Sin especificar —' }, ...propertyOptions] })}
+              ${UI.field('propiedad', 'Propiedad', { type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin especificar —' }, ...propertyOptions] })}
               ${UI.field('observaciones', 'Observaciones', { type: 'textarea', full: true })}
             </div>
             ${signatureSectionHTML()}

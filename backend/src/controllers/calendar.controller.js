@@ -19,6 +19,7 @@ const { Appointment, Task, Business, Goal, ProspectingActivity, Meeting, Session
 const User = require('../models/user.model');
 const { googleCalendarClientId, googleCalendarClientSecret, googleCalendarRedirectUri, clientUrl, jwtSecret } = require('../config/env');
 const { hashToken } = require('../services/session.service');
+const { isBoss } = require('../utils/scope');
 
 const GOOGLE_TOKEN_URL = 'oauth2.googleapis.com';
 const GOOGLE_CALENDAR_URL = 'www.googleapis.com';
@@ -170,14 +171,29 @@ function parseISODate(v) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Normaliza un rango de fechas: empieza a las 00:00 del día inicial y termina
-// a las 23:59:59 del día final.
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// Normaliza un rango de fechas. Acepta:
+//  - instantes ISO completos ("2026-10-25T07:00:00.000Z"), que se usan TAL CUAL
+//    (el frontend ya calcula los límites del día en la zona del navegador); y
+//  - fechas de solo día ("2026-10-25"), que se interpretan en UTC (00:00 a
+//    23:59:59.999) para no desplazar el día según la zona del servidor.
+//
+// Antes se reinterpretaba siempre en la zona local del servidor, lo que hacía
+// que un rango "2026-10-25" se convirtiera en el día 24 cuando el servidor
+// corría en UTC-7 (los eventos del día se perdían en la vista de Día/Semana).
 function dateRange(start, end) {
-  const s = parseISODate(start);
-  const e = parseISODate(end);
-  if (!s || !e) return { error: 'Fechas inválidas' };
-  const from = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0);
-  const to = new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999);
+  const build = (value, isEnd) => {
+    if (typeof value === 'string' && ISO_DATE_ONLY.test(value.trim())) {
+      const suffix = isEnd ? 'T23:59:59.999Z' : 'T00:00:00.000Z';
+      const d = new Date(`${value.trim()}${suffix}`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return parseISODate(value);
+  };
+  const from = build(start, false);
+  const to = build(end, true);
+  if (!from || !to) return { error: 'Fechas inválidas' };
   return { from, to };
 }
 
@@ -187,16 +203,27 @@ function inRange(d, from, to) {
 }
 
 // Agrega los eventos de un usuario según los módulos.
-async function gatherEvents(userId, from, to) {
+//
+// `scope` controla de quién se muestran los eventos:
+//   - { all: false }                  → solo los del usuario `userId` (asesor).
+//   - { all: true }                   → los de TODOS los asesores (admin/gerencia).
+//   - { all: true, targetUserId }     → los de un asesor concreto (un jefe que
+//     elige "ver calendario de"). `targetUserId` solo se aplica con `all`.
+async function gatherEvents(userId, from, to, scope = {}) {
   const events = [];
+  const seeAll = Boolean(scope.all);
+  const owner = scope.targetUserId ? scope.targetUserId : userId;
+  // Condición de propietario: {} (todos) o { <campo>: <usuario> }.
+  const own = (field) => (seeAll ? {} : { [field]: owner });
 
   // --- Citas (appointments): su campo `date` es la fecha del evento.
   const appointments = await Appointment.find({
-    user: userId,
+    ...own('user'),
     date: { $gte: from, $lte: to },
   })
     .populate('client', 'nombre name')
     .populate('property', 'zone city type')
+    .populate('user', 'name')
     .lean();
 
   appointments.forEach((a) => {
@@ -217,15 +244,19 @@ async function gatherEvents(userId, from, to) {
       meta: TYPE_META.appointment,
       client: a.client || null,
       property: a.property || null,
+      // Asesor dueño de la cita: permite mostrar "de quién es" cuando un jefe
+      // ve el calendario de todo el equipo.
+      advisor: a.user ? a.user.name : '',
     });
   });
 
   // --- Tareas (tasks): su campo `date` es la fecha límite.
   const tasks = await Task.find({
-    assignedTo: userId,
+    ...own('assignedTo'),
     date: { $gte: from, $lte: to },
   })
 .populate('client', 'nombre name')
+    .populate('assignedTo', 'name')
     .lean()
   tasks.forEach((t) => {
     const end = new Date(t.date.getTime() + 60 * 60 * 1000);
@@ -243,17 +274,22 @@ async function gatherEvents(userId, from, to) {
       priority: t.priority,
       meta: TYPE_META.task,
       client: t.client || null,
+      advisor: t.assignedTo ? t.assignedTo.name : '',
     });
   });
 
   // --- Negocios (businesses): se incluyen por sus fechas de cierre y etiquetas
   // de etapa dentro del rango (fechas de inicio/fin y fechas de promesa/cierre).
-  const businesses = await Business.find({
-    $or: [
-      { mainAdvisor: userId },
-      { partnerAdvisor: userId },
-    ],
-  }).populate('buyerClient', 'nombre name').lean();
+  const businesses = await Business.find(
+    seeAll
+      ? {}
+      : {
+        $or: [
+          { mainAdvisor: owner },
+          { partnerAdvisor: owner },
+        ],
+      }
+  ).populate('buyerClient', 'nombre name').lean();
 
   businesses.forEach((b) => {
     const candidates = [];
@@ -287,7 +323,7 @@ async function gatherEvents(userId, from, to) {
 
   // --- Metas (goals): rangos inicio-fin.
   const goals = await Goal.find({
-    user: userId,
+    ...own('user'),
     $or: [
       { startDate: { $gte: from, $lte: to } },
       { endDate: { $gte: from, $lte: to } },
@@ -316,7 +352,7 @@ async function gatherEvents(userId, from, to) {
 
   // --- Prospección (prospecting): fecha de la actividad.
   const prospecting = await ProspectingActivity.find({
-    user: userId,
+    ...own('user'),
     date: { $gte: from, $lte: to },
   }).lean();
   prospecting.forEach((p) => {
@@ -371,15 +407,19 @@ async function gatherEvents(userId, from, to) {
 // Handlers de Express
 // ---------------------------------------------------------------------------
 
-// GET /api/calendar/events?start&end  → lista agregada de eventos.
+// GET /api/calendar/events?start&end&user  → lista agregada de eventos.
 const listEvents = async (req, res, next) => {
   try {
     const { from, to } = dateRange(req.query.start, req.query.end);
     if (!from || !to) {
       return res.status(400).json({ success: false, message: 'Parámetros start y end requeridos (ISO).' });
     }
-    const events = await gatherEvents(req.user._id, from, to);
-    res.json({ success: true, data: { events, types: TYPE_META } });
+    // Admin/gerencia ven el calendario de todo el equipo (y pueden acotarlo a
+    // un asesor concreto con ?user=). Un asesor solo ve lo suyo.
+    const seeAll = isBoss(req);
+    const targetUserId = seeAll && req.query.user ? req.query.user : null;
+    const events = await gatherEvents(req.user._id, from, to, { all: seeAll, targetUserId });
+    res.json({ success: true, data: { events, types: TYPE_META, scope: { all: seeAll, user: targetUserId || null } } });
   } catch (error) {
     next(error);
   }
@@ -538,7 +578,7 @@ const syncToGoogle = async (req, res, next) => {
     if (!from || !to) {
       return res.status(400).json({ success: false, message: 'Fechas inválidas.' });
     }
-    const events = await gatherEvents(req.user._id, from, to);
+    const events = await gatherEvents(req.user._id, from, to, { all: false });
     const created = [];
     for (const event of events.slice(0, 50)) {
       // No se envían metas (son rangos largos) por defecto; se omite.

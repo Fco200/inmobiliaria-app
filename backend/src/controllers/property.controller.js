@@ -32,6 +32,48 @@ const INTENTIONS_BY_OPERATION = {
   renta: ['rentar', 'alquilar'],
 };
 
+// Catálogo LIGERO de propiedades para selects con búsqueda (citas, negocios,
+// documentos, inventario, egresos). Devuelve solo _id, folio, tipo, operación y
+// ubicación para no arrastrar el documento completo, y acepta ?q para filtrar
+// en el servidor (escalable: el select nunca despliega toda la lista).
+const options = asyncHandler(async (req, res) => {
+  const filter = {};
+  // Un asesor solo ve las propiedades de las que es responsable; un jefe ve
+  // todas (y puede acotar con ?asesor=).
+  if (!isBoss(req)) filter.responsibleUser = req.user._id;
+  else if (req.query.asesor) filter.responsibleUser = req.query.asesor;
+  if (req.query.operationType) filter.operationType = req.query.operationType;
+  if (req.query.type) filter.type = req.query.type;
+
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    const term = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = [
+      { folio: { $regex: term, $options: 'i' } },
+      { zone: { $regex: term, $options: 'i' } },
+      { city: { $regex: term, $options: 'i' } },
+      { address: { $regex: term, $options: 'i' } },
+    ];
+  }
+
+  const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+  const items = await Property.find(filter)
+    .select('folio type operationType zone city address')
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+  // `label`/`subtitle` ya armados para el select remoto: "casa — Villa verde
+  // Hermosillo" + folio. Así el asesor reconoce la propiedad sin abrir la ficha.
+  const data = items.map((p) => ({
+    ...p,
+    label: [p.type, [p.zone, p.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || p.folio || 'Propiedad',
+    subtitle: p.folio || '',
+  }));
+
+  res.json({ success: true, data });
+});
+
 // Avisa a los clientes cuyo embudo/intención y presupuesto coinciden con la
 // propiedad.
 //
@@ -478,4 +520,4 @@ const market = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...stats, prices } });
 });
 
-module.exports = { list, get, create, update, remove, togglePublish, market, uploadPhotos, notifyInterestedClients };
+module.exports = { list, get, options, create, update, remove, togglePublish, market, uploadPhotos, notifyInterestedClients };

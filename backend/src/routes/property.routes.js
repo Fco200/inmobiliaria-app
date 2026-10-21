@@ -12,6 +12,9 @@ router.use(protect);
 
 router.get('/', propertyController.list);
 router.post('/', propertyRules, propertyController.create);
+// Catálogo ligero para selects con búsqueda remota (?q=…). Debe ir ANTES de
+// /:id para que "options" no se interprete como un identificador.
+router.get('/options', propertyController.options);
 router.get('/:id', propertyIdParam, propertyController.get);
 router.get('/:id/market', propertyIdParam, propertyController.market);
 router.post(

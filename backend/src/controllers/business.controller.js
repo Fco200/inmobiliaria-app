@@ -514,6 +514,44 @@ const history = asyncHandler(async (req, res) => {
   res.json({ success: true, data: stages });
 });
 
+// Catálogo LIGERO de negocios para selects con búsqueda (cita/prospecto/
+// inventario/egresos). Devuelve solo _id, nombre y etapa para no arrastrar el
+// documento completo, y acepta ?q para filtrar en el servidor (escalable:
+// el select nunca despliega toda la lista).
+const options = asyncHandler(async (req, res) => {
+  const filter = {};
+  // Un asesor solo ve los negocios de los que es principal o socio; un jefe ve
+  // todos (y puede acotar con ?asesor=).
+  if (!isBoss(req)) {
+    filter.$or = [{ mainAdvisor: req.user._id }, { partnerAdvisor: req.user._id }];
+  } else if (req.query.asesor) {
+    filter.$or = [{ mainAdvisor: req.query.asesor }, { partnerAdvisor: req.query.asesor }];
+  }
+  if (req.query.processType) filter.processType = req.query.processType;
+
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    const term = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.name = { $regex: term, $options: 'i' };
+  }
+
+  const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+  const items = await Business.find(filter)
+    .select('name currentStage processType')
+    .sort({ name: 1 })
+    .limit(limit)
+    .lean();
+
+  // `label`/`subtitle` ya armados para el select remoto.
+  const data = items.map((b) => ({
+    ...b,
+    label: b.name || 'Negocio',
+    subtitle: STAGE_LABELS[b.currentStage] || String(b.currentStage || '').replace(/_/g, ' '),
+  }));
+
+  res.json({ success: true, data });
+});
+
 // Negocios ABIERTOS ligados a una propiedad. Se consulta desde el inventario
 // general para avisar, sin importar quién sea el dueño del negocio, que la
 // propiedad ya está trabajada por un compañero.
@@ -530,4 +568,4 @@ const propertyBusinesses = asyncHandler(async (req, res) => {
   res.json({ success: true, data: items });
 });
 
-module.exports = { list, get, create, update, remove, changeStage, history, propertyBusinesses, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };
+module.exports = { list, get, options, create, update, remove, changeStage, history, propertyBusinesses, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };

@@ -7,12 +7,14 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 const apiRoutes = require('./routes');
 const notFound = require('./middlewares/notFound');
 const errorHandler = require('./middlewares/errorHandler');
+const { compression } = require('./middlewares/compression');
 const { maintenance, maintenancePage } = require('./middlewares/maintenance');
-const { clientUrl, isProduction } = require('./config/env');
+const { clientUrl, isProduction, jwtSecret } = require('./config/env');
 const { User } = require('./models');
 
 const app = express();
@@ -20,6 +22,7 @@ const app = express();
 // Detrás de proxies (Render, Nginx, etc.) se respeta la IP real del cliente
 // para el límite de peticiones.
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
 app.use(
   helmet({
@@ -70,6 +73,11 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Compresión gzip de las respuestas de texto (JSON/HTML/CSS/JS). Reduce el
+// tráfico de red entre 4 y 6 veces en los listados del CRM: con 50+ usuarios
+// concurrentes es la palanca más barata para que la app no se "trave".
+app.use(compression());
+
 if (!isProduction) {
   app.use(morgan('dev'));
 }
@@ -78,8 +86,13 @@ if (!isProduction) {
 // navega rápido entre módulos (listados, filtros, detalle) y cada pantalla
 // dispara varias peticiones, por lo que 300/15min era insuficiente y producía
 // bloqueos del tipo "Demasiadas peticiones, intenta más tarde".
-//  - Se eleva a 1500 por IP cada 15 min (~100/min sostenido), suficiente para
-//    30+ usuarios simultáneos sin permitir abuso.
+//  - Se eleva a 1500 por usuario cada 15 min (~100/min sostenido), suficiente
+//    para 50+ usuarios simultáneos sin permitir abuso.
+//  - La clave es POR USUARIO (id del JWT), no por IP. Antes se limitaba por
+//    IP y toda la oficina comparte la misma salida a Internet (NAT): con 30
+//    personas a la vez el cubo se agotaba entre todos y bloqueaba a usuarios
+//    que no habían hecho nada. Si la petición no trae token válido (login,
+//    recursos públicos) se recurre a la IP.
 //  - `skipSuccessfulRequests` NO se usa (queremos contar todo), pero se
 //    excluyen del conteo los preflight CORS (OPTIONS), que no son peticiones
 //    de datos reales.
@@ -88,6 +101,22 @@ if (!isProduction) {
 const API_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
 const API_RATE_MAX = Number(process.env.API_RATE_MAX || 1500);
 
+// Extrae el id del usuario del token Bearer (verificando la firma con el
+// mismo secreto que usa la autenticación) para poder limitar por usuario.
+// Si el token falta o es inválido se devuelve null y se usa la IP.
+function rateLimitKey(req) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(header.slice(7).trim(), jwtSecret);
+      if (decoded && decoded.id) return `u:${decoded.id}`;
+    } catch (error) {
+      // Token inválido o caducado: se cae a la clave por IP.
+    }
+  }
+  return `ip:${req.ip}`;
+}
+
 app.use(
   '/api',
   rateLimit({
@@ -95,6 +124,7 @@ app.use(
     max: API_RATE_MAX,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
     skip: (req) => req.method === 'OPTIONS',
     message: { success: false, message: 'Demasiadas peticiones, intenta más tarde' },
   })
@@ -159,10 +189,30 @@ PREVIEW_PAGES.forEach((page) => {
 // de páginas (no bloquear recursos estáticos ni las páginas públicas/panel de
 // soporte). Se registra antes del estático para interceptar el contenido HTML.
 app.use(maintenancePage);
+
+// Caché de los archivos estáticos. Antes TODO se servía con `no-store`, lo que
+// obligaba al navegador a descargar de nuevo cada CSS/JS/logo en cada
+// navegación (y cada navegación es una página completa). Con 50+ usuarios
+// concurrentes eso saturaba el ancho de banda de la instancia de Render.
+// Ahora:
+//  - HTML → `no-cache`: se revalida con ETag (respuesta 304, sin cuerpo), así
+//    el HTML nuevo (aviso de versión, rutas nuevas) llega de inmediato.
+//  - JS/CSS/JSON → `no-cache` con ETag: igual de seguro y evita recargar el
+//    bundle entero.
+//  - Imágenes/fuentes → `public, max-age=1 día`: pesan mucho, casi no cambian
+//    y el Service Worker ya las sirve cache-first.
+const STATIC_IMAGE_RE = /\.(?:png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|eot|mp4|webm)$/i;
+
 app.use(
   express.static(frontendDir, {
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-store');
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      if (STATIC_IMAGE_RE.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      } else {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
     },
   })
 );

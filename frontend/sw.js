@@ -17,8 +17,8 @@
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
 // El nombre de la caché DEBE subirse en cada publicación: sin cambiarlo, las
 // copias viejas siguen en disco y ocupan cuota.
-const CACHE_NAME = 'crm-inmob-v46';
-const VERSION = '2.16';
+const CACHE_NAME = 'crm-inmob-v48';
+const VERSION = '2.18';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -45,6 +45,54 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// ── Respuestas comprimidas y caché del Service Worker ───────────────────────
+// El servidor envía las respuestas de texto comprimidas (gzip) para ahorrar
+// ancho de banda. Al guardarlas en el Cache API hay que tener cuidado con la
+// cabecera "Content-Encoding": el navegador puede entregar el cuerpo YA
+// descomprimido pero dejar la cabecera puesta, y si esa respuesta se vuelve a
+// servir desde la caché el navegador intentaría descomprimirla otra vez
+// (archivo roto). Esta función reconstruye la respuesta de forma segura:
+//  - Si el cuerpo llega comprimido (magic bytes 1f 8b) se guarda tal cual.
+//  - Si llega ya descomprimido se quitan Content-Encoding y Content-Length.
+async function cacheableResponse(response) {
+  const encoding = response.headers.get('Content-Encoding');
+  if (!encoding) return response;
+  let buffer;
+  try {
+    buffer = await response.arrayBuffer();
+  } catch (error) {
+    return response;
+  }
+  const bytes = new Uint8Array(buffer);
+  const looksCompressed = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  const headers = new Headers(response.headers);
+  if (!looksCompressed) {
+    headers.delete('Content-Encoding');
+    headers.delete('Content-Length');
+  }
+  try {
+    return new Response(buffer, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch (error) {
+    return response;
+  }
+}
+
+// Guarda la respuesta en la caché sin romperla (ignora errores silenciosos:
+// si algo falla, la app sigue funcionando con red).
+async function putInCache(cache, request, response) {
+  try {
+    const copy = response.clone();
+    const safe = await cacheableResponse(copy);
+    await cache.put(request, safe);
+  } catch (error) {
+    /* sin caché: no es crítico */
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
@@ -67,13 +115,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+            caches.open(CACHE_NAME).then((cache) => putInCache(cache, request, response)).catch(() => {});
           }
           return response;
         })
         .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match('index.html'))
+          caches.match(request, { ignoreVary: true }).then((cached) => cached || caches.match('index.html', { ignoreVary: true }))
         )
     );
     return;
@@ -86,13 +133,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+            caches.open(CACHE_NAME).then((cache) => putInCache(cache, request, response)).catch(() => {});
           }
           return response;
         })
         .catch(() =>
-          caches.match(request).then((cached) => {
+          caches.match(request, { ignoreVary: true }).then((cached) => {
             if (cached) return cached;
             // Nunca se devuelve index.html para un JS/CSS: el navegador lo
             // aceptaría y la app reventaría con errores de sintaxis.
@@ -106,13 +152,12 @@ self.addEventListener('fetch', (event) => {
   // Estáticos pesados (imágenes, fuentes, pdf): devolver de inmediato lo que haya
   // en caché y, por detrás, actualizarlo con la red.
   event.respondWith(
-    caches.match(request).then((cached) => {
+    caches.match(request, { ignoreVary: true }).then((cached) => {
       const fetchAndCache = () =>
         fetch(request)
           .then((response) => {
             if (response && response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+              caches.open(CACHE_NAME).then((cache) => putInCache(cache, request, response)).catch(() => {});
             }
             return response;
           })

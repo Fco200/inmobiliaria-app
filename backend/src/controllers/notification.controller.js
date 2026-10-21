@@ -42,6 +42,21 @@ const markAllRead = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Todas las notificaciones marcadas como leídas' });
 });
 
+// Marca como leídas varias notificaciones de una sola vez. Se usa cuando el
+// usuario ABRE el módulo de Avisos: así el contador de la campana se limpia
+// sin tener que lanzar una petición por cada notificación (con 50+ usuarios
+// eso era un pico de peticiones innecesario).
+const markReadMany = asyncHandler(async (req, res) => {
+  const body = req.body || {};
+  const ids = Array.isArray(body.ids) ? body.ids.filter(Boolean).slice(0, 200) : [];
+  if (!ids.length) return res.json({ success: true, data: { updated: 0 } });
+  const result = await Notification.updateMany(
+    { _id: { $in: ids }, user: req.user._id, read: false },
+    { read: true, readAt: new Date() }
+  );
+  res.json({ success: true, data: { updated: result.modifiedCount || 0 } });
+});
+
 async function ensure({ type, key, title, message, userId, data }) {
   const existing = await Notification.findOne({ user: userId, type, 'data.key': key });
   if (existing) return;
@@ -64,4 +79,4 @@ const clearAll = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list, unreadCount, markRead, markAllRead, generate, clearAll };
+module.exports = { list, unreadCount, markRead, markAllRead, markReadMany, generate, clearAll };

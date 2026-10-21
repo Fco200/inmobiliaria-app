@@ -95,21 +95,21 @@ function gridfsBucket() {
   return new GridFSBucket(db, { bucketName: GRIDFS_BUCKET });
 }
 
-function storeBufferToGridFS(key, buffer, contentType) {
+function storeBufferToGridFS(key, buffer, contentType, metadata) {
   const gfs = gridfsBucket();
   return new Promise((resolve, reject) => {
-    const stream = gfs.openUploadStream(key, { contentType: contentType || 'application/octet-stream' });
+    const stream = gfs.openUploadStream(key, { contentType: contentType || 'application/octet-stream', metadata: metadata || undefined });
     stream.on('error', reject);
     stream.on('finish', () => resolve({ id: stream.id, key }));
     stream.end(buffer);
   });
 }
 
-function storeFileToGridFS(key, localPath, contentType) {
+function storeFileToGridFS(key, localPath, contentType, metadata) {
   const gfs = gridfsBucket();
   return new Promise((resolve, reject) => {
     const source = fs.createReadStream(localPath);
-    const stream = gfs.openUploadStream(key, { contentType: contentType || 'application/octet-stream' });
+    const stream = gfs.openUploadStream(key, { contentType: contentType || 'application/octet-stream', metadata: metadata || undefined });
     source.on('error', reject);
     stream.on('error', reject);
     stream.on('finish', () => resolve({ id: stream.id, key }));
@@ -269,6 +269,175 @@ function readAll(stream, maxBytes = 2 * 1024 * 1024) {
 
 // ── Operaciones públicas ────────────────────────────────────────────────────
 
+// ── Referencias y limpieza de archivos huérfanos ──────────────────────────────
+//
+// Un archivo subido se guarda en el almacenamiento y DESPUÉS se referencia desde
+// un registro (propiedad, documento, inventario...). Si ese paso falla (el
+// usuario cancela, la creación del registro da error, se reintenta la captura),
+// el archivo queda huérfano y ocupa espacio para siempre. Con un Atlas del
+// nivel gratuito (512 MB) unos cuantos huérfanos de fotos de celular (5-8 MB)
+// dejan la base de datos SIN ESPACIO y bloquean TODAS las escrituras.
+//
+// Por eso:
+//   1) se deduplican los archivos idénticos (mismo contenido -> una sola copia),
+//   2) se puede borrar un archivo solo si NINGÚN registro lo referencia,
+//   3) hay una limpieza programada que borra los huérfanos antiguos.
+
+// Campos de texto largo: no se recorren al buscar referencias (solo buscamos
+// archivos, no datos) y son los que más memoria consumen al escanear.
+const SCAN_SKIP_FIELDS = ['text', 'body', 'message', 'description', 'observations', 'notes', 'content'];
+
+// Devuelve el nombre del archivo SOLO si la cadena apunta a nuestro almacén
+// ("/uploads/x.jpg", "https://host/uploads/x.jpg?t=1", "uploads/x.jpg").
+// Las URLs externas (otro dominio) devuelven '': nunca se confunden con un
+// archivo propio ni se intentan borrar del almacén.
+function fileKeyFromUrl(url) {
+  if (!url) return '';
+  const raw = String(url).trim();
+  if (!raw || /^(data|blob):/i.test(raw)) return '';
+  const marker = '/uploads/';
+  const idx = raw.toLowerCase().indexOf(marker);
+  if (idx < 0) {
+    // Acepta la forma relativa sin barra inicial ("uploads/x.jpg").
+    if (!/^uploads\//i.test(raw)) return '';
+    return path.basename(raw.slice('uploads/'.length).split('?')[0].split('#')[0]);
+  }
+  return path.basename(raw.slice(idx + marker.length).split('?')[0].split('#')[0]);
+}
+
+function sha256Hex(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+// Recorre todas las colecciones y devuelve el conjunto de nombres de archivo
+// que siguen en uso por algún registro.
+//
+// La base del CRM es pequeña (miles de documentos): recorrerla entera cada 2
+// horas es barato y evita tener que mantener una lista de campos "con archivos"
+// que se desincronizaría con el código. Aun así se limita el número de
+// documentos leídos por colección para que un crecimiento inesperado no
+// convierta la limpieza en una consulta gigantesca.
+const SCAN_MAX_DOCS_PER_COLLECTION = 20000;
+
+async function collectReferencedKeys() {
+  const refs = new Set();
+  const db = mongoose.connection && mongoose.connection.db;
+  if (!db) return refs;
+  const collections = await db.listCollections({}, { nameOnly: true }).toArray();
+  for (const c of collections) {
+    if (c.name.startsWith('uploads.')) continue;
+    const projection = {};
+    for (const field of SCAN_SKIP_FIELDS) projection[field] = 0;
+    let docs = [];
+    try {
+      docs = await db.collection(c.name).find({}, projection).limit(SCAN_MAX_DOCS_PER_COLLECTION).toArray();
+    } catch (e) {
+      continue;
+    }
+    const walk = (value) => {
+      if (typeof value === 'string') {
+        if (value.length > 400) return;
+        const key = fileKeyFromUrl(value);
+        if (key && /\.[a-z0-9]{2,5}$/i.test(key)) refs.add(key);
+      } else if (Array.isArray(value)) {
+        value.forEach(walk);
+      } else if (value && typeof value === 'object') {
+        Object.values(value).forEach(walk);
+      }
+    };
+    docs.forEach(walk);
+  }
+  return refs;
+}
+
+// ¿Sigue en uso este archivo? (lo referencia algún registro)
+async function isFileReferenced(key) {
+  if (!key) return false;
+  const refs = await collectReferencedKeys();
+  return refs.has(key);
+}
+
+// Borra un archivo SOLO si ningún registro lo referencia. Se usa al eliminar
+// una propiedad o un documento: si otra ficha comparte la foto, se conserva.
+// Ante cualquier duda (error al escanear) NO se borra: perder una foto de una
+// ficha activa es mucho peor que dejar un archivo de más.
+async function deleteFileIfUnused(key) {
+  const cleanKey = fileKeyFromUrl(key) || key;
+  // Solo se borran archivos con un nombre "de subida" (los que genera el
+  // sistema). Un valor raro (URL externa, data:) nunca se toca.
+  if (!cleanKey || !/^[A-Za-z0-9._-]+\.[a-z0-9]{2,5}$/i.test(cleanKey)) return false;
+  try {
+    const used = await isFileReferenced(cleanKey);
+    if (used) return false;
+  } catch (error) {
+    console.warn('[Storage] No se pudo comprobar si el archivo está en uso:', error.message);
+    return false;
+  }
+  await deleteFile(cleanKey);
+  return true;
+}
+
+// Limpieza programada: borra los archivos huérfanos (sin referencia) que
+// llevan un tiempo sin usarse, y los trozos de GridFS sin archivo.
+async function cleanupOrphans({ minAgeMs = 6 * 60 * 60 * 1000 } = {}) {
+  const result = { deleted: 0, freed: 0, orphanChunks: 0 };
+  if (mode !== 'mongodb') return result;
+  const db = mongoose.connection && mongoose.connection.db;
+  if (!db) return result;
+
+  try {
+    const refs = await collectReferencedKeys();
+    const cutoff = new Date(Date.now() - minAgeMs);
+    const files = await db.collection('uploads.files').find({ uploadDate: { $lt: cutoff } }).toArray();
+    for (const file of files) {
+      if (refs.has(file.filename)) continue;
+      await db.collection('uploads.files').deleteOne({ _id: file._id });
+      await db.collection('uploads.chunks').deleteMany({ files_id: file._id });
+      result.deleted += 1;
+      result.freed += file.length || 0;
+    }
+
+    // Trozos (chunks) que se quedaron sin su archivo (subidas interrumpidas).
+    const orphanChunks = await db.collection('uploads.chunks').aggregate([
+      { $group: { _id: '$files_id' } },
+      { $lookup: { from: 'uploads.files', localField: '_id', foreignField: '_id', as: 'file' } },
+      { $match: { file: { $size: 0 } } },
+    ]).toArray();
+    for (const c of orphanChunks) {
+      const res = await db.collection('uploads.chunks').deleteMany({ files_id: c._id });
+      result.orphanChunks += res.deletedCount || 0;
+    }
+  } catch (error) {
+    console.warn('[Storage] Error en la limpieza de archivos huérfanos:', error.message);
+  }
+  return result;
+}
+
+// Uso actual del almacenamiento (solo en modo MongoDB). Sirve para avisar a
+// tiempo: la cuota gratuita de Atlas (512 MB) se llena sin avisar y deja la
+// base de datos sin escrituras.
+//
+// IMPORTANTE: se informa del tamaño de los DATOS, no de `storageSize`. Atlas
+// reserva disco con mucha holgura para WiredTiger (compresión y espacio
+// reutilizable): tras borrar 265 MB de fotos huérfanas `storageSize` seguía
+// marcando 632 MB aunque los datos reales son ~97 MB. Avisar con storageSize
+// daría falsas alarmas para siempre.
+async function usageStats() {
+  if (mode !== 'mongodb') return null;
+  const db = mongoose.connection && mongoose.connection.db;
+  if (!db) return null;
+  try {
+    const stats = await db.command({ dbStats: 1, scale: 1048576 });
+    const chunkStats = await db.command({ collStats: 'uploads.chunks', scale: 1048576 }).catch(() => null);
+    return {
+      dataMB: Math.round(Number(stats.dataSize || 0)),
+      uploadsMB: chunkStats ? Math.round(Number(chunkStats.size || 0)) : null,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
 // Genera un nombre único y seguro para el archivo subido (multer en memoria no
 // asigna `filename`, a diferencia de diskStorage). Se completa la extensión con
 // el MIME cuando el nombre original no la trae (fotos tomadas con el celular).
@@ -287,6 +456,20 @@ function buildKey(file) {
   return `${unique}-${safe}${suffix}`;
 }
 
+// Busca un archivo ya guardado con EXACTAMENTE el mismo contenido (mismo
+// hash). Sirve para no guardar cinco veces la misma foto: el usuario que
+// reintenta la captura subía el mismo juego de fotos y cada intento dejaba
+// una copia huérfana de 5-8 MB.
+async function findByHash(hash) {
+  if (!hash || mode !== 'mongodb') return null;
+  try {
+    const gfs = gridfsBucket();
+    return await gfs.find({ 'metadata.sha256': hash }).sort({ uploadDate: -1 }).limit(1).next();
+  } catch (error) {
+    return null;
+  }
+}
+
 // Persiste un archivo subido por multer (que ahora llega EN MEMORIA) al
 // almacenamiento definitivo: GridFS/R2 (persistente) o disco local (solo si se
 // pidió explícitamente con STORAGE_DRIVER=local). NUNCA deja el archivo en el
@@ -303,12 +486,23 @@ async function persistFile(file) {
   try {
     // Caso normal: multer.memoryStorage → el archivo viene en file.buffer.
     if (file.buffer) {
+      // Deduplicación: si el mismo contenido ya está guardado, se reutiliza el
+      // archivo existente en lugar de guardar otra copia idéntica.
+      const hash = sha256Hex(file.buffer);
+      const existing = await findByHash(hash);
+      if (existing && existing.filename) {
+        file.filename = existing.filename;
+        file.reused = true;
+        delete file.buffer; // libera la memoria del proceso
+        return;
+      }
+
       if (mode === 'local') {
         const diskPath = path.join(uploadsDir, key);
         fs.mkdirSync(path.dirname(diskPath), { recursive: true });
         fs.writeFileSync(diskPath, file.buffer);
       } else {
-        await putBuffer(key, file.buffer, contentType);
+        await putBuffer(key, file.buffer, contentType, { sha256: hash });
       }
       delete file.buffer; // libera la memoria del proceso
       return;
@@ -336,10 +530,10 @@ async function persistFiles(files) {
 }
 
 // Sube un buffer (p. ej. un PDF generado) al destino persistente.
-async function putBuffer(key, buffer, contentType) {
+async function putBuffer(key, buffer, contentType, metadata) {
   const cleanKey = String(key).replace(/^\/+/, '');
   if (mode === 'mongodb') {
-    await storeBufferToGridFS(cleanKey, buffer, contentType);
+    await storeBufferToGridFS(cleanKey, buffer, contentType, metadata);
     return { key: cleanKey, stored: 'mongodb' };
   }
   if (mode === 'local') {
@@ -503,6 +697,10 @@ async function serveFromGridFS(req, res, key) {
   const headers = {
     'Content-Type': file.contentType || 'application/octet-stream',
     'Accept-Ranges': 'bytes',
+    // El nombre del archivo es único por contenido (incluye un prefijo con
+    // fecha + aleatorio): una vez subido nunca cambia, así que el navegador
+    // puede guardar las fotos en caché y no volver a bajarlas en cada visita.
+    'Cache-Control': 'public, max-age=31536000, immutable',
   };
   let status = 200;
   let start = 0;
@@ -548,6 +746,11 @@ module.exports = {
   putBuffer,
   putFile,
   deleteFile,
+  fileKeyFromUrl,
+  isFileReferenced,
+  deleteFileIfUnused,
+  cleanupOrphans,
+  usageStats,
   fileExists,
   serveStatic,
 };

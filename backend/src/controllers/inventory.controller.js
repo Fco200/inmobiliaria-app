@@ -236,7 +236,7 @@ const uploadProperty = asyncHandler(async (req, res) => {
     message: `Se subió una propiedad al inventario general (${property.type} en ${property.zone || property.city || 'sin ubicación'})`,
   });
 
-  const notified = isPublished ? await notifyInterestedClients(property) : 0;
+  const notified = isPublished ? await notifyInterestedClients(property, req.user._id) : 0;
 
   await inventory.populate('property');
   await inventory.populate('assignedAgent');

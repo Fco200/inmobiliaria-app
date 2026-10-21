@@ -117,8 +117,7 @@ window.Welcome = (() => {
         <h2 class="welcome-title">¡Bienvenido, ${UI.escapeHtml(name || 'usuario')}!</h2>
         <p class="welcome-phrase">${UI.escapeHtml(phrase.text)}</p>
         <div class="welcome-brand-row">
-          <img class="welcome-brand-logo" src="logoinmobles.png" alt="INMOBLES">
-          <span class="welcome-brand-plus">&#43;</span>
+          <span class="welcome-brand-plus">&#215;</span>
           <img class="welcome-brand-dev" src="fv_digital_logo.png.webp" alt="FV DIGITAL">
         </div>
         <p class="welcome-note">INMOBLES &times; FV DIGITAL</p>

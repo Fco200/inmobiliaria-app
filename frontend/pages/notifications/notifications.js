@@ -21,12 +21,16 @@ window.Pages.notifications = {
           ${isBoss ? '<button class="btn btn-danger" type="button" data-clear-anns>&#128465; Borrar avisos del equipo</button>' : ''}
         </div>
       </div>
-      <div id="notif-filter" style="margin-bottom:16px;">
+      <div id="notif-filter" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
         <label class="form-check">
           <input type="checkbox" id="notif-unread" style="margin-right:6px;"> Solo no leídas
         </label>
+        <span id="notif-counter" class="text-muted" style="font-size:12px;"></span>
       </div>
       <div id="notif-list"><div class="loading">Cargando avisos...</div></div>
+      <div id="notif-more" style="display:none;text-align:center;margin-top:14px;">
+        <button class="btn btn-secondary" type="button" id="notif-load-more">Cargar más avisos</button>
+      </div>
 
       <h3 style="margin:28px 0 12px;">&#128276; Avisos del equipo</h3>
       <p class="text-muted" style="font-size:13px;margin:0 0 10px;">
@@ -39,7 +43,18 @@ window.Pages.notifications = {
     const listEl = container.querySelector('#notif-list');
     const unreadFilter = container.querySelector('#notif-unread');
     const annListEl = container.querySelector('#ann-list');
+    const counterEl = container.querySelector('#notif-counter');
+    const moreEl = container.querySelector('#notif-more');
+    const moreBtn = container.querySelector('#notif-load-more');
     let records = [];
+    // Paginación: el backend devuelve 25 avisos por página (máx. 100). Antes la
+    // página pedía solo la primera página y no había forma de ver el resto, por
+    // lo que la lista "se cortaba" sin explicación.
+    const PAGE_SIZE = 25;
+    let page = 1;
+    let total = 0;
+    let pages = 1;
+    let loading = false;
 
     const TYPE_ICONS = {
       cita_proxima: '&#128197;',
@@ -64,6 +79,7 @@ window.Pages.notifications = {
       const items = records;
       if (!items.length) {
         listEl.innerHTML = '<div class="card"><div class="empty-state"><p>No hay avisos.</p></div></div>';
+        updateFooter();
         return;
       }
       listEl.innerHTML = `
@@ -97,17 +113,68 @@ window.Pages.notifications = {
           }
         });
       });
+      updateFooter();
     }
 
-    async function load() {
-      listEl.innerHTML = '<div class="loading">Cargando avisos...</div>';
+    // Contador "mostrando X de Y" + botón de "Cargar más" mientras queden
+    // páginas por ver.
+    function updateFooter() {
+      const shown = records.length;
+      if (counterEl) {
+        counterEl.textContent = total
+          ? `Mostrando ${shown} de ${total} aviso${total === 1 ? '' : 's'}`
+          : '';
+      }
+      if (moreEl) {
+        moreEl.style.display = page < pages && shown > 0 ? 'block' : 'none';
+      }
+    }
+
+    // Marca como leídas (en el servidor) las notificaciones que se están
+    // mostrando: al abrir el módulo, el contador de la campana se limpia de
+    // una sola vez, sin una petición por aviso.
+    async function markVisibleAsRead() {
+      const ids = records.filter((n) => n && n._id && !n.read).map((n) => n._id);
+      if (!ids.length) return;
+      records.forEach((n) => { if (n && !n.read) n.read = true; });
       try {
-        const params = unreadFilter.checked ? { unread: true } : {};
+        await API.notifications.markReadMany(ids);
+        window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
+      } catch (error) {
+        // sin acción
+      }
+    }
+
+    async function load(reset) {
+      if (loading) return;
+      loading = true;
+      const isReset = reset !== false;
+      if (isReset) {
+        page = 1;
+        listEl.innerHTML = '<div class="loading">Cargando avisos...</div>';
+      } else {
+        moreBtn.disabled = true;
+        moreBtn.textContent = 'Cargando...';
+      }
+      try {
+        const params = { page, limit: PAGE_SIZE };
+        if (unreadFilter.checked) params.unread = true;
         const result = await API.notifications.list(params);
-        records = result.data || [];
+        const items = (result && Array.isArray(result.data)) ? result.data : [];
+        const meta = (result && result.meta) || {};
+        total = Number(meta.total) || items.length;
+        pages = Number(meta.pages) || 1;
+        records = isReset ? items : records.concat(items);
         renderList();
+        if (isReset) markVisibleAsRead();
       } catch (error) {
         listEl.innerHTML = UI.errorAlert(error.message);
+      } finally {
+        loading = false;
+        if (moreBtn) {
+          moreBtn.disabled = false;
+          moreBtn.textContent = 'Cargar más avisos';
+        }
       }
     }
 
@@ -230,7 +297,15 @@ window.Pages.notifications = {
       }
     }
 
-    unreadFilter.addEventListener('change', load);
+    unreadFilter.addEventListener('change', () => load(true));
+
+    if (moreBtn) {
+      moreBtn.addEventListener('click', () => {
+        if (page >= pages) return;
+        page += 1;
+        load(false);
+      });
+    }
 
     const writeAnnBtn = container.querySelector('[data-write-ann]');
     if (writeAnnBtn) writeAnnBtn.addEventListener('click', openWriteAnnouncement);
@@ -240,7 +315,7 @@ window.Pages.notifications = {
       try {
         const res = await API.notifications.generate();
         UI.toast(res.message, 'success');
-        load();
+        load(true);
         window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
       } catch (error) {
         UI.toast(error.message, 'error');
@@ -252,7 +327,7 @@ window.Pages.notifications = {
       try {
         await API.notifications.markAllRead();
         UI.toast('Todas marcadas como leídas', 'success');
-        load();
+        load(true);
         window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
       } catch (error) {
         UI.toast(error.message, 'error');
@@ -267,7 +342,7 @@ window.Pages.notifications = {
       try {
         await API.notifications.clearAll();
         UI.toast('Historial borrado', 'success');
-        load();
+        load(true);
         window.App && window.App.refreshNotificationBadge && window.App.refreshNotificationBadge();
       } catch (error) {
         UI.toast(error.message || 'No se pudo borrar el historial', 'error');
@@ -289,7 +364,7 @@ window.Pages.notifications = {
       }
     });
 
-    load();
+    load(true);
     loadAnnouncements();
   },
 };

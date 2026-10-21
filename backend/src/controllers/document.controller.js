@@ -95,7 +95,15 @@ const remove = asyncHandler(async (req, res) => {
   if (!assertOwnership(req, doc)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este documento.' });
   }
+  const fileUrl = doc.fileUrl;
   await doc.deleteOne();
+  // Borra el archivo asociado si ya nada más lo referencia (si otra ficha usa
+  // el mismo archivo, se conserva).
+  try {
+    await require('../services/storage.service').deleteFileIfUnused(fileUrl);
+  } catch (error) {
+    console.warn('[Storage] No se pudo eliminar el archivo del documento:', error.message);
+  }
   res.json({ success: true, message: 'Documento eliminado' });
 });
 

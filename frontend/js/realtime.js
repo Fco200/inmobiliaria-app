@@ -13,6 +13,8 @@ window.Realtime = (() => {
   let socket = null;
   let connecting = null;
   let pollTimer = null;
+  // Instancia de Socket.IO a la que ya se le registraron los listeners.
+  let wiredInstance = null;
 
   const ALERT_KEY = 'crm_alerted';
   const NOTIF_ALERT_KEY = 'crm_notif_alerted';
@@ -62,6 +64,18 @@ window.Realtime = (() => {
   function markReadServer(id) {
     if (window.API && window.API.announcements && window.API.announcements.markRead) {
       window.API.announcements.markRead(id).catch(() => {});
+    }
+  }
+
+  // Marca la notificación como leída EN EL SERVIDOR. Antes solo se guardaba en
+  // localStorage (`crm_notif_alerted`), por lo que MongoDB seguía marcando la
+  // notificación como `read: false` para siempre: el contador de la campana
+  // nunca se limpiaba y la alerta volvía a saltar en cada navegación.
+  function markNotifReadServer(id) {
+    if (window.API && window.API.notifications && window.API.notifications.markRead) {
+      window.API.notifications.markRead(id)
+        .then(() => refreshBadges())
+        .catch(() => {});
     }
   }
 
@@ -138,9 +152,11 @@ window.Realtime = (() => {
     const authorId = author && typeof author === 'object' ? (author._id || author.id) : author;
     if (authorId && String(authorId) === String(currentUserId())) return;
 
-    // Motivo: la notificación/aviso NO se marca como leída aquí. El usuario la
-    // verá como clicable y, al abrir el detalle, se marcará como leída vía API.
+    // El aviso se marca como leído en el servidor en cuanto se muestra: así no
+    // reaparece en cada navegación (cada módulo recarga la página) y el
+    // contador de no leídos se limpia de verdad.
     markSeen(announcement._id);
+    markReadServer(announcement._id);
 
     const palette = {
       normal: { color: '#5B2D8E', soft: '#f3e8ff' },
@@ -242,13 +258,17 @@ window.Realtime = (() => {
   }
 
   // Alertas modales de las notificaciones individuales del usuario (recordatorios,
-  // tareas vencidas, nuevos prospectos, etc.). Se muestran una sola vez por id.
+  // tareas vencidas, nuevos prospectos, etc.). Se muestran una sola vez por id
+  // y quedan marcadas como leídas en el servidor en cuanto se muestran.
   function showNotification(item) {
     if (!item || !item._id || typeof UI === 'undefined') return;
     if (seenNotifIds().includes(item._id)) return;
     if (typeof Sounds !== 'undefined') Sounds.notification().catch(() => {});
 
     markNotifSeen(item._id);
+    // Lectura en el servidor: el contador de la campana se limpia de verdad y
+    // la notificación deja de reaparecer al cambiar de módulo.
+    markNotifReadServer(item._id);
 
     const color = '#2d7d6c';
     const soft = '#e4f5f1';
@@ -325,6 +345,12 @@ window.Realtime = (() => {
 
   function wire() {
     if (!socket) return;
+    // `wire()` se llama en cada evento 'connect'. Si la reconexión reutiliza la
+    // misma instancia de Socket.IO, volver a registrar los listeners duplicaba
+    // los manejadores (cada aviso se procesaba dos veces). Se registra una
+    // sola vez por instancia.
+    if (wiredInstance === socket) return;
+    wiredInstance = socket;
     socket.on('new-announcement', (announcement) => {
       showAlert(announcement);
       refreshBadges();
@@ -437,47 +463,24 @@ window.Realtime = (() => {
     return socket;
   }
 
-  // Respaldo: si no hay socket conectado, cada 30s revisa avisos y
-  // notificaciones no vistas.
+  // Respaldo: si no hay socket conectado, cada 30s se revisan los avisos y
+  // notificaciones para ACTUALIZAR LOS CONTADORES.
+  //
+  // IMPORTANTE: el polling NO abre modales. Antes lo hacía, y como cada módulo
+  // del CRM es una recarga completa de la página, el polling arrancaba de
+  // cero en cada navegación y saltaba un modal por cada aviso pendiente:
+  // de ahí la complaint de "me salta una notificación en cada sección".
+  // Las modales solo se muestran con eventos EN VIVO del socket; si este no
+  // está disponible, el usuario ve el contador en la campana y puede abrir el
+  // módulo de Avisos.
   function startPolling() {
     if (pollTimer) return;
-    const checkAnnouncements = () => {
+    const refreshCounters = () => {
       if (socket && socket.connected) return;
-      if (!window.API || !window.API.announcements) return;
-      window.API.announcements.list().then((res) => {
-        // ApiClient.unwrap desenrolla {data:[...]} → arreglo directo.
-        const raw = res && typeof res === 'object' && res.data !== undefined && res.meta !== undefined ? res.data : res;
-        const list = Array.isArray(raw) ? raw : [];
-        const unseen = list.filter((a) => a && a._id && !seenIds().includes(a._id));
-        if (unseen.length) showAlert(unseen[0]);
-      }).catch(() => {});
+      refreshBadges();
     };
-    const checkNotifications = () => {
-      if (socket && socket.connected) return;
-      if (!window.API || !window.API.notifications) return;
-      window.API.notifications.list({ unread: true }).then((res) => {
-        let items = res;
-        if (res && typeof res === 'object' && Array.isArray(res.data)) items = res.data;
-        if (Array.isArray(items)) {
-          const unseen = items.filter((n) => n && n._id && !seenNotifIds().includes(n._id));
-          if (unseen.length) showNotification(unseen[0]);
-        }
-      }).catch(() => {});
-    };
-    // Respaldo de chat: sin socket, refresca el contador no leído para que la
-    // burbuja del chat se actualice aunque se pierda la conexión en vivo.
-    const checkChat = () => {
-      if (socket && socket.connected) return;
-      if (window.App && window.App.refreshChatBadge) window.App.refreshChatBadge();
-    };
-    checkAnnouncements();
-    checkNotifications();
-    checkChat();
-    pollTimer = setInterval(() => {
-      checkAnnouncements();
-      checkNotifications();
-      checkChat();
-    }, 30000);
+    refreshCounters();
+    pollTimer = setInterval(refreshCounters, 30000);
   }
 
   return { connect, getSocket, startPolling };

@@ -254,6 +254,8 @@ window.API = {
     list: (params) => ApiClient.get('/notifications', params),
     unreadCount: () => ApiClient.get('/notifications/unread-count'),
     markRead: (id) => ApiClient.patch(`/notifications/${id}/read`),
+    // Marca varias como leídas en una sola petición (al abrir el módulo).
+    markReadMany: (ids) => ApiClient.post('/notifications/mark-read', { ids }),
     markAllRead: () => ApiClient.post('/notifications/mark-all-read'),
     generate: () => ApiClient.post('/notifications/generate'),
     // Borra todo el historial de avisos de mi cuenta.

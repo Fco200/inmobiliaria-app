@@ -80,7 +80,6 @@ window.AppShell = (() => {
       <div class="app-sidebar-top">
         <a class="app-sidebar-brand" href="home.html" title="INMOBLES">
           <img src="logoinmobles.png" alt="INMOBLES" class="app-sidebar-logo-wide">
-          <img src="LOGOICONO.jpeg" alt="INMOBLES" class="app-sidebar-logo-icon">
           <span class="app-sidebar-brandname">INMOBLES</span>
         </a>
         <button class="app-sidebar-collapse" id="app-sidebar-collapse" type="button" title="Colapsar menú" aria-label="Colapsar menú">&#9776;</button>
@@ -219,14 +218,32 @@ window.AppShell = (() => {
   // render terminó. Es responsiva (móvil, tablet, PC) y respeta el tema.
   let appLoaderShownAt = 0;
   let appLoaderSafety = null;
-  // Duración de las cargas normales (navegar entre módulos) y de la carga
-  // especial de actualización.
+  // Duración de las cargas. Antes el overlay se mantenía 3 s SIEMPRE, aunque la
+  // página ya estuviera lista: con 50+ usuariosEso se traducía en 3 s de
+  // "app colgada" en cada clic del menú. Ahora solo la PRIMERA carga de la
+  // sesión dura lo suficiente para que la animación se aprecie; el resto de
+  // navegaciones usan un mínimo de 400 ms (suficiente para evitar el "flash").
+  // La carga especial de actualización mantiene su duración larga.
   const APP_LOADER_MIN_MS = 3000;
+  const APP_LOADER_MIN_MS_NAV = 400;
   const UPDATE_LOADER_MIN_MS = 6000;
+  const LOADER_SESSION_KEY = 'crm_loader_seen';
+
+  // Devuelve la duración mínima del loader según sea la primera carga de la
+  // sesión o una navegación posterior (sessionStorage = solo esta pestaña).
+  function loaderMinMs() {
+    try {
+      if (sessionStorage.getItem(LOADER_SESSION_KEY)) return APP_LOADER_MIN_MS_NAV;
+      sessionStorage.setItem(LOADER_SESSION_KEY, '1');
+    } catch (e) {
+      return APP_LOADER_MIN_MS_NAV;
+    }
+    return APP_LOADER_MIN_MS;
+  }
 
   function showGlobalLoader(options) {
     const opts = options || {};
-    const minMs = Number(opts.minMs) > 0 ? Number(opts.minMs) : APP_LOADER_MIN_MS;
+    const minMs = Number(opts.minMs) > 0 ? Number(opts.minMs) : loaderMinMs();
     const label = opts.text || 'INMOBLES';
     const subtext = opts.subtext || 'Preparando tu espacio de trabajo…';
     const existing = document.getElementById('app-loader');
@@ -1023,6 +1040,18 @@ window.AppShell = (() => {
     });
     const content = document.getElementById('app-content');
     if (content) content.insertBefore(banner, content.firstChild);
+
+    // El banner se marca como leído en el SERVIDOR en cuanto se muestra. Antes
+    // solo se guardaba en localStorage, así que volvía a aparecer en CADA
+    // navegación (cada módulo es una recarga completa de la página) y el
+    // contador de no leídos no se limpiaba nunca.
+    const next = alertBannerStore();
+    if (!next.includes(chosen._id)) {
+      next.push(chosen._id);
+      saveAlertBannerStore(next);
+    }
+    try { if (window.API && window.API.announcements) window.API.announcements.markRead(chosen._id).catch(() => {}); } catch (e) {}
+    refreshNotificationBadge();
   }
 
   // Modal con los avisos del equipo pendientes. Se usa al FINAL del flujo de

@@ -1042,8 +1042,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .login-logo-img {
   height: 54px;
   width: auto;
+  max-width: 100%;
   object-fit: contain;
-  border-radius: 14px;
+  border-radius: 10px;
   filter: drop-shadow(0 3px 10px rgba(91, 45, 142, 0.28));
 }
 
@@ -1223,9 +1224,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   gap: 8px;
   margin-bottom: 4px;
 }
-.login-wm-logo { height: 20px; width: auto; }
 .login-wm-dev { height: 20px; width: auto; border-radius: 4px; }
-.login-wm-plus { color: var(--primary); font-weight: 800; font-size: 13px; }
 
 /* Roles */
 .role-option input { accent-color: var(--primary); }
@@ -2651,10 +2650,6 @@ body.page-chat .assistant-panel {
   gap: 10px;
   margin-bottom: 6px;
 }
-.welcome-brand-logo {
-  height: 26px;
-  width: auto;
-}
 .welcome-brand-dev {
   height: 26px;
   width: auto;
@@ -3517,23 +3512,19 @@ body.sidebar-collapsed { --sidebar-w: 78px; }
 }
 .app-sidebar-brand { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1; text-decoration: none; color: var(--text); }
 
-/* Intercambio de logo con animación: cuando el menú está expandido se ve el
-   logotipo largo (logoinmobles.png); al colapsar, el largo se funde y se
-   reduce mientras aparece el icono cuadrado (LOGOICONO.jpeg). */
+/* Logotipo del sidebar: SOLO el logo horizontal (logoinmobles.png). Antes se
+   renderizaban también el icono cuadrado (LOGOICONO.jpeg) y el texto de marca,
+   con lo que la misma marca aparecía duplicada. Al colapsar el menú el logo
+   horizontal se reduce (no desaparece) para que siga identificando la app. */
 .app-sidebar-logo-wide {
   height: 32px; width: auto; max-width: 170px;
   flex-shrink: 0; object-fit: contain; border-radius: 8px;
   margin-right: 10px;
-  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin-right 0.28s cubic-bezier(0.16, 1, 0.3, 1), height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.app-sidebar-logo-icon {
-  height: 34px; width: 34px; max-width: 0;
-  flex-shrink: 0; object-fit: contain; border-radius: 9px;
-  opacity: 0; overflow: hidden; transform: scale(0.85);
-  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+body.sidebar-collapsed .app-sidebar-logo-wide {
+  max-width: 60px; height: 22px; opacity: 1; margin-right: 0;
 }
-body.sidebar-collapsed .app-sidebar-logo-wide { max-width: 0; opacity: 0; margin-right: 0; }
-body.sidebar-collapsed .app-sidebar-logo-icon { max-width: 34px; opacity: 1; transform: scale(1); }
 
 .app-sidebar-brandname {
   font-weight: 800; font-size: 15px; letter-spacing: 0.02em;

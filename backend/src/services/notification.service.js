@@ -21,12 +21,11 @@ function setIo(io) {
   ioRef = io;
 }
 
-async function ensure({ type, key, title, message, userId, data }) {
-  const existing = await Notification.findOne({ user: userId, type, 'data.key': key });
-  if (existing) return existing;
-  const doc = await Notification.create({ user: userId, type, title, message, data: { key, ...data } });
+// Emite el aviso nuevo en tiempo real al usuario dueño (Socket.IO).
+function emitNew(doc) {
   try {
-    if (ioRef) ioRef.to(`user:${String(userId)}`).emit('new-notification', {
+    if (!ioRef) return;
+    ioRef.to(`user:${String(doc.user)}`).emit('new-notification', {
       _id: doc._id,
       type: doc.type,
       title: doc.title,
@@ -37,7 +36,65 @@ async function ensure({ type, key, title, message, userId, data }) {
   } catch (e) {
     console.error('[Notificacion] Error emitiendo aviso en tiempo real:', e.message);
   }
+}
+
+async function ensure({ type, key, title, message, userId, data }) {
+  const existing = await Notification.findOne({ user: userId, type, 'data.key': key });
+  if (existing) return existing;
+  const doc = await Notification.create({ user: userId, type, title, message, data: { key, ...data } });
+  emitNew(doc);
   return doc;
+}
+
+// Crea varios avisos de una sola vez. Antes se creaban de uno en uno y cada
+// uno hacía 2 viajes a MongoDB (findOne + create): con 50+ usuarios eso
+// saturaba el pool de conexiones. Ahora los existentes se resuelven en UNA
+// consulta y los nuevos se crean en paralelo.
+//
+// IMPORTANTE: se sigue usando Notification.create() (y no insertMany) para que
+// se dispare el hook post('save') del modelo, que es el que envía la
+// notificación push nativa al celular.
+async function ensureMany(userId, items) {
+  if (!items || !items.length) return [];
+  try {
+    const types = Array.from(new Set(items.map((i) => i.type)));
+    const keys = items.map((i) => i.key);
+    const existing = await Notification.find({
+      user: userId,
+      type: { $in: types },
+      'data.key': { $in: keys },
+    })
+      .select('type data')
+      .lean();
+
+    const existingKeys = new Set(
+      existing.map((d) => `${d.type}::${d.data && d.data.key}`)
+    );
+    const pending = items.filter((i) => !existingKeys.has(`${i.type}::${i.key}`));
+    if (!pending.length) return [];
+
+    const docs = await Promise.all(
+      pending.map((item) =>
+        Notification.create({
+          user: userId,
+          type: item.type,
+          title: item.title,
+          message: item.message,
+          data: { key: item.key, ...(item.data || {}) },
+        }).catch((error) => {
+          console.error(`[Notificacion] Error creando aviso ${item.type}:`, error.message);
+          return null;
+        })
+      )
+    );
+
+    const created = docs.filter(Boolean);
+    created.forEach(emitNew);
+    return created;
+  } catch (error) {
+    console.error('[Notificacion] Error en ensureMany:', error.message);
+    return [];
+  }
 }
 
 // Push NATIVO directo (sin crear un aviso en la lista de la app) para eventos
@@ -73,264 +130,283 @@ const DATE_OPTS = { hour: '2-digit', minute: '2-digit' };
 async function generateForUser(userId) {
   const now = new Date();
   const created = [];
+  // Todos los avisos candidatos se armed aquí y se crean de un solo lote.
+  const items = [];
 
-  // Recordatorio 1: 24 horas antes
-  const upcoming24h = await Appointment.find({
-    user: userId,
-    status: { $in: ['pendiente', 'confirmada'] },
-    date: { $gte: new Date(now.getTime() + 23 * 60 * 60 * 1000), $lte: new Date(now.getTime() + 25 * 60 * 60 * 1000) },
-  }).populate('client');
+  // Las consultas se lanzan EN PARALELO: antes se ejecutaban una detrás de
+  // otra (~15 round-trips a MongoDB por usuario). Con 50+ usuarios eso
+  // saturaba el pool de conexiones y el job se atrasaba.
+  const [
+    upcoming24h,
+    upcoming1h,
+    upcoming,
+    expiredAppointments,
+    overdue,
+    nearTasks,
+    nearGoals,
+    pendingDocs,
+    slowStages,
+    staleBusinesses,
+    newlyCancelled,
+    newProspects,
+    apartadas,
+    unpublishedInventory,
+  ] = await Promise.all([
+    // Recordatorio 1: 24 horas antes
+    Appointment.find({
+      user: userId,
+      status: { $in: ['pendiente', 'confirmada'] },
+      date: { $gte: new Date(now.getTime() + 23 * 60 * 60 * 1000), $lte: new Date(now.getTime() + 25 * 60 * 60 * 1000) },
+    }).populate('client'),
+    // Recordatorio 2: 1 hora antes
+    Appointment.find({
+      user: userId,
+      status: { $in: ['pendiente', 'confirmada'] },
+      date: { $gte: new Date(now.getTime() + 55 * 60 * 1000), $lte: new Date(now.getTime() + 65 * 60 * 1000) },
+    }).populate('client'),
+    // Cita próxima (24 horas)
+    Appointment.find({
+      user: userId,
+      status: { $in: ['pendiente', 'confirmada'] },
+      date: { $gte: now, $lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+    }).populate('client'),
+    // Vencimientos: citas cuya fecha ya pasó y siguen sin marcar su resultado.
+    Appointment.find({
+      user: userId,
+      status: { $in: ['pendiente', 'confirmada'] },
+      date: { $lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+    }).populate('client'),
+    // Tareas vencidas.
+    Task.find({
+      assignedTo: userId,
+      status: { $in: ['pendiente', 'en_proceso'] },
+      date: { $lt: now },
+    }),
+    // Recordatorio de tarea próxima (próximas 2 horas).
+    Task.find({
+      assignedTo: userId,
+      status: { $in: ['pendiente', 'en_proceso'] },
+      date: { $gte: now, $lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
+    }),
+    // Metas que vencen esta semana.
+    Goal.find({
+      user: userId,
+      status: 'activa',
+      endDate: { $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), $gte: now },
+    }),
+    // Documentos pendientes de validar.
+    Document.find({ status: 'pendiente', uploadedBy: userId }),
+    // Negocios estancados en etapas que requieren acción.
+    Business.find({
+      mainAdvisor: userId,
+      status: 'activo',
+      currentStage: { $in: ['avaluo', 'firma', 'pago'] },
+      updatedAt: { $lt: new Date(now.getTime() - 48 * 60 * 60 * 1000) },
+    }),
+    // Negocios sin actualización en 7 días.
+    Business.find({
+      mainAdvisor: userId,
+      status: 'activo',
+      updatedAt: { $lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
+    }),
+    // Negocios cancelados en las últimas 24 horas.
+    Business.find({
+      mainAdvisor: userId,
+      status: 'cancelado',
+      updatedAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+    }),
+    // Prospectos nuevos del último día.
+    Client.find({
+      asesorAsignado: userId,
+      status: 'activo',
+      createdAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+    }),
+    // Propiedades apartadas a cargo del usuario.
+    Property.find({ status: 'apartada', responsibleUser: userId }),
+    // Stock: propiedades del inventario del usuario sin publicar hace +7 días.
+    Inventory.find({ assignedAgent: userId }).populate('property'),
+  ]);
+
   for (const app of upcoming24h) {
-    await ensure({
+    items.push({
       type: 'cita_recordatorio_24h',
       key: `appointment-24h-${app._id}`,
       title: 'Recordatorio: Cita en 24 horas',
       message: `Mañana tendrás una cita con ${app.client ? app.client.name : 'sin cliente'} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
-      userId,
       data: { entityId: app._id, date: app.date },
     });
-    created.push('cita_recordatorio_24h');
   }
 
-  // Recordatorio 2: 1 hora antes
-  const upcoming1h = await Appointment.find({
-    user: userId,
-    status: { $in: ['pendiente', 'confirmada'] },
-    date: { $gte: new Date(now.getTime() + 55 * 60 * 1000), $lte: new Date(now.getTime() + 65 * 60 * 1000) },
-  }).populate('client');
   for (const app of upcoming1h) {
-    await ensure({
+    items.push({
       type: 'cita_recordatorio_1h',
       key: `appointment-1h-${app._id}`,
       title: '¡Cita en 1 hora!',
       message: `Tu cita con ${app.client ? app.client.name : 'sin cliente'} es a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
-      userId,
       data: { entityId: app._id, date: app.date },
     });
-    created.push('cita_recordatorio_1h');
   }
 
-  // Cita próxima (24 horas)
-  const upcoming = await Appointment.find({
-    user: userId,
-    status: { $in: ['pendiente', 'confirmada'] },
-    date: { $gte: now, $lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
-  }).populate('client');
   for (const app of upcoming) {
-    await ensure({
+    items.push({
       type: 'cita_proxima',
       key: `appointment-${app._id}`,
       title: 'Cita próxima',
       message: `Cita: ${app.client ? app.client.name : 'sin cliente'} el ${app.date.toLocaleDateString('es-MX')} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
-      userId,
       data: { entityId: app._id, date: app.date },
     });
-    created.push('cita_proxima');
   }
 
-  // Vencimientos: citas cuya fecha ya pasó y siguen sin marcar su resultado.
-  const expiredAppointments = await Appointment.find({
-    user: userId,
-    status: { $in: ['pendiente', 'confirmada'] },
-    date: { $lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
-  }).populate('client');
   for (const app of expiredAppointments) {
-    await ensure({
+    items.push({
       type: 'cita_vencida',
       key: `appointment-expired-${app._id}`,
       title: 'Cita sin avance',
       message: `La cita con ${app.client ? app.client.name : 'sin cliente'} del ${app.date.toLocaleDateString('es-MX')} ya pasó y sigue sin registrar resultado.`,
-      userId,
       data: { entityId: app._id, date: app.date },
     });
-    created.push('cita_vencida');
   }
 
-  const overdue = await Task.find({
-    assignedTo: userId,
-    status: { $in: ['pendiente', 'en_proceso'] },
-    date: { $lt: now },
-  });
   for (const t of overdue) {
-    await ensure({
+    items.push({
       type: 'tarea_vencida',
       key: `task-${t._id}`,
       title: 'Tarea vencida',
       message: `La tarea "${t.title}" venció el ${t.date.toLocaleDateString('es-MX')}.`,
-      userId,
       data: { entityId: t._id, date: t.date },
     });
-    created.push('tarea_vencida');
   }
 
-  // Recordatorio de tarea próxima (próximas 2 horas): aunque el dispositivo
-  // esté bloqueado llega el push vía el hook post('save') de Notification.
-  const nearTasks = await Task.find({
-    assignedTo: userId,
-    status: { $in: ['pendiente', 'en_proceso'] },
-    date: { $gte: now, $lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
-  });
   for (const t of nearTasks) {
-    await ensure({
+    items.push({
       type: 'tarea_proxima',
       key: `task-near-${t._id}`,
       title: 'Tarea próxima',
       message: `Tienes la tarea "${t.title}" a las ${t.date.toLocaleTimeString('es-MX', DATE_OPTS)}.`,
-      userId,
       data: { entityId: t._id, date: t.date },
     });
-    created.push('tarea_proxima');
   }
 
-  const nearGoals = await Goal.find({
-    user: userId,
-    status: 'activa',
-    endDate: { $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), $gte: now },
-  });
   for (const g of nearGoals) {
-    await ensure({
+    items.push({
       type: 'meta_proxima_vencer',
       key: `goal-${g._id}`,
       title: 'Meta próxima a vencer',
       message: `La meta "${g.name}" vence el ${g.endDate.toLocaleDateString('es-MX')}.`,
-      userId,
       data: { entityId: g._id, date: g.endDate },
     });
-    created.push('meta_proxima_vencer');
   }
 
-  const pendingDocs = await Document.find({ status: 'pendiente', uploadedBy: userId });
   for (const d of pendingDocs) {
-    await ensure({
+    items.push({
       type: 'documento_pendiente',
       key: `document-${d._id}`,
       title: 'Documento pendiente',
       message: `El documento "${d.name}" sigue pendiente de validar.`,
-      userId,
       data: { entityId: d._id },
     });
-    created.push('documento_pendiente');
   }
 
-  const slowStages = await Business.find({
-    mainAdvisor: userId,
-    status: 'activo',
-    currentStage: { $in: ['avaluo', 'firma', 'pago'] },
-    updatedAt: { $lt: new Date(now.getTime() - 48 * 60 * 60 * 1000) },
-  });
   for (const b of slowStages) {
     const typeMap = { avaluo: 'avaluo_pendiente', firma: 'firma_pendiente', pago: 'pago_pendiente' };
-    await ensure({
+    items.push({
       type: typeMap[b.currentStage],
       key: `business-${b._id}`,
       title: `${b.currentStage.charAt(0).toUpperCase() + b.currentStage.slice(1)} pendiente`,
       message: `El negocio "${b.name}" lleva más de 48 horas en la etapa de ${b.currentStage}.`,
-      userId,
       data: { entityId: b._id },
     });
-    created.push(typeMap[b.currentStage]);
   }
 
-  const staleBusinesses = await Business.find({
-    mainAdvisor: userId,
-    status: 'activo',
-    updatedAt: { $lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
-  });
   for (const b of staleBusinesses) {
-    await ensure({
+    items.push({
       type: 'negocio_sin_actualizacion',
       key: `stale-${b._id}`,
       title: 'Negocio sin actualizar',
       message: `El negocio "${b.name}" no se actualiza desde hace más de 7 días.`,
-      userId,
       data: { entityId: b._id },
     });
-    created.push('negocio_sin_actualizacion');
   }
 
-  const newlyCancelled = await Business.find({
-    mainAdvisor: userId,
-    status: 'cancelado',
-    updatedAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
-  });
   for (const b of newlyCancelled) {
-    await ensure({
+    items.push({
       type: 'negocio_cancelado',
       key: `cancelled-${b._id}`,
       title: 'Negocio cancelado',
       message: `El negocio "${b.name}" fue cancelado.`,
-      userId,
       data: { entityId: b._id },
     });
-    created.push('negocio_cancelado');
   }
 
-  const newProspects = await Client.find({
-    asesorAsignado: userId,
-    status: 'activo',
-    createdAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
-  });
   for (const c of newProspects) {
-    await ensure({
+    items.push({
       type: 'nuevo_prospecto',
       key: `prospect-${c._id}`,
       title: 'Nuevo prospecto',
       message: `Se registró el prospecto ${c.name}.`,
-      userId,
       data: { entityId: c._id },
     });
-    created.push('nuevo_prospecto');
   }
 
-  const apartadas = await Property.find({ status: 'apartada', responsibleUser: userId });
   for (const p of apartadas) {
-    await ensure({
+    items.push({
       type: 'propiedad_apartada',
       key: `apartada-${p._id}`,
       title: 'Propiedad apartada',
       message: `La propiedad en ${p.zone || ''} ${p.city || ''} está marcada como apartada.`,
-      userId,
       data: { entityId: p._id },
     });
-    created.push('propiedad_apartada');
   }
 
-  // Stock: propiedades del inventario del usuario sin publicar hace +7 días.
-  const SAME_AS_UNPUBLISHED = 7 * 24 * 60 * 60 * 1000;
-  const unpublishedInventory = await Inventory.find({ assignedAgent: userId }).populate('property');
   for (const inv of unpublishedInventory) {
     if (inv.isPublished) continue;
     const since = inv.unpublishedAt || inv.createdAt;
     const days = Math.floor((now.getTime() - new Date(since).getTime()) / (24 * 60 * 60 * 1000));
     if (!since || days < 7) continue;
     const prop = inv.property || {};
-    await ensure({
+    items.push({
       type: 'propiedad_sin_publicar',
       key: `inv-unpublished-${inv._id}`,
       title: 'Propiedad sin publicar',
       message: `La propiedad en ${prop.zone || ''} ${prop.city || ''} lleva ${days} días en tu inventario sin publicar.`,
-      userId,
       data: { entityId: inv.property ? inv.property._id : null },
     });
-    created.push('propiedad_sin_publicar');
   }
+
+  // Todos los avisos se crean en un solo lote: se resuelve en UNA consulta
+  // cuáles ya existían y los nuevos se insertan en paralelo.
+  const createdDocs = await ensureMany(userId, items);
+  created.push(...createdDocs.map((doc) => doc.type));
 
   return created;
 }
 
 // Genera avisos automáticos para todos los usuarios del sistema (job programado).
+// Los usuarios se procesan con CONCURRENCIA LIMITADA (no uno por uno): con 50+
+// usuarios en el equipo el job secuencial tardaba minutos y bloqueaba el pool
+// de conexiones de MongoDB durante todo ese tiempo.
+const USER_BATCH_SIZE = 8;
+
 async function generateForAllUsers() {
   const users = await User.find({ status: { $ne: 'inactivo' } }).select('_id');
   const totals = { users: users.length, notifications: 0 };
-  for (const u of users) {
-    try {
-      const created = await generateForUser(u._id);
-      totals.notifications += created.length;
-    } catch (error) {
-      console.error(`[NotificationJob] Error para el usuario ${u._id}:`, error.message);
-    }
+
+  for (let i = 0; i < users.length; i += USER_BATCH_SIZE) {
+    const batch = users.slice(i, i + USER_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (u) => {
+        try {
+          const created = await generateForUser(u._id);
+          return created.length;
+        } catch (error) {
+          console.error(`[NotificationJob] Error para el usuario ${u._id}:`, error.message);
+          return 0;
+        }
+      })
+    );
+    totals.notifications += results.reduce((sum, n) => sum + n, 0);
   }
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers, setIo, ensure, pushNative };
+module.exports = { generateForUser, generateForAllUsers, setIo, ensure, ensureMany, pushNative };

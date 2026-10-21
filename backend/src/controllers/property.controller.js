@@ -32,8 +32,13 @@ const INTENTIONS_BY_OPERATION = {
   renta: ['rentar', 'alquilar'],
 };
 
-// Avisa a los clientes cuyo embudo/intención y presupuesto coinciden con la propiedad.
-async function notifyInterestedClients(property) {
+// Avisa a los clientes cuyo embudo/intención y presupuesto coinciden con la
+// propiedad.
+//
+// `excludeUserId` es quien publicó la propiedad: NUNCA debe recibir el aviso de
+// su propia publicación (era la causa de que al asesor le llegara el aviso de
+// "nueva propiedad" que él mismo había generado).
+async function notifyInterestedClients(property, excludeUserId) {
   const intentions = INTENTIONS_BY_OPERATION[property.operationType] || [];
   if (!intentions.length || !property.isPublished) return 0;
 
@@ -54,6 +59,9 @@ async function notifyInterestedClients(property) {
     let notified = 0;
     for (const client of clients) {
       const targetUser = client.asesorAsignado || client.responsibleUser;
+      if (!targetUser) continue;
+      // Quien publicó la propiedad no recibe el aviso de su propia captura.
+      if (excludeUserId && String(targetUser) === String(excludeUserId)) continue;
       const budget = client.buyerInfo && client.buyerInfo.budget ? Number(client.buyerInfo.budget) : 0;
       if (budget > 0 && price > budget * 1.15) continue; // supera el presupuesto (15% de holgura)
 
@@ -126,6 +134,24 @@ async function syncInventoryOnPublish(property, isPublished, assignedAgent) {
   }
 }
 
+// Borra del almacenamiento las fotos de una propiedad. Se usa cuando se
+// elimina la propiedad o cuando se le quitan fotos en la edición: los archivos
+// que siguen en uso (por otra propiedad, documento o inventario) se quedan,
+// los que quedan huérfanos se eliminan para no llenar la base de datos.
+async function deletePhotosFromStorage(urls) {
+  if (!Array.isArray(urls) || !urls.length) return 0;
+  const storage = require('../services/storage.service');
+  let removed = 0;
+  for (const url of urls) {
+    try {
+      if (await storage.deleteFileIfUnused(url)) removed += 1;
+    } catch (error) {
+      console.warn('[Storage] No se pudo eliminar una foto:', error.message);
+    }
+  }
+  return removed;
+}
+
 const create = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (body.photos !== undefined) body.photos = normalizePhotos(body.photos);
@@ -137,7 +163,13 @@ const create = asyncHandler(async (req, res) => {
   const nextNum = String(count + 1).padStart(3, '0');
   body.folio = `INMO-${nextNum}-${year}`;
   
-  const property = await Property.create(body);
+  const property = await Property.create(body).catch(async (error) => {
+    // Si la creación falla (por ejemplo, la base de datos está sin espacio),
+    // las fotos que se subieron antes quedan huérfanas ocupando storage.
+    // Se borran aquí mismo para no acumular archivos sin uso.
+    await deletePhotosFromStorage(body.photos);
+    throw error;
+  });
   await logActivity({
     entityType: 'Property',
     entityId: property._id,
@@ -145,7 +177,7 @@ const create = asyncHandler(async (req, res) => {
     action: 'creacion',
     message: `Se registró la propiedad (${property.type} en ${property.zone || property.city || 'sin ubicación'})`,
   });
-  await notifyInterestedClients(property);
+  await notifyInterestedClients(property, req.user._id);
   await notifyNewsletter(property);
 
   // Si se registró ya compartida, aparece de inmediato en el inventario general.
@@ -166,6 +198,7 @@ const update = asyncHandler(async (req, res) => {
   const previousStatus = property.status;
   const previousPrice = Number(property.price) || 0;
   const previousPublished = Boolean(property.isPublished);
+  const previousPhotos = Array.isArray(property.photos) ? [...property.photos] : [];
 
   Object.assign(property, req.body);
   if (req.body.photos !== undefined) property.photos = normalizePhotos(req.body.photos);
@@ -183,6 +216,19 @@ const update = asyncHandler(async (req, res) => {
   const nowPublished = Boolean(property.isPublished);
   if (nowPublished !== previousPublished) {
     await syncInventoryOnPublish(property, nowPublished, req.body.assignedAgent || property.responsibleUser);
+    // Publicar desde la edición también avisa a los asesores con clientes
+    // interesados (nunca al propio autor de la publicación).
+    if (nowPublished && !previousPublished) {
+      await notifyInterestedClients(property, req.user._id);
+    }
+  }
+
+  // Fotos quitadas en la edición: se borran del almacenamiento si ya ninguna
+  // otra ficha las referencia (si no, quedarían huérfanas ocupando espacio).
+  if (req.body.photos !== undefined) {
+    const kept = new Set((property.photos || []).map(String));
+    const removedPhotos = previousPhotos.filter((p) => !kept.has(String(p)));
+    if (removedPhotos.length) await deletePhotosFromStorage(removedPhotos);
   }
 
   if (req.body.status && req.body.status !== previousStatus) {
@@ -216,6 +262,9 @@ const remove = asyncHandler(async (req, res) => {
   await property.deleteOne();
 
   await Inventory.deleteMany({ property: property._id });
+  // Fotos de la propiedad eliminada: sin el registro ya nada las referencia,
+  // así que se borran del almacenamiento para no dejar archivos huérfanos.
+  await deletePhotosFromStorage(property.photos);
   await logActivity({
     entityType: 'Property',
     entityId: property._id,
@@ -238,6 +287,14 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   const isPublished = req.body.isPublished === true;
 
+  // Estado previo: se guarda ANTES de modificar el documento para poder
+  // detectar la transición publicar/despublicar. Antes esta variable no
+  // existía en este ámbito y lanzaba "previousPublished is not defined",
+  // lo que devolvía un error 500 al publicar aunque la propiedad sí se
+  // guardara (y el resto del flujo, incluido el aviso a los interesados,
+  // nunca se ejecutaba).
+  const previousPublished = Boolean(property.isPublished);
+
   // Quien es dueño de la propiedad (o la tiene asignada) puede publicar y
   // despublicar; la restricción anterior dejaba botón y API desincronizados.
   property.isPublished = isPublished;
@@ -245,7 +302,7 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   await syncInventoryOnPublish(property, isPublished, req.body.assignedAgent || null);
 
-  if (isPublished && !Boolean(previousPublished)) {
+  if (isPublished && !previousPublished) {
     await notifyNewsletter(property);
   }
 
@@ -257,7 +314,7 @@ const togglePublish = asyncHandler(async (req, res) => {
     message: isPublished ? 'Propiedad publicada en inventario' : 'Propiedad despublicada',
   });
 
-  const notified = isPublished ? await notifyInterestedClients(property) : 0;
+  const notified = isPublished ? await notifyInterestedClients(property, req.user._id) : 0;
 
   res.json({
     success: true,

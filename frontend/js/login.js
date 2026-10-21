@@ -596,6 +596,102 @@ window.LoginPage = (() => {
     });
   }
 
+  // ---- Aviso de nueva versión (pantalla de inicio de sesión) ----
+  // Consulta la versión publicada en el servidor y avisa cuando hay una nueva
+  // disponible. Es el aviso "al iniciar sesión" que complementaba al banner y
+  // al botón de Actualizaciones que ya se muestran dentro de la app.
+  const SEEN_VERSION_KEY = 'crm_app_version_seen';
+  const MODAL_VERSION_KEY = 'crm_update_modal_shown';
+
+  function readStorage(key) {
+    try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
+  }
+
+  function writeStorage(key, value) {
+    try { localStorage.setItem(key, String(value || '')); } catch (e) { /* sin almacenamiento */ }
+  }
+
+  // Hash de la versión que se acaba de aplicar: al recargar, la app ya
+  // considerará esa versión como vista (nada de banner ni botón parpadeando).
+  let latestVersionHash = '';
+
+  // Aplica la actualización: borra la caché del service worker, lo da de baja
+  // y recarga la página para tomar los archivos nuevos.
+  async function applyUpdate() {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (e) { /* seguir */ }
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch (e) { /* seguir */ }
+    // La versión recién aplicada queda marcada como vista: al recargar no debe
+    // volver a salir el aviso ni quedar el botón "Actualizaciones" con el punto.
+    if (latestVersionHash) writeStorage(SEEN_VERSION_KEY, latestVersionHash);
+    window.location.reload();
+  }
+
+  async function versionNotice() {
+    const label = document.getElementById('login-version');
+    let data = null;
+    try {
+      data = await window.API.config.version();
+    } catch (e) {
+      return;
+    }
+    if (!data) return;
+    if (label && data.version) label.textContent = `Versión ${data.version}`;
+    latestVersionHash = data.hash || '';
+
+    const seen = readStorage(SEEN_VERSION_KEY);
+    if (!seen) {
+      // Primer uso en este dispositivo: se registra la versión actual sin
+      // molestar al usuario. A partir de aquí, cualquier cambio avisa.
+      writeStorage(SEEN_VERSION_KEY, data.hash || '');
+      return;
+    }
+    if (!data.hash || String(data.hash) === String(seen)) return;
+    if (readStorage(MODAL_VERSION_KEY) === String(data.hash)) return;
+    writeStorage(MODAL_VERSION_KEY, data.hash);
+
+    const notes = Array.isArray(data.notes) ? data.notes.slice(0, 6).filter(Boolean) : [];
+    const versionText = data.version ? ` — v${data.version}` : '';
+    const modal = UI.openModal({
+      title: `&#127881;&nbsp; Nueva versión disponible${versionText}`,
+      size: 520,
+      body: `
+        <p style="margin-top:0;">Tu aplicación se ha actualizado. Estas son las novedades:</p>
+        ${notes.length
+          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
+              ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
+             </ul>`
+          : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
+        <p class="text-muted" style="font-size:12px;margin:14px 0 0;">Pulsa <strong>Actualizar ahora</strong> para cargar la última versión. Puedes entrar igualmente y actualizarla después desde el módulo <strong>Actualizaciones</strong>.</p>
+      `,
+      footer: `
+        <button class="btn btn-secondary" type="button" data-update-later>Entrar sin actualizar</button>
+        <button class="btn btn-primary" type="button" data-update-now>&#128260;&nbsp; Actualizar ahora</button>
+      `,
+    });
+    const overlay = modal && modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+    if (!overlay) return;
+    const laterBtn = overlay.querySelector('[data-update-later]');
+    if (laterBtn) laterBtn.addEventListener('click', () => UI.closeModal());
+    const nowBtn = overlay.querySelector('[data-update-now]');
+    if (nowBtn) {
+      nowBtn.addEventListener('click', async () => {
+        nowBtn.disabled = true;
+        nowBtn.textContent = 'Actualizando…';
+        await applyUpdate();
+      });
+    }
+  }
+
   function setup() {
     registerServiceWorker();
 
@@ -649,6 +745,9 @@ window.LoginPage = (() => {
     if (window.AppInstall) window.AppInstall.init();
 
     resetAppFlow();
+
+    // Aviso de nueva versión (no bloquea el inicio de sesión).
+    versionNotice();
   }
 
   function init() {

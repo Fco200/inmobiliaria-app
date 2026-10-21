@@ -1,15 +1,17 @@
 {
-  "version": "2.16",
+  "version": "2.18",
   "channel": "estable",
-  "title": "Actualización 2.16",
-  "date": "2026-10-19",
+  "title": "Actualización 2.18",
+  "date": "2026-10-21",
   "notes": [
-    "Propiedades: el módulo (antes 'Mis Propiedades') es el inventario general del equipo y ya no permite publicar ni despublicar. Ahí solo se consulta: ver el detalle, agendar citas, crear negocios y compartir por WhatsApp.",
-    "Captar Propiedades: es donde el asesor que capta decide, con el botón Publicar, si su propiedad se sube o no al inventario general para que los demás asesores puedan verla y crear a partir de ella.",
-    "Propiedades: solo aparecen las propiedades que los asesores comparten desde 'Captar Propiedades' (ya no se muestran todas).",
-    "Clientes: la forma de compra ahora es opcional (Contado, Infonavit, Banco, Fovissste u Otros, o bien Pendiente). Si el cliente viene a Vender, se ocultan automáticamente la forma de pago y la capacidad de pago.",
-    "Negocios: al crear un negocio con una propiedad se avisa al resto del equipo con una nota en el chat interno, y al abrir una propiedad con negocios abiertos se muestra un aviso.",
-    "Compartir por WhatsApp: el PDF lleva el logo de la inmobiliaria, la foto de portada destacada con su etiqueta y la descripción con sus viñetas y saltos de línea.",
-    "Fotos: además de elegir la portada con la estrella, ya puedes arrastrar las fotos para ordenarlas."
+    "Estabilidad: se corrigió el problema que dejaba la aplicación \"trabada\". La base de datos se había llenado con fotos repetidas que ya nadie usaba y el servidor rechazaba TODAS las escrituras (no se podían guardar propiedades, avisos ni sesiones). Se limpiaron más de 260 MB de archivos sin uso.",
+    "Fotos: las imágenes idénticas ya no se guardan por duplicado y al borrar una propiedad (o quitarle fotos) sus archivos se eliminan si nadie más los usa. Hay una limpieza automática cada 2 horas.",
+    "Avisos: la lista ya no se corta. Ahora muestra cuántos avisos hay en total y permite cargar los siguientes con el botón \"Cargar más avisos\".",
+    "Notificaciones: cuando se te avisa de algo nuevo, la notificación queda marcada como leída en el servidor. El contador de la campana se limpia de verdad y ya no vuelve a saltarte el aviso en cada módulo.",
+    "Avisos del equipo: el banner se marca como leído al mostrarse, así que no vuelve a aparecer en cada cambio de sección.",
+    "Propiedades: al publicar o despublicar ya no se genera un error en el servidor y el asesor que publica no recibe su propia notificación.",
+    "Rendimiento: las respuestas del servidor se comprimen (gzip), los archivos estáticos y las fotos se cachean en el navegador y la base de datos usa un pool de conexiones acotado. La app va más fluida con todo el equipo conectado.",
+    "Aviso de actualización: ahora también aparece en la pantalla de inicio de sesión, con el número de versión real en el pie.",
+    "Logotipo: se eliminó el logo duplicado de la barra lateral y de la pantalla de bienvenida; ahora solo aparece el logo horizontal de INMOBLES."
   ]
 }

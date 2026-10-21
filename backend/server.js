@@ -5,9 +5,6 @@ require('dotenv').config();
 // Render no siempre tiene ruta de salida por IPv6: forzamos que las conexiones
 // salientes (p. ej. SMTP de Gmail) resuelvan a IPv4 primero, evitando
 // "connect ENETUNREACH <ipv6>:587".
-// Render no siempre tiene ruta de salida por IPv6: forzamos que las conexiones
-// salientes (p. ej. SMTP de Gmail) resuelvan a IPv4 primero, evitando
-// "connect ENETUNREACH <ipv6>:587".
 try {
   require('node:dns').setDefaultResultOrder('ipv4first');
 } catch (e) {
@@ -22,6 +19,7 @@ const { port, nodeEnv, jwtSecret } = require('./src/config/env');
 const { hasSmtp, resetTransporter } = require('./src/services/mail.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const maintenanceJob = require('./src/jobs/maintenance.job');
+const storageJob = require('./src/jobs/storage.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { User, Session } = require('./src/models');
@@ -56,6 +54,10 @@ async function start() {
     // Asegura el canal grupal general y el canal de Soporte accesibles para el equipo.
     try { await getOrCreateGeneralChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal general:', e.message); }
     try { await getOrCreateSupportChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal de soporte:', e.message); }
+    // Limpieza de archivos subidos sin registro (fotos huérfanas): con la
+    // cuota gratuita de Atlas, unas pocas fotos de celular repetidas bastan
+    // para dejar la base de datos sin espacio y bloquear las escrituras.
+    storageJob.startStorageJob();
   }
 
   const server = app.listen(port, () => {
@@ -64,6 +66,22 @@ async function start() {
 
   const io = new Server(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
+    // Ajustes para 50+ usuarios simultáneos en una sola instancia:
+    //  - `pingInterval`/`pingTimeout`: el servidor comprueba la conexión cada
+    //    30 s y la da por muerta a los 20 s de no responder. Con los valores
+    //    por defecto (25 s/20 s) un pc en reposo con la pestaña en segundo
+    //    plano se desconectaba y reconectaba en bucle, generando carga.
+    //  - `maxHttpBufferSize` pequeño: los mensajes de chat son cortos; un
+    //    payload enorme es un abuso y no debe memorie.
+    //  - `connectionStateRecovery`: si la conexión se cae, el cliente recupera
+    //    las salas y los paquetes perdidos en lugar de quedarse desconectado.
+    pingInterval: 30000,
+    pingTimeout: 20000,
+    maxHttpBufferSize: 1e6,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      skipMiddlewares: false,
+    },
   });
 
   logger.setIo(io);

@@ -35,6 +35,7 @@ notificationRouter.get('/', notificationController.list);
 notificationRouter.get('/unread-count', notificationController.unreadCount);
 notificationRouter.post('/generate', notificationController.generate);
 notificationRouter.post('/mark-all-read', notificationController.markAllRead);
+notificationRouter.post('/mark-read', notificationController.markReadMany);
 notificationRouter.delete('/all', notificationController.clearAll);
 notificationRouter.patch('/:id/read', idParam, notificationController.markRead);
 

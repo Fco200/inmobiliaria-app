@@ -387,6 +387,7 @@ window.Pages.properties = {
       },
       statusOptions: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'],
       filters: [
+        { key: 'owner', label: 'Propietario', searchSource: UI.remoteSources.client, placeholder: 'Todos los propietarios' },
         { key: 'operationType', label: 'Operación', placeholder: 'Todas las operaciones', options: ['venta', 'renta'] },
         { key: 'type', label: 'Tipo', placeholder: 'Todos los tipos', options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
         { key: 'minPrice', label: 'Precio mínimo', type: 'number', placeholder: 'Precio mín.', width: 130 },
@@ -418,7 +419,7 @@ window.Pages.properties = {
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
         { name: 'city', label: 'Ciudad', type: 'text' },
         { name: 'state', label: 'Estado', type: 'text' },
-        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre, teléfono o correo y la lista se filtra al instante.' }, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
+        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },

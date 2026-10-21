@@ -36,6 +36,11 @@ window.Pages.tasks = {
         remove: (id) => API.tasks.remove(id),
       },
       statusOptions: ['pendiente', 'en_proceso', 'completada', 'cancelada', 'vencida'],
+      filters: [
+        { key: 'client', label: 'Cliente', searchSource: UI.remoteSources.client, placeholder: 'Todos los clientes' },
+        { key: 'property', label: 'Propiedad', searchSource: UI.remoteSources.property, placeholder: 'Todas las propiedades' },
+        { key: 'business', label: 'Negocio', searchSource: UI.remoteSources.business, placeholder: 'Todos los negocios' },
+      ],
       columns: [
         { key: 'title', label: 'Tarea', render: (r) => `<strong>${UI.escapeHtml(r.title)}</strong><br><small class="text-muted">${UI.escapeHtml(r.description || '')}</small>` },
         { key: 'date', label: 'Fecha', render: (r) => Format.dateTime(r.date) },
@@ -50,7 +55,7 @@ window.Pages.tasks = {
         { name: 'date', label: 'Fecha y hora', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
         { name: 'priority', label: 'Prioridad', type: 'select', options: ['baja', 'media', 'alta', 'urgente'], value: 'media' },
         { name: 'assignedTo', label: 'Responsable', type: 'select', sinOtros: true, required: true, value: me ? me._id : '', options: users.map((x) => ({ value: x._id, label: x.name })) },
-        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'status', label: 'Estado', type: 'select', required: true, options: ['pendiente', 'en_proceso', 'completada', 'cancelada', 'vencida'] },
       ],
       formData(values) {

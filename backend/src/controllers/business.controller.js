@@ -132,8 +132,8 @@ const stages = asyncHandler(async (req, res) => {
 const businessCrud = buildCrud(Business, {
   populate: ['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'ticket'],
   searchFields: ['name'],
-  // Filtros por etapa y tipo de proceso (?currentStage= / ?processType=).
-  extraFilters: { currentStage: 'currentStage', processType: 'processType' },
+  // Filtros por etapa, tipo de proceso, cliente y propiedad.
+  extraFilters: { currentStage: 'currentStage', processType: 'processType', buyerClient: 'buyerClient', sellerClient: 'sellerClient', property: 'property' },
   // Un negocio pertenece al asesor principal o al socio que participa.
   ownerMatch: (userId) => ({ $or: [{ mainAdvisor: userId }, { partnerAdvisor: userId }] }),
 });

@@ -3506,31 +3506,14 @@ body.sidebar-collapsed { --sidebar-w: 78px; }
   transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1), padding 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .app-sidebar-top {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 2px 6px 12px; margin-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
-.app-sidebar-brand { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1; text-decoration: none; color: var(--text); }
 
-/* Logotipo del sidebar: SOLO el logo horizontal (logoinmobles.png). Antes se
-   renderizaban también el icono cuadrado (LOGOICONO.jpeg) y el texto de marca,
-   con lo que la misma marca aparecía duplicada. Al colapsar el menú el logo
-   horizontal se reduce (no desaparece) para que siga identificando la app. */
-.app-sidebar-logo-wide {
-  height: 32px; width: auto; max-width: 170px;
-  flex-shrink: 0; object-fit: contain; border-radius: 8px;
-  margin-right: 10px;
-  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin-right 0.28s cubic-bezier(0.16, 1, 0.3, 1), height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-}
-body.sidebar-collapsed .app-sidebar-logo-wide {
-  max-width: 60px; height: 22px; opacity: 1; margin-right: 0;
-}
-
-.app-sidebar-brandname {
-  font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
-  white-space: nowrap; overflow: hidden; max-width: 160px;
-  transition: max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
-}
+/* La cabecera del sidebar muestra SOLO el botón de hamburguesa (abre/cierra el
+   menú). Se retiró el logotipo y el texto de marca para dejar la barra limpia:
+   la marca ya aparece en la pantalla de inicio de sesión y en el sitio público. */
 .app-sidebar-collapse {
   width: 34px; height: 34px; flex-shrink: 0;
   border-radius: 10px; border: 1px solid var(--border);
@@ -3570,14 +3553,12 @@ body.sidebar-collapsed .app-sidebar-logo-wide {
 .app-sidebar-foot { margin-top: 8px; padding: 10px 12px 2px; border-top: 1px solid var(--border); }
 .app-sidebar-credit { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.02em; transition: opacity 0.18s ease; }
 
-body.sidebar-collapsed .app-sidebar-brandname { max-width: 0; opacity: 0; }
 body.sidebar-collapsed .app-sidebar-label { max-width: 0; opacity: 0; }
 body.sidebar-collapsed .app-sidebar-section { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
 body.sidebar-collapsed .app-sidebar-credit { opacity: 0; }
 body.sidebar-collapsed .app-sidebar-ico { margin-right: 0; }
 body.sidebar-collapsed .app-sidebar { padding-left: 8px; padding-right: 8px; }
 body.sidebar-collapsed .app-sidebar-link { justify-content: center; padding: 10px 8px; }
-body.sidebar-collapsed .app-sidebar-brand { justify-content: center; flex: 0 0 auto; }
 body.sidebar-collapsed .app-sidebar-top { flex-direction: column; gap: 6px; }
 
 .app-sidebar-backdrop { display: none; }

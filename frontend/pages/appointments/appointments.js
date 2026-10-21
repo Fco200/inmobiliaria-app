@@ -68,6 +68,14 @@ window.Pages.appointments = {
         remove: (id) => API.appointments.remove(id),
       },
       statusOptions: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'],
+      // Filtros de la barra superior: cliente, propiedad, negocio y tipo, todos
+      // con búsqueda remota (no despliegan la lista completa).
+      filters: [
+        { key: 'client', label: 'Cliente', searchSource: UI.remoteSources.client, placeholder: 'Todos los clientes' },
+        { key: 'property', label: 'Propiedad', searchSource: UI.remoteSources.property, placeholder: 'Todas las propiedades' },
+        { key: 'business', label: 'Negocio', searchSource: UI.remoteSources.business, placeholder: 'Todos los negocios' },
+        { key: 'type', label: 'Tipo', placeholder: 'Todos los tipos', options: APPOINTMENT_TYPES.map((t) => ({ value: t.value, label: t.label })) },
+      ],
       columns: [
         { key: 'date', label: 'Fecha y hora', render: (r) => Format.dateTime(r.date) },
         { key: 'client', label: 'Cliente', render: (r) => UI.escapeHtml(r.client ? r.client.name : '—') },
@@ -78,9 +86,9 @@ window.Pages.appointments = {
       ],
       fields: [
         { name: 'date', label: 'Fecha y hora', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
-        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: { url: '/properties/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe zona, ciudad o folio y la lista se filtra.' }, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
-        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: { url: '/businesses/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe el nombre del negocio y la lista se filtra.' }, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
+        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: me ? me._id : '', options: userOptions },
         { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },
         { name: 'typeOther', label: 'Especifica el tipo de cita', type: 'text', placeholder: 'Ej. Revisión de escrituras…' },

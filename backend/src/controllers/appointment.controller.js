@@ -35,6 +35,9 @@ const appointmentCrud = buildCrud(Appointment, {
   populate: ['client', 'user', 'business', 'property'],
   searchFields: ['place', 'notes'],
   ownerField: 'user',
+  // Permite filtrar el listado por cliente, propiedad o negocio desde la barra
+  // de filtros (los selects con búsqueda remota envían ?client=…).
+  extraFilters: { client: 'client', property: 'property', business: 'business', type: 'type' },
   afterCreate: async (doc, req) => {
     await syncToGoogle(doc, req, 'appointment').catch(() => {});
     const ownerId = doc.user && (doc.user._id || doc.user);
@@ -54,6 +57,8 @@ const taskCrud = buildCrud(Task, {
   populate: ['assignedTo', 'client', 'business', 'property'],
   searchFields: ['title', 'description'],
   ownerField: 'assignedTo',
+  // Filtro por cliente/propiedad/negocio desde la barra de filtros.
+  extraFilters: { client: 'client', property: 'property', business: 'business' },
   afterCreate: async (doc, req) => {
     await syncToGoogle(doc, req, 'task').catch(() => {});
     const assigneeId = doc.assignedTo && (doc.assignedTo._id || doc.assignedTo);

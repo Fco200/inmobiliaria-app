@@ -38,10 +38,27 @@ function crudPage(container, config) {
         </select>
       `;
     }
-    // Filtros adicionales configurables: { key, label, placeholder, options[] | type }.
-    // Cada control escribe en state.filters y recarga la página al cambiar.
+    // Filtros adicionales configurables: { key, label, placeholder, options[] |
+    // type | searchSource }. Cada control escribe en state.filters y recarga la
+    // página al cambiar.
+    //
+    // `searchSource` convierte el filtro en un selector con BÚSQUEDA REMOTA
+    // (igual que el de los formularios): en vez de desplegar toda la cartera de
+    // clientes, el asesor escribe y se consulta al servidor. Se usa el mismo
+    // componente UI.searchSelect + UI.wireSearchSelects para no duplicar lógica.
     const filterControls = config.filters && config.filters.length
       ? config.filters.map((f) => {
+        if (f.searchSource) {
+          return `<div data-toolbar-search="${UI.escapeHtml(f.key)}" style="max-width:${f.width || 240}px;min-width:200px;">${UI.searchSelect(
+            `filter-${f.key}`,
+            f.label,
+            {
+              source: { ...f.searchSource, legend: f.searchSource.legend || 'Escribe para buscar y filtrar.' },
+              placeholder: f.placeholder || 'Escribe para buscar…',
+              options: [{ value: '', label: f.placeholder || `Todos: ${String(f.label).toLowerCase()}` }, ...(f.options || [])],
+            }
+          )}</div>`;
+        }
         if (f.options) {
           const opts = f.options
             .map((o) => `<option value="${UI.escapeHtml(typeof o === 'object' ? o.value : o)}">${UI.escapeHtml(typeof o === 'object' ? o.label : o)}</option>`)
@@ -81,6 +98,23 @@ function crudPage(container, config) {
         clearTimeout(filterTimer);
         // El select aplica al instante; los inputs numéricos debouncean (300 ms).
         filterTimer = setTimeout(() => { state.page = 1; load(); }, isSelect ? 0 : 300);
+      });
+    });
+
+    // Filtros con búsqueda remota (p. ej. "Cliente"): el buscador filtra contra
+    // el servidor y el <select> cambia de valor. Se restauran el valor guardado
+    // en el estado (al recargar la página conserva el filtro) y se engancha al
+    // mismo flujo de recarga que los demás filtros.
+    if (UI.wireSearchSelects) UI.wireSearchSelects(el);
+    el.querySelectorAll('[data-toolbar-search]').forEach((wrap) => {
+      const key = wrap.dataset.toolbarSearch;
+      const select = wrap.querySelector('select');
+      if (!select) return;
+      select.value = state.filters[key] || '';
+      select.addEventListener('change', () => {
+        state.filters[key] = select.value;
+        state.page = 1;
+        load();
       });
     });
     const statusEl = el.querySelector('[data-status]');

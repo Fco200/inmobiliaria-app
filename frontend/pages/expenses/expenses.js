@@ -38,6 +38,10 @@ window.Pages.expenses = {
         remove: (id) => API.expenses.remove(id),
       },
       csvExport: () => API.expenses.exportCsv(),
+      filters: [
+        { key: 'business', label: 'Negocio', searchSource: UI.remoteSources.business, placeholder: 'Todos los negocios' },
+        { key: 'category', label: 'Categoría', placeholder: 'Todas las categorías', options: ['gasolina', 'publicidad', 'lonas', 'tarjetas', 'volantes', 'imagen', 'traslados', 'material', 'impresiones', 'otros'] },
+      ],
       columns: [
         { key: 'concept', label: 'Concepto', render: (r) => `<strong>${UI.escapeHtml(r.concept)}</strong><br><small class="text-muted">${UI.escapeHtml(r.activity || '')}</small>` },
         { key: 'category', label: 'Categoría', render: (r) => UI.badge(String(r.category || '').replace(/_/g, ' '), 'info') },
@@ -52,7 +56,7 @@ window.Pages.expenses = {
         { name: 'amount', label: 'Monto', type: 'number', required: true },
         { name: 'date', label: 'Fecha', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
         { name: 'activity', label: 'Actividad', type: 'text' },
-        { name: 'business', label: 'Negocio relacionado', type: 'select', sinOtros: true, search: true, searchSource: { url: '/businesses/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe el nombre del negocio y la lista se filtra.' }, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'business', label: 'Negocio relacionado', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'observations', label: 'Observaciones', type: 'textarea', full: true },
         { name: 'receipt_file', label: 'Comprobante (factura/ticket)', type: 'file', accept: 'image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,application/pdf', full: true, hint: 'Opcional. Imagen o PDF que queda guardado con el gasto (máx. 15 MB).' },
       ],

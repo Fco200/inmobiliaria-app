@@ -123,10 +123,13 @@ window.Pages.documents = {
           <option value="">Todos los estados</option>
           ${STATUS.map((s) => `<option value="${s}">${s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
         </select>
-        <select class="form-control" id="doc-client" style="max-width:200px;">
-          <option value="">Todos los clientes</option>
-          ${clientOptions.map((o) => `<option value="${o.value}">${UI.escapeHtml(o.label)}</option>`).join('')}
-        </select>
+        <div style="max-width:280px;min-width:220px;" id="doc-client-wrap">
+          ${UI.searchSelect('doc-client', 'Cliente', {
+            source: UI.remoteSources.client,
+            placeholder: 'Escribe un nombre o teléfono…',
+            options: [{ value: '', label: 'Todos los clientes' }, ...clientOptions],
+          })}
+        </div>
       </div>
       <div id="doc-list"><div class="loading">Cargando formatos...</div></div>
     `;
@@ -134,7 +137,8 @@ window.Pages.documents = {
     const listEl = container.querySelector('#doc-list');
     const searchEl = container.querySelector('#doc-search');
     const statusEl = container.querySelector('#doc-status');
-    const clientEl = container.querySelector('#doc-client');
+    const clientEl = container.querySelector('#fld-doc-client');
+    if (clientEl && UI.wireSearchSelects) UI.wireSearchSelects(container.querySelector('#doc-client-wrap'));
     let records = [];
     let currentEntityFilter = null;
 
@@ -143,7 +147,7 @@ window.Pages.documents = {
       const params = {};
       if (searchEl.value) params.q = searchEl.value;
       if (statusEl.value) params.status = statusEl.value;
-      if (clientEl.value) params.client = clientEl.value;
+      if (clientEl && clientEl.value) params.client = clientEl.value;
       if (currentEntityFilter) {
         params[currentEntityFilter.type] = currentEntityFilter.id;
       }
@@ -254,9 +258,9 @@ window.Pages.documents = {
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: record ? record.name : '' },
         { name: 'type', label: 'Tipo', type: 'select', options: TYPES, value: record ? record.type : 'formato' },
         { name: 'status', label: 'Estado', type: 'select', options: STATUS, value: record ? record.status : 'pendiente' },
-        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: { url: '/properties/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe zona, ciudad o folio y la lista se filtra.' }, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
-        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: { url: '/businesses/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe el nombre del negocio y la lista se filtra.' }, options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
+        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
         { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },
         { name: 'observations', label: 'Observaciones', type: 'textarea', full: true, value: record ? record.observations : '' },
       ];

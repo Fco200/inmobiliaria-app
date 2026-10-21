@@ -41,7 +41,7 @@ window.Pages.negotiations = {
     ];
     const stagesFor = (processType) => (processType === 'vendedor' ? SELLER_STAGES : BUYER_STAGES);
 
-    const state = { processType: 'comprador' };
+    const state = { processType: 'comprador', clientFilter: '' };
 
     let me = null;
     let users = [];
@@ -79,8 +79,26 @@ window.Pages.negotiations = {
           <button class="btn btn-primary" type="button" data-new>+ Nueva negociación</button>
         </div>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px;">
+        <div style="max-width:320px;min-width:240px;flex:1;" data-neg-client-filter>
+          ${UI.searchSelect('neg-client-filter', 'Filtrar por cliente', {
+            source: UI.remoteSources.client,
+            placeholder: 'Escribe un nombre o teléfono…',
+            options: [{ value: '', label: 'Todos los clientes' }, ...clientOptions],
+          })}
+        </div>
+      </div>
       <div id="neg-board"><div class="loading">Cargando negociaciones...</div></div>
     `;
+
+    if (UI.wireSearchSelects) UI.wireSearchSelects(container.querySelector('[data-neg-client-filter]'));
+    const clientFilterEl = container.querySelector('#fld-neg-client-filter');
+    if (clientFilterEl) {
+      clientFilterEl.addEventListener('change', () => {
+        state.clientFilter = clientFilterEl.value || '';
+        renderBoard();
+      });
+    }
 
     const boardEl = container.querySelector('#neg-board');
 
@@ -102,6 +120,10 @@ window.Pages.negotiations = {
       ];
     }
 
+    // Guarda los negocios cargados; el filtro por cliente solo repinta la
+    // vista sin volver a consultar al servidor.
+    let boardBusinesses = [];
+
     async function loadBoard() {
       boardEl.innerHTML = '<div class="loading">Cargando negociaciones...</div>';
       try {
@@ -110,60 +132,76 @@ window.Pages.negotiations = {
           API.businesses.list({ limit: 200, status: 'concluido' }),
           API.businesses.list({ limit: 200, status: 'cancelado' }),
         ]);
-        const active = result.data || [];
-        const all = [...active, ...(doneResult.data || []), ...(cancelledResult.data || [])];
-
-        const columns = columnsFor();
-        const byStage = {};
-        columns.forEach((c) => { byStage[c.stage] = []; });
-        const extras = [];
-        all.forEach((b) => {
-          const stage = b.currentStage;
-          if (byStage[stage]) byStage[stage].push(b);
-          else extras.push(b);
-        });
-
-        boardEl.innerHTML = `
-          <div class="funnel-board">
-            ${columns.map((col) => {
-              const items = byStage[col.stage] || [];
-              return `
-                <div class="kanban-col">
-                  <h4><span>${col.label}</span><span style="color:${col.color};">${items.length}</span></h4>
-                  ${items.map((b) => `
-                    <div class="kanban-card" data-card="${b._id}">
-                      <strong>${UI.escapeHtml(b.name)}</strong>
-                      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                        ${Format.currency(b.valueOperation)}<br>
-                        ${UI.escapeHtml(b.buyerClient ? b.buyerClient.name : 'Sin comprador')}${b.sellerClient ? ` ← ${UI.escapeHtml(b.sellerClient.name)}` : ''}
-                      </div>
-                    </div>`).join('') || '<p class="text-muted" style="font-size:12px;">Sin negocios</p>'}
-                </div>`;
-            }).join('')}
-            ${extras.length ? `
-              <div class="kanban-col">
-                <h4><span>Otras etapas</span><span style="color:#64748b;">${extras.length}</span></h4>
-                ${extras.map((b) => `
-                  <div class="kanban-card" data-card="${b._id}">
-                    <strong>${UI.escapeHtml(b.name)}</strong>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                      ${stageLabel(b.currentStage)}<br>
-                      ${Format.currency(b.valueOperation)}
-                    </div>
-                  </div>`).join('')}
-              </div>` : ''}
-          </div>
-        `;
-
-        boardEl.querySelectorAll('[data-card]').forEach((card) => {
-          card.addEventListener('click', () => {
-            const business = all.find((b) => b._id === card.dataset.card);
-            if (business) openDetail(business);
-          });
-        });
+        boardBusinesses = [
+          ...(result.data || []),
+          ...(doneResult.data || []),
+          ...(cancelledResult.data || []),
+        ];
+        renderBoard();
       } catch (error) {
         boardEl.innerHTML = UI.errorAlert(error.message);
       }
+    }
+
+    // Aplica el filtro por cliente (si lo hay) y pinta el tablero.
+    function renderBoard() {
+      const wanted = state.clientFilter;
+      const all = wanted
+        ? boardBusinesses.filter((b) => {
+          const buyer = b.buyerClient && (b.buyerClient._id || b.buyerClient);
+          const seller = b.sellerClient && (b.sellerClient._id || b.sellerClient);
+          return String(buyer) === String(wanted) || String(seller) === String(wanted);
+        })
+        : boardBusinesses;
+
+      const columns = columnsFor();
+      const byStage = {};
+      columns.forEach((c) => { byStage[c.stage] = []; });
+      const extras = [];
+      all.forEach((b) => {
+        const stage = b.currentStage;
+        if (byStage[stage]) byStage[stage].push(b);
+        else extras.push(b);
+      });
+
+      boardEl.innerHTML = `
+        <div class="funnel-board">
+          ${columns.map((col) => {
+            const items = byStage[col.stage] || [];
+            return `
+              <div class="kanban-col">
+                <h4><span>${col.label}</span><span style="color:${col.color};">${items.length}</span></h4>
+                ${items.map((b) => `
+                  <div class="kanban-card" data-card="${b._id}">
+                    <strong>${UI.escapeHtml(b.name)}</strong>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                      ${Format.currency(b.valueOperation)}<br>
+                      ${UI.escapeHtml(b.buyerClient ? b.buyerClient.name : 'Sin comprador')}${b.sellerClient ? ` ← ${UI.escapeHtml(b.sellerClient.name)}` : ''}
+                    </div>
+                  </div>`).join('') || '<p class="text-muted" style="font-size:12px;">Sin negocios</p>'}
+              </div>`;
+          }).join('')}
+          ${extras.length ? `
+            <div class="kanban-col">
+              <h4><span>Otras etapas</span><span style="color:#64748b;">${extras.length}</span></h4>
+              ${extras.map((b) => `
+                <div class="kanban-card" data-card="${b._id}">
+                  <strong>${UI.escapeHtml(b.name)}</strong>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                    ${stageLabel(b.currentStage)}<br>
+                    ${Format.currency(b.valueOperation)}
+                  </div>
+                </div>`).join('')}
+            </div>` : ''}
+        </div>
+      `;
+
+      boardEl.querySelectorAll('[data-card]').forEach((card) => {
+        card.addEventListener('click', () => {
+          const business = all.find((b) => b._id === card.dataset.card);
+          if (business) openDetail(business);
+        });
+      });
     }
 
     function openDetail(business) {
@@ -244,9 +282,9 @@ window.Pages.negotiations = {
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin comprador —' }, ...clientOptions] },
-        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin vendedor —' }, ...clientOptions] },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: { url: '/properties/options', valueField: '_id', labelField: 'label', subtitleField: 'subtitle', limit: 30, legend: 'Escribe zona, ciudad o folio y la lista se filtra.' }, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
+        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin comprador —' }, ...clientOptions] },
+        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin vendedor —' }, ...clientOptions] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
         { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number' },
         { name: 'negotiation_counterOffer', label: 'Contraoferta', type: 'number' },

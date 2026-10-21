@@ -10,6 +10,8 @@ const expenseCrud = buildCrud(Expense, {
   populate: ['user', 'business'],
   searchFields: ['concept', 'activity', 'observations'],
   ownerField: 'user',
+  // La barra de filtros permite acotar por negocio y por categoría.
+  extraFilters: { business: 'business', category: 'category' },
 });
 
 // Exporta los gastos a CSV con el mismo alcance del listado.

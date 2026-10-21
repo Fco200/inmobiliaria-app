@@ -824,6 +824,37 @@ function showImages(images, title = 'Galería de imágenes') {
     });
   }
 
+  // Fuentes de búsqueda remota estándar para los selectores de clientes,
+  // propiedades y negocios. Centralizarlas evita repetir la misma configuración
+  // (URL + campos + leyenda) en cada módulo y garantiza que TODOS los selectores
+  // del CRM se comporten igual: se escribe y se filtra contra el servidor.
+  const remoteSources = {
+    client: {
+      url: '/clients/options',
+      valueField: '_id',
+      labelField: 'nombre',
+      subtitleField: 'telefono',
+      limit: 30,
+      legend: 'Escribe un nombre o teléfono y la lista se filtra.',
+    },
+    property: {
+      url: '/properties/options',
+      valueField: '_id',
+      labelField: 'label',
+      subtitleField: 'subtitle',
+      limit: 30,
+      legend: 'Escribe zona, ciudad o folio y la lista se filtra.',
+    },
+    business: {
+      url: '/businesses/options',
+      valueField: '_id',
+      labelField: 'label',
+      subtitleField: 'subtitle',
+      limit: 30,
+      legend: 'Escribe el nombre del negocio y la lista se filtra.',
+    },
+  };
+
   return {
     escapeHtml,
     toast,
@@ -837,6 +868,7 @@ function showImages(images, title = 'Galería de imágenes') {
     field,
     searchSelect,
     wireSearchSelects,
+    remoteSources,
     collectForm,
     toggleOtros,
     syncOtros,

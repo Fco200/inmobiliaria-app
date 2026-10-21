@@ -282,15 +282,12 @@ window.Pages.inventory = {
 
     function openAppointmentModal(item) {
       const prop = item.property;
-      const clientOptions = clients.length
-        ? `<option value="">— Selecciona un cliente —</option>` + clients.map((c) => `<option value="${c._id}">${UI.escapeHtml(c.name)}</option>`).join('')
-        : `<option value="">No hay clientes registrados</option>`;
       const modal = UI.openModal({
         title: `Agendar cita — ${propertyLabel(prop)}`,
         body: `
           <div class="form-group">
             <label>Cliente</label>
-            <select class="form-control" data-client required>${clientOptions}</select>
+            ${UI.searchSelect('inv-appt-client', 'Cliente', { source: UI.remoteSources.client, placeholder: '— Selecciona un cliente —', options: [{ value: '', label: '— Selecciona un cliente —' }, ...clients.map((c) => ({ value: c._id, label: c.name }))] })}
           </div>
           <div class="form-group">
             <label>Fecha y hora</label>
@@ -313,11 +310,12 @@ window.Pages.inventory = {
       });
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
       if (!overlay) return;
+      if (UI.wireSearchSelects) UI.wireSearchSelects(overlay);
       const cancelBtn = overlay.querySelector('[data-cancel]');
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
       const okBtn = overlay.querySelector('[data-ok]');
       if (okBtn) okBtn.addEventListener('click', async () => {
-        const client = overlay.querySelector('[data-client]').value;
+        const client = overlay.querySelector('#fld-inv-appt-client').value;
         const date = overlay.querySelector('[data-date]').value;
         if (!client) return UI.toast('Selecciona un cliente', 'warning');
         if (!date) return UI.toast('Indica la fecha y hora', 'warning');
@@ -348,9 +346,6 @@ window.Pages.inventory = {
 
     function openBusinessModal(item) {
       const prop = item.property;
-      const clientOptions = clients.length
-        ? `<option value="">— Selecciona el cliente comprador —</option>` + clients.map((c) => `<option value="${c._id}">${UI.escapeHtml(c.name)}</option>`).join('')
-        : `<option value="">No hay clientes registrados</option>`;
       const modal = UI.openModal({
         title: `Nuevo negocio — ${propertyLabel(prop)}`,
         body: `
@@ -360,7 +355,7 @@ window.Pages.inventory = {
           </div>
           <div class="form-group">
             <label>Cliente comprador</label>
-            <select class="form-control" data-client required>${clientOptions}</select>
+            ${UI.searchSelect('inv-biz-client', 'Cliente comprador', { source: UI.remoteSources.client, placeholder: '— Selecciona el cliente comprador —', options: [{ value: '', label: '— Selecciona el cliente comprador —' }, ...clients.map((c) => ({ value: c._id, label: c.name }))] })}
           </div>
           <div class="form-group">
             <label>Valor de la operación</label>
@@ -381,11 +376,12 @@ window.Pages.inventory = {
       });
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
       if (!overlay) return;
+      if (UI.wireSearchSelects) UI.wireSearchSelects(overlay);
       const cancelBtn = overlay.querySelector('[data-cancel]');
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
       const okBtn = overlay.querySelector('[data-ok]');
       if (okBtn) okBtn.addEventListener('click', async () => {
-        const buyerClient = overlay.querySelector('[data-client]').value;
+        const buyerClient = overlay.querySelector('#fld-inv-biz-client').value;
         const name = overlay.querySelector('[data-name]').value.trim();
         if (!buyerClient) return UI.toast('Selecciona el cliente comprador', 'warning');
         if (!name) return UI.toast('Escribe el nombre del negocio', 'warning');

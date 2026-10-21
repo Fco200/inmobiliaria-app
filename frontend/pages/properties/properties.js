@@ -275,45 +275,64 @@ window.Pages.properties = {
       form._photoManager = manager;
     };
 
-    // Sube las fotos del input una por una vía /documents/upload y devuelve las
-    // URLs ya subidas. Tolera fallos por archivo (p. ej. HEIC no reconocido o
-    // imagen pesada en el celular) sin descartar las que sí funcionan.
+    // Sube las fotos del input vía /documents/upload y devuelve las URLs ya
+    // subidas. Tolera fallos por archivo (p. ej. HEIC no reconocido o imagen
+    // pesada en el celular) sin descartar las que sí funcionan, y reintenta
+    // una vez cada archivo para redes móviles inestables.
     const uploadPhotoUrls = async (files) => {
       const urls = [];
       let failed = 0;
-      for (const file of files) {
-        try {
-          const res = await API.documents.upload(file);
-          if (res && res.fileUrl) urls.push(res.fileUrl);
-          else failed += 1;
-        } catch (error) {
-          failed += 1;
-          console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
+      const list = Array.from(files || []);
+      let lastToast = 0;
+      for (let i = 0; i < list.length; i += 1) {
+        const file = list[i];
+        let attempt = 0;
+        let ok = false;
+        while (attempt <= 1 && !ok) {
+          try {
+            const res = await API.documents.upload(file);
+            if (res && res.fileUrl) { urls.push(res.fileUrl); ok = true; }
+            else { attempt += 1; }
+          } catch (error) {
+            attempt += 1;
+            if (attempt > 1) {
+              console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
+            } else {
+              await new Promise((r) => setTimeout(r, 500));
+            }
+          }
+        }
+        if (!ok) failed += 1;
+        const now = Date.now();
+        if (now - lastToast > 800) {
+          lastToast = now;
+          UI.toast(`Subiendo fotografías… ${i + 1}/${list.length}`, 'info');
         }
       }
       return { urls, failed };
     };
 
     // Sube fotos de una propiedad YA creada/guardada usando el endpoint
-    // dedicado multipart (campo "photos"). Se envía UNA por llamada para que
-    // un archivo rechazado (p. ej. HEIC no reconocido o imagen muy pesada) no
-    // tumbe al resto.
+    // dedicado multipart (campo "photos"). Se envían en LOTES pequeños (4 por
+    // petición) para que el asesor no vea "se quedó a medias": cada lote se
+    // reintenta solo y el progreso se muestra en pantalla.
     const uploadPropertyPhotos = async (propId, files) => {
-      if (!files.length) return 0;
-      UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
-      let ok = 0;
-      let failed = 0;
-      for (const file of Array.from(files)) {
-        try {
-          await API.properties.uploadPhotos(propId, [file]);
-          ok += 1;
-        } catch (error) {
-          failed += 1;
-          console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
-        }
-      }
+      const list = Array.from(files || []);
+      if (!list.length) return 0;
+      let lastToast = 0;
+      const { added, failed } = await API.properties.uploadPhotosBatch(propId, list, {
+        chunkSize: 4,
+        retries: 1,
+        onProgress: (done, total) => {
+          const now = Date.now();
+          if (now - lastToast < 800 && done < total) return;
+          lastToast = now;
+          UI.toast(`Subiendo fotografías… ${done}/${total}`, 'info');
+        },
+      });
       if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
-      return ok;
+      else if (added) UI.toast(`${added} ${added === 1 ? 'fotografía subida' : 'fotografías subidas'}.`, 'success');
+      return added;
     };
 
     // Referencia al formulario de edición que usa crudPage; openDetail lo
@@ -399,7 +418,7 @@ window.Pages.properties = {
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
         { name: 'city', label: 'Ciudad', type: 'text' },
         { name: 'state', label: 'Estado', type: 'text' },
-        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Buscar propietario por nombre o teléfono…', options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
+        { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre, teléfono o correo y la lista se filtra al instante.' }, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
         { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', options: [{ value: '', label: '— Sin asesor —' }, ...userOptions] },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },

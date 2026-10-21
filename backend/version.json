@@ -1,17 +1,15 @@
 {
-  "version": "2.18",
+  "version": "2.19",
   "channel": "estable",
-  "title": "Actualización 2.18",
+  "title": "Actualización 2.19",
   "date": "2026-10-21",
   "notes": [
-    "Estabilidad: se corrigió el problema que dejaba la aplicación \"trabada\". La base de datos se había llenado con fotos repetidas que ya nadie usaba y el servidor rechazaba TODAS las escrituras (no se podían guardar propiedades, avisos ni sesiones). Se limpiaron más de 260 MB de archivos sin uso.",
-    "Fotos: las imágenes idénticas ya no se guardan por duplicado y al borrar una propiedad (o quitarle fotos) sus archivos se eliminan si nadie más los usa. Hay una limpieza automática cada 2 horas.",
-    "Avisos: la lista ya no se corta. Ahora muestra cuántos avisos hay en total y permite cargar los siguientes con el botón \"Cargar más avisos\".",
-    "Notificaciones: cuando se te avisa de algo nuevo, la notificación queda marcada como leída en el servidor. El contador de la campana se limpia de verdad y ya no vuelve a saltarte el aviso en cada módulo.",
-    "Avisos del equipo: el banner se marca como leído al mostrarse, así que no vuelve a aparecer en cada cambio de sección.",
-    "Propiedades: al publicar o despublicar ya no se genera un error en el servidor y el asesor que publica no recibe su propia notificación.",
-    "Rendimiento: las respuestas del servidor se comprimen (gzip), los archivos estáticos y las fotos se cachean en el navegador y la base de datos usa un pool de conexiones acotado. La app va más fluida con todo el equipo conectado.",
-    "Aviso de actualización: ahora también aparece en la pantalla de inicio de sesión, con el número de versión real en el pie.",
-    "Logotipo: se eliminó el logo duplicado de la barra lateral y de la pantalla de bienvenida; ahora solo aparece el logo horizontal de INMOBLES."
+    "Correo al asesor: cuando publicas o compartes una propiedad, ahora TAMBIÉN te llega un correo de confirmación con los datos clave (folio, precio, estado y número de fotos) y cuántos clientes interesados fueron avisados. Es el mismo aviso que ya reciben los suscriptores del catálogo, pero dirigido a ti.",
+    "Fotos: al subir varias fotos ya no se queda a medias. Se envían por lotes pequeños con progreso (\"Subiendo fotografías… 4/12\") y si un lote falla se reintenta solo, sin perder las que ya entraron. El límite del servidor subió de 10 a 12 archivos por petición.",
+    "Fotos: la limpieza de archivos sin uso sigue activa, así que borrar fotos de una propiedad ya no deja basura ocupando espacio.",
+    "Clientes: en TODO el CRM (propietario de una propiedad, comprador y vendedor de un negocio, citas, tareas y documentos) el selector de clientes ya no despliega la lista completa. Escribe un nombre, teléfono o correo y el sistema filtra al instante contra el servidor, mostrando solo las coincidencias con su leyenda de ayuda.",
+    "PDF de WhatsApp: ahora incluye TODAS las fotografías (hasta 24) en una galería de dos columnas, no solo unas cuantas. Antes se recortaba a 4.",
+    "PDF de WhatsApp: diseño profesional renovado. Portada con marco y sello, encabezado de marca en cada página, recuadro de datos ampliado (operación, tipo, estado, formas de pago, fechas y coordenadas), numeración de páginas y un código QR para abrir la ficha pública.",
+    "PDF de WhatsApp: se agregó el contacto completo de quien comparte (nombre, WhatsApp, correo) y su ID de usuario del CRM, para saber siempre quién envió la ficha."
   ]
 }

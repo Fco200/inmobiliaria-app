@@ -638,9 +638,9 @@ window.Pages.businesses = {
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono para filtrar la cartera.' }, options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
-        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono para filtrar la cartera.' }, options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
@@ -654,7 +654,9 @@ window.Pages.businesses = {
         body: `
           <form id="new-neg-form" novalidate>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${fields.map((f) => UI.field(f.name, f.label, { ...f, value: f.value || '' })).join('')}
+              ${fields.map((f) => (f.search
+                ? UI.searchSelect(f.name, f.label, { ...f, source: f.searchSource, value: f.value || '' })
+                : UI.field(f.name, f.label, { ...f, value: f.value || '' }))).join('')}
             </div>
           </form>
         `,
@@ -672,6 +674,8 @@ window.Pages.businesses = {
       }
       const form = bodyEl ? bodyEl.querySelector('#new-neg-form') : null;
       if (form) {
+        // Conecta los buscadores remotos de comprador/vendedor.
+        if (UI.wireSearchSelects) UI.wireSearchSelects(form);
         // Comprador/vendedor/asesor "Otro / Externo": muestra el campo de
         // nombre libre solo cuando la opción externa está elegida.
         const syncExt = (selName, wrapName) => {

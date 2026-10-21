@@ -110,6 +110,48 @@ window.API = {
       Array.from(files || []).forEach((file) => form.append('photos', file));
       return ApiClient.postMultipart(`/properties/${id}/photos`, form);
     },
+    // Sube fotos en LOTES (por defecto 4 por petición) con reporte de progreso.
+    // Enviar 12 fotos de golpe rebasa el límite de multer (10 archivos) y hacer
+    // una petición por foto tarda demasiado y se "cuelga" en el celular. Los
+    // lotes pequeños mantienen cada petición corta y permiten reintentar solo
+    // el lote que falló, sin perder las fotos que ya entraron.
+    //   onProgress(subidos, total)
+    // Devuelve { added, failed, photos }.
+    uploadPhotosBatch: async (id, files, opts = {}) => {
+      const list = Array.from(files || []);
+      const chunkSize = Math.max(1, Math.min(8, Number(opts.chunkSize) || 4));
+      const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+      const retries = Number(opts.retries == null ? 1 : opts.retries);
+      let added = 0;
+      let failed = 0;
+      let photos = null;
+      const total = list.length;
+      onProgress(0, total);
+      for (let i = 0; i < total; i += chunkSize) {
+        const chunk = list.slice(i, i + chunkSize);
+        let attempt = 0;
+        let ok = false;
+        while (attempt <= retries && !ok) {
+          try {
+            const res = await window.API.properties.uploadPhotos(id, chunk);
+            photos = (res && res.data && res.data.photos) || photos;
+            added += chunk.length;
+            ok = true;
+          } catch (error) {
+            attempt += 1;
+            if (attempt > retries) {
+              failed += chunk.length;
+              console.error('[Fotos] Lote rechazado:', error && error.message);
+            } else {
+              // Pequeña pausa antes de reintentar (red móvil inestable).
+              await new Promise((r) => setTimeout(r, 600 * attempt));
+            }
+          }
+        }
+        onProgress(added, total);
+      }
+      return { added, failed, photos };
+    },
   },
 
   inventory: {

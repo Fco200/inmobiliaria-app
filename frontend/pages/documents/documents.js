@@ -254,7 +254,7 @@ window.Pages.documents = {
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: record ? record.name : '' },
         { name: 'type', label: 'Tipo', type: 'select', options: TYPES, value: record ? record.type : 'formato' },
         { name: 'status', label: 'Estado', type: 'select', options: STATUS, value: record ? record.status : 'pendiente' },
-        { name: 'client', label: 'Cliente', type: 'select', options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
+        { name: 'client', label: 'Cliente', type: 'select', search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
         { name: 'property', label: 'Propiedad', type: 'select', options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
         { name: 'business', label: 'Negocio', type: 'select', options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
         { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },

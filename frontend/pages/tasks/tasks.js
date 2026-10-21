@@ -50,7 +50,7 @@ window.Pages.tasks = {
         { name: 'date', label: 'Fecha y hora', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
         { name: 'priority', label: 'Prioridad', type: 'select', options: ['baja', 'media', 'alta', 'urgente'], value: 'media' },
         { name: 'assignedTo', label: 'Responsable', type: 'select', required: true, value: me ? me._id : '', options: users.map((x) => ({ value: x._id, label: x.name })) },
-        { name: 'client', label: 'Cliente', type: 'select', options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'client', label: 'Cliente', type: 'select', search: true, searchSource: { url: '/clients/options', valueField: '_id', labelField: 'nombre', subtitleField: 'telefono', limit: 30, legend: 'Escribe un nombre o teléfono y la lista se filtra.' }, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'status', label: 'Estado', type: 'select', required: true, options: ['pendiente', 'en_proceso', 'completada', 'cancelada', 'vencida'] },
       ],
       formData(values) {

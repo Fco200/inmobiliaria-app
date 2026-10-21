@@ -139,10 +139,72 @@ function mailNewProperty(property) {
   };
 }
 
+// Aviso al ASESOR RESPONSABLE cuando él mismo (o su equipo) publica la
+// propiedad en el inventario general. Es el correo "espejo" del newsletter de
+// suscriptores: mientras el suscriptor recibe la promoción, el asesor recibe
+// la confirmación de que su propiedad ya está compartida, con un resumen de
+// los datos clave y de cuántos clientes interesados fueron avisados.
+function mailPropertyPublishedToAdvisor(property, opts = {}) {
+  const place = [property.zone, property.city, property.state].filter(Boolean).join(', ') || 'sin ubicación';
+  const price = Number(property.price) || 0;
+  const priceText = price ? `$${price.toLocaleString('es-MX')}` : 'Precio a consultar';
+  const folio = property.folio ? ` (${property.folio})` : '';
+  const advisorName = opts.advisorName ? String(opts.advisorName) : '';
+  const interesados = Number(opts.interestedClients) || 0;
+  const fotos = Array.isArray(property.photos) ? property.photos.length : 0;
+
+  const subject = `Propiedad publicada${folio} · ${place}`;
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">${advisorName ? `Hola, ${escapeHtml(advisorName)}. ` : 'Hola. '}Tu propiedad ya quedó <strong>publicada en el inventario general</strong> y es visible para todo el equipo.</p>
+    <div style="background:#faf7ee;border:1px solid #eadfc0;border-radius:8px;padding:16px 18px;font-size:14px;color:#2d1048;">
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;">${escapeHtml(property.type || 'Propiedad')} en ${escapeHtml(place)}${escapeHtml(folio)}</div>
+      <div style="color:#555;margin-bottom:4px;">Operación: ${escapeHtml(property.operationType || 'venta')}</div>
+      <div style="color:#555;margin-bottom:4px;">Estado: ${escapeHtml(String(property.status || 'disponible').replace(/_/g, ' '))}</div>
+      <div style="color:#555;margin-bottom:4px;">Fotografías: ${fotos}</div>
+      <div style="font-size:16px;color:#2d1048;font-weight:700;margin-top:6px;">${priceText}</div>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:13px;color:#166534;margin-top:14px;">
+      ${interesados
+        ? `Se avisó a <strong>${interesados}</strong> ${interesados === 1 ? 'cliente interesado' : 'clientes interesados'} cuyo perfil coincide con esta propiedad.`
+        : 'Por ahora no hubo clientes interesados cuyo perfil coincida con esta propiedad.'}
+    </div>
+    <p style="margin:18px 0 0;font-size:13px;color:#333;"><a href="https://inmobles.com/propiedades.html?propId=${encodeURIComponent(property._id)}" style="background:#b9912f;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;">Ver mi propiedad</a></p>
+  `;
+  return {
+    subject,
+    html: wrapLayout(subject, inner),
+    text: `Tu propiedad${folio} en ${place} quedó publicada. ${priceText}. ${interesados ? `Se avisó a ${interesados} clientes interesados.` : 'Sin clientes interesados por ahora.'}`,
+  };
+}
+
+// Aviso al asesor cuando NO se pudo generar algo de su propiedad, o cuando el
+// proceso de publicación se completó sin poder enviar el correo. Se usa para
+// que los procesos "queden limpios": si algo falla, el asesor se entera.
+function mailPropertyProcessNotice(property, opts = {}) {
+  const advisorName = opts.advisorName ? String(opts.advisorName) : '';
+  const place = [property.zone, property.city].filter(Boolean).join(', ') || 'sin ubicación';
+  const folio = property.folio ? ` (${property.folio})` : '';
+  const subject = opts.subject || `Aviso sobre tu propiedad${folio}`;
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">${advisorName ? `Hola, ${escapeHtml(advisorName)}. ` : 'Hola. '}${escapeHtml(opts.message || 'Ocurrió un detalle al procesar tu propiedad.')}</p>
+    <div style="background:#faf7ee;border:1px solid #eadfc0;border-radius:8px;padding:14px 16px;font-size:13px;color:#2d1048;">
+      <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(property.type || 'Propiedad')} en ${escapeHtml(place)}${escapeHtml(folio)}</div>
+      ${opts.detail ? `<div style="color:#555;">${escapeHtml(opts.detail)}</div>` : ''}
+    </div>
+  `;
+  return {
+    subject,
+    html: wrapLayout(subject, inner),
+    text: `${opts.message || 'Detalle al procesar la propiedad'} — ${property.type || 'Propiedad'} en ${place}${folio}`,
+  };
+}
+
 module.exports = {
   sendMail,
   resetTransporter,
   mailWelcome,
   mailNewProperty,
+  mailPropertyPublishedToAdvisor,
+  mailPropertyProcessNotice,
   hasSmtp,
 };

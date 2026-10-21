@@ -64,9 +64,11 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  // `files: 10` para poder subir varias fotos en una sola petición
-  // (POST /properties/:id/photos usa upload.array('photos', 10)).
-  limits: { fileSize: 15 * 1024 * 1024, files: 10 },
+  // `files: 12` para poder subir varias fotos en una sola petición
+  // (POST /properties/:id/photos usa upload.array('photos', 12)). El frontend
+  // manda lotes de 4, así que 12 deja margen sin dejar que una petición
+  // consuma memoria del servidor sin control.
+  limits: { fileSize: 15 * 1024 * 1024, files: 12 },
 });
 
 // ── Validación de contenido real (magic bytes) ──────────────────────────────

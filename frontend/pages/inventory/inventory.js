@@ -240,11 +240,18 @@ window.Pages.inventory = {
           photosInput.addEventListener('change', async () => {
             if (!photosInput.files || !photosInput.files.length) return;
             try {
-              await API.properties.uploadPhotos(prop._id, photosInput.files);
-              UI.toast('Fotos agregadas', 'success');
+              const { added, failed } = await API.properties.uploadPhotosBatch(prop._id, photosInput.files, {
+                chunkSize: 4,
+                retries: 1,
+                onProgress: (done, total) => UI.toast(`Subiendo fotografías… ${done}/${total}`, 'info'),
+              });
+              if (failed) UI.toast(`${added} subidas, ${failed} con error`, 'warning');
+              else UI.toast(`${added} ${added === 1 ? 'foto agregada' : 'fotos agregadas'}`, 'success');
               paint();
             } catch (photoError) {
               UI.toast(photoError.message, 'error');
+            } finally {
+              photosInput.value = '';
             }
           });
         }
@@ -554,16 +561,16 @@ window.Pages.inventory = {
           if (photoManager) body.photos = photoManager.getPhotos();
           await API.properties.update(prop._id, body);
 
-          // Sube las fotos nuevas una por una para no perder el resto si una falla.
+          // Sube las fotos nuevas en lotes pequeños y reintenta cada lote para
+          // no perder el resto si una imagen falla.
           const files = photoManager ? photoManager.getFiles() : [];
           if (files.length) {
-            UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
-            let failed = 0;
-            for (const file of files) {
-              try { await API.properties.uploadPhotos(prop._id, [file]); }
-              catch (photoError) { failed += 1; }
-            }
-            if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
+            const { added, failed } = await API.properties.uploadPhotosBatch(prop._id, files, {
+              chunkSize: 4,
+              retries: 1,
+              onProgress: (done, total) => UI.toast(`Subiendo fotografías… ${done}/${total}`, 'info'),
+            });
+            if (failed) UI.toast(`${added} subidas, ${failed} con error`, 'warning');
           }
 
           UI.toast('Propiedad actualizada', 'success');

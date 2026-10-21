@@ -656,37 +656,162 @@ function showImages(images, title = 'Galería de imágenes') {
   // UI.collectForm y con el envío de formularios) precedido por un buscador que
   // filtra las opciones por texto, sin tener que desplazarse por todo el listado.
   //
+  // Dos modos:
+  //  · LOCAL (por defecto): filtra las <option> ya cargadas.
+  //  · REMOTO (`source`): NO se carga la lista al abrir. El asesor ESCRIBE y se
+  //    consulta al servidor (p. ej. /clients/options?q=…), mostrando solo las
+  //    coincidencias. Ideal para carteras grandes: la lista nunca se despliega
+  //    completa y siempre aparece la leyenda que indica cómo filtrar.
+  //
   // Uso:
   //   ${UI.searchSelect('owner', 'Propietario', { options, value, placeholder })}
+  //   ${UI.searchSelect('owner', 'Propietario', { source: { url: '/clients/options', label: … } })}
   //   UI.wireSearchSelects(form);   // una sola vez tras montar el modal
-  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false } = {}) {
+  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false, source = null } = {}) {
     const id = `fld-${name}`;
     const searchId = `search-${id}`;
     const valStr = String(value == null ? '' : value);
+    const remote = source && typeof source === 'object';
     const opts = options.map((o) => {
       const optValue = typeof o === 'object' ? o.value : o;
       const optLabel = typeof o === 'object' ? o.label : o;
       const selected = valStr === String(optValue) ? ' selected' : '';
       return `<option value="${escapeHtml(optValue)}"${selected} data-search-text="${escapeHtml(String(optLabel).toLowerCase())}">${escapeHtml(optLabel)}</option>`;
     }).join('');
+    // Leyenda clara de cómo filtrar (se muestra siempre, para que el asesor
+    // sepa que puede escribir y no que "no hay clientes").
+    const legendText = remote
+      ? (source.legend || 'Escribe un nombre, teléfono o correo para buscar y filtrar.')
+      : 'Escribe para filtrar la lista.';
+    const searchPlaceholder = placeholder && placeholder !== 'Buscar…'
+      ? placeholder
+      : 'Escribe para buscar…';
     return `
-      <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;" data-search-select>
+      <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;" data-search-select${remote ? ' data-search-remote' : ''}${remote ? ` data-search-url="${escapeHtml(source.url || '')}"` : ''}${remote ? ` data-search-param="${escapeHtml(source.param || 'q')}"` : ''}${remote ? ` data-search-limit="${escapeHtml(String(source.limit || 30))}"` : ''}${remote ? ` data-search-value-field="${escapeHtml(source.valueField || '_id')}"` : ''}${remote ? ` data-search-label-field="${escapeHtml(source.labelField || 'nombre')}"` : ''}${remote ? ` data-search-subtitle-field="${escapeHtml(source.subtitleField || 'telefono')}"` : ''}>
         <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(label)}${required ? ' *' : ''}</label>
-        <input class="form-control" id="${searchId}" type="search" placeholder="${escapeHtml(placeholder)}" autocomplete="off" style="margin-bottom:6px;">
+        <input class="form-control" id="${searchId}" type="search" placeholder="${escapeHtml(searchPlaceholder)}" autocomplete="off" style="margin-bottom:6px;">
+        <div class="text-muted" data-search-legend style="font-size:12px;margin:-2px 0 6px;">${escapeHtml(legendText)}</div>
         <select class="form-control" id="${id}" name="${name}" ${required ? 'required' : ''}>${opts}</select>
         ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
       </div>`;
   }
 
-  // Conecta los buscadores de los searchSelect presentes en `root`. Filtra las
-  // <option> por coincidencia de texto y preserva la selección actual.
+  // Conecta los buscadores de los searchSelect presentes en `root`. En modo
+  // local filtra las <option> por texto; en modo remoto consulta al servidor
+  // conforme se escribe (con debounce) y reemplaza las opciones con las
+  // coincidencias. Siempre conserva la selección actual.
   function wireSearchSelects(root) {
     const scope = root || document;
     scope.querySelectorAll('[data-search-select]').forEach((wrap) => {
       const searchEl = wrap.querySelector('input[type="search"]');
       const select = wrap.querySelector('select');
+      const legendEl = wrap.querySelector('[data-search-legend]');
       if (!searchEl || !select || searchEl.dataset.wired) return;
       searchEl.dataset.wired = '1';
+
+      // Modo REMOTO: consulta al servidor mientras se escribe.
+      if (wrap.dataset.searchRemote === '1' || wrap.hasAttribute('data-search-remote')) {
+        const url = wrap.dataset.searchUrl;
+        const param = wrap.dataset.searchParam || 'q';
+        const limit = Number(wrap.dataset.searchLimit) || 30;
+        const valueField = wrap.dataset.searchValueField || '_id';
+        const labelField = wrap.dataset.searchLabelField || 'nombre';
+        const subtitleField = wrap.dataset.searchSubtitleField || 'telefono';
+        const emptyLabel = select.dataset.emptyLabel || (select.options[0] ? select.options[0].textContent : '—');
+        const emptyValue = select.dataset.emptyValue != null ? select.dataset.emptyValue : (select.options[0] ? select.options[0].value : '');
+
+        const setLegend = (text, isError) => {
+          if (!legendEl) return;
+          legendEl.textContent = text;
+          legendEl.style.color = isError ? '#b91c1c' : '';
+        };
+
+        // Conserva el valor elegido antes de reemplazar las opciones: si el
+        // asesor ya había seleccionado un cliente (o al EDITAR, el cliente
+        // guardado), no debe perderse al refrescar los resultados.
+        const stashCurrent = () => {
+          const cur = select.value;
+          if (!cur) return null;
+          const opt = Array.from(select.options).find((o) => o.value === cur);
+          return opt ? { value: opt.value, text: opt.textContent } : { value: cur, text: cur };
+        };
+
+        let timer = null;
+        let lastQuery = null;
+        let seq = 0;
+
+        const renderOptions = (items) => {
+          const keep = stashCurrent();
+          const keepIsSpecial = keep && (keep.value === '__externo__' || keep.value === emptyValue);
+          // Se conserva la opción vacía ("— Sin propietario —") al inicio.
+          const head = `<option value="${escapeHtml(emptyValue)}">${escapeHtml(emptyLabel)}</option>`;
+          // La opción especial (p. ej. "Otro (propietario externo)") viaja
+          // siempre, para que siga disponible al buscar.
+          const special = Array.from(select.options)
+            .filter((o) => o.value === '__externo__')
+            .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</option>`)
+            .join('');
+          const body = items.map((it) => {
+            const v = it && typeof it === 'object' ? (it[valueField] || it._id || '') : it;
+            const l = it && typeof it === 'object'
+              ? (it[labelField] || it.nombre || it.name || it.label || '')
+              : String(it);
+            const sub = it && typeof it === 'object' ? (it[subtitleField] || it.telefono || it.phone || '') : '';
+            const text = sub ? `${l} — ${sub}` : String(l);
+            return `<option value="${escapeHtml(v)}" data-search-text="${escapeHtml(text.toLowerCase())}">${escapeHtml(text)}</option>`;
+          }).join('');
+          let extra = '';
+          // Si el valor actual no viene en los resultados, se reinyecta para
+          // no perderlo al buscar otra cosa.
+          if (keep && !keepIsSpecial) {
+            const inResults = items.some((it) => {
+              const v = it && typeof it === 'object' ? (it[valueField] || it._id || '') : it;
+              return String(v) === String(keep.value);
+            });
+            if (!inResults) {
+              extra = `<option value="${escapeHtml(keep.value)}" selected>${escapeHtml(keep.text)}</option>`;
+            }
+          }
+          select.innerHTML = head + extra + special + body;
+          select.value = keep ? keep.value : emptyValue;
+        };
+
+        const runSearch = async () => {
+          const term = searchEl.value.trim();
+          if (term === lastQuery) return;
+          lastQuery = term;
+          const mySeq = ++seq;
+          setLegend('Buscando…');
+          try {
+            const res = await ApiClient.get(url, { [param]: term, limit });
+            if (mySeq !== seq) return; // llegó una respuesta vieja: se ignora
+            // `ApiClient` ya "desenvuelve" la respuesta: normalmente llega el
+            // arreglo directo; se toleran también las formas {data:[…]}.
+            const items = Array.isArray(res)
+              ? res
+              : ((res && (res.data || res.items)) || []);
+            renderOptions(items);
+            setLegend(
+              items.length
+                ? `${items.length} ${items.length === 1 ? 'resultado' : 'resultados'} para "${term || 'todos'}". Sigue escribiendo para afinar.`
+                : `Sin resultados para "${term}". Escribe otro nombre, teléfono o correo.`
+            );
+          } catch (error) {
+            if (mySeq !== seq) return;
+            setLegend('No se pudo buscar. Revisa tu conexión e intenta de nuevo.', true);
+          }
+        };
+
+        searchEl.addEventListener('input', () => {
+          clearTimeout(timer);
+          timer = setTimeout(runSearch, 300);
+        });
+        // Si ya venía un valor seleccionado (edición), se respeta tal cual: no
+        // se dispara búsqueda hasta que el asesor escriba.
+        return;
+      }
+
+      // Modo LOCAL: filtra las opciones ya cargadas.
       searchEl.addEventListener('input', () => {
         const term = searchEl.value.trim().toLowerCase();
         Array.from(select.options).forEach((opt) => {

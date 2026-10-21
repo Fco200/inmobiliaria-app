@@ -344,8 +344,9 @@ ${rowXml}
         ? (typeof f.value === 'function' ? f.value(record) : record[f.name])
         : (typeof f.value === 'function' ? '' : (f.value || ''));
       // Los campos marcados con `search: true` se dibujan como select con
-      // buscador (para listas largas como clientes/propiedades).
-      if (f.search) return UI.searchSelect(f.name, f.label, { ...f, value });
+      // buscador (para listas largas como clientes/propiedades). Si además
+      // traen `searchSource`, el buscador consulta al servidor (modo remoto).
+      if (f.search) return UI.searchSelect(f.name, f.label, { ...f, source: f.searchSource || null, value });
       return UI.field(f.name, f.label, { ...f, value });
     });
 

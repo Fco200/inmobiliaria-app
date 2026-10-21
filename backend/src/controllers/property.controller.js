@@ -7,7 +7,7 @@ const buildCrud = require('../utils/crud');
 const { isBoss } = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
-const { sendMail, mailNewProperty } = require('../services/mail.service');
+const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
 const { normalizePhotos } = require('../utils/photos');
 
 const propertyCrud = buildCrud(Property, {
@@ -112,6 +112,42 @@ async function notifyNewsletter(property) {
   }
 }
 
+// Avisa por CORREO al asesor responsable de la propiedad cuando ésta queda
+// publicada en el inventario general. Es el "espejo" del newsletter: el
+// suscriptor recibe la promoción y el asesor recibe la confirmación de que su
+// propiedad ya está compartida. NUNCA se cae el flujo si el correo falla.
+//
+// `interestedClients` es cuántos clientes interesados se avisaron, para
+// incluirlo en el correo.
+async function notifyAdvisorPublished(property, interestedClients = 0) {
+  if (!property || !property.isPublished) return false;
+  try {
+    // El asesor es el "responsibleUser" (o el propietario de la ficha si no hay
+    // uno asignado). Se pide aparte con select('+email') porque el campo email
+    // del usuario no se expone por defecto.
+    const advisorId = property.responsibleUser || property.owner;
+    if (!advisorId) return false;
+    const User = require('../models/user.model');
+    const advisor = await User.findById(advisorId).select('name email').lean();
+    const email = (advisor && advisor.email) || '';
+    if (!email) return false;
+    const ok = await sendMail({
+      ...mailPropertyPublishedToAdvisor(property, {
+        advisorName: (advisor && advisor.name) || '',
+        interestedClients,
+      }),
+      to: email,
+    });
+    if (ok) {
+      console.log(`[MAIL] Aviso de publicación enviado al asesor ${email}.`);
+    }
+    return ok;
+  } catch (error) {
+    console.error('[MAIL] Error al notificar al asesor de la publicación:', error.message);
+    return false;
+  }
+}
+
 // Sincroniza la publicación de una propiedad con el inventario general:
 //  - al publicar/compartir → se crea (o actualiza) su registro de inventario,
 //    y así aparece en el módulo "Propiedades" para todo el equipo.
@@ -183,6 +219,8 @@ const create = asyncHandler(async (req, res) => {
   // Si se registró ya compartida, aparece de inmediato en el inventario general.
   if (property.isPublished) {
     await syncInventoryOnPublish(property, true, property.responsibleUser);
+    // Aviso por correo al asesor responsable (además del newsletter).
+    await notifyAdvisorPublished(property, 0);
   }
 
   res.status(201).json({ success: true, data: property });
@@ -219,7 +257,9 @@ const update = asyncHandler(async (req, res) => {
     // Publicar desde la edición también avisa a los asesores con clientes
     // interesados (nunca al propio autor de la publicación).
     if (nowPublished && !previousPublished) {
-      await notifyInterestedClients(property, req.user._id);
+      const interesados = await notifyInterestedClients(property, req.user._id);
+      await notifyNewsletter(property);
+      await notifyAdvisorPublished(property, interesados);
     }
   }
 
@@ -316,6 +356,12 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   const notified = isPublished ? await notifyInterestedClients(property, req.user._id) : 0;
 
+  // Aviso por correo al asesor responsable (nunca al propio autor, que ya sabe
+  // que publicó): cierra el ciclo para que el flujo quede limpio.
+  if (isPublished && !previousPublished) {
+    await notifyAdvisorPublished(property, notified);
+  }
+
   res.json({
     success: true,
     message: isPublished ? 'Propiedad publicada' : 'Propiedad despublicada',
@@ -353,9 +399,31 @@ const uploadPhotos = asyncHandler(async (req, res) => {
   }
 
   // Sube las fotos al almacenamiento en la nube (R2) si está configurado.
-  await require('../services/storage.service').persistFiles(files);
+  // Se sube UNA por una y se toleran fallos individuales: si una imagen no se
+  // puede persistir, las demás SÍ se guardan (antes un solo error abortaba el
+  // lote completo y el asesor veía que "se quedó en 6 de 12").
+  const storageSvc = require('../services/storage.service');
+  const saved = [];
+  const failed = [];
+  for (const file of files) {
+    try {
+      await storageSvc.persistFile(file);
+      saved.push(file);
+    } catch (error) {
+      failed.push({ name: file.originalname || file.filename || 'imagen', reason: error.message });
+      console.error('[Fotos] No se pudo guardar una imagen:', error.message);
+    }
+  }
 
-  const urls = files.map((f) => `/uploads/${f.filename}`);
+  if (!saved.length) {
+    return res.status(500).json({
+      success: false,
+      message: 'No se pudo guardar ninguna fotografía. Intenta de nuevo con imágenes JPG o PNG.',
+      failed,
+    });
+  }
+
+  const urls = saved.map((f) => `/uploads/${f.filename}`);
   property.photos = [...(property.photos || []), ...urls];
   await property.save();
 
@@ -364,10 +432,18 @@ const uploadPhotos = asyncHandler(async (req, res) => {
     entityId: property._id,
     user: req.user._id,
     action: 'fotos',
-    message: `Se agregaron ${files.length} ${files.length === 1 ? 'foto' : 'fotos'} a la propiedad`,
+    message: `Se agregaron ${saved.length} ${saved.length === 1 ? 'foto' : 'fotos'} a la propiedad`,
   });
 
-  res.json({ success: true, data: { photos: property.photos } });
+  res.json({
+    success: true,
+    data: { photos: property.photos, added: saved.length, failed },
+    // Mensaje explícito de cuántas entraron y cuántas no, para que el frontend
+    // lo muestre y el proceso quede limpio (nada de "se quedó a medias").
+    message: failed.length
+      ? `Se agregaron ${saved.length} de ${files.length} fotos. ${failed.length} no se pudieron guardar.`
+      : `Se agregaron ${saved.length} ${saved.length === 1 ? 'foto' : 'fotos'}.`,
+  });
 });
 
 const market = asyncHandler(async (req, res) => {

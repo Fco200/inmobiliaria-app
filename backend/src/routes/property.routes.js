@@ -17,7 +17,7 @@ router.get('/:id/market', propertyIdParam, propertyController.market);
 router.post(
   '/:id/photos',
   propertyIdParam,
-  uploadMw.upload.array('photos', 10),
+  uploadMw.upload.array('photos', 12),
   uploadMw.uploadErrorHandler,
   uploadMw.verifyUploads,
   propertyController.uploadPhotos

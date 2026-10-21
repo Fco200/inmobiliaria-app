@@ -96,7 +96,14 @@ window.WhatsAppGenerator = (() => {
     const prop = property || {};
     // El contacto que viaja en el PDF y el mensaje es SIEMPRE quien comparte.
     const me = currentUser();
-    const contact = asesor || { name: me.name || '', phone: me.phone || '', email: me.email || '' };
+    const contact = asesor || {
+      name: me.name || '',
+      phone: me.phone || '',
+      email: me.email || '',
+      // ID del usuario del CRM que comparte: se imprime en el PDF para saber
+      // quién envió la ficha.
+      id: me._id || me.id || '',
+    };
     const contactName = contact.name || '';
     const contactPhone = contact.phone || '';
 

@@ -1931,6 +1931,7 @@ body.lightbox-open {
   padding: 8px 56px;
   /* Las fotos altas se pueden desplazar dentro del visor. */
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .lightbox-photo {
@@ -1939,6 +1940,11 @@ body.lightbox-open {
   object-fit: contain;
   border-radius: 8px;
   background: #0b0e13;
+  /* En el celular el gesto horizontal se usa para cambiar de foto en vez de
+     arrastrar la página o activar la navegación del navegador. */
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
   /* Al pulsar la foto se cierra el visor (mismo comportamiento que el fondo). */
   cursor: zoom-out;
 }
@@ -2010,8 +2016,16 @@ body.lightbox-open {
 }
 
 @media (max-width: 640px) {
-  .lightbox-stage { padding: 8px 12px; }
-  .lightbox-nav { width: 36px; height: 52px; font-size: 24px; }
+  .image-lightbox { height: 100vh; height: 100dvh; }
+  .lightbox-stage { padding: 8px 10px; overflow: hidden; }
+  .lightbox-photo {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(100vh - 150px);
+    max-height: calc(100dvh - 150px);
+  }
+  .lightbox-nav { width: 40px; height: 56px; font-size: 26px; }
   .lightbox-prev { left: 4px; }
   .lightbox-next { right: 4px; }
   .lightbox-bar { gap: 8px; padding: 10px 12px; }
@@ -2019,6 +2033,7 @@ body.lightbox-open {
   .lightbox-btn { padding: 0 10px; gap: 5px; }
   .lightbox-btn-text { display: none; }
   .lightbox-btn > span:first-child { font-size: 20px; }
+  .lightbox-thumbs { padding: 8px 12px; }
 }
 
 /* ---- Textareas altos (descripciones largas) ----
@@ -2646,16 +2661,19 @@ body.page-chat .assistant-panel {
    de descarga. Funciona con ratón, teclado y gestos táctiles. */
 .property-carousel {
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .pc-stage {
   position: relative;
+  width: 100%;
   border-radius: 12px;
   overflow: hidden;
   background: #0b0e13;
   border: 1px solid var(--border);
   aspect-ratio: 16 / 10;
   max-height: 430px;
+  touch-action: pan-y;
 }
 
 .pc-photo {
@@ -2800,8 +2818,25 @@ body.page-chat .assistant-panel {
 }
 
 @media (max-width: 640px) {
-  .pc-stage { aspect-ratio: 4 / 3; max-height: none; }
-  .pc-nav { width: 36px; height: 48px; font-size: 24px; }
+  /* En el celular la foto se ajusta a un alto cómodo de la pantalla: se ve
+     completa (sin recortes) y las flechas quedan siempre visibles. Antes la
+     imagen podía crecer con su proporción original y empujar los controles
+     fuera de vista. */
+  .property-carousel { margin-bottom: 8px; }
+  .pc-stage {
+    aspect-ratio: auto;
+    height: clamp(200px, 56vw, 340px);
+    max-height: 52vh;
+    max-height: 52dvh;
+  }
+  .pc-photo { object-fit: contain; }
+  .pc-nav {
+    width: 42px;
+    height: 56px;
+    font-size: 26px;
+    background: rgba(15, 15, 20, 0.78);
+    -webkit-tap-highlight-color: transparent;
+  }
   .pc-prev { left: 6px; }
   .pc-next { right: 6px; }
   .pc-download { min-height: 34px; padding: 0 10px; font-size: 11px; }

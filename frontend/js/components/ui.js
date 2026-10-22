@@ -677,9 +677,12 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     if (photos.length > 1 && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
       swiped = true;
       go(dx < 0 ? 1 : -1);
-      setTimeout(() => { swiped = false; }, 350);
+      // Evita que el mismo gesto se interprete como toque y cierre el visor.
+      if (e.cancelable) e.preventDefault();
+      setTimeout(() => { swiped = false; }, 700);
     }
-  }, { passive: true });
+  }, { passive: false });
+  stageEl.addEventListener('touchcancel', () => { touchX = null; touchY = null; }, { passive: true });
 
   // Navegación con teclado: no se usa el diálogo modal general para no
   // provocar scrolls ni recargas al cambiar de imagen.

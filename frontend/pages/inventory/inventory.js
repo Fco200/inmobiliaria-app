@@ -271,6 +271,12 @@ window.Pages.inventory = {
 
           const openViewer = () => UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`, { startIndex: photoIndex });
 
+          // Al deslizar con el dedo el navegador también dispara un "click" al
+          // soltar; sin este candado se abría el visor a pantalla completa justo
+          // cuando el asesor intentaba pasar a la siguiente foto (el carrusel
+          // quedaba tapado y parecía que no avanzaba).
+          let swiped = false;
+
           modal.bodyEl.querySelectorAll('[data-pc-prev]').forEach((btn) => {
             btn.addEventListener('click', () => setIndex(photoIndex - 1));
           });
@@ -281,7 +287,10 @@ window.Pages.inventory = {
             thumb.addEventListener('click', () => setIndex(Number(thumb.getAttribute('data-pc-thumb')) || 0));
           });
           if (photoEl) {
-            photoEl.addEventListener('click', openViewer);
+            photoEl.addEventListener('click', () => {
+              if (swiped) { swiped = false; return; }
+              openViewer();
+            });
             photoEl.addEventListener('keydown', (event) => {
               if (event.key === 'ArrowLeft') { event.preventDefault(); setIndex(photoIndex - 1); }
               if (event.key === 'ArrowRight') { event.preventDefault(); setIndex(photoIndex + 1); }
@@ -319,8 +328,16 @@ window.Pages.inventory = {
               const dy = touch ? touch.clientY - touchY : 0;
               touchX = null;
               touchY = null;
-              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) setIndex(photoIndex + (dx < 0 ? 1 : -1));
-            }, { passive: true });
+              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+                swiped = true;
+                setIndex(photoIndex + (dx < 0 ? 1 : -1));
+                // Evita que el mismo gesto se interprete como un toque y abra
+                // el visor; el candado se libera enseguida para el próximo toque.
+                if (event.cancelable) event.preventDefault();
+                setTimeout(() => { swiped = false; }, 500);
+              }
+            }, { passive: false });
+            stageEl.addEventListener('touchcancel', () => { touchX = null; touchY = null; }, { passive: true });
           }
 
           const removeBtn = modal.bodyEl.querySelector('[data-pc-remove]');

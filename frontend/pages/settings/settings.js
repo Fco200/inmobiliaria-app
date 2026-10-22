@@ -518,13 +518,12 @@ window.Pages.settings = {
             if (record && !body.password) delete body.password;
 
             // Al crear con rol personalizado, el <select> de rol envía el valor
-            // "__custom__" que NO es un ObjectId: se cambia por los permisos
-            // elegidos y el backend crea el rol a partir de ellos.
+            // "__custom__": se conserva para que el backend cree el rol a
+            // partir de los permisos elegidos (el validador lo acepta).
             const customRole = form ? form.querySelector('#fld-role') : null;
             const isCustom = (customRole && customRole.value === '__custom__') || body.role === '__custom__';
             if (isCustom) {
-              delete body.role;
-              delete body.customRole;
+              body.role = '__custom__';
               const checks = form ? Array.from(form.querySelectorAll('input[data-custom-perm]:checked')) : [];
               body.customPermissions = checks.map((c) => c.value);
               if (!body.customPermissions.length) {

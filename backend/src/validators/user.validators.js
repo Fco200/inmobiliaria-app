@@ -19,7 +19,15 @@ const userRules = [
   body('role')
     .notEmpty()
     .withMessage('El rol es obligatorio')
-    .custom(async (value) => {
+    .custom(async (value, { req }) => {
+      // Rol personalizado: el usuario elige permisos y el backend crea el rol
+      // al vuelo. La validación de que exista se sustituye por la de que al
+      // menos haya un permiso marcado.
+      if (value === '__custom__') {
+        const perms = Array.isArray(req.body.customPermissions) ? req.body.customPermissions.filter(Boolean) : [];
+        if (!perms.length) throw new Error('Selecciona al menos un permiso para el rol personalizado');
+        return true;
+      }
       const role = await Role.findById(value);
       if (!role) throw new Error('El rol no existe');
       return true;

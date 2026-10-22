@@ -17,8 +17,8 @@
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
 // El nombre de la caché DEBE subirse en cada publicación: sin cambiarlo, las
 // copias viejas siguen en disco y ocupan cuota.
-const CACHE_NAME = 'crm-inmob-v53';
-const VERSION = '2.22';
+const CACHE_NAME = 'crm-inmob-v54';
+const VERSION = '2.23';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

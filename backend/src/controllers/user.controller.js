@@ -58,7 +58,41 @@ const userCrud = buildCrud(User, {
 
 const listUsers = userCrud.list;
 const getUser = userCrud.get;
-const updateUser = userCrud.update;
+
+const updateUser = asyncHandler(async (req, res) => {
+  const body = { ...req.body };
+  const customPerms = Array.isArray(body.customPermissions) ? body.customPermissions.filter(Boolean) : [];
+
+  // Edición con rol personalizado: se crea un rol nuevo con los permisos
+  // elegidos y se asigna al usuario (igual que en la creación).
+  if (body.role === '__custom__') {
+    if (!customPerms.length) {
+      return res.status(400).json({ success: false, message: 'Selecciona al menos un permiso para el rol personalizado.' });
+    }
+    const target = await User.findById(req.params.id);
+    const safeName = (body.name || (target && target.name) || 'Usuario').trim();
+    const role = await Role.create({
+      name: `Personalizado - ${safeName}`,
+      code: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      description: 'Rol personalizado creado desde Configuración > Usuarios',
+      permissions: customPerms,
+      isSystem: false,
+      status: 'activo',
+    });
+    body.role = role._id;
+  }
+
+  delete body.customPermissions;
+
+  // Se reutiliza el CRUD base pasando el cuerpo ya normalizado.
+  const originalBody = req.body;
+  req.body = body;
+  try {
+    return await userCrud.update(req, res);
+  } finally {
+    req.body = originalBody;
+  }
+});
 
 const createUser = asyncHandler(async (req, res) => {
   let body = { ...req.body };

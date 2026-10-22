@@ -333,7 +333,12 @@ ${rowXml}
         editButtons.push({ id: record._id, rec: record, handler: editHandler });
       }
       if (config.onRemove) {
-        actions += `<button class="btn btn-danger btn-sm" data-remove="${record._id}" style="margin-left:6px;">Eliminar</button>`;
+        // `canRemove(record)` permite ocultar el botón Eliminar de ciertas
+        // filas (p. ej. no borrar cuentas de Administrador/Gerencia/Soporte).
+        const canRemove = typeof config.canRemove === 'function' ? config.canRemove(record) : true;
+        if (canRemove) {
+          actions += `<button class="btn btn-danger btn-sm" data-remove="${record._id}" style="margin-left:6px;">Eliminar</button>`;
+        }
       }
       rows += `<tr data-record="${record._id}">${cells}<td data-label="Acciones">${actions}</td></tr>`;
     });

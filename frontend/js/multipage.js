@@ -27,24 +27,70 @@ window.AppShell = (() => {
     { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema', boss: true },
   ];
 
-  function currentUserRole() {
+  // Módulos del menú ligados a un permiso: si el rol del usuario no tiene el
+  // permiso, el módulo se OCULTA del menú (p. ej. una "secretaria" con rol
+  // personalizado solo ve lo que se le autorizó). Los módulos sin entrada aquí
+  // son de acceso general (Inicio, Perfil, Avisos, Directorio, Actualizaciones…).
+  const NAV_PERMISSION = {
+    dashboard: 'dashboard_view',
+    prospecting: 'prospecting_manage',
+    clients: 'clients_manage',
+    businesses: 'businesses_manage',
+    appointments: 'appointments_manage',
+    tasks: 'tasks_manage',
+    goals: 'goals_manage',
+    properties: 'properties_manage',
+    inventory: 'inventory_manage',
+    expenses: 'expenses_manage',
+    reports: 'reports_view',
+    management: 'reports_gerencia',
+    documents: 'documents_manage',
+    settings: 'settings_manage',
+  };
+
+  function currentUserRoleCode() {
     if (!window.ApiClient || !window.ApiClient.getStoredUser) return '';
     const user = window.ApiClient.getStoredUser();
     if (!user || !user.role) return '';
     const role = user.role;
-    return (typeof role === 'object' && role !== null ? role.code : role) || (typeof role === 'string' ? role : '');
+    return (typeof role === 'object' && role !== null ? role.code : role) || '';
+  }
+
+  // Códigos de permiso del usuario actual. Devuelve null (= sin restricción)
+  // para los roles de SISTEMA (admin, gerencia, asesor, superadmin…), que ya
+  // tienen su propio control de acceso y no deben perder módulos. Solo los
+  // roles PERSONALIZADOS (creados a medida) traen una lista explícita que
+  // oculta los módulos no autorizados.
+  function currentUserPermissions() {
+    if (!window.ApiClient || !window.ApiClient.getStoredUser) return null;
+    const user = window.ApiClient.getStoredUser();
+    const role = user && user.role;
+    if (!role || typeof role !== 'object') return null;
+    const code = String(role.code || '');
+    if (!code.startsWith('custom_')) return null;
+    if (!Array.isArray(role.permissions)) return null;
+    return role.permissions;
+  }
+
+  function currentUserRole() {
+    const role = currentUserRoleCode();
+    return role;
   }
 
   function isBoss() {
-    const role = currentUserRole();
+    const role = currentUserRoleCode();
     return role === 'admin' || role === 'gerencia';
   }
 
   function visibleNav() {
     const boss = isBoss();
+    const perms = currentUserPermissions();
     return NAV.filter((n) => {
       if (n.boss && !boss) return false;   // p. ej. Configuración, Gerencia, guía del admin
       if (n.user && boss) return false;    // guía de usuarios solo para no-admin
+      // Filtro por permiso: solo cuando el rol trae una lista explícita.
+      const needed = NAV_PERMISSION[n.key];
+      if (needed && Array.isArray(perms) && !perms.includes(needed)) return false;
       return true;
     });
   }
@@ -1164,6 +1210,14 @@ window.AppShell = (() => {
       content.innerHTML = '<div class="card"><div class="empty-state"><p>No tienes permiso para ver este módulo.</p></div></div>';
       return;
     }
+    // Bloqueo por permiso si el rol trae una lista explícita (roles
+    // personalizados): evita abrir por URL un módulo no autorizado.
+    const needed = NAV_PERMISSION[key];
+    const perms = currentUserPermissions();
+    if (needed && Array.isArray(perms) && !perms.includes(needed)) {
+      content.innerHTML = '<div class="card"><div class="empty-state"><p>No tienes permiso para ver este módulo.</p></div></div>';
+      return;
+    }
     if (page && typeof page.render === 'function') {
       try {
         await page.render(content);
@@ -1309,6 +1363,20 @@ window.AppShell = (() => {
     }
   }
 
+  // Refresca el usuario almacenado (localStorage) con los datos actuales del
+  // servidor, sobre todo el rol con sus PERMISOS: así el menú lateral oculta
+  // los módulos no autorizados aunque el usuario lleve sesiones iniciadas
+  // desde antes de crear el rol personalizado. Se silencioso: si falla, se
+  // conserva el usuario guardado.
+  async function refreshStoredUser() {
+    try {
+      const me = await window.API.auth.me();
+      if (me && (me._id || me.id)) {
+        window.ApiClient.setStoredUser(me);
+      }
+    } catch (e) { /* sin conexión: se usa el usuario guardado */ }
+  }
+
   function init() {
     installErrorHandlers();
     applyTheme();
@@ -1320,10 +1388,14 @@ window.AppShell = (() => {
 
     if (!embed) {
       registerServiceWorker();
-      buildSidebar();
-      updateTopnavUser();
+      // Se refresca el usuario (permisos) ANTES de pintar el menú para que los
+      // módulos restringidos no aparezcan ni por un instante.
+      refreshStoredUser().finally(() => {
+        buildSidebar();
+        updateTopnavUser();
+        injectBrandProfile();
+      });
       injectBrandCollab();
-      injectBrandProfile();
       injectThemeButton();
       injectGuideButton();
       injectUpdateButton();

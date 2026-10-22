@@ -41,6 +41,22 @@ function roleNeedsKey(roleCode) {
 }
 
 function buildUserResponse(user) {
+  // El rol trae los permisos poblados (códigos) para que el frontend pueda
+  // ocultar los módulos que el usuario no puede usar (p. ej. un rol
+  // personalizado tipo "secretaria"). Si llega sin poblar (solo ObjectId) se
+  // devuelve tal cual.
+  const roleDoc = user.role && typeof user.role === 'object' && user.role.code ? user.role : null;
+  const role = roleDoc
+    ? {
+        _id: roleDoc._id,
+        name: roleDoc.name,
+        code: roleDoc.code,
+        permissions: Array.isArray(roleDoc.permissions)
+          ? roleDoc.permissions.map((p) => (p && p.code ? p.code : String(p))).filter(Boolean)
+          : [],
+      }
+    : user.role;
+
   return {
     id: user._id,
     name: user.name,
@@ -52,7 +68,7 @@ function buildUserResponse(user) {
     facebook: user.facebook || '',
     instagram: user.instagram || '',
     bio: user.bio || '',
-    role: user.role,
+    role,
     status: user.status,
     joinedAt: user.joinedAt,
     lastLoginAt: user.lastLoginAt,
@@ -67,7 +83,7 @@ const login = asyncHandler(async (req, res) => {
     $or: [{ email: identifier.toLowerCase() }, { username: identifier }],
   })
     .select('+password +failedLoginAttempts +lockUntil')
-    .populate('role');
+    .populate({ path: 'role', populate: { path: 'permissions' } });
 
   if (!user) {
     return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
@@ -153,7 +169,8 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 const me = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: req.user });
+  const user = await User.findById(req.user._id).populate({ path: 'role', populate: { path: 'permissions' } });
+  res.json({ success: true, data: buildUserResponse(user) });
 });
 
 const updateMe = asyncHandler(async (req, res) => {
@@ -194,7 +211,7 @@ const updateMe = asyncHandler(async (req, res) => {
   Object.assign(req.user, updates);
   await req.user.save();
 
-  const user = await User.findById(req.user._id).populate('role');
+  const user = await User.findById(req.user._id).populate({ path: 'role', populate: { path: 'permissions' } });
   res.json({ success: true, message: 'Perfil actualizado', data: buildUserResponse(user) });
 });
 
@@ -358,7 +375,7 @@ const registerGoogle = asyncHandler(async (req, res) => {
     message: isNew ? `Registro con Google (${email})` : `Inicio de sesión con Google (${email})`,
   });
 
-  const populated = await User.findById(user._id).populate('role');
+  const populated = await User.findById(user._id).populate({ path: 'role', populate: { path: 'permissions' } });
   const token = signToken(user._id, jwtRememberExpiresIn);
   await createSession(user._id, token, req, { remember: true });
   res.json({

@@ -56,6 +56,17 @@ window.ApiClient = (() => {
     localStorage.setItem(LOGIN_AT_KEY, String(Date.now()));
   }
 
+  // Actualiza SOLO el usuario guardado (sin tocar token ni fecha de sesión).
+  // Se usa para refrescar el rol y sus permisos sin obligar a re-iniciar sesión.
+  function setStoredUser(user) {
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user || null));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -227,6 +238,7 @@ window.ApiClient = (() => {
     clearToken,
     getToken,
     getStoredUser,
+    setStoredUser,
     setLogin,
     isAuthenticated,
     isExpired,

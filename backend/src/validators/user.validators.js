@@ -46,7 +46,12 @@ const userUpdateRules = [
   body('username').optional().isLength({ min: 3 }).withMessage('El usuario debe tener al menos 3 caracteres'),
   body('email').optional().isEmail().withMessage('El correo no es válido'),
   body('password').optional().isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres'),
-  body('role').optional().custom(async (value) => {
+  body('role').optional().custom(async (value, { req }) => {
+    if (value === '__custom__') {
+      const perms = Array.isArray(req.body.customPermissions) ? req.body.customPermissions.filter(Boolean) : [];
+      if (!perms.length) throw new Error('Selecciona al menos un permiso para el rol personalizado');
+      return true;
+    }
     const role = await Role.findById(value);
     if (!role) throw new Error('El rol no existe');
     return true;

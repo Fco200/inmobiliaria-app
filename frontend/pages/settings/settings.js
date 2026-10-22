@@ -532,9 +532,23 @@ window.Pages.settings = {
             }
             return body;
           },
-          onFormMount(form) {
+          onFormMount(form, record) {
             const roleSel = form.querySelector('#fld-role');
             if (!roleSel) return;
+
+            // Al EDITAR un usuario cuyo rol no está en la lista cargada (p. ej.
+            // un rol personalizado creado después de abrir la pantalla), se
+            // agrega la opción para no cambiar su rol sin querer.
+            if (record && record.role && record.role._id) {
+              const rid = String(record.role._id);
+              if (!Array.from(roleSel.options).some((o) => o.value === rid)) {
+                const opt = document.createElement('option');
+                opt.value = rid;
+                opt.textContent = record.role.name || 'Rol actual';
+                roleSel.insertBefore(opt, roleSel.firstChild);
+              }
+              roleSel.value = rid;
+            }
 
             const wrap = document.createElement('div');
             wrap.className = 'form-field form-field-full';
@@ -610,8 +624,18 @@ window.Pages.settings = {
             toggle();
             updateCount();
           },
-          onEdit: false,
+          // Editar SÍ está disponible para las cuentas administrativas (admin,
+          // gerencia) y para soporte. Al editar un usuario con rol
+          // personalizado se puede ajustar sus datos.
+          onEdit: true,
           onRemove: true,
+          // No permitir borrar cuentas de Administrador / Gerencia / Soporte.
+          // Tampoco los usuarios con rol personalizado pueden borrarlas (aquí
+          // se oculta el botón directamente).
+          canRemove(record) {
+            const code = record && record.role && record.role.code ? record.role.code : '';
+            return !['admin', 'gerencia', 'superadmin'].includes(code);
+          },
         });
       }).catch((error) => {
         tabContent.innerHTML = UI.errorAlert(error.message);

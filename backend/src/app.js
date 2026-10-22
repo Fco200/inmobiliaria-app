@@ -86,20 +86,28 @@ if (!isProduction) {
 // navega rápido entre módulos (listados, filtros, detalle) y cada pantalla
 // dispara varias peticiones, por lo que 300/15min era insuficiente y producía
 // bloqueos del tipo "Demasiadas peticiones, intenta más tarde".
-//  - Se eleva a 1500 por usuario cada 15 min (~100/min sostenido), suficiente
-//    para 50+ usuarios simultáneos sin permitir abuso.
 //  - La clave es POR USUARIO (id del JWT), no por IP. Antes se limitaba por
 //    IP y toda la oficina comparte la misma salida a Internet (NAT): con 30
 //    personas a la vez el cubo se agotaba entre todos y bloqueaba a usuarios
 //    que no habían hecho nada. Si la petición no trae token válido (login,
 //    recursos públicos) se recurre a la IP.
+//  - Cada usuario tiene SU PROPIO cubo: 50 personas conectadas no se estorban
+//    entre sí, así que el límite se puede subir sin castigar a nadie.
+//  - 3000 por usuario cada 15 min (~200/min sostenidos). Es de sobra para el
+//    uso real del CRM (un asesor escribiendo en un buscador no llega a
+//    30/min) y deja margen para los picos: 50 usuarios a la vez golpeando el
+//    mismo listado.
+//  - Para lo que NO lleva token (catálogo público, consultas sin sesión) se
+//    usa un tope más bajo POR IP, porque ahí sí pueden coincidir muchas
+//    personas detrás de la misma salida.
 //  - `skipSuccessfulRequests` NO se usa (queremos contar todo), pero se
 //    excluyen del conteo los preflight CORS (OPTIONS), que no son peticiones
 //    de datos reales.
 //  - Se usa el store en memoria por defecto; con `trust proxy` la IP real del
 //    cliente se respeta detrás de Render/Nginx.
 const API_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
-const API_RATE_MAX = Number(process.env.API_RATE_MAX || 1500);
+const API_RATE_MAX = Number(process.env.API_RATE_MAX || 3000);
+const API_RATE_MAX_ANON = Number(process.env.API_RATE_MAX_ANON || 600);
 
 // Extrae el id del usuario del token Bearer (verificando la firma con el
 // mismo secreto que usa la autenticación) para poder limitar por usuario.
@@ -121,7 +129,10 @@ app.use(
   '/api',
   rateLimit({
     windowMs: API_WINDOW_MS,
-    max: API_RATE_MAX,
+    // El tope depende de si la petición viene de un usuario identificado:
+    // cada usuario autenticado tiene su propio cubo, así que 50 usuarios
+    // simultáneos NUNCA se bloquean entre sí.
+    max: (req) => (rateLimitKey(req).startsWith('u:') ? API_RATE_MAX : API_RATE_MAX_ANON),
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: rateLimitKey,

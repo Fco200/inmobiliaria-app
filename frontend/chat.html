@@ -21,31 +21,78 @@
     body.page-chat { overflow: hidden; }
     body.page-chat .app,
     body.page-chat .app.has-sidebar { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+    /* El layout con menú lateral es una rejilla y trae `align-items: start`
+       (para que el menú no se estire). Con esa alineación la columna de
+       contenido (.main) queda con la ALTURA DE SU CONTENIDO en vez de ocupar
+       la fila, y el chat se salía de la ventana: la barra de escritura
+       quedaba cortada abajo y los mensajes no se veían. Con `stretch` la
+       columna ocupa exactamente el alto disponible y el chat se ajusta. */
+    body.page-chat .app.has-sidebar { align-items: stretch; }
+    body.page-chat .app.has-sidebar > .main { min-height: 0; overflow: hidden; height: 100%; }
     body.page-chat .main { min-height: 0; overflow: hidden; }
-    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; flex: 1; padding: 12px; }
 
     /* Modo embebido (chat dentro del panel flotante): sin cabecera ni bordes. */
     body.is-embed .topnav { display: none !important; }
     body.is-embed .content { padding: 0 !important; }
     body.is-embed .chat-wrap { border-radius: 0; border: none; }
+
+    /* ---- Panel flotante (burbuja de chat) ----
+       El chat embebido vive en un iframe de ~400 px de ancho, así que las
+       reglas de móvil (max-width: 768px) se le aplican igual y dejaban solo
+       la LISTA de participantes tapando la conversación (el chat no se veía).
+       Aquí la lista se convierte en un cajón que se desliza y el chat ocupa
+       TODO el ancho del panel; el cajón solo aparece cuando se pide. */
+    body.is-embed .chat-wrap { position: relative; }
+    body.is-embed .chat-sidebar {
+      position: absolute; inset: 0 auto 0 0; width: 100%;
+      z-index: 3; border-right: none;
+      transform: translateX(-100%);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: none;
+    }
+    body.is-embed.chat-drawer-open .chat-sidebar {
+      transform: translateX(0);
+      box-shadow: 0 0 28px rgba(0, 0, 0, 0.22);
+    }
+    body.is-embed .chat-main {
+      display: flex !important;
+      position: absolute; inset: 0;
+      z-index: 2;
+    }
+    body.is-embed .chat-main.active {
+      position: absolute; inset: 0;
+      width: auto; height: auto;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 2;
+      box-shadow: none;
+    }
+    /* Botón para abrir el cajón de conversaciones (solo en el panel flotante).
+       El botón nace oculto con estilo en línea, así que hace falta !important
+       para que la regla del modo embebido lo pueda mostrar. */
+    body.is-embed #btn-chat-list { display: inline-flex !important; }
     body.is-embed #btn-exit-modules,
     body.is-embed #btn-exit-header { display: none !important; }
     .chat-wrap { display: flex; flex: 1; min-height: 0; gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
-    .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; }
-    .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; }
+    .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; min-height: 0; overflow: hidden; }
+    .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
     .chat-sidebar-head .btn { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
     .chat-sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
     .chat-sidebar-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.15s; }
     .chat-sidebar-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
-    .chat-sidebar-list { flex: 1; overflow-y: auto; }
-    .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
-    .chat-header { padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .chat-sidebar-list { flex: 1; overflow-y: auto; min-height: 0; }
+    .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; min-height: 0; }
+    .chat-header { padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
     .chat-header-titles { flex: 1; min-width: 0; }
     .chat-header-titles #chat-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chat-header .icon-btn { width: 38px; height: 38px; flex-shrink: 0; }
     .chat-sidebar-head .chat-exit { flex: 1 1 100%; }
-    .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-    .chat-input-bar { padding: 12px 16px; background: var(--white); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; }
+    /* `min-height: 0` es imprescindible: en una columna flex, un elemento con
+       scroll conserva por defecto su altura mínima igual a la del contenido.
+       Sin eso la lista de mensajes crecía sin límite, empujaba la barra de
+       escritura fuera de la ventana y el chat quedaba cortado por abajo. */
+    .chat-messages { flex: 1; overflow-y: auto; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .chat-input-bar { padding: 12px 16px; background: var(--white); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
     .chat-input-bar input { flex: 1; font-size: 16px; }
     .chat-input-bar textarea { flex: 1; font-size: 16px; resize: none; max-height: 140px; overflow-y: auto; line-height: 1.4; min-height: 40px; }
     .chat-input-bar .btn { flex-shrink: 0; }
@@ -197,6 +244,7 @@
     @media (max-width: 768px) {
       body.page-chat .topnav { position: sticky; }
       body.page-chat .topnav-credit { display: none; }
+      body.page-chat .content { padding: 0; }
       .chat-wrap { border-radius: 0; border-left: none; border-right: none; }
       .chat-sidebar { width: 100%; }
       .chat-main { display: none; }

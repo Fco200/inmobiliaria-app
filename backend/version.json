@@ -7,8 +7,11 @@
     "Citas: se corrigió el diseño de la barra de filtros y del formulario, que se veían separados y desalineados en computadora.",
     "Calendario: se corrigió la zona horaria que dejaba citas fuera del rango y ahora administración y gerencia ven las citas de todo el equipo.",
     "Selectores de cliente, propiedad, negocio y asesor: se corrigió el envío de valores que el servidor rechazaba.",
+    "Chat: se corrigió que en computadora el chat se cortaba por abajo y no se veían los mensajes.",
+    "Chat: se corrigió que al abrir la burbuja de chat aparecía la lista de participantes tapando la conversación; ahora el chat se ve de inmediato y la lista se abre a un botón.",
     "Chat: se corrigieron los mensajes duplicados y la lentitud al cargar; ahora muestra el día de cada mensaje y avisa cuando se pierde la conexión.",
     "Chat: se agregaron mensajes rápidos con los saludos (buenos días, buenas tardes, buenas noches, hola equipo) para todo el equipo.",
+    "Acceso: se corrigió que los intentos de inicio de sesión de una persona bloquearan al resto del equipo; ahora cada quien tiene su propio límite.",
     "Rendimiento: los listados y el chat cargan mucho más rápido cuando hay 50 o más usuarios conectados a la vez."
   ]
 }

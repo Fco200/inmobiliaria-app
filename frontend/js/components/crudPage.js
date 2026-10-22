@@ -3,6 +3,7 @@
 function crudPage(container, config) {
   const state = { page: 1, q: '', status: '', records: [], meta: null, filters: {} };
   let filterTimer = null;
+  let searchTimer = null;
 
   function renderHeader() {
     const el = document.createElement('div');
@@ -109,10 +110,16 @@ function crudPage(container, config) {
       </div>
       ${hasFilters ? `<div class="crud-toolbar-filters${isMobile() ? ' is-collapsed' : ''}">${statusSelect}${filterControls}</div>` : ''}
     `;
+    // El buscador se aplica con retardo: antes cada tecla que se pulsaba
+    // disparaba una petición al servidor (escribir 10 letras = 10 listados
+    // completos). Con 50+ usuarios eso saturaba el backend y terminaba en
+    // "Demasiadas peticiones". Ahora solo se consulta cuando el asesor deja
+    // de escribir.
     el.querySelector('[data-search]').addEventListener('input', (e) => {
       state.q = e.target.value;
       state.page = 1;
-      load();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { searchTimer = null; load(); }, 350);
     });
     el.querySelectorAll('[data-filter]').forEach((ctl) => {
       const key = ctl.dataset.filter;

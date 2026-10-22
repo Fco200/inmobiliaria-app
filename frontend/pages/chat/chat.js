@@ -172,6 +172,7 @@ window.Pages.chat = {
         <div class="chat-main" id="chat-main">
           <div class="chat-header" id="chat-header">
             <button class="icon-btn" id="btn-back-chat" type="button" title="Volver a la lista de chats" aria-label="Volver a la lista de chats">&#8592;</button>
+            <button class="icon-btn" id="btn-chat-list" type="button" title="Ver las conversaciones" aria-label="Ver las conversaciones" style="display:none;">&#9776;</button>
             <div class="chat-header-titles">
               <div id="chat-title" class="chat-title-line">Selecciona un chat</div>
               <div id="chat-participants" class="chat-subline"></div>
@@ -208,6 +209,7 @@ window.Pages.chat = {
     const chatTitle = $('#chat-title');
     const chatParticipants = $('#chat-participants');
     const btnBack = $('#btn-back-chat');
+    const btnChatList = $('#btn-chat-list');
     const btnGeneral = $('#btn-general');
     const btnSoporte = $('#btn-soporte');
     const btnNewAnnouncement = $('#btn-new-announcement');
@@ -422,8 +424,11 @@ window.Pages.chat = {
 
     // Refresco con retardo de la lista: evita una petición al servidor por
     // cada mensaje que llega cuando hay mucho tráfico en el equipo.
+    // Si la pestaña está oculta no se consulta nada: al volver se refresca
+    // una sola vez (ver el evento 'visibilitychange' del final).
     function scheduleChatsReload() {
       if (chatsReloadTimer) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       chatsReloadTimer = setTimeout(() => {
         chatsReloadTimer = null;
         loadChats();
@@ -536,13 +541,27 @@ window.Pages.chat = {
         if (!currentChat || !currentChat._id) throw new Error('Chat no disponible');
         if (!Array.isArray(currentChat.messages)) currentChat.messages = [];
         chatTitle.textContent = chatLabel(currentChat);
-        chatParticipants.textContent = (currentChat.participants || []).filter(Boolean).map(p => {
+        // En un canal de equipo con 50 personas, la lista completa de
+        // participantes se comía el ancho de la cabecera (y el chat quedaba
+        // sin espacio). Ahora se resume y el detalle completo queda en el
+        // tooltip del título.
+        const partNames = (currentChat.participants || []).filter(Boolean).map(p => {
           const pName = typeof p === 'object' ? (p.name || p.username) : p;
           return pName || 'Usuario';
-        }).join(', ');
+        });
+        if (partNames.length > 4) {
+          chatParticipants.textContent = `${partNames.length} participantes`;
+          chatParticipants.title = partNames.join(', ');
+        } else {
+          chatParticipants.textContent = partNames.join(', ');
+          chatParticipants.title = '';
+        }
         chatInput.style.display = 'flex';
         quickBox.style.display = 'flex';
         btnBack.style.display = 'inline-flex';
+        // En el panel flotante la lista es un cajón: al abrir una
+        // conversación se cierra para dejar ver el chat.
+        if (isEmbed) document.body.classList.remove('chat-drawer-open');
         // El borrado de historial de los canales del equipo (General/Soporte)
         // queda reservado a admin/gerencia; en los chats 1:1 cualquiera.
         if (btnClearChat) {
@@ -884,6 +903,9 @@ window.Pages.chat = {
       if (btnClearChat) btnClearChat.style.display = 'none';
       chatMain.classList.remove('active');
       renderChatList();
+      // En el panel flotante la lista es un cajón sobrepuesto: al cerrar la
+      // conversación se abre para que se vea dónde elegir la siguiente.
+      if (isEmbed) document.body.classList.add('chat-drawer-open');
     }
 
     // Sale del módulo de chat: primero cierra la conversación (si hay) y luego
@@ -906,6 +928,13 @@ window.Pages.chat = {
     }
 
     btnBack.addEventListener('click', closeConversation);
+    // En el panel flotante el botón de la lista abre/cierra el cajón con las
+    // conversaciones; el chat sigue siendo lo que se ve de entrada.
+    if (btnChatList) {
+      btnChatList.addEventListener('click', () => {
+        document.body.classList.toggle('chat-drawer-open');
+      });
+    }
     if (btnExit) btnExit.addEventListener('click', exitToModules);
     if (btnExitHeader) btnExitHeader.addEventListener('click', exitToModules);
 
@@ -1056,7 +1085,10 @@ window.Pages.chat = {
     // En PC se abre el canal general para que el chat arranque "listo".
     // En móvil NO: se prefiere mostrar la lista de chats con el menú superior
     // visible, para que entrar al chat nunca deje sin salida al usuario.
-    if (!window.matchMedia('(max-width: 768px)').matches) {
+    // En el panel flotante (burbuja) SÍ se abre: ahí lo que se quiere es ver
+    // los mensajes de inmediato, no la lista de participantes.
+    const autoOpenGeneral = isEmbed || !window.matchMedia('(max-width: 768px)').matches;
+    if (autoOpenGeneral) {
       API.chats.general()
         .then((result) => {
           const gen = pickData(result);
@@ -1071,7 +1103,11 @@ window.Pages.chat = {
       if (document.visibilityState !== 'visible') return;
       if (socket && !socket.connected && socket.connect) socket.connect();
       flushQueue();
-      scheduleChatsReload();
+      // Al volver se refresca la lista de una vez (sin esperar el retardo) y
+      // se cancela el refresco pendiente para no consultar dos veces.
+      clearTimeout(chatsReloadTimer);
+      chatsReloadTimer = null;
+      loadChats();
     });
   },
 };

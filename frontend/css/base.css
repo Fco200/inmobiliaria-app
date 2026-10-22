@@ -617,6 +617,9 @@ html, body {
 .assistant-messages {
   flex: 1;
   overflow-y: auto;
+  /* Sin esto, en una columna flex la lista crece con el contenido y empuja
+     la caja de escritura fuera del panel (quedaba cortada abajo). */
+  min-height: 0;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -632,7 +635,7 @@ html, body {
 }
 .assistant-msg.bot { align-self: flex-start; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
 .assistant-msg.user { align-self: flex-end; background: var(--grad-primary); color: #fff; }
-.assistant-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.assistant-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .assistant-input input { flex: 1; }
 
 
@@ -3775,6 +3778,10 @@ body.fab-panel-open .fab-panel-backdrop { display: block; pointer-events: auto; 
   animation: fabPanelIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes fabPanelIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+/* El panel del chat necesita más ancho que el de avisos: con 380 px la lista
+   de conversaciones y la conversación compiten por el mismo espacio y el
+   chat queda casi ilegible. */
+.fab-panel-chat { width: 420px; height: min(620px, calc(100vh - 150px)); }
 .fab-panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 12px 14px; border-bottom: 1px solid var(--border);
@@ -3806,6 +3813,9 @@ body.fab-panel-open .fab-panel-backdrop { display: block; pointer-events: auto; 
 
 @media (max-width: 600px) {
   .fab-panel { right: 10px; left: 10px; bottom: 84px; width: auto; max-width: none; height: min(70vh, calc(100dvh - 150px)); }
+  /* El chat aprovecha más alto: la lista de conversaciones y la conversación
+     necesitan sitio para que los mensajes no queden aplastados. */
+  .fab-panel-chat { height: min(82vh, calc(100dvh - 120px)); }
   body.fab-panel-open .fab-panel-backdrop { background: rgba(15, 8, 25, 0.45); }
 }
 body.page-chat .fab-panels { display: none !important; }

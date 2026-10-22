@@ -27,6 +27,61 @@ const SUPPORT_TEAM_ROLES = ['admin', 'gerencia', 'asesor'];
 // Códigos de rol del Soporte Técnico (superadmin), exento de mantenimiento.
 const SUPPORT_ROLE = 'superadmin';
 
+// Normaliza un id a ObjectId. Las rutas Express entregan los ids como TEXTO
+// (`req.params.id`) y Mongoose solo los castea en las consultas con `find`/
+// `updateOne`, NO en las agregaciones (`aggregate`). Sin esta conversión, un
+// id en texto no encuentra nada en una agregación.
+const toObjectId = (value) => {
+  if (!value) return null;
+  if (value instanceof mongoose.Types.ObjectId) return value;
+  if (value._id) return toObjectId(value._id);
+  const raw = String(value);
+  if (!mongoose.Types.ObjectId.isValid(raw)) return null;
+  return new mongoose.Types.ObjectId(raw);
+};
+
+// RENDIMIENTO (50+ usuarios a la vez): cada vez que alguien abría el canal
+// general se repetían las consultas de roles y usuarios activos, y si
+// faltaba alguien se guardaba el documento COMPLETO con `save()`, lo que
+// reescribía también todo el historial de mensajes. Ahora:
+//   · la lista del equipo se cachea 60 s (es lo mismo para todos), y
+//   · los participantes se sincronizan con `$addToSet`, que es atómico y
+//     solo toca ese campo: el historial no se reescribe nunca.
+const TEAM_CACHE_MS = 60 * 1000;
+let teamCache = { key: '', at: 0, ids: [] };
+
+async function activeTeamIds(roleCodes) {
+  const key = roleCodes.join(',');
+  const now = Date.now();
+  if (teamCache.key === key && now - teamCache.at < TEAM_CACHE_MS) {
+    return teamCache.ids;
+  }
+  const roles = await Role.find({ code: { $in: roleCodes } }).select('_id').lean();
+  const roleIds = roles.map((r) => r._id);
+  const team = await User.find({
+    role: { $in: roleIds },
+    status: 'activo',
+  }).select('_id').lean();
+  const ids = team.map((u) => u._id);
+  teamCache = { key, at: now, ids };
+  return ids;
+}
+
+// Añade al chat los miembros del equipo que todavía no estén. Usa `$addToSet`
+// (atómico, sin duplicados) en lugar de `save()` para no reescribir el
+// historial de mensajes del canal.
+async function syncParticipants(chat, teamIds) {
+  const current = (chat.participants || []).filter(Boolean).map((p) => p.toString());
+  const missing = teamIds.filter((id) => !current.includes(id.toString()));
+  if (!missing.length) return chat;
+  await Chat.updateOne(
+    { _id: chat._id },
+    { $addToSet: { participants: { $each: missing } } }
+  );
+  chat.participants = [...(chat.participants || []), ...missing];
+  return chat;
+}
+
 /**
  * Devuelve (creándolo si hace falta) el chat grupal general en el que
  * participa todo el equipo. Se invoca al arrancar y bajo demanda.
@@ -35,28 +90,15 @@ async function getOrCreateGeneralChat() {
   let chat = await Chat.findOne({ type: 'grupal', name: GENERAL_NAME });
   if (chat) {
     // Mantener sincronizados los participantes con el equipo actual.
-    const roles = await Role.find({ code: { $in: TEAM_ROLES } });
-    const roleIds = roles.map((r) => r._id);
-    const team = await User.find({
-      role: { $in: roleIds },
-      status: 'activo',
-    }).select('_id');
-    const teamIds = team.map((u) => u._id);
-    const missing = teamIds.filter((id) => !chat.participants.some((p) => p.toString() === id.toString()));
-    if (missing.length) {
-      chat.participants.push(...missing);
-      await chat.save();
-    }
-    return chat;
+    const teamIds = await activeTeamIds(TEAM_ROLES);
+    return syncParticipants(chat, teamIds);
   }
 
-  const roles = await Role.find({ code: { $in: TEAM_ROLES } });
-  const roleIds = roles.map((r) => r._id);
-  const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
+  const teamIds = await activeTeamIds(TEAM_ROLES);
   chat = await Chat.create({
     name: GENERAL_NAME,
     type: 'grupal',
-    participants: team.map((u) => u._id),
+    participants: teamIds,
   });
   return chat;
 }
@@ -71,25 +113,15 @@ async function getOrCreateSupportChat() {
   let chat = await Chat.findOne({ type: 'grupal', name: SOPORTE_NAME });
   if (chat) {
     // Mantener sincronizados los participantes con el equipo y el soporte actual.
-    const roles = await Role.find({ code: { $in: [...SUPPORT_TEAM_ROLES, SUPPORT_ROLE] } });
-    const roleIds = roles.map((r) => r._id);
-    const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
-    const teamIds = team.map((u) => u._id);
-    const missing = teamIds.filter((id) => !chat.participants.some((p) => p && p.toString() === id.toString()));
-    if (missing.length) {
-      chat.participants.push(...missing);
-      await chat.save();
-    }
-    return chat;
+    const teamIds = await activeTeamIds([...SUPPORT_TEAM_ROLES, SUPPORT_ROLE]);
+    return syncParticipants(chat, teamIds);
   }
 
-  const roles = await Role.find({ code: { $in: [...SUPPORT_TEAM_ROLES, SUPPORT_ROLE] } });
-  const roleIds = roles.map((r) => r._id);
-  const team = await User.find({ role: { $in: roleIds }, status: 'activo' }).select('_id');
+  const teamIds = await activeTeamIds([...SUPPORT_TEAM_ROLES, SUPPORT_ROLE]);
   chat = await Chat.create({
     name: SOPORTE_NAME,
     type: 'grupal',
-    participants: team.map((u) => u._id),
+    participants: teamIds,
   });
   return chat;
 }
@@ -362,22 +394,24 @@ const persistAndBroadcastMessage = async (io, chatId, userId, userName, message,
     // `clientId` lo genera el navegador al enviar: permite reemplazar el
     // mensaje "optimista" (pintado al instante) por el definitivo cuando
     // vuelve el eco del servidor, sin duplicados.
+    //
+    // RENDIMIENTO: Socket.IO admite varios nombres de evento en una sola
+    // llamada (`emit([a, b], payload)`) y los manda en UN solo paquete. Antes
+    // eran dos paquetes idénticos por destinatario: con 50 usuarios en el
+    // canal general eso era el doble de tráfico de la nada.
     const payload = {
       chatId: String(chat._id),
       message: socketMessage,
       clientId: clientId || null,
     };
-    io.to(`chat:${chat._id}`).emit('receive-message', payload);
-    io.to(`chat:${chat._id}`).emit('new-message', payload);
+    const EVENTS = ['receive-message', 'new-message'];
+    io.to(`chat:${chat._id}`).emit(EVENTS, payload);
     if (chat.type === 'individual') {
       participants.forEach((p) => {
-        const room = `user:${p.toString()}`;
-        io.to(room).emit('receive-message', payload);
-        io.to(room).emit('new-message', payload);
+        io.to(`user:${p.toString()}`).emit(EVENTS, payload);
       });
     } else {
-      io.to('general').emit('receive-message', payload);
-      io.to('general').emit('new-message', payload);
+      io.to('general').emit(EVENTS, payload);
     }
   }
 
@@ -471,11 +505,55 @@ const sendMessage = asyncHandler(async (req, res) => {
 // documento entero: con mucho historial eso era lentísimo y bloqueaba el
 // canal para todos los usuarios a la vez.
 //
+// Antes de escribir se comprueba si de verdad hay algo pendiente. Sin esa
+// comprobación, cada vez que un asesor ABRÍA el canal general se reescribía
+// el historial completo aunque ya lo hubiera leído todo: con 50 usuarios
+// eso son 50 reescrituras del mismo documento por vuelta, y además se
+// peleaban por el mismo documento (bloqueos y reintentos en MongoDB).
+//
 // Devuelve false si el chat no existe.
 const markChatAsRead = async (chatId, userId) => {
+  // OJO: las rutas pasan el id como TEXTO (req.params.id) y Mongoose NO
+  // castea los filtros de una agregación (sí los de un updateOne). Si el id
+  // se quedara como cadena, la agregación no encontraría nada, se creería
+  // que no hay nada pendiente y los mensajes NUNCA se marcarían como leídos.
+  // Por eso se normaliza a ObjectId antes de consultar.
+  const chatObjectId = toObjectId(chatId);
+  const userObjectId = toObjectId(userId);
+  if (!chatObjectId || !userObjectId) return false;
+
+  // 1) ¿Hay algo sin leer? Solo se calcula el número en el servidor: el
+  //    historial no viaja al backend de Node.
+  let unread = 0;
+  try {
+    const rows = await Chat.aggregate([
+      { $match: { _id: chatObjectId } },
+      {
+        $project: {
+          unread: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$messages', []] },
+                as: 'm',
+                cond: { $not: { $in: [userObjectId, { $ifNull: ['$$m.readBy', []] }] } },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    if (!rows || !rows.length) return false; // el chat no existe
+    unread = rows[0].unread || 0;
+  } catch (e) {
+    unread = -1; // -1 = "no se pudo saber": se intenta escribir de todos modos.
+  }
+
+  // 2) Si no hay nada pendiente se sale sin tocar el documento.
+  if (unread === 0) return true;
+
   try {
     await Chat.updateOne(
-      { _id: chatId },
+      { _id: chatObjectId },
       [
         {
           $set: {
@@ -485,12 +563,12 @@ const markChatAsRead = async (chatId, userId) => {
                 as: 'm',
                 in: {
                   $cond: [
-                    { $in: [userId, { $ifNull: ['$$m.readBy', []] }] },
+                    { $in: [userObjectId, { $ifNull: ['$$m.readBy', []] }] },
                     '$$m',
                     {
                       $mergeObjects: [
                         '$$m',
-                        { readBy: { $concatArrays: [{ $ifNull: ['$$m.readBy', []] }, [userId]] } },
+                        { readBy: { $concatArrays: [{ $ifNull: ['$$m.readBy', []] }, [userObjectId]] } },
                       ],
                     },
                   ],
@@ -504,10 +582,10 @@ const markChatAsRead = async (chatId, userId) => {
     return true;
   } catch (e) {
     // Respaldo para servidores antiguos (< 4.2): carga y guardado clásicos.
-    const chat = await Chat.findById(chatId);
+    const chat = await Chat.findById(chatObjectId);
     if (!chat) return false;
     chat.messages.forEach(msg => {
-      if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
+      if (!msg.readBy.some((r) => r && r.toString() === String(userObjectId))) {
         msg.readBy.push(userId);
       }
     });
@@ -616,4 +694,5 @@ module.exports = {
   getOrCreateSupportChat,
   persistAndBroadcast,
   markChatAsRead,
+  toObjectId,
 };

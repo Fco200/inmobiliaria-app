@@ -84,6 +84,10 @@ const createUser = asyncHandler(async (req, res) => {
 
   delete body.customPermissions;
 
+  if (body.role && body.role === '__custom__') {
+    return res.status(400).json({ success: false, message: 'Selecciona al menos un permiso para el rol personalizado.' });
+  }
+
   if (body.password === undefined || body.password === '') {
     return res.status(400).json({ success: false, message: 'La contraseña es obligatoria' });
   }

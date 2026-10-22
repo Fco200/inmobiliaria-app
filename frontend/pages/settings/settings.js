@@ -452,6 +452,29 @@ window.Pages.settings = {
       if (chatBtn) chatBtn.addEventListener('click', shareGuideChatModal);
     }
 
+    // Detalle legible de cada permiso: el admin ve qué HABILITA cada casilla
+    // antes de crear al usuario (p. ej. una secretaria), sin adivinar.
+    const PERMISSION_DETAILS = {
+      dashboard_view: { module: 'Panel principal', icon: '&#128202;', desc: 'Ver el dashboard con el resumen de su actividad.' },
+      users_manage: { module: 'Usuarios', icon: '&#128101;', desc: 'Crear, editar y dar de baja usuarios del CRM.' },
+      roles_manage: { module: 'Usuarios', icon: '&#128273;', desc: 'Crear y modificar roles y sus permisos.' },
+      clients_manage: { module: 'Clientes', icon: '&#129309;', desc: 'Registrar, editar y dar seguimiento a clientes.' },
+      properties_manage: { module: 'Propiedades', icon: '&#127968;', desc: 'Captar, editar y publicar propiedades.' },
+      inventory_manage: { module: 'Propiedades', icon: '&#128230;', desc: 'Administrar el inventario de propiedades.' },
+      businesses_manage: { module: 'Negocios', icon: '&#128188;', desc: 'Gestionar negocios y su etapa en el embudo.' },
+      appointments_manage: { module: 'Citas', icon: '&#128197;', desc: 'Agendar y administrar citas.' },
+      tasks_manage: { module: 'Tareas', icon: '&#9989;', desc: 'Crear y dar seguimiento a tareas.' },
+      goals_manage: { module: 'Metas', icon: '&#127919;', desc: 'Definir y consultar metas de ventas.' },
+      documents_manage: { module: 'Documentos', icon: '&#128193;', desc: 'Subir y administrar documentos.' },
+      expenses_manage: { module: 'Gastos', icon: '&#128176;', desc: 'Registrar y consultar gastos.' },
+      tickets_manage: { module: 'Tickets', icon: '&#127903;', desc: 'Administrar el valor y control de tickets.' },
+      reports_view: { module: 'Reportes', icon: '&#128200;', desc: 'Ver reportes de su actividad.' },
+      reports_gerencia: { module: 'Reportes', icon: '&#128202;', desc: 'Ver reportes de gerencia (todo el equipo).' },
+      audit_view: { module: 'Seguridad', icon: '&#128373;', desc: 'Consultar la auditoría y la actividad del sistema.' },
+      settings_manage: { module: 'Configuración', icon: '&#9881;', desc: 'Cambiar la configuración del sistema.' },
+      prospecting_manage: { module: 'Prospección', icon: '&#128270;', desc: 'Administrar la prospección de clientes.' },
+    };
+
     function renderUsers() {
       if (!isAdmin) return renderAdminOnly();
       tabContent.innerHTML = `
@@ -461,7 +484,7 @@ window.Pages.settings = {
       renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
       API.permissions.list().then((perms) => {
         const permissions = Array.isArray(perms) ? perms : (perms && perms.data ? perms.data : []);
-        const roleOptions = [...roles.map((x) => ({ value: x._id, label: x.name })), { value: '__custom__', label: 'Personalizado (seleccionar permisos)' }];
+        const roleOptions = [...roles.map((x) => ({ value: x._id, label: x.name })), { value: '__custom__', label: 'Personalizado (elegir permisos)' }];
 
         crudPage(tabContent.querySelector('#users-crud'), {
           title: 'Usuarios',
@@ -493,7 +516,15 @@ window.Pages.settings = {
           formData(values, record, form) {
             const body = { ...values };
             if (record && !body.password) delete body.password;
-            if (body.role === '__custom__') {
+
+            // Al crear con rol personalizado, el <select> de rol envía el valor
+            // "__custom__" que NO es un ObjectId: se cambia por los permisos
+            // elegidos y el backend crea el rol a partir de ellos.
+            const customRole = form ? form.querySelector('#fld-role') : null;
+            const isCustom = (customRole && customRole.value === '__custom__') || body.role === '__custom__';
+            if (isCustom) {
+              delete body.role;
+              delete body.customRole;
               const checks = form ? Array.from(form.querySelectorAll('input[data-custom-perm]:checked')) : [];
               body.customPermissions = checks.map((c) => c.value);
               if (!body.customPermissions.length) {
@@ -505,32 +536,82 @@ window.Pages.settings = {
           onFormMount(form) {
             const roleSel = form.querySelector('#fld-role');
             if (!roleSel) return;
+
             const wrap = document.createElement('div');
             wrap.className = 'form-field form-field-full';
             wrap.id = 'custom-perms-wrap';
             wrap.style.display = 'none';
+            wrap.style.gridColumn = '1 / -1';
+
             const groups = {};
             permissions.forEach((p) => {
-              if (!groups[p.module]) groups[p.module] = [];
-              groups[p.module].push(p);
+              const meta = PERMISSION_DETAILS[p.code] || {};
+              const mod = meta.module || p.module || 'General';
+              if (!groups[mod]) groups[mod] = [];
+              groups[mod].push({ ...p, _meta: meta });
             });
-            let html = `<label class="form-label">Permisos personalizados</label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">`;
+
+            const total = permissions.length;
+            let html = `
+              <div class="custom-perms-head">
+                <div>
+                  <label class="form-label" style="margin:0;">Permisos del usuario personalizado</label>
+                  <small class="text-muted">Marca lo que este usuario podr&aacute; hacer. ${total} permisos disponibles.</small>
+                </div>
+                <div class="custom-perms-quick">
+                  <button type="button" class="btn btn-secondary btn-sm" data-perms-all>Marcar todos</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-perms-none>Limpiar</button>
+                  <span class="custom-perms-count" data-perms-count>0 / ${total}</span>
+                </div>
+              </div>
+              <div class="custom-perms-grid">`;
+
             Object.keys(groups).sort().forEach((mod) => {
-              html += `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;"><div style="font-weight:600;margin-bottom:6px;text-transform:capitalize;">${UI.escapeHtml(mod)}</div>`;
-              (groups[mod] || []).forEach((p) => {
-                html += `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;"><input type="checkbox" data-custom-perm value="${p._id}"> <span>${UI.escapeHtml(p.name)}</span></label>`;
+              html += `<div class="custom-perms-group">
+                <div class="custom-perms-group-title">${UI.escapeHtml(mod)}</div>`;
+              groups[mod].forEach((p) => {
+                const meta = p._meta || {};
+                html += `
+                  <label class="custom-perm">
+                    <input type="checkbox" data-custom-perm value="${p._id}">
+                    <span class="custom-perm-info">
+                      <span class="custom-perm-name">${meta.icon ? meta.icon + ' ' : ''}${UI.escapeHtml(p.name)}</span>
+                      <span class="custom-perm-desc">${UI.escapeHtml(meta.desc || p.description || 'Acceso al m\u00f3dulo de ' + p.module + '.')}</span>
+                    </span>
+                  </label>`;
               });
               html += `</div>`;
             });
-            html += `</div><small class="text-muted">Solo aplica cuando seleccionas "Personalizado".</small>`;
+
+            html += `</div>`;
             wrap.innerHTML = html;
-            const grid = form.querySelector('.crud-form-grid') || form.querySelector('form > div');
-            if (grid) grid.appendChild(wrap);
-            const toggle = () => { wrap.style.display = roleSel.value === '__custom__' ? '' : 'none'; };
+
+            const grid = form.querySelector('.crud-form-grid');
+            if (grid) grid.appendChild(wrap); else form.appendChild(wrap);
+
+            const boxes = () => Array.from(wrap.querySelectorAll('input[data-custom-perm]'));
+            const countEl = wrap.querySelector('[data-perms-count]');
+            const updateCount = () => {
+              const n = boxes().filter((c) => c.checked).length;
+              if (countEl) countEl.textContent = `${n} / ${total}`;
+            };
+            boxes().forEach((c) => c.addEventListener('change', updateCount));
+
+            const allBtn = wrap.querySelector('[data-perms-all]');
+            if (allBtn) allBtn.addEventListener('click', () => { boxes().forEach((c) => { c.checked = true; }); updateCount(); });
+            const noneBtn = wrap.querySelector('[data-perms-none]');
+            if (noneBtn) noneBtn.addEventListener('click', () => { boxes().forEach((c) => { c.checked = false; }); updateCount(); });
+
+            const toggle = () => {
+              const on = roleSel.value === '__custom__';
+              wrap.style.display = on ? '' : 'none';
+              if (on) wrap.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            };
             roleSel.addEventListener('change', toggle);
             toggle();
+            updateCount();
           },
-          onEdit: true,
+          onEdit: false,
           onRemove: true,
         });
       }).catch((error) => {

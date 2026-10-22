@@ -216,8 +216,15 @@ window.Pages.properties = {
         // admite escribir para filtrar y no obliga a recorrer todo el listado.
         API.clients.options({ limit: 50 }).catch(() => ({ data: [] })),
       ]);
-      users = u.data;
-      owners = o.data;
+      // Las respuestas pueden llegar de dos formas: el arreglo directo (p. ej.
+      // /clients/options, que no devuelve `meta` y ApiClient ya desenvuelve) o
+      // envuelto en { data: [...] } (listados paginados como /users). Se
+      // normaliza aquí: antes se leía siempre `res.data`, así que cuando llegaba
+      // el arreglo directo quedaba `undefined` y el módulo rompía al hacer
+      // `owners.map(...)` ("Cannot read properties of undefined (reading 'map')").
+      const toArray = (res) => (Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : []));
+      users = toArray(u);
+      owners = toArray(o);
     } catch (error) {
       users = [];
       owners = [];

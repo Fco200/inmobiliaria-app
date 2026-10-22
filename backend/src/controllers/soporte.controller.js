@@ -28,7 +28,7 @@ const {
   Session,
   Chat,
 } = require('../models');
-const { persistAndBroadcast, getOrCreateGeneralChat } = require('./chat.controller');
+const { persistAndBroadcast, getOrCreateGeneralChat, markChatAsRead } = require('./chat.controller');
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { logActivity } = require('../services/log.service');
 const { createSession, revokeSessionByToken, hashToken } = require('../services/session.service');
@@ -853,21 +853,49 @@ const renombrarPlantilla = asyncHandler(async (req, res) => {
 const CANAL_GENERAL_SOPORTE = 'general';
 
 const listarChatsSoporte = asyncHandler(async (req, res) => {
-  const meId = String(req.user._id);
+  const meId = req.user._id;
   const chats = await Chat.find()
+    .select('-messages')
     .populate('participants', 'name username role photo')
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .limit(50)
     .lean();
 
+  // El contador de no leídos y el nombre del último emisor se calculan en
+  // MongoDB: antes se traía el historial COMPLETO de cada conversación solo
+  // para contarlo, lo que saturaba el servidor con 50+ usuarios.
+  const chatIds = chats.map((c) => c._id);
+  let stats = new Map();
+  if (chatIds.length) {
+    const rows = await Chat.aggregate([
+      { $match: { _id: { $in: chatIds } } },
+      {
+        $project: {
+          unread: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$messages', []] },
+                as: 'm',
+                cond: { $not: { $in: [meId, { $ifNull: ['$$m.readBy', []] }] } },
+              },
+            },
+          },
+          lastSender: {
+            $let: {
+              vars: { last: { $arrayElemAt: [{ $ifNull: ['$messages', []] }, -1] } },
+              in: { $ifNull: ['$$last.emisorNombre', ''] },
+            },
+          },
+        },
+      },
+    ]);
+    stats = new Map(rows.map((r) => [String(r._id), r]));
+  }
+
   // Se devuelve un resumen ligero (sin el historial completo) incluyendo el
   // número de mensajes NO leídos por Soporte, para pintar el indicador.
   const data = chats.map((chat) => {
-    const messages = chat.messages || [];
-    const unread = messages.filter((m) =>
-      !(m.readBy || []).some((r) => r && String(r) === meId)
-    ).length;
-    const last = messages[messages.length - 1] || null;
+    const stat = stats.get(String(chat._id)) || {};
     return {
       _id: chat._id,
       name: chat.name,
@@ -876,8 +904,8 @@ const listarChatsSoporte = asyncHandler(async (req, res) => {
       lastMessage: chat.lastMessage,
       lastMessageAt: chat.lastMessageAt,
       updatedAt: chat.updatedAt,
-      unread,
-      lastSender: (last && last.emisorNombre) || '',
+      unread: stat.unread || 0,
+      lastSender: stat.lastSender || '',
     };
   });
 
@@ -891,12 +919,45 @@ const generalSoporte = asyncHandler(async (req, res) => {
 });
 
 const verChatSoporte = asyncHandler(async (req, res) => {
+  // Metadatos SIN historial + los últimos 300 mensajes cortados en el
+  // servidor: antes se descargaba el documento entero con todo el historial.
   const chat = await Chat.findById(req.params.id)
+    .select('-messages')
     .populate('participants', 'name username role photo')
-    .populate('messages.sender', 'name username role photo');
+    .lean();
   if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
-  const data = chat.toObject();
-  data.messages = (data.messages || []).slice(-300);
+
+  let messages = [];
+  try {
+    const rows = await Chat.aggregate([
+      { $match: { _id: chat._id } },
+      { $project: { messages: { $slice: ['$messages', -300] } } },
+    ]);
+    messages = (rows && rows[0] && rows[0].messages) || [];
+  } catch (error) {
+    console.error('[Soporte] No se pudo recortar el historial del chat:', error.message);
+    messages = [];
+  }
+
+  const senderIds = [...new Set(messages
+    .map((m) => (m && m.sender ? String(m.sender) : ''))
+    .filter(Boolean))];
+  let senderMap = new Map();
+  if (senderIds.length) {
+    const senders = await User.find({ _id: { $in: senderIds } })
+      .select('name username role photo')
+      .populate('role', 'code')
+      .lean();
+    senderMap = new Map(senders.map((u) => [String(u._id), u]));
+  }
+
+  const data = {
+    ...chat,
+    messages: messages.map((m) => ({
+      ...m,
+      sender: senderMap.get(String(m.sender)) || m.sender || null,
+    })),
+  };
   res.json({ success: true, data });
 });
 
@@ -909,7 +970,9 @@ const enviarMensajeSoporte = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'El mensaje no puede superar los 2000 caracteres' });
   }
 
-  const chat = await Chat.findById(req.params.id);
+  // Solo los metadatos: el historial no hace falta (el mensaje se inserta
+  // con un $push atómico dentro de persistAndBroadcast).
+  const chat = await Chat.findById(req.params.id).select('-messages');
   if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
 
   // El soporte se agrega como participante si aún no lo estaba para poder
@@ -956,14 +1019,8 @@ const enviarMensajeSoporte = asyncHandler(async (req, res) => {
 });
 
 const marcarLeidoSoporte = asyncHandler(async (req, res) => {
-  const chat = await Chat.findById(req.params.id);
-  if (!chat) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
-  chat.messages.forEach((msg) => {
-    if (!msg.readBy.some((p) => p && p.toString() === String(req.user._id))) {
-      msg.readBy.push(req.user._id);
-    }
-  });
-  await chat.save();
+  const ok = await markChatAsRead(req.params.id, req.user._id);
+  if (!ok) return res.status(404).json({ success: false, message: 'Chat no encontrado' });
   res.json({ success: true, message: 'Mensajes marcados como leídos' });
 });
 

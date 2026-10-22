@@ -14,10 +14,15 @@ async function connectDB() {
       // se dimensiona un pool acotado y con espera máxima corta: si se
       // agota, la petición espera un momento en vez de quedarse colgada
       // indefinidamente (que era lo que producía la app "travada").
-      maxPoolSize: Number(process.env.MONGO_MAX_POOL || 20),
-      minPoolSize: Number(process.env.MONGO_MIN_POOL || 2),
+      //
+      // 40 conexiones: suficiente para atender a 50+ usuarios a la vez sin
+      // abrir documentaciones innecesarias en MongoDB Atlas (cada conexión
+      // cuenta para el límite del plan). Si se sube el número de usuarios
+      // simultáneos, se ajusta con MONGO_MAX_POOL sin tocar el código.
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL || 40),
+      minPoolSize: Number(process.env.MONGO_MIN_POOL || 5),
       maxIdleTimeMS: Number(process.env.MONGO_MAX_IDLE_MS || 60000),
-      waitQueueTimeoutMS: Number(process.env.MONGO_WAIT_QUEUE_MS || 10000),
+      waitQueueTimeoutMS: Number(process.env.MONGO_WAIT_QUEUE_MS || 15000),
       // Recupera rápido ante un corte de red de MongoDB (Render reinicia la
       // base en los planes gratuitos) en lugar de quedarse colgado 30 s.
       heartbeatFrequencyMS: 10000,

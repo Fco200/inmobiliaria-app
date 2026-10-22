@@ -1,8 +1,16 @@
 'use strict';
 
+const mongoose = require('mongoose');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Chat, User, Role, Notification } = require('../models');
 const { pushNative } = require('../services/notification.service');
+
+// Cantidad máxima de mensajes que se devuelven al abrir una conversación.
+// Antes se traían los últimos 200 DESPUÉS de cargar el documento completo
+// (con su historial entero) desde MongoDB: con grupos grandes eso significaba
+// mover decenas de miles de mensajes por cada apertura. Ahora el corte se
+// hace EN EL SERVIDOR con una proyección $slice.
+const MAX_MESSAGES_RETURNED = 200;
 
 // Códigos de rol que participan en el canal grupal general.
 const TEAM_ROLES = ['admin', 'gerencia', 'asesor', 'superadmin'];
@@ -88,16 +96,54 @@ async function getOrCreateSupportChat() {
 
 // Listar chats del usuario (los grupales cierran sesión de participantes y se
 // devuelven aunque el usuario haya sido agregado después de la creación).
+//
+// RENDIMIENTO (50+ usuarios simultáneos): antes este listado devolvía el
+// historial COMPLETO de cada conversación (hasta 50 chats con todos sus
+// mensajes). Eso son megabytes por usuario y por refresco, y saturaba el
+// ancho de banda y la RAM del servidor. Ahora:
+//   1) el historial NO viaja en la lista (el frontend solo necesita el
+//      último mensaje y el contador de no leídos), y
+//   2) el contador de no leídos se calcula en MongoDB con una agregación,
+//      sin traer los mensajes a memoria.
 const listChats = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const chats = await Chat.find({
     $or: [{ participants: userId }, { type: 'grupal' }],
   })
+    .select('-messages')
     .populate('participants', 'name username role')
     .sort({ lastMessageAt: -1, updatedAt: -1 })
-    .limit(50);
+    .limit(50)
+    .lean();
 
-  res.json({ success: true, data: chats });
+  const chatIds = chats.map((c) => c._id);
+  let unreadByChat = new Map();
+  if (chatIds.length) {
+    const rows = await Chat.aggregate([
+      { $match: { _id: { $in: chatIds } } },
+      {
+        $project: {
+          unread: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ['$messages', []] },
+                as: 'm',
+                cond: { $not: { $in: [userId, { $ifNull: ['$$m.readBy', []] }] } },
+              },
+            },
+          },
+        },
+      },
+    ]);
+    unreadByChat = new Map(rows.map((r) => [String(r._id), r.unread || 0]));
+  }
+
+  const data = chats.map((c) => ({
+    ...c,
+    unread: unreadByChat.get(String(c._id)) || 0,
+  }));
+
+  res.json({ success: true, data });
 });
 
 // Devuelve (creándolo) el canal grupal general para el equipo.
@@ -115,10 +161,17 @@ const supportChat = asyncHandler(async (req, res) => {
 });
 
 // Obtener chat por ID con mensajes
+//
+// RENDIMIENTO: se cargan por separado los DATOS de la conversación y sus
+// ÚLTIMOS 200 mensajes (corte con $slice dentro de MongoDB). Antes se
+// descargaba el documento entero con TODOS los mensajes y se recortaba en
+// JavaScript: en un canal de equipo con mucho historial eso era una descarga
+// enorme por cada apertura y ralentizaba a todos los usuarios a la vez.
 const getChat = asyncHandler(async (req, res) => {
   const chat = await Chat.findById(req.params.id)
+    .select('-messages')
     .populate('participants', 'name username role')
-    .populate({ path: 'messages.sender', select: 'name username role', populate: { path: 'role', select: 'code' } });
+    .lean();
 
   if (!chat) {
     return res.status(404).json({ success: false, message: 'Chat no encontrado' });
@@ -130,10 +183,39 @@ const getChat = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
   }
 
-  // En producción no conviene mandar historiales gigantes: se devuelven solo
-  // los últimos 200 mensajes.
-  const data = chat.toObject();
-  data.messages = (data.messages || []).slice(-200);
+  // Últimos mensajes (corte en el servidor).
+  let messages = [];
+  try {
+    const rows = await Chat.aggregate([
+      { $match: { _id: chat._id } },
+      { $project: { messages: { $slice: ['$messages', -MAX_MESSAGES_RETURNED] } } },
+    ]);
+    messages = (rows && rows[0] && rows[0].messages) || [];
+  } catch (error) {
+    console.error('[Chat] No se pudo recortar el historial del chat:', error.message);
+    messages = [];
+  }
+
+  // Autores de esos mensajes: una sola consulta para todos los remitentes.
+  const senderIds = [...new Set(messages
+    .map((m) => (m && m.sender ? String(m.sender) : ''))
+    .filter(Boolean))];
+  let senderMap = new Map();
+  if (senderIds.length) {
+    const senders = await User.find({ _id: { $in: senderIds } })
+      .select('name username role')
+      .populate('role', 'code')
+      .lean();
+    senderMap = new Map(senders.map((u) => [String(u._id), u]));
+  }
+
+  const data = {
+    ...chat,
+    messages: messages.map((m) => ({
+      ...m,
+      sender: senderMap.get(String(m.sender)) || m.sender || null,
+    })),
+  };
 
   res.json({ success: true, data });
 });
@@ -198,55 +280,100 @@ const createChat = asyncHandler(async (req, res) => {
 // Lógica única de persistencia + broadcast del mensaje. La usan tanto el
 // endpoint REST (POST /chats/:id/messages) como el socket 'send-message',
 // para que las dos vías se comporten igual.
-const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
+//
+// RENDIMIENTO (50+ usuarios simultáneos): antes se cargaba el documento
+// COMPLETO del chat (con TODO su historial) solo para añadir un mensaje al
+// final, y luego se volvía a cargar y poblar para emitirlo por socket. En un
+// canal de equipo con mucho historial eso movía el historial entero por cada
+// mensaje enviado y ralentizaba a todos los usuarios a la vez. Ahora:
+//   1) el chat se lee SIN historial (proyección ligera) para validar acceso,
+//   2) el mensaje se inserta con un $push ATÓMICO (una sola escritura), y
+//   3) el emisor viaja ya resuelto en el payload del socket (sin populate).
+const MAX_CHAT_MESSAGES = 5000;
+
+const persistAndBroadcastMessage = async (io, chatId, userId, userName, message, senderRoleCode, clientId) => {
   const text = String(message || '').trim();
   if (!text) throw new Error('El mensaje no puede estar vacío');
   if (text.length > 2000) throw new Error('El mensaje no puede superar los 2000 caracteres');
   if (!userId) throw new Error('Usuario no autenticado');
 
-  const chat = await Chat.findById(chatId);
+  // Metadatos del chat: SIN el historial de mensajes.
+  const chat = await Chat.findById(chatId).select('-messages').lean();
   if (!chat) throw new Error('Chat no encontrado');
 
-  if (!chat.participants.some(p => p && p.toString() === String(userId))) {
+  const participants = (chat.participants || []).filter(Boolean);
+  if (!participants.some(p => p.toString() === String(userId))) {
     throw new Error('No tienes acceso a este chat');
   }
 
   let destinatario = 'GRUPO_GENERAL';
   if (chat.type === 'individual') {
-    const other = chat.participants.find(p => p && p.toString() !== String(userId));
+    const other = participants.find(p => p.toString() !== String(userId));
     destinatario = other ? other.toString() : 'GRUPO_GENERAL';
   }
 
-  chat.messages.push({
-    sender: userId,
-    emisor: userId,
-    emisorNombre: (userName || 'Usuario').trim().slice(0, 80),
+  const now = new Date();
+  // El id del emisor puede llegar como ObjectId o como texto (REST vs socket).
+  let senderId = null;
+  try {
+    senderId = new mongoose.Types.ObjectId(String(userId));
+  } catch (e) {
+    throw new Error('Usuario no autenticado');
+  }
+  const senderName = (userName || 'Usuario').trim().slice(0, 80) || 'Usuario';
+
+  const newMsg = {
+    _id: new mongoose.Types.ObjectId(),
+    sender: senderId,
+    emisor: senderId,
+    emisorNombre: senderName,
     destinatario,
     message: text,
-    readBy: [userId],
-  });
+    readBy: [senderId],
+    createdAt: now,
+    updatedAt: now,
+  };
 
-  chat.lastMessage = text;
-  chat.lastMessageAt = new Date();
+  // Escritura atómica: una sola operación contra MongoDB. `$slice` acota el
+  // tamaño del documento (límite de 16 MB) conservando siempre los mensajes
+  // más recientes; el chat solo muestra los últimos 200 de todos modos.
+  const result = await Chat.updateOne(
+    { _id: chat._id },
+    {
+      $push: { messages: { $each: [newMsg], $slice: -MAX_CHAT_MESSAGES } },
+      $set: { lastMessage: text, lastMessageAt: now },
+    }
+  );
+  if (!result.matchedCount) throw new Error('Chat no encontrado');
 
-  await chat.save();
-
-  const populated = await chat.populate('messages.sender', 'name username role');
-  const newMsg = populated.messages[populated.messages.length - 1];
+  // El emisor viaja ya resuelto: el frontend lo pinta sin llamadas extra.
+  const socketMessage = {
+    ...newMsg,
+    sender: {
+      _id: senderId,
+      name: senderName,
+      role: senderRoleCode ? { code: senderRoleCode } : null,
+    },
+  };
 
   if (io) {
     // Se emite con DOS nombres de evento para compatibilidad: el chat escucha
     // tanto 'receive-message' como 'new-message'.
-    const payload = { chatId, message: newMsg };
-    io.to(`chat:${chatId}`).emit('receive-message', payload);
-    io.to(`chat:${chatId}`).emit('new-message', payload);
+    // `clientId` lo genera el navegador al enviar: permite reemplazar el
+    // mensaje "optimista" (pintado al instante) por el definitivo cuando
+    // vuelve el eco del servidor, sin duplicados.
+    const payload = {
+      chatId: String(chat._id),
+      message: socketMessage,
+      clientId: clientId || null,
+    };
+    io.to(`chat:${chat._id}`).emit('receive-message', payload);
+    io.to(`chat:${chat._id}`).emit('new-message', payload);
     if (chat.type === 'individual') {
-      chat.participants.forEach((p) => {
-        if (p) {
-          const room = `user:${p.toString()}`;
-          io.to(room).emit('receive-message', payload);
-          io.to(room).emit('new-message', payload);
-        }
+      participants.forEach((p) => {
+        const room = `user:${p.toString()}`;
+        io.to(room).emit('receive-message', payload);
+        io.to(room).emit('new-message', payload);
       });
     } else {
       io.to('general').emit('receive-message', payload);
@@ -259,8 +386,7 @@ const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
   // envío del mensaje, por eso todo va en try/catch y se ignora cualquier fallo.
   try {
     if (chat.type === 'individual') {
-      const recipients = chat.participants.filter((p) => p && p.toString() !== String(userId));
-      const senderName = (userName || 'Usuario').trim().slice(0, 80) || 'Usuario';
+      const recipients = participants.filter((p) => p.toString() !== String(userId));
       await Promise.all(
         recipients.map((p) =>
           Notification.create({
@@ -277,14 +403,14 @@ const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
       // participantes excepto el emisor. No se crea aviso en la lista interna
       // para no saturarla; el mensaje llega igualmente al celular (incluso
       // bloqueado o con la app cerrada).
-      const recipients = chat.participants
-        .filter((p) => p && p.toString() !== String(userId))
+      const recipients = participants
+        .filter((p) => p.toString() !== String(userId))
         .map((p) => p.toString());
       const groupLabel = chat.name && String(chat.name).trim()
         ? String(chat.name).trim()
         : 'Equipo';
       await pushNative(recipients, {
-        title: `${groupLabel}: ${(userName || 'Usuario').trim().slice(0, 40)}`,
+        title: `${groupLabel}: ${senderName.slice(0, 40)}`,
         body: text.slice(0, 140),
         tag: `chat-${chat._id}`,
         url: 'chat.html',
@@ -292,8 +418,14 @@ const persistAndBroadcast = async (io, chatId, userId, userName, message) => {
     }
   } catch (e) { /* el aviso nunca debe impedir el mensaje */ }
 
-  return newMsg;
+  return socketMessage;
 };
+
+// Punto de entrada usado por el endpoint REST y por el socket 'send-message'.
+// `senderRoleCode` es opcional: si no se pasa, el mensaje se emite sin rol
+// (el frontend solo lo usa para etiquetar los mensajes de Soporte Técnico).
+const persistAndBroadcast = (io, chatId, userId, userName, message, senderRoleCode, clientId) =>
+  persistAndBroadcastMessage(io, chatId, userId, userName, message, senderRoleCode || null, clientId || null);
 
 // Enviar mensaje (vía REST)
 const sendMessage = asyncHandler(async (req, res) => {
@@ -303,6 +435,7 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   const chatId = req.params.id;
   const text = String((req.body && req.body.message) || '').trim();
+  const clientId = (req.body && req.body.clientId) ? String(req.body.clientId) : null;
   if (!text) {
     return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío' });
   }
@@ -312,9 +445,12 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   const nameUser = req.user.name || req.user.username || 'Usuario';
+  const roleCode = req.user.role && typeof req.user.role === 'object'
+    ? (req.user.role.code || null)
+    : null;
 
   try {
-    const newMsg = await persistAndBroadcast(io, chatId, req.user._id.toString(), nameUser, text);
+    const newMsg = await persistAndBroadcast(io, chatId, req.user._id.toString(), nameUser, text, roleCode, clientId);
     return res.status(201).json({ success: true, data: newMsg });
   } catch (error) {
     if (error.message === 'Chat no encontrado') {
@@ -327,45 +463,96 @@ const sendMessage = asyncHandler(async (req, res) => {
   }
 });
 
+// Marca TODOS los mensajes de un chat como leídos por el usuario.
+//
+// RENDIMIENTO: se hace con una ACTUALIZACIÓN POR AGREGACIÓN (MongoDB 4.2+),
+// que trabaja en el servidor. Antes se cargaba el chat COMPLETO (con todo su
+// historial) en memoria, se modificaba cada mensaje y se guardaba el
+// documento entero: con mucho historial eso era lentísimo y bloqueaba el
+// canal para todos los usuarios a la vez.
+//
+// Devuelve false si el chat no existe.
+const markChatAsRead = async (chatId, userId) => {
+  try {
+    await Chat.updateOne(
+      { _id: chatId },
+      [
+        {
+          $set: {
+            messages: {
+              $map: {
+                input: { $ifNull: ['$messages', []] },
+                as: 'm',
+                in: {
+                  $cond: [
+                    { $in: [userId, { $ifNull: ['$$m.readBy', []] }] },
+                    '$$m',
+                    {
+                      $mergeObjects: [
+                        '$$m',
+                        { readBy: { $concatArrays: [{ $ifNull: ['$$m.readBy', []] }, [userId]] } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ]
+    );
+    return true;
+  } catch (e) {
+    // Respaldo para servidores antiguos (< 4.2): carga y guardado clásicos.
+    const chat = await Chat.findById(chatId);
+    if (!chat) return false;
+    chat.messages.forEach(msg => {
+      if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
+        msg.readBy.push(userId);
+      }
+    });
+    await chat.save();
+    return true;
+  }
+};
+
 // Marcar mensajes como leídos
 const markAsRead = asyncHandler(async (req, res) => {
   const chatId = req.params.id;
-  const userId = req.user._id;
-
-  const chat = await Chat.findById(chatId);
-  if (!chat) {
+  const ok = await markChatAsRead(chatId, req.user._id);
+  if (!ok) {
     return res.status(404).json({ success: false, message: 'Chat no encontrado' });
   }
-
-  chat.messages.forEach(msg => {
-    if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
-      msg.readBy.push(userId);
-    }
-  });
-
-  await chat.save();
-
   res.json({ success: true, message: 'Mensajes marcados como leídos' });
 });
 
 // Obtener conteo de mensajes no leídos
+//
+// RENDIMIENTO: el conteo se calcula en MongoDB; no se trae el historial a la
+// memoria para contar a mano (antes se cargaban todos los chats con sus
+// mensajes completos en cada consulta del badge).
 const unreadCount = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const chats = await Chat.find({
-    participants: userId,
-    'messages.readBy': { $ne: userId },
-  });
+  const rows = await Chat.aggregate([
+    { $match: { participants: userId } },
+    {
+      $project: {
+        unread: {
+          $size: {
+            $filter: {
+              input: { $ifNull: ['$messages', []] },
+              as: 'm',
+              cond: { $not: { $in: [userId, { $ifNull: ['$$m.readBy', []] }] } },
+            },
+          },
+        },
+      },
+    },
+    { $group: { _id: null, total: { $sum: '$unread' } } },
+  ]);
 
-  let totalUnread = 0;
-  chats.forEach(chat => {
-    chat.messages.forEach(msg => {
-      if (!msg.readBy.some((r) => r && r.toString() === String(userId))) {
-        totalUnread++;
-      }
-    });
-  });
-
+  const totalUnread = rows.length ? (rows[0].total || 0) : 0;
   res.json({ success: true, data: { unread: totalUnread } });
 });
 
@@ -377,12 +564,15 @@ const clearMessages = asyncHandler(async (req, res) => {
   const chatId = req.params.id;
   const userId = req.user._id;
 
-  const chat = await Chat.findById(chatId);
+  // Solo los metadatos: el historial no hace falta para validar permisos y
+  // borrarlo con un $set evita recargar y reescribir todo el documento.
+  const chat = await Chat.findById(chatId).select('-messages').lean();
   if (!chat) {
     return res.status(404).json({ success: false, message: 'Chat no encontrado' });
   }
 
-  const isParticipant = chat.participants.some((p) => p && p.toString() === String(userId));
+  const participants = (chat.participants || []).filter(Boolean);
+  const isParticipant = participants.some((p) => p.toString() === String(userId));
   if (!isParticipant) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
   }
@@ -397,10 +587,10 @@ const clearMessages = asyncHandler(async (req, res) => {
     });
   }
 
-  chat.messages = [];
-  chat.lastMessage = '';
-  chat.lastMessageAt = null;
-  await chat.save();
+  await Chat.updateOne(
+    { _id: chat._id },
+    { $set: { messages: [], lastMessage: '', lastMessageAt: null } }
+  );
 
   const io = req.app.get('io');
   if (io) {
@@ -425,4 +615,5 @@ module.exports = {
   getOrCreateGeneralChat,
   getOrCreateSupportChat,
   persistAndBroadcast,
+  markChatAsRead,
 };

@@ -92,7 +92,7 @@ window.Pages.appointments = {
         { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: me ? me._id : '', options: userOptions },
         { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },
         { name: 'typeOther', label: 'Especifica el tipo de cita', type: 'text', placeholder: 'Ej. Revisión de escrituras…' },
-        { name: 'status', label: 'Estado', type: 'select', options: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'] },
+        { name: 'status', label: 'Estado', type: 'select', sinOtros: true, options: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'], value: (r) => r.status || 'pendiente' },
         { name: 'reminder', label: 'Recordatorio', type: 'datetime-local', hint: 'Aviso antes de la cita', value: (r) => Format.toLocalInput(r.reminder) },
         { name: 'place', label: 'Lugar', type: 'text', full: true },
         { name: 'notes', label: 'Notas', type: 'textarea', full: true },
@@ -124,6 +124,15 @@ window.Pages.appointments = {
         };
         if (typeSel) typeSel.addEventListener('change', sync);
         sync();
+
+        // Al crear una cita se propone la hora actual (redondeada a los 5
+        // minutos) para no tener que escribirla siempre.
+        const dateEl = form.querySelector('#fld-date');
+        if (dateEl && !dateEl.value) {
+          const d = new Date();
+          d.setMinutes(Math.round(d.getMinutes() / 5) * 5, 0, 0);
+          dateEl.value = Format.toLocalInput(d);
+        }
       },
       onEdit: true,
       onRemove: true,

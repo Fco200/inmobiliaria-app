@@ -263,7 +263,7 @@ const UI = (() => {
           <input type="checkbox" id="${id}" name="${name}" ${checked}> ${escapeHtml(label)}
         </label>
       `;
-      return `<div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">${control}${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}</div>`;
+      return `<div class="form-field${full ? ' form-field-full' : ''}">${control}${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}</div>`;
     } else if (type === 'textarea') {
       // `rows` permite ampliar campos largos (descripciones, notas) sin
       // tener que forzar estilos inline en cada pantalla.
@@ -281,8 +281,8 @@ const UI = (() => {
       control = `<input class="form-control" id="${id}" name="${name}" type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ${req}>`;
     }
     return `
-      <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
-        <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(label)}${required ? ' *' : ''}</label>
+      <div class="form-field${full ? ' form-field-full' : ''}">
+        <label class="form-label" for="${id}">${escapeHtml(label)}${required ? ' *' : ''}</label>
         ${control}
         ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
       </div>
@@ -687,10 +687,10 @@ function showImages(images, title = 'Galería de imágenes') {
       ? placeholder
       : 'Escribe para buscar…';
     return `
-      <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;" data-search-select${remote ? ' data-search-remote' : ''}${remote ? ` data-search-url="${escapeHtml(source.url || '')}"` : ''}${remote ? ` data-search-param="${escapeHtml(source.param || 'q')}"` : ''}${remote ? ` data-search-limit="${escapeHtml(String(source.limit || 30))}"` : ''}${remote ? ` data-search-value-field="${escapeHtml(source.valueField || '_id')}"` : ''}${remote ? ` data-search-label-field="${escapeHtml(source.labelField || 'nombre')}"` : ''}${remote ? ` data-search-subtitle-field="${escapeHtml(source.subtitleField || 'telefono')}"` : ''}>
-        <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(label)}${required ? ' *' : ''}</label>
-        <input class="form-control" id="${searchId}" type="search" placeholder="${escapeHtml(searchPlaceholder)}" autocomplete="off" style="margin-bottom:6px;">
-        <div class="text-muted" data-search-legend style="font-size:12px;margin:-2px 0 6px;">${escapeHtml(legendText)}</div>
+      <div class="form-field${full ? ' form-field-full' : ''}" data-search-select${remote ? ' data-search-remote' : ''}${remote ? ` data-search-url="${escapeHtml(source.url || '')}"` : ''}${remote ? ` data-search-param="${escapeHtml(source.param || 'q')}"` : ''}${remote ? ` data-search-limit="${escapeHtml(String(source.limit || 30))}"` : ''}${remote ? ` data-search-value-field="${escapeHtml(source.valueField || '_id')}"` : ''}${remote ? ` data-search-label-field="${escapeHtml(source.labelField || 'nombre')}"` : ''}${remote ? ` data-search-subtitle-field="${escapeHtml(source.subtitleField || 'telefono')}"` : ''}>
+        <label class="form-label" for="${id}">${escapeHtml(label)}${required ? ' *' : ''}</label>
+        <input class="form-control form-control-search" id="${searchId}" type="search" placeholder="${escapeHtml(searchPlaceholder)}" autocomplete="off">
+        <div class="form-legend" data-search-legend>${escapeHtml(legendText)}</div>
         <select class="form-control" id="${id}" name="${name}" ${required ? 'required' : ''}>${opts}</select>
         ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
       </div>`;
@@ -723,6 +723,9 @@ function showImages(images, title = 'Galería de imágenes') {
         const setLegend = (text, isError) => {
           if (!legendEl) return;
           legendEl.textContent = text;
+          // El texto completo también queda en el title: en la barra de
+          // filtros la leyenda se recorta y así el asesor puede leerla entera.
+          legendEl.title = text;
           legendEl.style.color = isError ? '#b91c1c' : '';
         };
 

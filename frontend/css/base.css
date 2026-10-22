@@ -762,6 +762,136 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 
+/* ---- Campos de formulario (UI.field / UI.searchSelect) ----
+   Antes cada campo traía sus estilos en línea (margin-bottom, grid-column,
+   etiqueta). Eso impedía alinear bien los formularios: un campo con buscador
+   es mucho más alto que uno normal y la rejilla los deformaba. Ahora todo
+   usa clases, de modo que el formulario (y la barra de filtros) se ve igual
+   en todos los módulos. */
+.form-field { margin-bottom: 16px; min-width: 0; }
+.form-field-full { grid-column: 1 / -1; }
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.form-legend {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: -2px 0 6px;
+  line-height: 1.35;
+}
+.form-control-search { margin-bottom: 6px; }
+
+/* ---- Barra de herramientas de los módulos (crudPage) ----
+   La barra se parte en dos filas: buscador + acciones (arriba) y filtros
+   (abajo, en rejilla con etiqueta). Así todos los controles quedan
+   alineados y se evita el aspecto de controles "sueltos" o desalineados. */
+.crud-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.crud-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.crud-toolbar-main .crud-search {
+  flex: 1 1 260px;
+  max-width: 340px;
+  min-width: 170px;
+}
+.crud-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.crud-toolbar-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px 14px;
+  align-items: start;
+}
+.crud-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.crud-filter > .form-label,
+.crud-filter-search [data-search-select] > .form-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0;
+}
+.crud-filter .form-control { height: 38px; }
+.crud-filter-legend {
+  height: 15px;
+  line-height: 15px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Filtro con buscador (cliente/propiedad/negocio): el buscador y el <select>
+   comparten la misma fila y la leyenda (resultados) queda debajo, de modo
+   que la celda tiene exactamente la misma altura que un filtro normal. */
+.crud-filter-search [data-search-select] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px);
+  grid-template-areas:
+    "label   label"
+    "input   select"
+    "legend  legend";
+  gap: 4px;
+  margin-bottom: 0;
+}
+.crud-filter-search [data-search-select] > .form-label { grid-area: label; }
+.crud-filter-search [data-search-select] > .form-control-search {
+  grid-area: input;
+  margin-bottom: 0;
+}
+.crud-filter-search [data-search-select] > select.form-control { grid-area: select; }
+.crud-filter-search [data-search-select] > .form-legend { grid-area: legend; margin: 0; }
+.crud-filters-toggle { display: none; }
+
+/* Rejilla del formulario dentro del modal de los módulos. */
+.crud-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 16px;
+  align-items: start;
+}
+
+/* En móvil la barra de filtros se pliega (botón "Filtros") para no dejar
+   una columna interminable de controles encima de la tabla. */
+@media (max-width: 768px) {
+  .crud-toolbar-main .crud-search { max-width: 100%; flex: 1 1 100%; }
+  .crud-toolbar-actions { margin-left: 0; width: 100%; }
+  .crud-toolbar-filters { grid-template-columns: 1fr; }
+  .crud-toolbar-filters.is-collapsed { display: none; }
+  .crud-filters-toggle { display: inline-flex; }
+  .crud-filter-search [data-search-select] {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "label"
+      "input"
+      "select"
+      "legend";
+  }
+  .crud-form-grid { grid-template-columns: 1fr; }
+}
+
 /* ---- Badges ---- */
 .badge {
   display: inline-block;

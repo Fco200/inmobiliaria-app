@@ -91,7 +91,7 @@ async function start() {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (!token) return next(new Error('Autenticación requerida'));
       const decoded = jwt.verify(token, jwtSecret);
-      const user = await User.findById(decoded.id).select('name username role status');
+      const user = await User.findById(decoded.id).select('name username role status').populate('role', 'code');
       if (!user) return next(new Error('Usuario no encontrado'));
       // Un usuario desactivado no puede mantener el socket abierto.
       if (user.status !== 'activo') return next(new Error('Tu usuario está inactivo'));
@@ -161,14 +161,18 @@ async function start() {
       if (text.length > 2000) return;
 
       const nameUser = (socket.user.name || socket.user.username) || 'Usuario';
+      const roleCode = socket.user.role && typeof socket.user.role === 'object'
+        ? (socket.user.role.code || null)
+        : null;
+      const clientId = data.clientId ? String(data.clientId) : null;
       try {
-        await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text);
+        await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text, roleCode, clientId);
       } catch (err) {
         logger.error('Error al enviar mensaje por Socket.io', {
           chatId,
           reason: err.message,
         }, 'socket');
-        socket.emit('message-error', { message: err.message || 'Error al enviar mensaje' });
+        socket.emit('message-error', { message: err.message || 'Error al enviar mensaje', clientId });
       }
     });
 

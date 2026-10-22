@@ -20,7 +20,14 @@ function crudPage(container, config) {
 
   function renderToolbar() {
     const el = document.createElement('div');
-    el.style.cssText = 'display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
+    el.className = 'crud-toolbar';
+
+    // FILA 1: buscador + acciones de exportación.
+    // FILA 2: filtros (estado, cliente, propiedad, tipo…) en rejilla, cada uno
+    //         con su etiqueta para que TODO quede alineado.
+    // Antes todo iba en una sola fila flexible: los controles con buscador
+    // (etiqueta + buscador + leyenda + select) son mucho más altos que un
+    // select normal, así que la barra se partía y se veía "desordenada".
     let statusSelect = '';
     if (config.statusOptions) {
       const opts = config.statusOptions
@@ -32,10 +39,14 @@ function crudPage(container, config) {
         })
         .join('');
       statusSelect = `
-        <select class="form-control" data-status style="max-width:220px;">
-          <option value="">Todos los estados</option>
-          ${opts}
-        </select>
+        <div class="crud-filter">
+          <label class="form-label" for="crud-status">Estado</label>
+          <select class="form-control" id="crud-status" data-status>
+            <option value="">Todos los estados</option>
+            ${opts}
+          </select>
+          <div class="crud-filter-legend" aria-hidden="true"></div>
+        </div>
       `;
     }
     // Filtros adicionales configurables: { key, label, placeholder, options[] |
@@ -49,7 +60,7 @@ function crudPage(container, config) {
     const filterControls = config.filters && config.filters.length
       ? config.filters.map((f) => {
         if (f.searchSource) {
-          return `<div data-toolbar-search="${UI.escapeHtml(f.key)}" style="max-width:${f.width || 240}px;min-width:200px;">${UI.searchSelect(
+          return `<div class="crud-filter crud-filter-search" data-toolbar-search="${UI.escapeHtml(f.key)}">${UI.searchSelect(
             `filter-${f.key}`,
             f.label,
             {
@@ -64,25 +75,39 @@ function crudPage(container, config) {
             .map((o) => `<option value="${UI.escapeHtml(typeof o === 'object' ? o.value : o)}">${UI.escapeHtml(typeof o === 'object' ? o.label : o)}</option>`)
             .join('');
           return `
-            <select class="form-control" data-filter="${UI.escapeHtml(f.key)}" style="max-width:${f.width || 220}px;">
-              <option value="">${UI.escapeHtml(f.placeholder || `Todos los ${String(f.label).toLowerCase()}`)}</option>
-              ${opts}
-            </select>
+            <div class="crud-filter">
+              <label class="form-label" for="crud-filter-${UI.escapeHtml(f.key)}">${UI.escapeHtml(f.label)}</label>
+              <select class="form-control" id="crud-filter-${UI.escapeHtml(f.key)}" data-filter="${UI.escapeHtml(f.key)}">
+                <option value="">${UI.escapeHtml(f.placeholder || `Todos los ${String(f.label).toLowerCase()}`)}</option>
+                ${opts}
+              </select>
+              <div class="crud-filter-legend" aria-hidden="true"></div>
+            </div>
           `;
         }
         return `
-          <input class="form-control" data-filter="${UI.escapeHtml(f.key)}" type="${f.type || 'text'}" placeholder="${UI.escapeHtml(f.placeholder || f.label)}" style="max-width:${f.width || 200}px;">
+          <div class="crud-filter">
+            <label class="form-label" for="crud-filter-${UI.escapeHtml(f.key)}">${UI.escapeHtml(f.label)}</label>
+            <input class="form-control" id="crud-filter-${UI.escapeHtml(f.key)}" data-filter="${UI.escapeHtml(f.key)}" type="${f.type || 'text'}" placeholder="${UI.escapeHtml(f.placeholder || f.label)}">
+            <div class="crud-filter-legend" aria-hidden="true"></div>
+          </div>
         `;
       }).join('')
       : '';
 
+    const hasFilters = Boolean(statusSelect || filterControls);
+
     el.innerHTML = `
-      <input class="form-control" data-search placeholder="Buscar..." style="max-width:280px;" value="${UI.escapeHtml(state.q)}">
-      ${statusSelect}
-      ${filterControls}
-      <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
-      <button class="btn btn-secondary btn-sm" type="button" data-export-pdf title="Exportar a PDF (imprime o guarda como PDF)">&#128424;&nbsp; PDF</button>
-      ${config.csvExport ? `<button class="btn btn-secondary btn-sm" type="button" data-export-csv title="Exportar a CSV">&#11015;&nbsp; CSV</button>` : ''}
+      <div class="crud-toolbar-main">
+        <input class="form-control crud-search" data-search placeholder="Buscar..." value="${UI.escapeHtml(state.q)}">
+        <div class="crud-toolbar-actions">
+          ${hasFilters ? '<button class="btn btn-secondary btn-sm crud-filters-toggle" type="button" data-toggle-filters aria-expanded="false">&#9776;&nbsp; Filtros</button>' : ''}
+          <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-export-pdf title="Exportar a PDF (imprime o guarda como PDF)">&#128424;&nbsp; PDF</button>
+          ${config.csvExport ? `<button class="btn btn-secondary btn-sm" type="button" data-export-csv title="Exportar a CSV">&#11015;&nbsp; CSV</button>` : ''}
+        </div>
+      </div>
+      ${hasFilters ? `<div class="crud-toolbar-filters${isMobile() ? ' is-collapsed' : ''}">${statusSelect}${filterControls}</div>` : ''}
     `;
     el.querySelector('[data-search]').addEventListener('input', (e) => {
       state.q = e.target.value;
@@ -125,11 +150,28 @@ function crudPage(container, config) {
         load();
       });
     }
+    // En móvil los filtros se pliegan para dejar ver la tabla de inmediato.
+    const toggleFilters = el.querySelector('[data-toggle-filters]');
+    const filtersBox = el.querySelector('.crud-toolbar-filters');
+    if (toggleFilters && filtersBox) {
+      toggleFilters.addEventListener('click', () => {
+        const collapsed = filtersBox.classList.toggle('is-collapsed');
+        toggleFilters.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      });
+    }
     el.querySelector('[data-export-xls]').addEventListener('click', () => exportXls());
     el.querySelector('[data-export-pdf]').addEventListener('click', () => exportPdf());
     const csvEl = el.querySelector('[data-export-csv]');
     if (csvEl) csvEl.addEventListener('click', () => config.csvExport());
     return el;
+  }
+
+  // ¿Estamos en una pantalla estrecha? Se usa para plegar los filtros y para
+  // adaptar el comportamiento del chat (teclado en móvil, etc.).
+  function isMobile() {
+    return typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 768px)').matches
+      : window.innerWidth <= 768;
   }
 
   function currentParams() {
@@ -393,7 +435,7 @@ ${rowXml}
       title: opts.title || (isEdit ? `Editar ${config.title.toLowerCase()}` : `Nuevo ${config.title.toLowerCase()}`),
       body: `
         <form id="crud-form" novalidate>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
+          <div class="crud-form-grid">
             ${fields.join('')}
             ${opts.hiddenFields || ''}
           </div>

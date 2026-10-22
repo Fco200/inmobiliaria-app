@@ -41,6 +41,9 @@ window.PropertyPdf = (() => {
   const INK = [45, 16, 72];
   const GOLD = [185, 145, 47];
   const SLATE = [71, 85, 105];
+  const CARD_BG = [248, 247, 252];
+  const BORDER = [226, 232, 240];
+  const TEXT = [15, 23, 42];
 
   // Máximo de fotos que entran al PDF. Se puede subir mucho más alto que antes
   // (era 6): el PDF se mantiene razonable porque cada foto se reduce a JPEG.
@@ -80,29 +83,46 @@ window.PropertyPdf = (() => {
 
   // Logo de la inmobiliaria para el encabezado del PDF. Se carga una sola vez
   // (se cachea) y se convierte a PNG data-URL para conservar la transparencia.
-  // Si no está disponible, el PDF se genera igual sin logo.
+  // Si no está disponible, el PDF se genera igual sin logo. Se intenta primero
+  // con la versión en blanco (se ve mejor sobre el fondo morado) y se cae al
+  // logo original si falla.
   let logoCache;
   function loadLogo() {
     if (logoCache !== undefined) return Promise.resolve(logoCache);
-    return new Promise((resolve) => {
-      let url = 'icons/logoinmobles.png';
-      try { url = new URL('icons/logoinmobles.png', document.baseURI).href; } catch (e) { /* relativo */ }
+    const candidates = [
+      'logoinmobles-blanco.png',
+      'icons/logoinmobles-blanco.png',
+      'icons/logoinmobles.png',
+      'logoinmobles.png',
+    ];
+    const tryLoad = (url) => new Promise((resolve) => {
       const img = new Image();
-      const timer = setTimeout(() => { logoCache = null; resolve(null); }, 8000);
+      const timer = setTimeout(() => resolve(null), 8000);
       img.onload = () => {
         clearTimeout(timer);
         try {
           const canvas = document.createElement('canvas');
           canvas.width = img.naturalWidth || 300;
           canvas.height = img.naturalHeight || 300;
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           logoCache = { data: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
           resolve(logoCache);
-        } catch (e) { logoCache = null; resolve(null); }
+        } catch (e) { resolve(null); }
       };
-      img.onerror = () => { clearTimeout(timer); logoCache = null; resolve(null); };
-      img.src = url;
+      img.onerror = () => { clearTimeout(timer); resolve(null); };
+      try { img.src = new URL(url, document.baseURI).href; } catch (e) { img.src = url; }
     });
+    return (async () => {
+      for (let i = 0; i < candidates.length; i += 1) {
+        const res = await tryLoad(candidates[i]);
+        if (res) return res;
+      }
+      logoCache = null;
+      return null;
+    })();
   }
 
   // Los formatos HEIC/HEIF (típicos de iPhone) casi nunca se pueden
@@ -249,8 +269,11 @@ window.PropertyPdf = (() => {
   // viñetas y listas numeradas conservan su marcador y las líneas siguientes
   // se sangran (sangría francesa) para que el texto no se amontone debajo.
   function wrapText(doc, text, maxWidth) {
+    // Limpia emojis y caracteres fuera del rango Latin-1 para evitar símbolos
+    // extraños (□□□) al renderizar en pdf.js/fonts.
+    const cleaned = String(text || '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]/gu, '');
     const out = [];
-    String(text || '').split(/\r?\n/).forEach((rawLine) => {
+    cleaned.split(/\r?\n/).forEach((rawLine) => {
       const line = rawLine.replace(/\s+/g, ' ').trim();
       if (!line) { out.push(''); return; }
       const bullet = line.match(/^([•·▪◦‣∙*]\s+|[-–—]\s+|\d{1,2}[.)]\s+)/);
@@ -271,28 +294,28 @@ window.PropertyPdf = (() => {
   // bucles sin volverlos async.
   function paintHeader(doc, pageW, margin, logo, rightText) {
     doc.setFillColor(INK[0], INK[1], INK[2]);
-    doc.rect(0, 0, pageW, 54, 'F');
+    doc.rect(0, 0, pageW, 58, 'F');
     // Franja dorada inferior del encabezado.
     doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
-    doc.rect(0, 50, pageW, 4, 'F');
+    doc.rect(0, 54, pageW, 4, 'F');
 
     let titleX = margin;
     if (logo) {
-      const logoH = 30;
-      const logoW = Math.min(130, logo.width * (logoH / logo.height));
+      const logoH = 34;
+      const logoW = Math.min(150, logo.width * (logoH / logo.height));
       try {
-        doc.addImage(logo.data, 'PNG', margin, 11, logoW, logoH);
-        titleX = margin + logoW + 14;
+        doc.addImage(logo.data, 'PNG', margin, 10, logoW, logoH);
+        titleX = margin + logoW + 16;
       } catch (e) { /* sin logo: el encabezado queda igual */ }
     }
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('Ficha de propiedad', titleX, 32);
+    doc.setFontSize(15);
+    doc.text('Ficha de propiedad', titleX, 34);
     if (rightText) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.text(String(rightText), pageW - margin, 32, { align: 'right' });
+      doc.setFontSize(10);
+      doc.text(String(rightText), pageW - margin, 34, { align: 'right' });
     }
   }
 
@@ -334,9 +357,6 @@ window.PropertyPdf = (() => {
     const asesorNombre = (asesor && asesor.name) || user.name || '';
     const asesorTel = (asesor && asesor.phone) || user.phone || '';
     const asesorEmail = (asesor && asesor.email) || user.email || '';
-    // ID del usuario del CRM que comparte: es la trazabilidad que pidió el
-    // negocio (sabe quién mandó la ficha).
-    const asesorId = (asesor && (asesor.id || asesor._id)) || user._id || user.id || '';
 
     const logo = await loadLogo();
 
@@ -373,30 +393,30 @@ window.PropertyPdf = (() => {
     }
 
     // ── Título y ubicación ─────────────────────────────────────────────
-    doc.setTextColor(15, 23, 42);
+    doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(19);
+    doc.setFontSize(21);
     const tipo = TYPE_LABELS[prop.type] || 'Propiedad';
     const operacion = OP_LABELS[prop.operationType] || '';
     const titulo = operacion ? `${tipo} en ${operacion}` : tipo;
-    doc.text(titulo, margin, y + 14);
-    y += 24;
+    doc.text(titulo, margin, y + 16);
+    y += 28;
 
     const place = [prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (place) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
+      doc.setFontSize(11.5);
       doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       wrapText(doc, place, contentW).forEach((line) => {
         doc.text(line, margin, y + 10);
-        y += 14;
+        y += 15;
       });
-      y += 6;
+      y += 8;
     }
 
     // ── Datos clave (recuadro de dos columnas etiqueta/valor) ──────────
-    doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
     doc.setFontSize(11);
 
     // Primero se calculan las filas para saber la altura del recuadro; el
@@ -404,7 +424,6 @@ window.PropertyPdf = (() => {
     const filas = [];
     if (prop.folio) filas.push({ label: 'Folio', value: prop.folio });
     if (prop.price) filas.push({ label: 'Precio', value: currency(prop.price) });
-    if (prop.ticketValue) filas.push({ label: 'Valor ticket', value: currency(prop.ticketValue) });
     if (prop.operationType) filas.push({ label: 'Operación', value: OP_LABELS[prop.operationType] || prop.operationType });
     if (prop.type) filas.push({ label: 'Tipo', value: tipo });
     if (prop.status) filas.push({ label: 'Estado', value: STATUS_LABELS[prop.status] || String(prop.status).replace(/_/g, ' ') });
@@ -438,55 +457,74 @@ window.PropertyPdf = (() => {
     });
 
     const datosTop = y + 6;
-    const datosH = filasRender.length * 18 + 16;
+    const datosH = filasRender.length * 18 + 18;
     // Si el recuadro no cabe, se pasa a una página nueva antes de pintarlo.
     if (datosTop + datosH > pageH - 60) {
       doc.addPage();
       paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-      y = 66;
+      y = 70;
     }
     const datosTop2 = y + 6;
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
     doc.roundedRect(margin, datosTop2, contentW, datosH, 6, 6, 'FD');
+    // Acento lateral morado
+    doc.setFillColor(INK[0], INK[1], INK[2]);
+    doc.roundedRect(margin, datosTop2, 3, datosH, 2, 2, 'F');
 
-    let datosY = datosTop2 + 22;
+    let datosY = datosTop2 + 24;
     filasRender.forEach((fila2) => {
       if (fila2.label) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(INK[0], INK[1], INK[2]);
-        doc.text(`${fila2.label}:`, margin + 12, datosY);
+        doc.text(`${fila2.label}:`, margin + 16, datosY);
       }
       doc.setFont('helvetica', 'normal');
-      doc.setTextColor(15, 23, 42);
-      doc.text(fila2.value, margin + 130, datosY);
+      doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+      doc.text(fila2.value, margin + 138, datosY);
       datosY += 18;
     });
-    y = datosTop2 + datosH + 18;
+    y = datosTop2 + datosH + 20;
 
     // ── Descripción completa, con saltos de línea del original ─────────
     if (prop.description) {
       if (y > pageH - 160) {
         doc.addPage();
         paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 66;
+        y = 70;
       }
+      doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
+      doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+      const descText = wrapText(doc, prop.description, contentW - 28);
+      const descH = descText.length * 14 + 38;
+      if (y + descH > pageH - 60) {
+        doc.addPage();
+        paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
+        y = 70;
+      }
+      doc.roundedRect(margin, y, contentW, descH, 6, 6, 'FD');
+      doc.setFillColor(INK[0], INK[1], INK[2]);
+      doc.roundedRect(margin, y, 3, descH, 2, 2, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
-      doc.setTextColor(15, 23, 42);
-      doc.text('Descripción', margin, y + 10);
-      y += 22;
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      doc.text('Descripción', margin + 16, y + 22);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10.5);
-      doc.setTextColor(51, 65, 85);
-      const descLines = wrapText(doc, prop.description, contentW);
-      descLines.forEach((line) => {
-        if (y > pageH - 60) {
+      doc.setFontSize(10.8);
+      doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+      let descY = y + 40;
+      descText.forEach((line) => {
+        if (!line) { descY += 8; return; }
+        if (descY > pageH - 60) {
           doc.addPage();
-          y = margin + 10;
+          paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
+          y = 70;
+          descY = y + 24;
         }
-        doc.text(line, margin, y + 8);
-        y += 13;
+        doc.text(line, margin + 16, descY);
+        descY += 14;
       });
-      y += 10;
+      y = y + descH + 18;
     }
 
     // ── Galería: TODAS las fotos adicionales en 2 columnas ─────────────
@@ -529,68 +567,72 @@ window.PropertyPdf = (() => {
     }
 
     // ── Contacto del asesor que comparte (usuario activo) + QR ─────────
-    if (asesorNombre || asesorTel || asesorEmail || asesorId
-        || (window.PublicQR && prop._id)) {
-      const boxH = 108;
-      if (y > pageH - (boxH + 40)) {
+    if (asesorNombre || asesorTel || asesorEmail || (window.PublicQR && prop._id)) {
+      const boxH = 118;
+      if (y > pageH - (boxH + 44)) {
         doc.addPage();
         paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 66;
+        y = 70;
       }
-      doc.setFillColor(240, 253, 244);
-      doc.setDrawColor(34, 197, 94);
-      doc.roundedRect(margin, y, contentW, boxH, 6, 6, 'FD');
-      doc.setTextColor(20, 83, 45);
+      doc.setFillColor(248, 247, 252);
+      doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.setLineWidth(1);
+      doc.roundedRect(margin, y, contentW, boxH, 8, 8, 'FD');
+      doc.setFillColor(INK[0], INK[1], INK[2]);
+      doc.roundedRect(margin, y, 4, boxH, 3, 3, 'F');
+      doc.setTextColor(INK[0], INK[1], INK[2]);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Para más información contáctame', margin + 14, y + 22);
+      doc.setFontSize(13);
+      doc.text('Contacto para esta propiedad', margin + 18, y + 26);
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10.5);
-      let contactoY = y + 42;
-      if (asesorNombre) { doc.text(`Asesor: ${asesorNombre}`, margin + 14, contactoY); contactoY += 16; }
-      if (asesorTel) { doc.text(`WhatsApp / Tel: ${asesorTel}`, margin + 14, contactoY); contactoY += 16; }
-      if (asesorEmail) { doc.text(`Correo: ${asesorEmail}`, margin + 14, contactoY); contactoY += 16; }
-      if (asesorId) {
-        doc.setFontSize(8.5);
-        doc.setTextColor(21, 101, 52);
-        doc.text(`ID de usuario CRM: ${asesorId}`, margin + 14, contactoY);
-        doc.setFontSize(10.5);
-      }
+      doc.setFontSize(11);
+      doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+      let contactoY = y + 50;
+      if (asesorNombre) { doc.setFont('helvetica', 'bold'); doc.text(asesorNombre, margin + 18, contactoY); doc.setFont('helvetica', 'normal'); contactoY += 18; }
+      if (asesorTel) { doc.text(`WhatsApp / Teléfono: ${asesorTel}`, margin + 18, contactoY); contactoY += 18; }
+      if (asesorEmail) { doc.text(`Correo electrónico: ${asesorEmail}`, margin + 18, contactoY); contactoY += 18; }
+      doc.setFontSize(9.5);
+      doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
+      doc.text('Atendido por asesor de INMOBLES', margin + 18, contactoY);
 
       // QR con la ficha pública (si tenemos el QR y el id de la propiedad).
       if (window.PublicQR && prop._id) {
         try {
           const qrTarget = `https://inmobles.com/propiedades.html?propId=${encodeURIComponent(prop._id)}`;
-          const qrData = await window.PublicQR.dataUrl(qrTarget, 220);
+          const qrData = await window.PublicQR.dataUrl(qrTarget, 240);
           if (qrData) {
-            const size = 72;
-            const qx = pageW - margin - size - 16;
-            const qy = y + 20;
+            const size = 82;
+            const qx = pageW - margin - size - 18;
+            const qy = y + 18;
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(qx - 4, qy - 4, size + 8, size + 26, 6, 6, 'F');
             doc.addImage(qrData, 'PNG', qx, qy, size, size);
-            doc.setFontSize(7.5);
-            doc.setTextColor(21, 101, 52);
-            doc.text('Escanea para ver', qx + size / 2, qy + size + 10, { align: 'center' });
-            doc.text('la propiedad', qx + size / 2, qy + size + 19, { align: 'center' });
+            doc.setFontSize(7.8);
+            doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
+            doc.text('Escanea para ver', qx + size / 2, qy + size + 14, { align: 'center' });
+            doc.text('más detalles', qx + size / 2, qy + size + 24, { align: 'center' });
           }
         } catch (e) { /* el QR es opcional */ }
       }
-      y += boxH + 10;
+      y += boxH + 12;
     }
 
     // ── Pie de página (en todas las páginas) ───────────────────────────
     const pages = doc.internal.getNumberOfPages();
     for (let p = 1; p <= pages; p += 1) {
       doc.setPage(p);
+      doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+      doc.line(margin, pageH - 28, pageW - margin, pageH - 28);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
+      doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       doc.text(
-        `Generado desde el CRM · ${new Date().toLocaleDateString('es-MX')}${asesorNombre ? ` · ${asesorNombre}` : ''}`,
+        `INMOBLES | Generado desde el CRM · ${new Date().toLocaleDateString('es-MX')}${asesorNombre ? ` · ${asesorNombre}` : ''}`,
         margin,
-        pageH - 18
+        pageH - 16
       );
-      doc.text(`${p} / ${pages}`, pageW - margin, pageH - 18, { align: 'right' });
+      doc.text(`${p} / ${pages}`, pageW - margin, pageH - 16, { align: 'right' });
     }
 
     const slug = `${tipo}${operacion ? `-${operacion}` : ''}`

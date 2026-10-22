@@ -58,9 +58,58 @@ const userCrud = buildCrud(User, {
 
 const listUsers = userCrud.list;
 const getUser = userCrud.get;
-const createUser = userCrud.create;
 const updateUser = userCrud.update;
-const removeUser = userCrud.remove;
+
+const createUser = asyncHandler(async (req, res) => {
+  let body = { ...req.body };
+  const customPerms = Array.isArray(body.customPermissions) ? body.customPermissions.filter(Boolean) : [];
+
+  if (body.role === '__custom__') {
+    if (!customPerms.length) {
+      return res.status(400).json({ success: false, message: 'Selecciona al menos un permiso para el rol personalizado.' });
+    }
+
+    const safeName = (body.name || 'Usuario').trim();
+    const role = await Role.create({
+      name: `Personalizado - ${safeName}`,
+      code: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      description: 'Rol personalizado creado desde Configuración > Usuarios',
+      permissions: customPerms,
+      isSystem: false,
+      status: 'activo',
+    });
+
+    body.role = role._id;
+  }
+
+  delete body.customPermissions;
+
+  if (body.password === undefined || body.password === '') {
+    return res.status(400).json({ success: false, message: 'La contraseña es obligatoria' });
+  }
+
+  const user = await User.create(body);
+  const populated = await User.findById(user._id).populate('role');
+  res.status(201).json({ success: true, data: populated });
+});
+
+const removeUser = asyncHandler(async (req, res) => {
+  const target = await User.findById(req.params.id).populate('role');
+  if (!target) {
+    return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+  }
+
+  const targetCode = target.role && target.role.code ? target.role.code : '';
+  const protectedCodes = ['admin', 'gerencia', 'superadmin'];
+
+  if (protectedCodes.includes(targetCode)) {
+    return res.status(403).json({ success: false, message: 'No puedes eliminar cuentas de Administrador, Gerencia o Soporte.' });
+  }
+
+  await target.deleteOne();
+  await sessionService.revokeUserSessions(target._id, 'USER_DEACTIVATED');
+  res.json({ success: true, message: 'Registro eliminado' });
+});
 
 const listRoles = asyncHandler(async (req, res) => {
   const roles = await Role.find().populate('permissions').sort({ createdAt: 1 });

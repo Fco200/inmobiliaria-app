@@ -459,40 +459,82 @@ window.Pages.settings = {
         <div id="users-crud"></div>
       `;
       renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
-      crudPage(tabContent.querySelector('#users-crud'), {
-        title: 'Usuarios',
-        newLabel: 'Nuevo usuario',
-        service: {
-          list: (params) => API.users.list(params),
-          create: (body) => API.users.create(body),
-          update: (id, body) => API.users.update(id, body),
-          remove: (id) => API.users.remove(id),
-        },
-        statusOptions: ['activo', 'inactivo'],
-        columns: [
-          { key: 'name', label: 'Nombre', render: (r) => `${UI.escapeHtml(r.name)}<br><small class="text-muted">@${UI.escapeHtml(r.username)}</small>` },
-          { key: 'email', label: 'Correo', render: (r) => UI.escapeHtml(r.email) },
-          { key: 'role', label: 'Rol', render: (r) => UI.badge(r.role ? r.role.name : '—', 'info') },
-          { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
-          { key: 'joinedAt', label: 'Alta', render: (r) => Format.date(r.joinedAt) },
-        ],
-        fields: [
-          { name: 'name', label: 'Nombre', type: 'text', required: true },
-          { name: 'username', label: 'Usuario', type: 'text', required: true },
-          { name: 'email', label: 'Correo', type: 'email', required: true },
-          { name: 'password', label: 'Contraseña', type: 'password', hint: 'Solo si es nuevo o se quiere cambiar' },
-          { name: 'role', label: 'Rol', type: 'select', options: roles.map((x) => ({ value: x._id, label: x.name })) },
-          { name: 'phone', label: 'Teléfono', type: 'tel' },
-          { name: 'position', label: 'Cargo', type: 'text' },
-          { name: 'status', label: 'Estado', type: 'select', options: ['activo', 'inactivo'] },
-        ],
-        formData(values, record) {
-          const body = { ...values };
-          if (record && !body.password) delete body.password;
-          return body;
-        },
-        onEdit: true,
-        onRemove: true,
+      API.permissions.list().then((perms) => {
+        const permissions = Array.isArray(perms) ? perms : (perms && perms.data ? perms.data : []);
+        const roleOptions = [...roles.map((x) => ({ value: x._id, label: x.name })), { value: '__custom__', label: 'Personalizado (seleccionar permisos)' }];
+
+        crudPage(tabContent.querySelector('#users-crud'), {
+          title: 'Usuarios',
+          newLabel: 'Nuevo usuario',
+          service: {
+            list: (params) => API.users.list(params),
+            create: (body) => API.users.create(body),
+            update: (id, body) => API.users.update(id, body),
+            remove: (id) => API.users.remove(id),
+          },
+          statusOptions: ['activo', 'inactivo'],
+          columns: [
+            { key: 'name', label: 'Nombre', render: (r) => `${UI.escapeHtml(r.name)}<br><small class="text-muted">@${UI.escapeHtml(r.username)}</small>` },
+            { key: 'email', label: 'Correo', render: (r) => UI.escapeHtml(r.email) },
+            { key: 'role', label: 'Rol', render: (r) => UI.badge(r.role ? r.role.name : '—', 'info') },
+            { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
+            { key: 'joinedAt', label: 'Alta', render: (r) => Format.date(r.joinedAt) },
+          ],
+          fields: [
+            { name: 'name', label: 'Nombre', type: 'text', required: true },
+            { name: 'username', label: 'Usuario', type: 'text', required: true },
+            { name: 'email', label: 'Correo', type: 'email', required: true },
+            { name: 'password', label: 'Contraseña', type: 'password', hint: 'Solo si es nuevo o se quiere cambiar' },
+            { name: 'role', label: 'Rol', type: 'select', options: roleOptions },
+            { name: 'phone', label: 'Teléfono', type: 'tel' },
+            { name: 'position', label: 'Cargo', type: 'text' },
+            { name: 'status', label: 'Estado', type: 'select', options: ['activo', 'inactivo'] },
+          ],
+          formData(values, record, form) {
+            const body = { ...values };
+            if (record && !body.password) delete body.password;
+            if (body.role === '__custom__') {
+              const checks = form ? Array.from(form.querySelectorAll('input[data-custom-perm]:checked')) : [];
+              body.customPermissions = checks.map((c) => c.value);
+              if (!body.customPermissions.length) {
+                throw new Error('Selecciona al menos un permiso para el usuario personalizado.');
+              }
+            }
+            return body;
+          },
+          onFormMount(form) {
+            const roleSel = form.querySelector('#fld-role');
+            if (!roleSel) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'form-field form-field-full';
+            wrap.id = 'custom-perms-wrap';
+            wrap.style.display = 'none';
+            const groups = {};
+            permissions.forEach((p) => {
+              if (!groups[p.module]) groups[p.module] = [];
+              groups[p.module].push(p);
+            });
+            let html = `<label class="form-label">Permisos personalizados</label><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">`;
+            Object.keys(groups).sort().forEach((mod) => {
+              html += `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;"><div style="font-weight:600;margin-bottom:6px;text-transform:capitalize;">${UI.escapeHtml(mod)}</div>`;
+              (groups[mod] || []).forEach((p) => {
+                html += `<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;"><input type="checkbox" data-custom-perm value="${p._id}"> <span>${UI.escapeHtml(p.name)}</span></label>`;
+              });
+              html += `</div>`;
+            });
+            html += `</div><small class="text-muted">Solo aplica cuando seleccionas "Personalizado".</small>`;
+            wrap.innerHTML = html;
+            const grid = form.querySelector('.crud-form-grid') || form.querySelector('form > div');
+            if (grid) grid.appendChild(wrap);
+            const toggle = () => { wrap.style.display = roleSel.value === '__custom__' ? '' : 'none'; };
+            roleSel.addEventListener('change', toggle);
+            toggle();
+          },
+          onEdit: true,
+          onRemove: true,
+        });
+      }).catch((error) => {
+        tabContent.innerHTML = UI.errorAlert(error.message);
       });
     }
 

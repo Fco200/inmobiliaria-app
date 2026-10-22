@@ -46,16 +46,15 @@ window.SoportePanel = (() => {
   }
 
   // ── Navegación por pestañas ───────────────────────────────────────────────
+  function activarTab(tab) {
+    document.querySelectorAll('.sp-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.sp-pane').forEach((p) => p.classList.toggle('active', p.id === 'pane-' + tab));
+    onTabChanged(tab);
+  }
+
   function initTabs() {
     document.querySelectorAll('.sp-tab').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.sp-tab').forEach((t) => t.classList.remove('active'));
-        document.querySelectorAll('.sp-pane').forEach((p) => p.classList.remove('active'));
-        tab.classList.add('active');
-        const pane = document.getElementById('pane-' + tab.dataset.tab);
-        if (pane) pane.classList.add('active');
-        onTabChanged(tab.dataset.tab);
-      });
+      tab.addEventListener('click', () => activarTab(tab.dataset.tab));
     });
   }
 
@@ -71,10 +70,13 @@ window.SoportePanel = (() => {
     if (tab === 'usuarios') renderUsuarios();
     if (tab === 'anuncios') renderAnuncios();
     if (tab === 'herramientas') renderHerramientas();
+    if (tab === 'actividad') renderActividad();
   }
 
   // ── Pestaña Usuarios ──────────────────────────────────────────────────────
   let rolesCache = [];
+  let usuariosCache = [];
+  const usuariosFiltros = { q: '', status: '', role: '' };
 
   async function renderUsuarios() {
     const box = document.getElementById('usuarios-container');
@@ -85,64 +87,138 @@ window.SoportePanel = (() => {
         window.API.soporte.roles(),
       ]);
       rolesCache = roles;
+      usuariosCache = Array.isArray(usuarios) ? usuarios : [];
 
       const stats = {
-        total: usuarios.length,
-        activos: usuarios.filter((u) => u.status === 'activo').length,
-        asesores: usuarios.filter((u) => u.role && u.role.code === 'asesor').length,
+        total: usuariosCache.length,
+        activos: usuariosCache.filter((u) => u.status === 'activo').length,
+        conectados: usuariosCache.filter((u) => Number(u.sessions) > 0).length,
+        push: usuariosCache.filter((u) => Number(u.pushDevices) > 0).length,
       };
 
       box.innerHTML = `
+        <div class="sp-card">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="fgroup" style="flex:1 1 220px;">
+              <label for="usuarios-search">Buscar</label>
+              <input id="usuarios-search" type="text" placeholder="Nombre, usuario, correo o puesto…" value="${escapeHtml(usuariosFiltros.q)}">
+            </div>
+            <div class="fgroup" style="min-width:130px;">
+              <label for="usuarios-status">Estado</label>
+              <select id="usuarios-status">
+                <option value="">Todos</option>
+                <option value="activo" ${usuariosFiltros.status === 'activo' ? 'selected' : ''}>Activos</option>
+                <option value="inactivo" ${usuariosFiltros.status === 'inactivo' ? 'selected' : ''}>Inactivos</option>
+              </select>
+            </div>
+            <div class="fgroup" style="min-width:150px;">
+              <label for="usuarios-role">Rol</label>
+              <select id="usuarios-role">
+                <option value="">Todos</option>
+                ${roles.map((r) => `<option value="${escapeHtml(r.code)}" ${usuariosFiltros.role === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+              </select>
+            </div>
+            <button class="btn btn-gold btn-sm" id="usuarios-refresh" type="button">&#8635; Actualizar</button>
+          </div>
+        </div>
         <div class="stat-cards">
           <div class="stat-card"><b>${stats.total}</b><span>Total</span></div>
           <div class="stat-card"><b>${stats.activos}</b><span>Activos</span></div>
-          <div class="stat-card"><b>${stats.asesores}</b><span>Asesores</span></div>
+          <div class="stat-card"><b>${stats.conectados}</b><span>Con sesión activa</span></div>
+          <div class="stat-card"><b>${stats.push}</b><span>Con push</span></div>
         </div>
-        <div class="sp-card">
-          <div class="sp-table-wrap">
-            <table>
-              <thead><tr>
-                <th>Usuario</th><th>Rol</th><th>Canales</th><th>Estado</th><th>Último acceso</th><th>Acciones</th>
-              </tr></thead>
-              <tbody>
-                ${usuarios.map((u, i) => renderUsuarioRow(u, i)).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <div id="usuarios-tabla"></div>
       `;
 
-      box.querySelectorAll('[data-action]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const action = btn.dataset.action;
-          const id = btn.dataset.id;
-          if (action === 'toggle') toggleUsuario(id, btn);
-          else if (action === 'role') changeRole(null, id);
-          else if (action === 'reset') resetPassword(id);
-        });
+      const search = document.getElementById('usuarios-search');
+      const statusSel = document.getElementById('usuarios-status');
+      const roleSel = document.getElementById('usuarios-role');
+      search.addEventListener('input', () => {
+        usuariosFiltros.q = search.value;
+        pintarTablaUsuarios();
       });
-      box.querySelectorAll('[data-role-select]').forEach((sel) => {
-        sel.addEventListener('change', () => changeRole(sel, sel.dataset.userId, sel.value));
+      statusSel.addEventListener('change', () => {
+        usuariosFiltros.status = statusSel.value;
+        pintarTablaUsuarios();
       });
+      roleSel.addEventListener('change', () => {
+        usuariosFiltros.role = roleSel.value;
+        pintarTablaUsuarios();
+      });
+      document.getElementById('usuarios-refresh').addEventListener('click', renderUsuarios);
+
+      pintarTablaUsuarios();
     } catch (error) {
       box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
     }
+  }
+
+  function usuariosFiltrados() {
+    const term = usuariosFiltros.q.trim().toLowerCase();
+    return usuariosCache.filter((u) => {
+      if (usuariosFiltros.status && u.status !== usuariosFiltros.status) return false;
+      if (usuariosFiltros.role && (!u.role || u.role.code !== usuariosFiltros.role)) return false;
+      if (!term) return true;
+      return `${u.name || ''} ${u.username || ''} ${u.email || ''} ${u.position || ''}`.toLowerCase().includes(term);
+    });
+  }
+
+  function pintarTablaUsuarios() {
+    const box = document.getElementById('usuarios-tabla');
+    if (!box) return;
+    const lista = usuariosFiltrados();
+    if (!lista.length) {
+      box.innerHTML = '<div class="sp-empty">No hay usuarios que coincidan con los filtros.</div>';
+      return;
+    }
+    box.innerHTML = `
+      <div class="sp-card">
+        <div class="sp-table-wrap">
+          <table>
+            <thead><tr>
+              <th>Usuario</th><th>Rol</th><th>Accesos</th><th>Estado</th><th>Último acceso</th><th>Acciones</th>
+            </tr></thead>
+            <tbody>
+              ${lista.map((u, i) => renderUsuarioRow(u, i)).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    box.querySelectorAll('[data-action]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (action === 'toggle') toggleUsuario(id, btn);
+        else if (action === 'edit') editarUsuario(id);
+        else if (action === 'reset') resetPassword(id);
+        else if (action === 'sessions') cerrarSesionesUsuario(id);
+        else if (action === 'activity') verActividadUsuario(id);
+        else if (action === 'delete') eliminarUsuario(id);
+      });
+    });
+    box.querySelectorAll('[data-role-select]').forEach((sel) => {
+      sel.addEventListener('change', () => changeRole(sel, sel.dataset.userId, sel.value));
+    });
   }
 
   function renderUsuarioRow(u, i) {
     const roleCode = u.role ? u.role.code : '—';
     const roleName = u.role ? u.role.name : '—';
     const isSoporte = roleCode === 'superadmin';
-    const isSelf = u._id === (getSavedUser() || {}).id;
+    const isSelf = String(u._id) === String((getSavedUser() || {}).id || '');
     const options = rolesCache.map((r) =>
       `<option value="${r._id}" ${roleCode === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
     ).join('');
+    const conectado = Number(u.sessions) > 0;
 
     return `
       <tr>
         <td>
           <div style="font-weight:600;">${escapeHtml(u.name)} ${isSelf ? '<span class="badge badge-role">tú</span>' : ''}</div>
-          <div style="color:var(--text-muted);font-size:11px;">@${escapeHtml(u.username)}</div>
+          <div style="color:var(--text-muted);font-size:11px;">@${escapeHtml(u.username)} · ${escapeHtml(u.email)}</div>
+          ${u.position ? `<div style="color:var(--text-muted);font-size:11px;">${escapeHtml(u.position)}</div>` : ''}
         </td>
         <td>
           ${isSoporte
@@ -150,26 +226,120 @@ window.SoportePanel = (() => {
             : `<select class="role-select" data-role-select data-user-id="${u._id}" style="background:var(--bg-2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12px;">${options}</select>`
           }
         </td>
-        <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(u.email)}</td>
+        <td style="font-size:12px;">
+          <div>${conectado ? '<span class="badge badge-on">En línea</span>' : '<span class="badge badge-off">Sin sesión</span>'} <span style="color:var(--text-muted);">${u.sessions || 0} sesión(es)</span></div>
+          <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">${u.pushDevices ? `&#128276; ${u.pushDevices} dispositivo(s) push` : 'Sin push'}</div>
+          ${u.lastSeenAt ? `<div style="color:var(--text-muted);font-size:11px;">Visto: ${fmtDate(u.lastSeenAt)}</div>` : ''}
+        </td>
         <td><span class="badge ${u.status === 'activo' ? 'badge-on' : 'badge-off'}">${escapeHtml(u.status)}</span></td>
         <td style="font-size:12px;">${fmtDate(u.lastLoginAt)}</td>
         <td>
-          <div class="row-actions">
+          <div class="row-actions" style="flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${u._id}" title="Editar datos">&#9998; Editar</button>
             ${isSoporte ? '' : `
+              <button class="btn btn-ghost btn-sm" data-action="reset" data-id="${u._id}" title="Cambiar contraseña">&#128273; Contraseña</button>
+              <button class="btn btn-ghost btn-sm" data-action="sessions" data-id="${u._id}" title="Cerrar todas sus sesiones">&#128274; Sesiones</button>
               <button class="btn btn-ghost btn-sm" data-action="toggle" data-id="${u._id}">${u.status === 'activo' ? 'Desactivar' : 'Activar'}</button>
-              <button class="btn btn-ghost btn-sm" data-action="reset" data-id="${u._id}">Restablecer</button>
             `}
+            <button class="btn btn-ghost btn-sm" data-action="activity" data-id="${u._id}" title="Ver actividad">&#128269; Actividad</button>
+            ${isSoporte || isSelf ? '' : `<button class="btn btn-danger btn-sm" data-action="delete" data-id="${u._id}" title="Eliminar usuario">&#128465; Eliminar</button>`}
           </div>
         </td>
       </tr>
     `;
   }
 
+  function editarUsuario(id) {
+    const user = usuariosCache.find((u) => String(u._id) === String(id));
+    if (!user) return;
+    const isSoporte = user.role && user.role.code === 'superadmin';
+    const roleOptions = rolesCache.map((r) =>
+      `<option value="${r._id}" ${user.role && user.role.code === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
+    ).join('');
+
+    const modal = UI.openModal({
+      title: `Editar usuario — ${escapeHtml(user.name)}`,
+      size: 560,
+      body: `
+        <div class="form-grid">
+          <div class="fgroup fgroup-full">
+            <label for="eu-name">Nombre completo</label>
+            <input id="eu-name" type="text" value="${escapeHtml(user.name || '')}">
+          </div>
+          <div class="fgroup">
+            <label for="eu-username">Usuario</label>
+            <input id="eu-username" type="text" value="${escapeHtml(user.username || '')}" ${isSoporte ? 'disabled' : ''}>
+          </div>
+          <div class="fgroup">
+            <label for="eu-email">Correo</label>
+            <input id="eu-email" type="email" value="${escapeHtml(user.email || '')}" ${isSoporte ? 'disabled' : ''}>
+          </div>
+          <div class="fgroup">
+            <label for="eu-phone">Teléfono</label>
+            <input id="eu-phone" type="tel" value="${escapeHtml(user.phone || '')}">
+          </div>
+          <div class="fgroup">
+            <label for="eu-position">Puesto</label>
+            <input id="eu-position" type="text" value="${escapeHtml(user.position || '')}">
+          </div>
+          <div class="fgroup">
+            <label for="eu-role">Rol</label>
+            <select id="eu-role" ${isSoporte ? 'disabled' : ''}>${roleOptions}</select>
+          </div>
+          <div class="fgroup">
+            <label for="eu-status">Estado</label>
+            <select id="eu-status" ${isSoporte ? 'disabled' : ''}>
+              <option value="activo" ${user.status === 'activo' ? 'selected' : ''}>Activo</option>
+              <option value="inactivo" ${user.status === 'inactivo' ? 'selected' : ''}>Inactivo</option>
+            </select>
+          </div>
+        </div>
+        ${isSoporte ? '<p style="color:var(--text-muted);font-size:12px;margin:12px 0 0;">El acceso, rol y estado de la cuenta de soporte están protegidos.</p>' : ''}
+        <div id="eu-error" class="alert alert-error"></div>
+      `,
+      footer: `
+        <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button>
+        <button class="btn btn-gold" type="button" data-ok>Guardar cambios</button>
+      `,
+    });
+
+    const bodyEl = modal.bodyEl;
+    const overlay = bodyEl.closest('#modal-overlay');
+    if (!overlay) return;
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+    const errBox = bodyEl.querySelector('#eu-error');
+    overlay.querySelector('[data-ok]').addEventListener('click', async (event) => {
+      const btn = event.currentTarget;
+      const payload = {
+        name: bodyEl.querySelector('#eu-name').value.trim(),
+        phone: bodyEl.querySelector('#eu-phone').value.trim(),
+        position: bodyEl.querySelector('#eu-position').value.trim(),
+      };
+      if (!isSoporte) {
+        payload.username = bodyEl.querySelector('#eu-username').value.trim();
+        payload.email = bodyEl.querySelector('#eu-email').value.trim();
+        payload.role = bodyEl.querySelector('#eu-role').value;
+        payload.status = bodyEl.querySelector('#eu-status').value;
+      }
+      if (!payload.name) { showModalError(errBox, 'El nombre es obligatorio.'); return; }
+      btn.disabled = true;
+      try {
+        await window.API.soporte.actualizarUsuario(user._id, payload);
+        UI.closeModal();
+        renderUsuarios();
+      } catch (error) {
+        btn.disabled = false;
+        showModalError(errBox, error.message || 'No se pudo actualizar el usuario.');
+      }
+    });
+  }
+
   async function toggleUsuario(id, btn) {
-    const user = (await window.API.soporte.usuarios()).find((u) => u._id === id);
+    const user = usuariosCache.find((u) => String(u._id) === String(id));
     if (!user) return;
     const next = user.status === 'activo' ? 'inactivo' : 'activo';
-    if (!confirm(`¿${next === 'activo' ? 'Activar' : 'Desactivar'} a ${user.name}?`)) return;
+    const ok = await UI.confirm(`¿${next === 'activo' ? 'Activar' : 'Desactivar'} a ${user.name}?`);
+    if (!ok) return;
     btn.disabled = true;
     try {
       await window.API.soporte.actualizarUsuario(id, { status: next });
@@ -183,7 +353,8 @@ window.SoportePanel = (() => {
   async function changeRole(sel, userId, value) {
     const roleId = value || (sel && sel.value);
     if (!roleId) return;
-    if (!confirm('¿Cambiar el rol de este usuario?')) return;
+    const ok = await UI.confirm('¿Cambiar el rol de este usuario?');
+    if (!ok) { renderUsuarios(); return; }
     try {
       await window.API.soporte.actualizarUsuario(userId, { role: roleId });
       renderUsuarios();
@@ -193,17 +364,381 @@ window.SoportePanel = (() => {
     }
   }
 
-  async function resetPassword(id) {
-    const newPassword = prompt('Nueva contraseña (mín. 8 caracteres, con mayúsculas, minúsculas y números):');
-    if (newPassword === null) return;
-    if (!newPassword.trim()) { alert('La contraseña no puede estar vacía.'); return; }
+  async function cerrarSesionesUsuario(id) {
+    const user = usuariosCache.find((u) => String(u._id) === String(id));
+    if (!user) return;
+    const ok = await UI.confirm(`¿Cerrar todas las sesiones de ${user.name}? Deberá iniciar sesión de nuevo en todos sus dispositivos.`);
+    if (!ok) return;
     try {
-      await window.API.soporte.restablecerPassword(id, { newPassword });
-      alert('Contraseña restablecida correctamente. Todas sus sesiones fueron cerradas.');
+      const res = await window.API.soporte.revocarSesionesUsuario(id);
+      alert(`Sesiones cerradas: ${(res && res.cerradas) || 0}.`);
       renderUsuarios();
     } catch (error) {
       alert(error.message);
     }
+  }
+
+  async function verActividadUsuario(id) {
+    actividadUserId = String(id);
+    actividadPagina = 1;
+    await cargarUsuariosActividad();
+    const sel = document.getElementById('act-user');
+    if (sel) sel.value = actividadUserId;
+    activarTab('actividad');
+  }
+
+  async function eliminarUsuario(id) {
+    const user = usuariosCache.find((u) => String(u._id) === String(id));
+    if (!user) return;
+    const ok = await UI.confirm(
+      `¿Eliminar definitivamente a ${user.name} (${user.email})? Se cerrarán sus sesiones, se borrarán sus avisos y sus dispositivos push. Esta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+    try {
+      const res = await window.API.soporte.eliminarUsuario(id);
+      alert((res && res.message) || 'Usuario eliminado.');
+      renderUsuarios();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  function generarPassword(longitud = 12) {
+    const mayus = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const minus = 'abcdefghijkmnopqrstuvwxyz';
+    const nums = '23456789';
+    const symbols = '!@#$%&*';
+    const all = mayus + minus + nums + symbols;
+    const pick = (set) => set[Math.floor(Math.random() * set.length)];
+    const chars = [pick(mayus), pick(minus), pick(nums), pick(symbols)];
+    while (chars.length < longitud) chars.push(pick(all));
+    for (let i = chars.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
+  }
+
+  function resetPassword(id) {
+    const user = usuariosCache.find((u) => String(u._id) === String(id));
+    if (!user) return;
+    const sugerida = generarPassword();
+
+    const modal = UI.openModal({
+      title: `Cambiar contraseña — ${escapeHtml(user.name)}`,
+      size: 500,
+      body: `
+        <p style="color:var(--text-muted);font-size:13px;margin-top:0;">
+          La nueva contraseña debe tener al menos 8 caracteres e incluir mayúsculas, minúsculas y números.
+          Al guardarla se cerrarán todas las sesiones de <strong>${escapeHtml(user.name)}</strong>.
+        </p>
+        <div class="fgroup fgroup-full">
+          <label for="pw-new">Nueva contraseña</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input id="pw-new" type="text" autocomplete="new-password" value="${escapeHtml(sugerida)}" style="flex:1 1 200px;">
+            <button class="btn btn-ghost btn-sm" type="button" data-generate title="Generar otra contraseña">&#8635; Generar</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-copy title="Copiar contraseña">&#128203; Copiar</button>
+          </div>
+        </div>
+        <div id="pw-error" class="alert alert-error"></div>
+      `,
+      footer: `
+        <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button>
+        <button class="btn btn-gold" type="button" data-ok>Restablecer contraseña</button>
+      `,
+    });
+
+    const bodyEl = modal.bodyEl;
+    const overlay = bodyEl.closest('#modal-overlay');
+    if (!overlay) return;
+    const input = bodyEl.querySelector('#pw-new');
+    const errBox = bodyEl.querySelector('#pw-error');
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+    bodyEl.querySelector('[data-generate]').addEventListener('click', () => {
+      input.value = generarPassword();
+      input.focus();
+      input.select();
+    });
+    bodyEl.querySelector('[data-copy]').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(input.value);
+        showModalError(errBox, '');
+        errBox.className = 'alert alert-success show';
+        errBox.textContent = 'Contraseña copiada al portapapeles.';
+      } catch (error) {
+        input.focus();
+        input.select();
+        document.execCommand && document.execCommand('copy');
+      }
+    });
+    overlay.querySelector('[data-ok]').addEventListener('click', async (event) => {
+      const btn = event.currentTarget;
+      const newPassword = input.value;
+      if (!newPassword || newPassword.length < 8) return showModalError(errBox, 'La contraseña debe tener al menos 8 caracteres.');
+      if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+        return showModalError(errBox, 'Debe incluir mayúsculas, minúsculas y números.');
+      }
+      btn.disabled = true;
+      try {
+        await window.API.soporte.restablecerPassword(user._id, { newPassword });
+        UI.closeModal();
+        alert(`Contraseña actualizada para ${user.name}. Sesiones cerradas.`);
+        renderUsuarios();
+      } catch (error) {
+        btn.disabled = false;
+        showModalError(errBox, error.message || 'No se pudo cambiar la contraseña.');
+      }
+    });
+    setTimeout(() => { input.focus(); input.select(); }, 120);
+  }
+
+  // ── Pestaña Actividad del equipo ──────────────────────────────────────────
+  let actividadPagina = 1;
+  let actividadUserId = '';
+  let actividadUsuariosCargados = false;
+  let actividadLogsCache = [];
+
+  async function cargarUsuariosActividad(force) {
+    const sel = document.getElementById('act-user');
+    if (!sel) return;
+    if (actividadUsuariosCargados && !force) return;
+    try {
+      const usuarios = await window.API.soporte.usuarios();
+      const current = sel.value || actividadUserId;
+      sel.innerHTML = '<option value="">Todo el equipo</option>' +
+        usuarios.map((u) => `<option value="${u._id}">${escapeHtml(u.name || u.username || 'Usuario')}${u.role ? ` · ${escapeHtml(u.role.name || u.role.code)}` : ''}</option>`).join('');
+      if (current) sel.value = current;
+      actividadUsuariosCargados = true;
+    } catch (error) { /* se conserva la lista previa */ }
+  }
+
+  function filtrosActividad() {
+    const val = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : '';
+    };
+    return {
+      page: actividadPagina,
+      limit: Number(val('act-limit')) || 50,
+      userId: val('act-user'),
+      scope: val('act-scope'),
+      action: val('act-action').trim(),
+      q: val('act-q').trim(),
+      from: val('act-from'),
+      to: val('act-to'),
+    };
+  }
+
+  function renderResumenActividad(d, params) {
+    const box = document.getElementById('act-resumen');
+    if (!box) return;
+    const summary = (d && d.summary) || {};
+    const byUser = (d && d.byUser) || [];
+    const topAction = summary.byAction && summary.byAction[0];
+    const topScope = summary.byScope && summary.byScope[0];
+    const alcance = params.userId
+      ? (byUser.find((u) => String(u.userId) === String(params.userId)) || {}).name || 'Usuario'
+      : 'Todo el equipo';
+
+    box.innerHTML = `
+      <div class="stat-cards">
+        <div class="stat-card"><b>${d.total || 0}</b><span>Eventos</span></div>
+        <div class="stat-card"><b>${escapeHtml(alcance)}</b><span>Alcance</span></div>
+        <div class="stat-card"><b>${topAction ? escapeHtml(topAction.count) : 0}</b><span>${topAction ? escapeHtml(topAction.action) : 'Sin acciones'}</span></div>
+        <div class="stat-card"><b>${topScope ? escapeHtml(topScope.count) : 0}</b><span>${topScope ? escapeHtml(topScope.scope) : 'Sin módulo'}</span></div>
+      </div>
+      <div class="sp-card" style="display:flex;gap:18px;flex-wrap:wrap;">
+        <div style="flex:1 1 220px;">
+          <h3 style="margin:0 0 8px;font-size:13px;">Acciones más frecuentes</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${(summary.byAction || []).length
+              ? summary.byAction.map((a) => `<span class="role-chip" title="${a.count} eventos">${escapeHtml(a.action)} · ${a.count}</span>`).join('')
+              : '<span style="color:var(--text-muted);font-size:12px;">Sin datos.</span>'}
+          </div>
+        </div>
+        <div style="flex:1 1 220px;">
+          <h3 style="margin:0 0 8px;font-size:13px;">Módulos con actividad</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${(summary.byScope || []).length
+              ? summary.byScope.map((s) => `<span class="role-chip">${escapeHtml(s.scope)} · ${s.count}</span>`).join('')
+              : '<span style="color:var(--text-muted);font-size:12px;">Sin datos.</span>'}
+          </div>
+        </div>
+        <div style="flex:1 1 220px;">
+          <h3 style="margin:0 0 8px;font-size:13px;">Usuarios más activos</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${byUser.length
+              ? byUser.slice(0, 6).map((u) => `<button type="button" class="role-chip" data-act-user="${u.userId}" title="Filtrar por este usuario" style="cursor:pointer;border:none;font-family:inherit;">${escapeHtml(u.name)} · ${u.count}</button>`).join('')
+              : '<span style="color:var(--text-muted);font-size:12px;">Sin datos.</span>'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    box.querySelectorAll('[data-act-user]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        actividadUserId = btn.dataset.actUser;
+        const sel = document.getElementById('act-user');
+        if (sel) sel.value = actividadUserId;
+        actividadPagina = 1;
+        renderActividad();
+      });
+    });
+  }
+
+  function renderListaActividad(d) {
+    const box = document.getElementById('actividad-container');
+    if (!box) return;
+    const logs = (d && d.logs) || [];
+    actividadLogsCache = logs;
+    if (!logs.length) {
+      box.innerHTML = '<div class="sp-empty">No hay actividad que coincida con los filtros.</div>';
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="sp-card">
+        <div class="sp-logs">
+          ${logs.map((l, index) => {
+            const u = l.user || {};
+            return `
+              <div class="log-row" style="align-items:flex-start;">
+                <span class="log-time" style="min-width:112px;">${fmtDate(l.createdAt)}</span>
+                <span class="log-badge log-badge-INFO">${escapeHtml(l.action || 'evento')}</span>
+                <span class="log-msg">
+                  <strong>${escapeHtml(u.name || 'Usuario eliminado')}</strong>
+                  ${u.email ? `<small style="color:var(--text-muted);"> · ${escapeHtml(u.email)}</small>` : ''}
+                  <br>${escapeHtml(l.message || '')}
+                  <small style="color:var(--text-muted);display:block;margin-top:2px;">${escapeHtml(l.entityType || 'sistema')}</small>
+                </span>
+                ${l.data ? `<button class="btn btn-ghost btn-sm" type="button" data-log-detail="${index}">Detalle</button>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <span style="color:var(--text-muted);font-size:12px;">Página ${d.page || 1} de ${d.pages || 1} · ${d.total || 0} eventos</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" type="button" data-act-page="prev" ${d.page <= 1 ? 'disabled' : ''}>&#8592; Anterior</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-act-page="next" ${d.page >= d.pages ? 'disabled' : ''}>Siguiente &#8594;</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    box.querySelectorAll('[data-log-detail]').forEach((btn) => {
+      btn.addEventListener('click', () => verDetalleActividad(Number(btn.dataset.logDetail)));
+    });
+    box.querySelectorAll('[data-act-page]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        actividadPagina = btn.dataset.actPage === 'next'
+          ? Math.min((d.pages || 1), (d.page || 1) + 1)
+          : Math.max(1, (d.page || 1) - 1);
+        renderActividad();
+      });
+    });
+  }
+
+  function verDetalleActividad(index) {
+    const log = actividadLogsCache[index];
+    if (!log) return;
+    UI.openModal({
+      title: 'Detalle del evento',
+      size: 620,
+      body: `
+        <div class="kv-grid" style="margin-bottom:12px;">
+          <div class="kv"><b>${escapeHtml(log.action || '—')}</b><span>Acción</span></div>
+          <div class="kv"><b>${escapeHtml(log.entityType || '—')}</b><span>Entidad</span></div>
+          <div class="kv"><b>${escapeHtml((log.user && (log.user.name || log.user.email)) || '—')}</b><span>Usuario</span></div>
+          <div class="kv"><b>${fmtDate(log.createdAt)}</b><span>Fecha</span></div>
+        </div>
+        <p style="margin:0 0 10px;">${escapeHtml(log.message || 'Sin descripción.')}</p>
+        ${log.data ? `<pre style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:280px;">${escapeHtml(JSON.stringify(log.data, null, 2))}</pre>` : ''}
+      `,
+      footer: '<button class="btn btn-gold" type="button" data-close>Cerrar</button>',
+    });
+  }
+
+  async function renderActividad() {
+    const box = document.getElementById('actividad-container');
+    if (!box) return;
+    await cargarUsuariosActividad();
+    const params = filtrosActividad();
+    actividadUserId = params.userId;
+    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando actividad…</div>';
+    try {
+      const d = await window.API.soporte.actividadEquipo(params);
+      renderResumenActividad(d, params);
+      renderListaActividad(d);
+    } catch (error) {
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function csvCell(value) {
+    const text = String(value == null ? '' : value);
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }
+
+  async function exportarActividad() {
+    const btn = document.getElementById('act-export');
+    if (btn) { btn.disabled = true; btn.textContent = 'Exportando…'; }
+    try {
+      const base = filtrosActividad();
+      const rows = [['Fecha', 'Usuario', 'Correo', 'Acción', 'Entidad', 'Mensaje']];
+      let page = 1;
+      let pages = 1;
+      do {
+        const d = await window.API.soporte.actividadEquipo(Object.assign({}, base, { page, limit: 200 }));
+        (d.logs || []).forEach((l) => {
+          const u = l.user || {};
+          rows.push([
+            l.createdAt ? new Date(l.createdAt).toISOString() : '',
+            u.name || 'Usuario eliminado',
+            u.email || '',
+            l.action || '',
+            l.entityType || '',
+            l.message || '',
+          ]);
+        });
+        pages = d.pages || 1;
+        page += 1;
+      } while (page <= pages && page <= 10);
+
+      const csv = '\ufeff' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+      downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `actividad_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      alert(error.message || 'No se pudo exportar la actividad.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '⬇ Exportar CSV'; }
+    }
+  }
+
+  function initActividad() {
+    cargarUsuariosActividad();
+    const apply = document.getElementById('act-apply');
+    if (apply) apply.addEventListener('click', () => { actividadPagina = 1; renderActividad(); });
+    const clear = document.getElementById('act-clear');
+    if (clear) clear.addEventListener('click', () => {
+      ['act-user', 'act-scope', 'act-action', 'act-q', 'act-from', 'act-to'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      const limit = document.getElementById('act-limit');
+      if (limit) limit.value = '50';
+      actividadUserId = '';
+      actividadPagina = 1;
+      renderActividad();
+    });
+    const search = document.getElementById('act-q');
+    if (search) search.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); actividadPagina = 1; renderActividad(); }
+    });
+    const userSel = document.getElementById('act-user');
+    if (userSel) userSel.addEventListener('change', () => { actividadPagina = 1; renderActividad(); });
+    const scopeSel = document.getElementById('act-scope');
+    if (scopeSel) scopeSel.addEventListener('change', () => { actividadPagina = 1; renderActividad(); });
+    const exportBtn = document.getElementById('act-export');
+    if (exportBtn) exportBtn.addEventListener('click', exportarActividad);
   }
 
   // ── Pestaña Config ────────────────────────────────────────────────────────
@@ -1538,6 +2073,12 @@ window.SoportePanel = (() => {
       { title: 'Recomendación de seguridad', text: 'Al detectar un acceso sospechoso, cierra la sesión y restablece la contraseña del usuario desde la pestaña Usuarios.' },
     ]);
 
+    const actividad = guiaCard('&#128202;', 'Actividad y auditoría', [
+      { title: 'Historial del equipo', text: 'La pestaña Actividad reúne los eventos de todos los usuarios con filtros por persona, módulo, acción, texto y fechas.' },
+      { title: 'Ver la actividad de alguien', text: 'En Usuarios pulsa «Actividad» en la fila de la persona para abrir su historial filtrado.' },
+      { title: 'Exportar', text: 'El botón «Exportar CSV» descarga el historial filtrado para revisarlo en Excel o compartirlo.' },
+    ]);
+
     const logs = guiaCard('&#128220;', 'Logs y errores en tiempo real', [
       { title: 'Últimos 100 registros', text: 'El visor lee el buffer del servidor: errores de consultas, caídas de Socket.io y fallas de PDFs.' },
       { title: 'Filtrar por nivel', text: 'Usa los botones ERROR / WARN / INFO para aislar el tipo de evento. Se actualiza en vivo vía Socket.io (con polling de respaldo).' },
@@ -1565,6 +2106,7 @@ window.SoportePanel = (() => {
       <div class="guia-grid">
         ${mantenimiento}
         ${sesiones}
+        ${actividad}
         ${logs}
         ${pdfs}
         ${soporte}
@@ -1764,6 +2306,23 @@ window.SoportePanel = (() => {
     const b3 = document.getElementById('ht-cerrar-ses');
     if (b3) b3.addEventListener('click', () => accion('cerrar-sesiones'));
 
+    // Reparación de suscripciones push duplicadas (avisos repetidos en celular).
+    const pushFix = document.getElementById('ht-push-fix');
+    if (pushFix) {
+      pushFix.addEventListener('click', async () => {
+        if (!window.confirm('¿Reparar las notificaciones push? Se eliminarán las suscripciones repetidas del mismo dispositivo.')) return;
+        pushFix.disabled = true;
+        try {
+          const r = await window.API.soporte.limpiarPush();
+          showAlert2(null, 'ht-mt-alert', (r && r.message) || 'Suscripciones push revisadas.', 'success');
+        } catch (error) {
+          showAlert2(null, 'ht-mt-alert', error.message, 'error');
+        } finally {
+          pushFix.disabled = false;
+        }
+      });
+    }
+
     const form = document.getElementById('ht-notif-form');
     if (form) {
       form.addEventListener('submit', async (e) => {
@@ -1840,6 +2399,7 @@ window.SoportePanel = (() => {
     initChat();
     initMantenimiento();
     initHerramientas();
+    initActividad();
 
     renderResumen();
     renderGuia();

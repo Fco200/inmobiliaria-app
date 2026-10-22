@@ -326,6 +326,7 @@
       <button class="sp-tab active" data-tab="resumen"><span class="ico">&#128200;</span> Resumen</button>
       <button class="sp-tab" data-tab="guia"><span class="ico">&#128214;</span> Guía</button>
       <button class="sp-tab" data-tab="usuarios"><span class="ico">&#128101;</span> Usuarios</button>
+      <button class="sp-tab" data-tab="actividad"><span class="ico">&#128202;</span> Actividad</button>
       <button class="sp-tab" data-tab="sesiones"><span class="ico">&#128275;&#65039;</span> Sesiones</button>
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
       <button class="sp-tab" data-tab="solicitudes"><span class="ico">&#128229;</span> Solicitudes</button>
@@ -388,8 +389,76 @@
       <!-- --- Usuarios --- -->
       <section class="sp-pane" id="pane-usuarios">
         <h1 class="sp-pane-title">Control de Usuarios</h1>
-        <p class="sp-pane-sub">Lista, roles, activación y restablecimiento de contraseñas sin tocar la base de datos.</p>
+        <p class="sp-pane-sub">Busca, edita, activa o desactiva cuentas, restablece contraseñas, cierra sesiones y elimina usuarios con protección de administración.</p>
         <div id="usuarios-container"></div>
+      </section>
+
+      <!-- --- Actividad del equipo --- -->
+      <section class="sp-pane" id="pane-actividad">
+        <h1 class="sp-pane-title">Actividad del Equipo</h1>
+        <p class="sp-pane-sub">Auditoría de todo lo que ocurre en el CRM: quién hizo qué, cuándo y en qué módulo. Filtra, revisa el detalle y exporta el historial.</p>
+
+        <div class="sp-card">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="fgroup" style="min-width:190px;flex:1 1 190px;">
+              <label for="act-user">Usuario</label>
+              <select id="act-user"><option value="">Todo el equipo</option></select>
+            </div>
+            <div class="fgroup" style="min-width:150px;">
+              <label for="act-scope">Módulo / entidad</label>
+              <select id="act-scope">
+                <option value="">Todos</option>
+                <option value="User">Usuarios</option>
+                <option value="Session">Sesiones</option>
+                <option value="Client">Clientes</option>
+                <option value="Property">Propiedades</option>
+                <option value="Inventory">Inventario</option>
+                <option value="Business">Negocios</option>
+                <option value="Appointment">Citas</option>
+                <option value="Task">Tareas</option>
+                <option value="Goal">Metas</option>
+                <option value="Document">Documentos</option>
+                <option value="Expense">Gastos</option>
+                <option value="Chat">Chat</option>
+                <option value="Announcement">Avisos</option>
+                <option value="Config">Configuración</option>
+                <option value="Setting">Ajustes</option>
+                <option value="System">Sistema</option>
+              </select>
+            </div>
+            <div class="fgroup" style="min-width:150px;">
+              <label for="act-action">Acción</label>
+              <input id="act-action" type="text" placeholder="Ej. login, crear, actualizar…">
+            </div>
+            <div class="fgroup" style="flex:1 1 200px;min-width:180px;">
+              <label for="act-q">Buscar en el mensaje</label>
+              <input id="act-q" type="text" placeholder="Texto, entidad o acción…">
+            </div>
+            <div class="fgroup">
+              <label for="act-from">Desde</label>
+              <input id="act-from" type="date">
+            </div>
+            <div class="fgroup">
+              <label for="act-to">Hasta</label>
+              <input id="act-to" type="date">
+            </div>
+            <div class="fgroup" style="min-width:90px;">
+              <label for="act-limit">Por página</label>
+              <select id="act-limit">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </div>
+            <button class="btn btn-gold btn-sm" id="act-apply" type="button">Filtrar</button>
+            <button class="btn btn-ghost btn-sm" id="act-clear" type="button">Limpiar</button>
+            <button class="btn btn-ghost btn-sm" id="act-export" type="button">&#8681; Exportar CSV</button>
+          </div>
+        </div>
+
+        <div id="act-resumen"></div>
+        <div id="actividad-container"><div class="sp-empty">Aplica un filtro o pulsa Filtrar para ver la actividad.</div></div>
       </section>
 
       <!-- --- Sesiones --- -->
@@ -485,6 +554,7 @@
             <button class="btn btn-gold" id="ht-limpiar" type="button">&#128260; Limpiar caché y actualizar</button>
             <button class="btn btn-ghost" id="ht-recargar" type="button">&#8635; Recargar la app</button>
             <button class="btn btn-danger" id="ht-cerrar-ses" type="button">&#128274; Cerrar todas las sesiones</button>
+            <button class="btn btn-ghost" id="ht-push-fix" type="button">&#128276; Reparar notificaciones duplicadas</button>
           </div>
           <span class="alert" id="ht-mt-alert"></span>
         </div>

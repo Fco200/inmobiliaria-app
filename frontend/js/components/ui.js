@@ -442,10 +442,97 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Nombre de archivo seguro para una foto. Usa el nombre original del archivo
+// cuando existe y, si no, el título de la propiedad + posición.
+function imageFileName(url, index = 0, title = '') {
+  const safeTitle = String(title || 'imagen')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 70) || 'imagen';
+  let base = '';
+  try {
+    const pathname = new URL(String(url), window.location.href).pathname;
+    base = decodeURIComponent((pathname.split('/').pop() || '')).split('?')[0];
+  } catch (error) { base = ''; }
+  if (base && /\.[a-z0-9]{2,5}$/i.test(base)) return base;
+  const match = String(url || '').match(/\.(jpe?g|png|webp|gif|avif|bmp)(?:$|\?)/i);
+  const ext = match ? match[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
+  return `${safeTitle}-${index + 1}.${ext}`;
+}
+
+// Descarga una imagen como archivo. En escritorio y Android funciona con
+// fetch + blob (respeta el nombre y no abre otra pestaña); si el navegador o
+// el almacenamiento remoto lo impiden, cae al enlace de descarga directa.
+// En iPhone (Safari/PWA) también funciona desde iOS 13.
+async function downloadImage(url, name, options = {}) {
+  const absolute = window.AppConfig && window.AppConfig.resolveUrl
+    ? window.AppConfig.resolveUrl(url)
+    : String(url);
+  const filename = name || 'imagen.jpg';
+  const sameOrigin = absolute.indexOf(window.location.origin) === 0;
+  try {
+    const response = await fetch(absolute, {
+      credentials: sameOrigin ? 'include' : 'omit',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    if (!options.silent) toast('Imagen descargada', 'success');
+    return true;
+  } catch (error) {
+    // Respaldo: descarga directa del navegador (sin salir del CRM si puede).
+    try {
+      const link = document.createElement('a');
+      link.href = absolute;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (!options.silent) toast('Descarga iniciada', 'info');
+      return true;
+    } catch (fallbackError) {
+      if (!options.silent) toast('No se pudo descargar la imagen', 'error');
+      return false;
+    }
+  }
+}
+
+// Descarga varias fotos en secuencia. Los navegadores piden permiso para
+// descargas múltiples la primera vez; en móvil conviene bajar una por una.
+async function downloadImages(images, title = 'fotos') {
+  const photos = (Array.isArray(images) ? images : []).filter(Boolean);
+  if (!photos.length) return;
+  if (photos.length > 1) {
+    toast(`Descargando ${photos.length} fotos…`, 'info');
+  }
+  for (let i = 0; i < photos.length; i += 1) {
+    // Se espera un instante entre descargas para que el navegador no las
+    // bloquee por considerarlas una ráfaga automática.
+    // eslint-disable-next-line no-await-in-loop
+    await downloadImage(photos[i], imageFileName(photos[i], i, title), { silent: true });
+    // eslint-disable-next-line no-await-in-loop
+    if (i < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 450));
+  }
+  toast(photos.length === 1 ? 'Imagen descargada' : `${photos.length} fotos descargadas`, 'success');
+}
+
 // Visor de fotos dentro de la misma pantalla. Antes cada clic hacía
 // window.open(), lo que sacaba al asesor del CRM (y en algunos navegadores
-// móviles congela la interfaz). Ahora hay navegación, teclado y cierre propio.
-function showImages(images, title = 'Galería de imágenes') {
+// móviles congela la interfaz). Ahora hay navegación, teclado, gestos táctiles,
+// descarga y cierre propio.
+function showImages(images, title = 'Galería de imágenes', options = {}) {
   const photos = (Array.isArray(images) ? images : []).filter(Boolean);
   if (!photos.length) {
     toast('No hay imágenes para mostrar.', 'info');
@@ -458,7 +545,11 @@ function showImages(images, title = 'Galería de imágenes') {
   closeLightbox();
   document.body.classList.add('lightbox-open');
 
-  let index = 0;
+  let index = Math.min(
+    Math.max(0, Number(options.startIndex) || 0),
+    photos.length - 1
+  );
+  let swiped = false;
   const box = document.createElement('div');
   box.id = 'image-lightbox';
   box.className = 'image-lightbox';
@@ -468,8 +559,16 @@ function showImages(images, title = 'Galería de imágenes') {
   box.innerHTML = `
     <div class="lightbox-bar">
       <span class="lightbox-title"></span>
-      <span class="lightbox-counter"></span>
-      <button type="button" class="icon-btn" data-lb-close title="Cerrar (Esc)" aria-label="Cerrar">&times;</button>
+      <span class="lightbox-counter" aria-live="polite"></span>
+      <div class="lightbox-actions">
+        <button type="button" class="lightbox-btn" data-lb-download title="Descargar esta foto" aria-label="Descargar esta foto">
+          <span aria-hidden="true">&#11015;</span><span class="lightbox-btn-text">Descargar</span>
+        </button>
+        ${photos.length > 1 ? `<button type="button" class="lightbox-btn" data-lb-download-all title="Descargar todas las fotos" aria-label="Descargar todas las fotos">
+          <span aria-hidden="true">&#128229;</span><span class="lightbox-btn-text">Todas</span>
+        </button>` : ''}
+        <button type="button" class="icon-btn" data-lb-close title="Cerrar (Esc)" aria-label="Cerrar">&times;</button>
+      </div>
     </div>
     <div class="lightbox-stage">
       <button type="button" class="lightbox-nav lightbox-prev" data-lb-prev title="Anterior" aria-label="Foto anterior">&#8249;</button>
@@ -484,6 +583,7 @@ function showImages(images, title = 'Galería de imágenes') {
   const counterEl = box.querySelector('.lightbox-counter');
   const titleEl = box.querySelector('.lightbox-title');
   const thumbsEl = box.querySelector('.lightbox-thumbs');
+  const stageEl = box.querySelector('.lightbox-stage');
 
   function render() {
     const src = window.AppConfig.resolveUrl(photos[index]);
@@ -501,6 +601,13 @@ function showImages(images, title = 'Galería de imágenes') {
     const active = thumbsEl.querySelector('.lightbox-thumb.is-active');
     if (active && thumbsEl.scrollWidth > thumbsEl.clientWidth) {
       thumbsEl.scrollLeft = active.offsetLeft - (thumbsEl.clientWidth - active.clientWidth) / 2;
+    }
+    // Precarga anterior/siguiente para que el cambio se sienta instantáneo.
+    if (!single) {
+      [-1, 1].forEach((delta) => {
+        const preload = new Image();
+        preload.src = window.AppConfig.resolveUrl(photos[(index + delta + photos.length) % photos.length]);
+      });
     }
   }
 
@@ -528,12 +635,51 @@ function showImages(images, title = 'Galería de imágenes') {
   // foto). Antes solo cerraban la "×", "Esc" o el fondo vacío: al tocar la
   // imagen el asesor se quedaba atrapado y tenía que cerrar la pestaña.
   box.addEventListener('click', (e) => {
-    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index]')) return;
+    if (swiped) { swiped = false; return; }
+    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index], [data-lb-download], [data-lb-download-all]')) return;
     closeLightbox();
   });
   box.querySelector('[data-lb-close]').addEventListener('click', closeLightbox);
   box.querySelector('[data-lb-prev]').addEventListener('click', () => go(-1));
   box.querySelector('[data-lb-next]').addEventListener('click', () => go(1));
+
+  const downloadBtn = box.querySelector('[data-lb-download]');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+      downloadImage(
+        photos[index],
+        imageFileName(photos[index], index, title.replace(/^Fotos? — /, ''))
+      );
+    });
+  }
+  const downloadAllBtn = box.querySelector('[data-lb-download-all]');
+  if (downloadAllBtn) {
+    downloadAllBtn.addEventListener('click', () => {
+      downloadImages(photos, title.replace(/^Fotos? — /, ''));
+    });
+  }
+
+  // Gestos táctiles: deslizar a izquierda/derecha cambia de foto en el celular.
+  let touchX = null;
+  let touchY = null;
+  stageEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }, { passive: true });
+  stageEl.addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const touch = e.changedTouches && e.changedTouches[0];
+    const dx = touch ? touch.clientX - touchX : 0;
+    const dy = touch ? touch.clientY - touchY : 0;
+    touchX = null;
+    touchY = null;
+    if (photos.length > 1 && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+      swiped = true;
+      go(dx < 0 ? 1 : -1);
+      setTimeout(() => { swiped = false; }, 350);
+    }
+  }, { passive: true });
 
   // Navegación con teclado: no se usa el diálogo modal general para no
   // provocar scrolls ni recargas al cambiar de imagen.
@@ -878,6 +1024,9 @@ function showImages(images, title = 'Galería de imágenes') {
     otrosText,
     progressBar,
     showImages,
+    downloadImage,
+    downloadImages,
+    imageFileName,
     closeLightbox,
     showActivityHistory,
     printHtmlDocument,

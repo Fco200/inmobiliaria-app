@@ -9,6 +9,7 @@ const {
   listarUsuarios,
   actualizarUsuario,
   restablecerPassword,
+  eliminarUsuario,
   listarRoles,
   listarConfig,
   guardarConfig,
@@ -45,6 +46,8 @@ const {
   diagnostico,
   notificarMasivo,
   auditoriaUsuario,
+  actividadEquipo,
+  limpiarPushSoporte,
   accionMasiva,
   listarSuscriptores,
   eliminarSuscriptor,
@@ -66,6 +69,7 @@ router.post('/auth/logout', requireSoporte, soporteLogout);
 router.get('/usuarios', requireSoporte, listarUsuarios);
 router.get('/roles', requireSoporte, listarRoles);
 router.put('/usuarios/:id', requireSoporte, actualizarUsuario);
+router.delete('/usuarios/:id', requireSoporte, eliminarUsuario);
 router.post('/usuarios/:id/restablecer-password', requireSoporte, restablecerPassword);
 
 // Resumen / estado del sistema
@@ -127,6 +131,8 @@ router.get('/monitoreo', requireSoporte, monitoreo);
 router.get('/diagnostico', requireSoporte, diagnostico);
 router.post('/notificaciones-masivas', requireSoporte, notificarMasivo);
 router.get('/usuarios/:id/auditoria', requireSoporte, auditoriaUsuario);
+router.get('/actividad', requireSoporte, actividadEquipo);
+router.post('/push/limpiar', requireSoporte, limpiarPushSoporte);
 router.post('/acciones-masivas', requireSoporte, accionMasiva);
 router.get('/newsletter', requireSoporte, listarSuscriptores);
 router.delete('/newsletter/:id', requireSoporte, eliminarSuscriptor);

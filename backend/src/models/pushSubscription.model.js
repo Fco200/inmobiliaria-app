@@ -41,5 +41,8 @@ const pushSubscriptionSchema = new mongoose.Schema(
 
 // Un mismo dispositivo puede re-suscribirse: se actualiza en lugar de duplicar.
 pushSubscriptionSchema.index({ user: 1, endpoint: 1 }, { unique: true });
+// Búsqueda global por dispositivo: al iniciar sesión con otra cuenta se reasigna
+// el endpoint para que el celular no reciba avisos de varias cuentas.
+pushSubscriptionSchema.index({ endpoint: 1 });
 
 module.exports = mongoose.model('PushSubscription', pushSubscriptionSchema);

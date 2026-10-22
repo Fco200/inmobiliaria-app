@@ -99,6 +99,9 @@ window.Pages.inventory = {
       // notas queda reservado a administración/gerencia.
       const puedeModificar = isBoss;
       const canEditPhotos = isBoss;
+      // Índice de la foto visible en el carrusel. Se conserva entre repintados
+      // (por ejemplo, al subir o quitar una foto) para no perder la posición.
+      let photoIndex = 0;
 
       const modal = UI.openModal({
         title: `Inventario — ${propertyLabel(prop)}`,
@@ -168,6 +171,8 @@ window.Pages.inventory = {
           ? Math.max(2, Math.min(100, ((current - mk.min) / (mk.max - mk.min)) * 100))
           : 50;
         const photos = (prop.photos || []).filter(Boolean);
+        if (photoIndex >= photos.length) photoIndex = Math.max(0, photos.length - 1);
+        if (photoIndex < 0) photoIndex = 0;
         const characteristics = (prop.characteristics || [])
           .map((c) => `<li><strong>${UI.escapeHtml(c.name)}:</strong> ${UI.escapeHtml(c.value)}</li>`)
           .join('');
@@ -177,17 +182,32 @@ window.Pages.inventory = {
           <div class="grid grid-2" style="align-items:start;">
             <div>
               ${photos.length
-                ? `<div class="detail-photos">
-                    ${photos.map((p) => `
-                      <div class="detail-photo">
-                        <img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy" data-full="${UI.escapeHtml(p)}">
-                        ${canEditPhotos ? `<button type="button" class="detail-photo-x" data-photo-remove="${UI.escapeHtml(p)}" title="Quitar foto">&times;</button>` : ''}
-                      </div>`).join('')}
+                ? `<div class="property-carousel" data-carousel>
+                    <div class="pc-stage" data-pc-stage>
+                      <img class="pc-photo" src="${window.AppConfig.resolveUrl(photos[photoIndex])}" alt="Foto ${photoIndex + 1} de ${photos.length}" data-pc-photo tabindex="0">
+                      ${photos.length > 1 ? `
+                        <button type="button" class="pc-nav pc-prev" data-pc-prev aria-label="Foto anterior" title="Foto anterior">&#8249;</button>
+                        <button type="button" class="pc-nav pc-next" data-pc-next aria-label="Foto siguiente" title="Foto siguiente">&#8250;</button>` : ''}
+                      <span class="pc-counter" data-pc-counter>${photoIndex + 1} / ${photos.length}</span>
+                      <button type="button" class="pc-download" data-pc-download title="Descargar esta foto">
+                        <span aria-hidden="true">&#8681;</span> Descargar
+                      </button>
+                      ${canEditPhotos ? `<button type="button" class="pc-remove" data-pc-remove title="Quitar esta foto" aria-label="Quitar esta foto">&times;</button>` : ''}
+                    </div>
+                    ${photos.length > 1
+                      ? `<div class="pc-thumbs" data-pc-thumbs>
+                          ${photos.map((p, i) => `
+                            <button type="button" class="pc-thumb${i === photoIndex ? ' is-active' : ''}" data-pc-thumb="${i}" aria-label="Ver foto ${i + 1}">
+                              <img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy">
+                            </button>`).join('')}
+                        </div>`
+                      : ''}
                   </div>`
-                : '<p class="text-muted" style="font-size:13px;">Sin fotos todavía.</p>'}
-              <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-gallery>Ver todas (${photos.length})</button>` : ''}
-                ${canEditPhotos ? `<label class="btn btn-secondary btn-sm" style="cursor:pointer;">+ Añadir fotos<input type="file" accept="image/*" multiple style="display:none" data-photos-input></label>` : ''}
+                : `<div class="pc-empty">Sin fotos todavía.${canEditPhotos ? ' Usa “Añadir fotos” para cargar la primera.' : ''}</div>`}
+              <div class="pc-toolbar">
+                ${photos.length ? `<button class="btn btn-secondary btn-sm" type="button" data-gallery>Abrir visor (${photos.length})</button>` : ''}
+                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-download-all>Descargar todas</button>` : ''}
+                ${canEditPhotos ? `<label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;">+ Añadir fotos<input type="file" accept="image/*" multiple style="display:none" data-photos-input></label>` : ''}
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
@@ -225,24 +245,128 @@ window.Pages.inventory = {
             </div>
           </div>`;
 
-        // Ampliar una foto usa el visor interno: nunca se abre otra pestaña.
-        modal.bodyEl.querySelectorAll('[data-full]').forEach((img) => {
-          img.addEventListener('click', () => UI.showImages([img.getAttribute('src')], `Foto — ${propertyLabel(prop)}`));
-        });
+        // Carrusel: navegación con flechas, miniaturas y gestos táctiles.
+        const carousel = modal.bodyEl.querySelector('[data-carousel]');
+        if (carousel && photos.length) {
+          const photoEl = modal.bodyEl.querySelector('[data-pc-photo]');
+          const counterEl = modal.bodyEl.querySelector('[data-pc-counter]');
+          const thumbEls = Array.from(modal.bodyEl.querySelectorAll('[data-pc-thumb]'));
+          const stageEl = modal.bodyEl.querySelector('[data-pc-stage]');
+
+          const setIndex = (next, scrollThumb) => {
+            if (!photos.length) return;
+            photoIndex = ((next % photos.length) + photos.length) % photos.length;
+            if (photoEl) {
+              photoEl.src = window.AppConfig.resolveUrl(photos[photoIndex]);
+              photoEl.alt = `Foto ${photoIndex + 1} de ${photos.length}`;
+            }
+            if (counterEl) counterEl.textContent = `${photoIndex + 1} / ${photos.length}`;
+            thumbEls.forEach((thumb, i) => thumb.classList.toggle('is-active', i === photoIndex));
+            if (scrollThumb !== false && thumbEls[photoIndex] && thumbEls[photoIndex].scrollIntoView) {
+              try {
+                thumbEls[photoIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+              } catch (error) { /* navegadores antiguos */ }
+            }
+          };
+
+          const openViewer = () => UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`, { startIndex: photoIndex });
+
+          modal.bodyEl.querySelectorAll('[data-pc-prev]').forEach((btn) => {
+            btn.addEventListener('click', () => setIndex(photoIndex - 1));
+          });
+          modal.bodyEl.querySelectorAll('[data-pc-next]').forEach((btn) => {
+            btn.addEventListener('click', () => setIndex(photoIndex + 1));
+          });
+          thumbEls.forEach((thumb) => {
+            thumb.addEventListener('click', () => setIndex(Number(thumb.getAttribute('data-pc-thumb')) || 0));
+          });
+          if (photoEl) {
+            photoEl.addEventListener('click', openViewer);
+            photoEl.addEventListener('keydown', (event) => {
+              if (event.key === 'ArrowLeft') { event.preventDefault(); setIndex(photoIndex - 1); }
+              if (event.key === 'ArrowRight') { event.preventDefault(); setIndex(photoIndex + 1); }
+              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openViewer(); }
+            });
+          }
+
+          const downloadBtn = modal.bodyEl.querySelector('[data-pc-download]');
+          if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+              UI.downloadImage(
+                photos[photoIndex],
+                UI.imageFileName(photos[photoIndex], photoIndex, propertyLabel(prop))
+              );
+            });
+          }
+          const downloadAllBtn = modal.bodyEl.querySelector('[data-download-all]');
+          if (downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', () => UI.downloadImages(photos, propertyLabel(prop)));
+          }
+
+          // Deslizar con el dedo en el celular.
+          let touchX = null;
+          let touchY = null;
+          if (stageEl) {
+            stageEl.addEventListener('touchstart', (event) => {
+              if (event.touches.length !== 1) return;
+              touchX = event.touches[0].clientX;
+              touchY = event.touches[0].clientY;
+            }, { passive: true });
+            stageEl.addEventListener('touchend', (event) => {
+              if (touchX === null) return;
+              const touch = event.changedTouches && event.changedTouches[0];
+              const dx = touch ? touch.clientX - touchX : 0;
+              const dy = touch ? touch.clientY - touchY : 0;
+              touchX = null;
+              touchY = null;
+              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) setIndex(photoIndex + (dx < 0 ? 1 : -1));
+            }, { passive: true });
+          }
+
+          const removeBtn = modal.bodyEl.querySelector('[data-pc-remove]');
+          if (removeBtn && canEditPhotos) {
+            removeBtn.addEventListener('click', () => {
+              const url = photos[photoIndex];
+              UI.confirm('¿Quitar esta foto?').then(async (ok) => {
+                if (!ok) return;
+                try {
+                  const nextPhotos = (prop.photos || []).filter((p) => p !== url);
+                  await API.properties.update(prop._id, { photos: nextPhotos });
+                  prop.photos = nextPhotos;
+                  if (photoIndex >= nextPhotos.length) photoIndex = Math.max(0, nextPhotos.length - 1);
+                  UI.toast('Foto eliminada', 'success');
+                  paint();
+                } catch (photoError) {
+                  UI.toast(photoError.message, 'error');
+                }
+              });
+            });
+          }
+        }
+
         const galleryBtn = modal.bodyEl.querySelector('[data-gallery]');
         if (galleryBtn) {
-          galleryBtn.addEventListener('click', () => UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`));
+          galleryBtn.addEventListener('click', () => {
+            UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`, { startIndex: photoIndex });
+          });
         }
         const photosInput = modal.bodyEl.querySelector('[data-photos-input]');
         if (photosInput) {
           photosInput.addEventListener('change', async () => {
             if (!photosInput.files || !photosInput.files.length) return;
             try {
-              const { added, failed } = await API.properties.uploadPhotosBatch(prop._id, photosInput.files, {
+              const { added, failed, photos: uploaded } = await API.properties.uploadPhotosBatch(prop._id, photosInput.files, {
                 chunkSize: 4,
                 retries: 1,
                 onProgress: (done, total) => UI.toast(`Subiendo fotografías… ${done}/${total}`, 'info'),
               });
+              if (Array.isArray(uploaded)) {
+                prop.photos = uploaded;
+                // Mantener la foto que se estaba viendo si sigue existiendo.
+                const currentUrl = photos[photoIndex];
+                const stillThere = uploaded.indexOf(currentUrl);
+                if (stillThere >= 0) photoIndex = stillThere;
+              }
               if (failed) UI.toast(`${added} subidas, ${failed} con error`, 'warning');
               else UI.toast(`${added} ${added === 1 ? 'foto agregada' : 'fotos agregadas'}`, 'success');
               paint();
@@ -253,23 +377,6 @@ window.Pages.inventory = {
             }
           });
         }
-        modal.bodyEl.querySelectorAll('[data-photo-remove]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const url = btn.getAttribute('data-photo-remove');
-            UI.confirm('¿Quitar esta foto?').then(async (ok) => {
-              if (!ok) return;
-              try {
-                await API.properties.update(prop._id, {
-                  photos: (prop.photos || []).filter((p) => p !== url),
-                });
-                UI.toast('Foto eliminada', 'success');
-                paint();
-              } catch (photoError) {
-                UI.toast(photoError.message, 'error');
-              }
-            });
-          });
-        });
       };
       paint().catch((error) => {
         modal.bodyEl.innerHTML = UI.errorAlert(error.message);

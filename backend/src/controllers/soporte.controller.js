@@ -27,6 +27,7 @@ const {
   Notification,
   Session,
   Chat,
+  PushSubscription,
 } = require('../models');
 const { persistAndBroadcast, getOrCreateGeneralChat, markChatAsRead } = require('./chat.controller');
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
@@ -128,11 +129,60 @@ const soporteMe = asyncHandler(async (req, res) => {
 });
 
 // ── Control de usuarios ─────────────────────────────────────────────────────
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const listarUsuarios = asyncHandler(async (req, res) => {
-  const users = await User.find()
+  const { q, status, role } = req.query;
+  const filter = {};
+  if (status === 'activo' || status === 'inactivo') filter.status = status;
+  if (role) {
+    const roleDoc = await Role.findOne({ code: String(role) }).select('_id');
+    if (roleDoc) filter.role = roleDoc._id;
+  }
+  if (q && String(q).trim()) {
+    const rx = new RegExp(escapeRegex(String(q).trim()), 'i');
+    filter.$or = [{ name: rx }, { username: rx }, { email: rx }, { position: rx }];
+  }
+
+  const users = await User.find(filter)
     .populate('role', 'code name')
-    .select('name username email photo position role status joinedAt lastLoginAt');
-  res.json({ success: true, data: users });
+    .select('name username email phone photo position role status joinedAt lastLoginAt')
+    .sort({ name: 1 })
+    .lean();
+
+  // Enriquecer cada fila con sesiones activas y dispositivos push, para que el
+  // panel muestre de un vistazo quién está conectado y quién recibe avisos.
+  const ids = users.map((u) => u._id);
+  let sessionMap = new Map();
+  let pushMap = new Map();
+  if (ids.length) {
+    const [sessions, pushes] = await Promise.all([
+      Session.aggregate([
+        { $match: { user: { $in: ids } } },
+        { $group: { _id: '$user', count: { $sum: 1 }, lastSeenAt: { $max: '$lastSeenAt' } } },
+      ]).catch(() => []),
+      PushSubscription.aggregate([
+        { $match: { user: { $in: ids } } },
+        { $group: { _id: '$user', count: { $sum: 1 }, lastUsedAt: { $max: '$lastUsedAt' } } },
+      ]).catch(() => []),
+    ]);
+    sessionMap = new Map(sessions.map((s) => [String(s._id), s]));
+    pushMap = new Map(pushes.map((p) => [String(p._id), p]));
+  }
+
+  const data = users.map((u) => {
+    const s = sessionMap.get(String(u._id));
+    const p = pushMap.get(String(u._id));
+    return {
+      ...u,
+      sessions: s ? s.count : 0,
+      lastSeenAt: s ? s.lastSeenAt : null,
+      pushDevices: p ? p.count : 0,
+      pushLastUsedAt: p ? p.lastUsedAt : null,
+    };
+  });
+
+  res.json({ success: true, data });
 });
 
 const actualizarUsuario = asyncHandler(async (req, res) => {
@@ -233,6 +283,86 @@ const restablecerPassword = asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, message: 'Contraseña restablecida correctamente' });
+});
+
+// Elimina definitivamente una cuenta y limpia sus accesos. Se protege la cuenta
+// de soporte, la propia sesión y el último administrador activo para no dejar
+// el sistema sin administración.
+const eliminarUsuario = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (String(id) === String(req.user._id)) {
+    return res.status(403).json({ success: false, message: 'No puedes eliminar tu propia cuenta de soporte.' });
+  }
+
+  const user = await User.findById(id).populate('role', 'code name');
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+  const roleCode = user.role ? user.role.code : '';
+  if (roleCode === 'superadmin') {
+    return res.status(403).json({ success: false, message: 'No se puede eliminar una cuenta de soporte (SUPERADMIN).' });
+  }
+
+  if (roleCode === 'admin' && user.status === 'activo') {
+    const adminRole = await Role.findOne({ code: 'admin' }).select('_id');
+    if (adminRole) {
+      const otrosActivos = await User.countDocuments({
+        role: adminRole._id,
+        status: 'activo',
+        _id: { $ne: user._id },
+      });
+      if (otrosActivos < 1) {
+        return res.status(403).json({
+          success: false,
+          message: 'No puedes eliminar al último administrador activo. Activa o asigna otro administrador primero.',
+        });
+      }
+    }
+  }
+
+  const userId = user._id;
+  const email = user.email;
+
+  // Corta el acceso de inmediato: sesiones, avisos y dispositivos push.
+  await sessionService.revokeUserSessions(userId, 'USER_DELETED').catch(() => {});
+  const [sesiones, dispositivos, avisos] = await Promise.all([
+    Session.deleteMany({ user: userId }).catch(() => ({ deletedCount: 0 })),
+    PushSubscription.deleteMany({ user: userId }).catch(() => ({ deletedCount: 0 })),
+    Notification.deleteMany({ user: userId }).catch(() => ({ deletedCount: 0 })),
+  ]);
+
+  // Quita al usuario de los chats para no dejar participantes inexistentes.
+  await Chat.updateMany({ participants: userId }, { $pull: { participants: userId } }).catch(() => {});
+
+  await user.deleteOne();
+
+  await logActivity({
+    entityType: 'User',
+    entityId: userId,
+    user: req.user._id,
+    action: 'eliminar_usuario',
+    message: `Soporte eliminó al usuario ${email}`,
+    data: {
+      email,
+      sessions: sesiones.deletedCount || 0,
+      pushDevices: dispositivos.deletedCount || 0,
+      notifications: avisos.deletedCount || 0,
+    },
+  });
+
+  logger.warn(`Usuario eliminado desde soporte: ${email}`, { por: req.user.email, userId: String(userId) }, 'soporte');
+
+  res.json({
+    success: true,
+    message: `Usuario ${email} eliminado`,
+    data: {
+      id: userId,
+      email,
+      message: `Usuario ${email} eliminado`,
+      sessions: sesiones.deletedCount || 0,
+      pushDevices: dispositivos.deletedCount || 0,
+      notifications: avisos.deletedCount || 0,
+    },
+  });
 });
 
 const listarRoles = asyncHandler(async (req, res) => {
@@ -1174,13 +1304,179 @@ const notificarMasivo = asyncHandler(async (req, res) => {
 });
 
 // 4) Auditoría por usuario: historial de actividad de una cuenta.
+// Acepta filtros por texto, acción, tipo de entidad y rango de fechas, además
+// de paginación. Devuelve un resumen para pintar contadores en el panel.
+function buildActivityFilter(query, fixedUserId) {
+  const filter = {};
+  if (fixedUserId) {
+    filter.user = new mongoose.Types.ObjectId(fixedUserId);
+  } else if (query.userId && mongoose.isValidObjectId(query.userId)) {
+    filter.user = new mongoose.Types.ObjectId(query.userId);
+  }
+
+  if (query.scope && query.scope !== 'todos') filter.entityType = String(query.scope);
+  if (query.action) filter.action = new RegExp(escapeRegex(query.action), 'i');
+  if (query.q && String(query.q).trim()) {
+    const rx = new RegExp(escapeRegex(String(query.q).trim()), 'i');
+    filter.$or = [{ message: rx }, { action: rx }, { entityType: rx }];
+  }
+
+  const from = query.from ? new Date(query.from) : null;
+  let to = query.to ? new Date(query.to) : null;
+  // Un valor YYYY-MM-DD debe incluir todo el día seleccionado.
+  if (to && /^\d{4}-\d{2}-\d{2}$/.test(String(query.to))) {
+    to = new Date(to.getTime() + 24 * 60 * 60 * 1000 - 1);
+  }
+  if (from && !Number.isNaN(from.getTime())) filter.createdAt = { $gte: from };
+  if (to && !Number.isNaN(to.getTime())) {
+    filter.createdAt = Object.assign(filter.createdAt || {}, { $lte: to });
+  }
+  return filter;
+}
+
+async function activitySummary(filter) {
+  const [byAction, byScope, range, total] = await Promise.all([
+    ActivityLog.aggregate([
+      { $match: filter },
+      { $group: { _id: '$action', count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: 10 },
+    ]).catch(() => []),
+    ActivityLog.aggregate([
+      { $match: filter },
+      { $group: { _id: '$entityType', count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+    ]).catch(() => []),
+    ActivityLog.aggregate([
+      { $match: filter },
+      { $group: { _id: null, first: { $min: '$createdAt' }, last: { $max: '$createdAt' } } },
+    ]).catch(() => []),
+    ActivityLog.countDocuments(filter).catch(() => 0),
+  ]);
+  return {
+    total,
+    byAction: byAction.map((row) => ({ action: row._id || 'sin_accion', count: row.count })),
+    byScope: byScope.map((row) => ({ scope: row._id || 'sin_tipo', count: row.count })),
+    firstAt: range[0] ? range[0].first : null,
+    lastAt: range[0] ? range[0].last : null,
+  };
+}
+
 const auditoriaUsuario = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const limit = Math.min(200, parseInt(req.query.limit, 10) || 60);
-  const user = await User.findById(id).populate('role', 'code name').select('name username email role status lastLoginAt');
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ success: false, message: 'Usuario inválido.' });
+  }
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 60));
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const user = await User.findById(id)
+    .populate('role', 'code name')
+    .select('name username email role status lastLoginAt position photo')
+    .lean();
   if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
-  const logs = await ActivityLog.find({ user: id }).sort({ createdAt: -1 }).limit(limit).lean();
-  res.json({ success: true, data: { user, logs } });
+
+  const filter = buildActivityFilter(req.query, id);
+  const [total, logs, summary] = await Promise.all([
+    ActivityLog.countDocuments(filter),
+    ActivityLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    activitySummary(filter),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      user,
+      logs,
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      limit,
+      summary,
+    },
+  });
+});
+
+// Actividad de TODO el equipo: mismo formato que la auditoría individual pero
+// con filtro opcional por usuario. Es la fuente de la pestaña "Actividad".
+const actividadEquipo = asyncHandler(async (req, res) => {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const filter = buildActivityFilter(req.query, null);
+
+  const [total, logs, summary, byUser] = await Promise.all([
+    ActivityLog.countDocuments(filter),
+    ActivityLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('user', 'name username email photo role')
+      .lean(),
+    activitySummary(filter),
+    ActivityLog.aggregate([
+      { $match: filter },
+      { $group: { _id: '$user', count: { $sum: 1 }, lastAt: { $max: '$createdAt' } } },
+      { $sort: { count: -1 } },
+      { $limit: 12 },
+    ]).catch(() => []),
+  ]);
+
+  const userIds = byUser.map((row) => row._id).filter(Boolean);
+  const users = userIds.length
+    ? await User.find({ _id: { $in: userIds } }).select('name username email').lean()
+    : [];
+  const userMap = new Map(users.map((u) => [String(u._id), u]));
+  const resumenUsuarios = byUser.map((row) => {
+    const u = userMap.get(String(row._id)) || {};
+    return {
+      userId: row._id,
+      name: u.name || 'Usuario eliminado',
+      username: u.username || '',
+      email: u.email || '',
+      count: row.count,
+      lastAt: row.lastAt,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      logs,
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      limit,
+      summary,
+      byUser: resumenUsuarios,
+    },
+  });
+});
+
+// 4b) Mantenimiento de notificaciones: elimina suscripciones push repetidas
+// (mismo dispositivo suscrito con varias cuentas) que provocaban avisos
+// duplicados en el celular.
+const limpiarPushSoporte = asyncHandler(async (req, res) => {
+  const push = require('../services/push.service');
+  const result = await push.cleanupDuplicates();
+  await logActivity({
+    entityType: 'System',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'limpiar_push_duplicados',
+    message: `Soporte reparó las suscripciones push (${result.removed || 0} duplicadas eliminadas)`,
+    data: result,
+  });
+  const message = result.removed
+    ? `Se eliminaron ${result.removed} suscripciones duplicadas.`
+    : 'No había suscripciones push duplicadas.';
+  res.json({
+    success: true,
+    message,
+    data: { ...result, message },
+  });
 });
 
 // 5) Acciones de mantenimiento masivo sobre todos los dispositivos conectados.
@@ -1247,6 +1543,7 @@ module.exports = {
   listarUsuarios,
   actualizarUsuario,
   restablecerPassword,
+  eliminarUsuario,
   listarRoles,
   listarConfig,
   guardarConfig,
@@ -1284,6 +1581,8 @@ module.exports = {
   diagnostico,
   notificarMasivo,
   auditoriaUsuario,
+  actividadEquipo,
+  limpiarPushSoporte,
   accionMasiva,
   listarSuscriptores,
   eliminarSuscriptor,

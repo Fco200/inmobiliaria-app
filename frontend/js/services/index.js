@@ -391,6 +391,9 @@ window.API = {
     roles: () => soporteJson('/soporte/roles'),
     actualizarUsuario: (id, body) => soporteJson(`/soporte/usuarios/${id}`, { method: 'PUT', body }),
     restablecerPassword: (id, body) => soporteJson(`/soporte/usuarios/${id}/restablecer-password`, { method: 'POST', body }),
+    eliminarUsuario: (id) => soporteJson(`/soporte/usuarios/${id}`, { method: 'DELETE' }),
+    actividadEquipo: (params) => soporteJson(`/soporte/actividad${qs(params)}`),
+    limpiarPush: () => soporteJson('/soporte/push/limpiar', { method: 'POST' }),
 
     config: () => soporteJson('/soporte/config'),
     guardarConfig: (body) => soporteJson('/soporte/config', { method: 'PUT', body }),

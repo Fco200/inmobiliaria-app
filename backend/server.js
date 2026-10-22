@@ -54,6 +54,12 @@ async function start() {
     // Asegura el canal grupal general y el canal de Soporte accesibles para el equipo.
     try { await getOrCreateGeneralChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal general:', e.message); }
     try { await getOrCreateSupportChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal de soporte:', e.message); }
+    // Un mismo dispositivo puede quedar suscrito varias veces al cambiar de
+    // cuenta; eso hacía que el celular mostrara el mismo aviso repetido.
+    try {
+      const push = require('./src/services/push.service');
+      await push.cleanupDuplicates();
+    } catch (e) { console.warn('[Push] Limpieza inicial omitida:', e.message); }
     // Limpieza de archivos subidos sin registro (fotos huérfanas): con la
     // cuota gratuita de Atlas, unas pocas fotos de celular repetidas bastan
     // para dejar la base de datos sin espacio y bloquear las escrituras.

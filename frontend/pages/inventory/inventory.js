@@ -8,7 +8,7 @@ window.Pages = window.Pages || {};
 //   - Quien capta decide ahí mismo si comparte la propiedad al inventario.
 //   - Asesores y personal: solo consultan (detalle, citas, negocios y
 //     WhatsApp) y crean apartir de ahí. No editan ni eliminan la ficha.
-//   - Administración/gerencia: además administran (editar, asignar, quitar).
+//   - Administración/gerencia: además administran (asignar, quitar).
 // No hay interruptor de publicación en este módulo.
 window.Pages.inventory = {
   title: 'Propiedades',
@@ -26,8 +26,6 @@ window.Pages.inventory = {
       ['comisiones', 'Comisiones'],
       ['otro', 'Otro (especificar)'],
     ];
-    const TIPOS_INMUEBLE = ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'];
-    const ESTADOS_PROPIEDAD = ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'];
 
     // Único listado: el inventario general del equipo.
     const state = {
@@ -97,8 +95,8 @@ window.Pages.inventory = {
     function openDetailModal(item) {
       const prop = item.property;
       // Inventario general de consulta: asesores y personal solo ven el
-      // detalle, agendan citas, crean negocios y comparten. Editar fotos, notas
-      // o la ficha queda reservado a administración/gerencia.
+      // detalle, agendan citas, crean negocios y comparten. Editar fotos o
+      // notas queda reservado a administración/gerencia.
       const puedeModificar = isBoss;
       const canEditPhotos = isBoss;
 
@@ -437,148 +435,6 @@ window.Pages.inventory = {
       });
     }
 
-    // ---- Editar propiedad ----
-
-    function openEditModal(item) {
-      const prop = item.property || {};
-      const opts = (list, current) => list.map((v) => `<option value="${v}" ${String(current) === v ? 'selected' : ''}>${v}</option>`).join('');
-      const agentOptions = agents.map((u) => `<option value="${u._id}" ${prop.responsibleUser && String(prop.responsibleUser._id || prop.responsibleUser) === String(u._id) ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('');
-      const modal = UI.openModal({
-        title: `Editar propiedad — ${propertyLabel(prop)}`,
-        body: `
-          <div class="grid grid-2">
-            <div class="form-group">
-              <label>Tipo</label>
-              <select class="form-control" data-type>${opts(TIPOS_INMUEBLE, prop.type)}</select>
-            </div>
-            <div class="form-group">
-              <label>Operación</label>
-              <select class="form-control" data-operation>${opts(['venta', 'renta'], prop.operationType)}</select>
-            </div>
-            <div class="form-group">
-              <label>Precio</label>
-              <input class="form-control" type="number" min="0" step="0.01" data-price value="${Number(prop.price) || 0}">
-            </div>
-            <div class="form-group">
-              <label>Valor del ticket</label>
-              <input class="form-control" type="number" min="0" step="0.01" data-ticket value="${Number(prop.ticketValue) || 0}">
-            </div>
-            <div class="form-group">
-              <label>Estado</label>
-              <select class="form-control" data-status>${opts(ESTADOS_PROPIEDAD, prop.status)}</select>
-            </div>
-            ${isBoss ? `<div class="form-group">
-              <label>Responsable</label>
-              <select class="form-control" data-responsible>
-                <option value="">— Sin responsable —</option>
-                ${agentOptions}
-              </select>
-            </div>` : ''}
-            ${isBoss ? `<div class="form-group" style="display:flex;align-items:center;gap:8px;">
-              <input type="checkbox" id="edit-external" data-external ${prop.isExternal ? 'checked' : ''}>
-              <label for="edit-external" style="margin:0;">Propiedad externa (ajena al equipo)</label>
-            </div>
-            <div class="form-group" data-external-wrap style="${prop.isExternal ? '' : 'display:none;'}">
-              <label>Asesor / inmobiliaria externa</label>
-              <input class="form-control" data-external-advisor value="${UI.escapeHtml(prop.externalAdvisor || '')}" placeholder="Ej. Inmobiliaria Centro…">
-            </div>` : ''}
-            <div class="form-group">
-              <label>Calle / dirección</label>
-              <input class="form-control" data-address value="${UI.escapeHtml(prop.address || '')}">
-            </div>
-            <div class="form-group">
-              <label>Colonia</label>
-              <input class="form-control" data-zone value="${UI.escapeHtml(prop.zone || '')}">
-            </div>
-            <div class="form-group">
-              <label>Ciudad</label>
-              <input class="form-control" data-city value="${UI.escapeHtml(prop.city || '')}">
-            </div>
-            <div class="form-group" style="grid-column:1/-1;">
-              <label>Fotografías</label>
-              <div data-photos-manager></div>
-            </div>
-            <div class="form-group" style="grid-column:1/-1;">
-              <label>Descripción</label>
-              <textarea class="form-control" data-description rows="3">${UI.escapeHtml(prop.description || '')}</textarea>
-            </div>
-          </div>
-        `,
-        footer: `
-          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="button" data-ok>Guardar</button>`,
-      });
-      const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
-      if (!overlay) return;
-      const cancelBtn = overlay.querySelector('[data-cancel]');
-      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-
-      // Propiedad externa: mostrar/ocultar el campo del asesor externo.
-      const externalEl = overlay.querySelector('[data-external]');
-      const externalWrap = overlay.querySelector('[data-external-wrap]');
-      if (externalEl && externalWrap) {
-        externalEl.addEventListener('change', () => {
-          externalWrap.style.display = externalEl.checked ? '' : 'none';
-        });
-      }
-
-      // Editor visual de fotografías (agregar / quitar / reordenar).
-      const pmMount = overlay.querySelector('[data-photos-manager]');
-      const photoManager = (window.PhotoManager && pmMount)
-        ? window.PhotoManager.create({ photos: Array.isArray(prop.photos) ? prop.photos : [] })
-        : null;
-      if (photoManager) pmMount.appendChild(photoManager.el);
-
-      const okBtn = overlay.querySelector('[data-ok]');
-      if (okBtn) okBtn.addEventListener('click', async () => {
-        if (okBtn.disabled) return;
-        okBtn.disabled = true;
-        try {
-          const body = {
-            type: overlay.querySelector('[data-type]').value,
-            operationType: overlay.querySelector('[data-operation]').value,
-            price: Number(overlay.querySelector('[data-price]').value) || 0,
-            ticketValue: Number(overlay.querySelector('[data-ticket]').value) || 0,
-            status: overlay.querySelector('[data-status]').value,
-            address: overlay.querySelector('[data-address]').value.trim(),
-            zone: overlay.querySelector('[data-zone]').value.trim(),
-            city: overlay.querySelector('[data-city]').value.trim(),
-            description: overlay.querySelector('[data-description]').value.trim(),
-          };
-          const responsibleEl = overlay.querySelector('[data-responsible]');
-          if (responsibleEl) body.responsibleUser = responsibleEl.value || null;
-          const extEl = overlay.querySelector('[data-external]');
-          if (extEl) {
-            body.isExternal = extEl.checked;
-            body.externalAdvisor = extEl.checked
-              ? String(overlay.querySelector('[data-external-advisor]').value || '').trim()
-              : '';
-          }
-          if (photoManager) body.photos = photoManager.getPhotos();
-          await API.properties.update(prop._id, body);
-
-          // Sube las fotos nuevas en lotes pequeños y reintenta cada lote para
-          // no perder el resto si una imagen falla.
-          const files = photoManager ? photoManager.getFiles() : [];
-          if (files.length) {
-            const { added, failed } = await API.properties.uploadPhotosBatch(prop._id, files, {
-              chunkSize: 4,
-              retries: 1,
-              onProgress: (done, total) => UI.toast(`Subiendo fotografías… ${done}/${total}`, 'info'),
-            });
-            if (failed) UI.toast(`${added} subidas, ${failed} con error`, 'warning');
-          }
-
-          UI.toast('Propiedad actualizada', 'success');
-          UI.closeModal();
-          load();
-        } catch (error) {
-          UI.toast(error.message, 'error');
-          okBtn.disabled = false;
-        }
-      });
-    }
-
     // ---- Asignar asesor (solo jefes) ----
 
     function openAssignModal(item) {
@@ -626,7 +482,7 @@ window.Pages.inventory = {
           <p class="text-muted" style="margin:4px 0 0;">
             Inventario general del equipo: aquí aparecen las propiedades que los asesores comparten desde "Captar Propiedades", incluidas las externas de otras inmobiliarias o asesores.
             ${isBoss
-              ? 'Edita, asigna o quita propiedades desde aquí.'
+              ? 'Asigna o quita propiedades desde aquí.'
               : 'Abre cualquiera para ver el detalle, agendar una cita, crear un negocio o compartir por WhatsApp. La ficha de la propiedad no se modifica desde este módulo.'}
           </p>
           ${meta ? `<div class="home-stats" style="margin-top:14px;">
@@ -679,22 +535,35 @@ window.Pages.inventory = {
         .map(([v, l]) => `<option value="${UI.escapeHtml(v)}" ${String(valor) === String(v) ? 'selected' : ''}>${UI.escapeHtml(l)}</option>`)
         .join('');
 
+      // Cada filtro va en una celda con su etiqueta: así los controles quedan
+      // alineados en rejilla (PC) y en dos columnas (móvil) en vez de sueltos.
+      const filtro = (etiqueta, control, extra) => `
+        <label class="inventory-filter${extra ? ` ${extra}` : ''}">
+          <span class="inventory-filter-label">${etiqueta}</span>
+          ${control}
+        </label>`;
+
+      const isMobile = () => !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+
       el.innerHTML = `
-        <div class="inventory-toolbar-row">
-          <input class="form-control" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}">
-          <select class="form-control" data-agent-filter>${sel('agent', [['', 'Todos los asesores'], ...agents.map((u) => [u._id, u.name])], state.agent)}</select>
+        <div class="inventory-toolbar-main">
+          <input class="form-control inventory-search" data-q type="search" placeholder="Buscar por ubicación, tipo o folio..." value="${UI.escapeHtml(state.q)}">
+          <div class="inventory-toolbar-actions">
+            <button class="btn btn-secondary btn-sm crud-filters-toggle" type="button" data-toggle-filters aria-expanded="false">&#9776;&nbsp; Filtros</button>
+            <button class="btn btn-primary btn-sm" type="button" data-search>Buscar</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-clear>Limpiar</button>
+          </div>
         </div>
-        <div class="inventory-toolbar-row">
-          <select class="form-control" data-type-filter>${sel('type', tipoOpciones, state.type)}</select>
-          <select class="form-control" data-operation-filter>${sel('operation', operacionOpciones, state.operation)}</select>
-          <select class="form-control" data-status-filter>${sel('status', estadoOpciones, state.status)}</select>
-          <select class="form-control" data-payment-filter>${sel('payment', pagoOpciones, state.payment)}</select>
-        </div>
-        <div class="inventory-toolbar-row">
-          <input class="form-control" data-min-price type="number" min="0" step="1000" placeholder="Precio mínimo" value="${UI.escapeHtml(state.minPrice)}">
-          <input class="form-control" data-max-price type="number" min="0" step="1000" placeholder="Precio máximo" value="${UI.escapeHtml(state.maxPrice)}">
-          <button class="btn btn-primary" type="button" data-search>Buscar</button>
-          <button class="btn btn-secondary" type="button" data-clear>Limpiar</button>
+        <div class="inventory-toolbar-filters${isMobile() ? ' is-collapsed' : ''}">
+          ${filtro('Asesor', `<select class="form-control" data-agent-filter>${sel('agent', [['', 'Todos los asesores'], ...agents.map((u) => [u._id, u.name])], state.agent)}</select>`)}
+          ${filtro('Tipo', `<select class="form-control" data-type-filter>${sel('type', tipoOpciones, state.type)}</select>`)}
+          ${filtro('Operación', `<select class="form-control" data-operation-filter>${sel('operation', operacionOpciones, state.operation)}</select>`)}
+          ${filtro('Estado', `<select class="form-control" data-status-filter>${sel('status', estadoOpciones, state.status)}</select>`)}
+          ${filtro('Financiamiento', `<select class="form-control" data-payment-filter>${sel('payment', pagoOpciones, state.payment)}</select>`)}
+          ${filtro('Precio', `<span class="inventory-price-range">
+            <input class="form-control" data-min-price type="number" min="0" step="1000" placeholder="Mínimo" value="${UI.escapeHtml(state.minPrice)}">
+            <input class="form-control" data-max-price type="number" min="0" step="1000" placeholder="Máximo" value="${UI.escapeHtml(state.maxPrice)}">
+          </span>`, 'inventory-filter-price')}
         </div>
       `;
 
@@ -715,10 +584,25 @@ window.Pages.inventory = {
       // sea ágil sin obligar a pulsar "Buscar".
       ['[data-agent-filter]', '[data-type-filter]', '[data-operation-filter]', '[data-status-filter]', '[data-payment-filter]']
         .forEach((attr) => el.querySelector(attr).addEventListener('change', run));
+      // El precio se aplica al salir del campo (o al pulsar Enter) para no
+      // consultar el servidor en cada tecla.
+      ['[data-min-price]', '[data-max-price]'].forEach((attr) => {
+        el.querySelector(attr).addEventListener('change', run);
+        el.querySelector(attr).addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+      });
       el.querySelector('[data-clear]').addEventListener('click', () => {
         Object.assign(state, { q: '', agent: '', type: '', operation: '', status: '', payment: '', minPrice: '', maxPrice: '', page: 1 });
         load();
       });
+      // En móvil los filtros se pliegan para dejar ver la tabla de inmediato.
+      const toggleFilters = el.querySelector('[data-toggle-filters]');
+      const filtersBox = el.querySelector('.inventory-toolbar-filters');
+      if (toggleFilters && filtersBox) {
+        toggleFilters.addEventListener('click', () => {
+          const collapsed = filtersBox.classList.toggle('is-collapsed');
+          toggleFilters.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        });
+      }
       return el;
     }
 
@@ -735,8 +619,8 @@ window.Pages.inventory = {
       }
 
       // Inventario general de consulta: el asesor solo ve el detalle, agenda
-      // citas, crea negocios y comparte. Editar, asignar, notas y eliminar
-      // quedan reservados a administración/gerencia.
+      // citas, crea negocios y comparte. Asignar, notas y quitar quedan
+      // reservados a administración/gerencia.
       const puedeAdministrar = isBoss;
 
       const rows = items.map((item, index) => {
@@ -760,7 +644,6 @@ window.Pages.inventory = {
             <td data-label="Asesor">${UI.escapeHtml(agentName)}</td>
             <td data-label="Acciones">
               <button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="view">Ver</button>
-              ${puedeAdministrar ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="edit" style="margin-left:6px;">Editar</button>` : ''}
               ${puedeAdministrar && item.observations ? `<button class="btn btn-secondary btn-sm" data-action data-index="${index}" data-kind="obs" style="margin-left:6px;" title="Ver/editar notas">Notas</button>` : ''}
               <button class="btn btn-primary btn-sm" data-action data-index="${index}" data-kind="appointment" style="margin-left:6px;">Cita</button>
               <button class="btn btn-success btn-sm" data-action data-index="${index}" data-kind="business" style="margin-left:6px;">Negocio</button>
@@ -792,7 +675,6 @@ window.Pages.inventory = {
           if (!item) return;
           const kind = btn.dataset.kind;
           if (kind === 'view') openDetailModal(item);
-          else if (kind === 'edit') openEditModal(item);
           else if (kind === 'obs') openObservationsModal(item);
           else if (kind === 'appointment') openAppointmentModal(item);
           else if (kind === 'business') openBusinessModal(item);

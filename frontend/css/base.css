@@ -895,6 +895,75 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .crud-form-grid { grid-template-columns: 1fr; }
 }
 
+/* ---- Barra de filtros del inventario general (módulo Propiedades) ----
+   Los controles van en una tarjeta: buscador y acciones arriba, filtros en
+   una rejilla con etiqueta abajo. En PC se reparten en una o dos filas y en
+   móvil en dos columnas, para que no quede una columna interminable. */
+.inventory-toolbar {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.inventory-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.inventory-toolbar-main .inventory-search {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 40px;
+}
+.inventory-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.inventory-toolbar-actions .btn { height: 40px; }
+.inventory-toolbar-filters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.inventory-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.inventory-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.inventory-filter .form-control { height: 38px; }
+/* El rango de precio son dos campos dentro de la misma celda. */
+.inventory-price-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+@media (max-width: 1199px) {
+  .inventory-toolbar-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Si la ventana crece después de plegar los filtros en el móvil, vuelven a
+   mostrarse (la clase is-collapsed solo aplica al ancho pequeño). */
+@media (min-width: 769px) {
+  .inventory-toolbar-filters.is-collapsed { display: grid; }
+}
+
 /* ---- Badges ---- */
 .badge {
   display: inline-block;
@@ -2331,14 +2400,17 @@ body.lightbox-open {
     border-radius: 10px;
   }
 
-  /* El listado del inventario usa tarjetas: se apilan bien en el celular. */
-  .inventory-toolbar-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 10px;
-  }
-  .inventory-toolbar-row .form-control { flex: 1 1 140px; min-width: 0; }
+  /* Barra de filtros del inventario en celular: buscador arriba, botones a lo
+     ancho y filtros en dos columnas que se pliegan a un botón. */
+  .inventory-toolbar { padding: 12px; }
+  .inventory-toolbar-main .inventory-search { flex: 1 1 100%; }
+  .inventory-toolbar-actions { margin-left: 0; width: 100%; }
+  .inventory-toolbar-actions .btn { flex: 1 1 auto; }
+  .inventory-toolbar-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .inventory-toolbar-filters.is-collapsed { display: none; }
+  .inventory-price-range { gap: 6px; }
+  /* El rango de precio ocupa la fila completa: los dos campos no se aprietan. */
+  .inventory-filter-price { grid-column: 1 / -1; }
 
   .page-header { flex-direction: column; align-items: stretch; gap: 10px; }
   .page-header h2 { font-size: 20px; }

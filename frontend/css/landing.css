@@ -33,7 +33,9 @@
 .landing-brand-logo {
   height: 40px;
   width: auto;
-  filter: drop-shadow(0 0 8px rgba(123, 63, 160, 0.4));
+  /* El logo es blanco (contrasta con la cabecera oscura): la sombra es suave
+     y oscura para que destaque sin ensuciar el trazo. */
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45));
 }
 
 .landing-brand small {

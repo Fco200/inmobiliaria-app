@@ -12,6 +12,9 @@
     "Chat: se corrigieron los mensajes duplicados y la lentitud al cargar; ahora muestra el día de cada mensaje y avisa cuando se pierde la conexión.",
     "Chat: se agregaron mensajes rápidos con los saludos (buenos días, buenas tardes, buenas noches, hola equipo) para todo el equipo.",
     "Acceso: se corrigió que los intentos de inicio de sesión de una persona bloquearan al resto del equipo; ahora cada quien tiene su propio límite.",
-    "Rendimiento: los listados y el chat cargan mucho más rápido cuando hay 50 o más usuarios conectados a la vez."
+    "Rendimiento: los listados y el chat cargan mucho más rápido cuando hay 50 o más usuarios conectados a la vez.",
+    "Propiedades: se quitó el botón Editar del inventario general, que abría un formulario que no lograba cerrarse al guardar.",
+    "Propiedades: se reorganizaron los filtros del inventario general para que se vean ordenados en computadora y en celular.",
+    "Logo: el logo de la app ahora es la versión en blanco, y se ve mejor en la pestaña del navegador, en el ícono del celular y en las páginas públicas."
   ]
 }

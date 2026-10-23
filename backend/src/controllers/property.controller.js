@@ -10,6 +10,66 @@ const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
 const { normalizePhotos } = require('../utils/photos');
 
+function normalizeFolio(value) {
+  return String(value == null ? '' : value).trim().replace(/\s+/g, ' ').slice(0, 60);
+}
+
+function isFolioDuplicateError(err) {
+  if (!err) return false;
+  if (err.code === 11000) {
+    const keyPattern = err.keyPattern || {};
+    const keyValue = err.keyValue || {};
+    if (keyPattern.folio || (keyValue && Object.prototype.hasOwnProperty.call(keyValue, 'folio'))) return true;
+    if (typeof err.message === 'string' && /folio/i.test(err.message)) return true;
+  }
+  return false;
+}
+
+async function nextAutomaticFolio(extra = 0) {
+  const year = new Date().getFullYear();
+  const docs = await Property.find({ folio: { $regex: `^INMO-\\d+-${year}$` } })
+    .select('folio')
+    .lean();
+  let max = 0;
+  docs.forEach((doc) => {
+    const folio = String(doc.folio || '');
+    const match = folio.match(/^INMO-(\d+)-(\d{4})$/);
+    if (match && Number(match[2]) === year) {
+      const num = Number(match[1]);
+      if (!Number.isNaN(num) && num > max) max = num;
+    }
+  });
+  let seq = max + 1 + Number(extra || 0);
+  let candidate;
+  do {
+    candidate = `INMO-${String(seq).padStart(3, '0')}-${year}`;
+    seq += 1;
+    // avoid infinite loop
+    if (seq > max + 5000) break;
+  } while (await Property.exists({ folio: candidate }));
+  return candidate;
+}
+
+async function resolveUniqueFolio(requested, excludeId) {
+  let base = normalizeFolio(requested);
+  if (!base) return nextAutomaticFolio();
+  // try base first
+  let candidate = base;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (attempt === 0) {
+      candidate = base;
+    } else {
+      candidate = `${base}-${attempt + 1}`;
+    }
+    const query = { folio: candidate };
+    if (excludeId) query._id = { $ne: excludeId };
+    const exists = await Property.exists(query);
+    if (!exists) return candidate;
+  }
+  // fallback
+  return nextAutomaticFolio(1000 + Math.floor(Math.random() * 1000));
+}
+
 const propertyCrud = buildCrud(Property, {
   populate: ['owner', 'responsibleUser'],
   searchFields: ['address', 'zone', 'city', 'state', 'description'],
@@ -252,23 +312,39 @@ async function deletePhotosFromStorage(urls) {
 }
 
 const create = asyncHandler(async (req, res) => {
-  const body = { ...req.body };
+  const body = { ...(req.body || {}) };
   if (body.photos !== undefined) body.photos = normalizePhotos(body.photos);
-  if (!isBoss(req) || !body.responsibleUser) body.responsibleUser = req.user._id;
-  
-  // Generar folio INMO-###-AÑO
-  const year = new Date().getFullYear();
-  const count = await Property.countDocuments();
-  const nextNum = String(count + 1).padStart(3, '0');
-  body.folio = `INMO-${nextNum}-${year}`;
-  
-  const property = await Property.create(body).catch(async (error) => {
-    // Si la creación falla (por ejemplo, la base de datos está sin espacio),
-    // las fotos que se subieron antes quedan huérfanas ocupando storage.
-    // Se borran aquí mismo para no acumular archivos sin uso.
+  // El asesor responsable siempre debe ser el usuario que sube la propiedad
+  body.responsibleUser = req.user._id;
+
+  const requestedFolio = body.folio;
+  let property = null;
+  let lastErr = null;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      let folioToUse;
+      if (attempt === 0) {
+        folioToUse = await resolveUniqueFolio(requestedFolio);
+      } else {
+        folioToUse = await resolveUniqueFolio(requestedFolio ? `${requestedFolio}-${attempt + 1}` : '');
+      }
+      const createBody = { ...body, folio: folioToUse };
+      property = await Property.create(createBody);
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (isFolioDuplicateError(err)) {
+        continue;
+      }
+      await deletePhotosFromStorage(body.photos);
+      throw err;
+    }
+  }
+  if (!property) {
     await deletePhotosFromStorage(body.photos);
-    throw error;
-  });
+    if (lastErr) throw lastErr;
+    throw new Error('No se pudo generar un folio único para la propiedad');
+  }
   await logActivity({
     entityType: 'Property',
     entityId: property._id,
@@ -306,7 +382,13 @@ const update = asyncHandler(async (req, res) => {
   const previousPublished = Boolean(property.isPublished);
   const previousPhotos = Array.isArray(property.photos) ? [...property.photos] : [];
 
-  Object.assign(property, req.body);
+  const body = req.body ? { ...req.body } : {};
+  if (body.responsibleUser === undefined) {
+    // No cambiar el responsable si no viene explícito; pero para asegurar
+    // consistencia con la solicitud, si es el propio usuario se mantiene
+  }
+
+  Object.assign(property, body);
   if (req.body.photos !== undefined) property.photos = normalizePhotos(req.body.photos);
 
   if (req.body.price !== undefined && Number(req.body.price) !== previousPrice) {
@@ -317,7 +399,41 @@ const update = asyncHandler(async (req, res) => {
     });
   }
 
-  await property.save();
+  if (req.body.folio !== undefined) {
+    const requestedFolio = req.body.folio;
+    if (normalizeFolio(requestedFolio) !== String(property.folio || '').trim()) {
+      let saved = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        try {
+          let folioToUse;
+          if (attempt === 0) {
+            folioToUse = await resolveUniqueFolio(requestedFolio, property._id);
+          } else {
+            folioToUse = await resolveUniqueFolio(requestedFolio ? `${requestedFolio}-${attempt + 1}` : '', property._id);
+          }
+          property.folio = folioToUse;
+          await property.save();
+          saved = property;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (isFolioDuplicateError(err)) {
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!saved) {
+        if (lastErr) throw lastErr;
+        throw new Error('No se pudo actualizar el folio');
+      }
+    } else {
+      await property.save();
+    }
+  } else {
+    await property.save();
+  }
 
   const nowPublished = Boolean(property.isPublished);
   const justPublished = nowPublished && !previousPublished;

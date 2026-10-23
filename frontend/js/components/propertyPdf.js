@@ -81,15 +81,12 @@ window.PropertyPdf = (() => {
       .join(', ');
   }
 
-  // Logo de la inmobiliaria para el encabezado del PDF. Se carga una sola vez
-  // (se cachea) y se convierte a PNG data-URL para conservar la transparencia.
-  // Si no está disponible, el PDF se genera igual sin logo. Se intenta primero
-  // con la versión en blanco (se ve mejor sobre el fondo morado) y se cae al
-  // logo original si falla.
   let logoCache;
   function loadLogo() {
     if (logoCache !== undefined) return Promise.resolve(logoCache);
     const candidates = [
+      'icons/logoinmobles_ennegro.jfif',
+      'logoinmobles_ennegro.jfif',
       'logoinmobles-blanco.png',
       'icons/logoinmobles-blanco.png',
       'icons/logoinmobles.png',
@@ -293,7 +290,7 @@ window.PropertyPdf = (() => {
   // El logo ya viene cargado, así que es SÍNCRONO: se puede llamar dentro de
   // bucles sin volverlos async.
   function paintHeader(doc, pageW, margin, logo, rightText) {
-    doc.setFillColor(INK[0], INK[1], INK[2]);
+    doc.setFillColor(255, 255, 255);
     doc.rect(0, 0, pageW, 58, 'F');
     // Franja dorada inferior del encabezado.
     doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
@@ -308,7 +305,7 @@ window.PropertyPdf = (() => {
         titleX = margin + logoW + 16;
       } catch (e) { /* sin logo: el encabezado queda igual */ }
     }
-    doc.setTextColor(255, 255, 255);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
     doc.text('Ficha de propiedad', titleX, 34);
@@ -384,7 +381,7 @@ window.PropertyPdf = (() => {
       doc.rect(imgX, imgY, 64, 16, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       doc.text('PORTADA', imgX + 8, imgY + 11);
       doc.setLineWidth(0.2);
       y += 6 + h + 16;
@@ -672,20 +669,9 @@ window.PropertyPdf = (() => {
       }
     }
 
-    // Respaldo: descargar el PDF y abrir WhatsApp con el mensaje de texto.
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = pdf.filename || 'propiedad.pdf';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }
-    if (phone && window.Format && Format.waNumber && Format.waNumber(phone)) {
-      window.open(`https://wa.me/${Format.waNumber(phone)}?text=${encodeURIComponent(previewText || '')}`, '_blank', 'noopener');
-    }
+    // Si se llama con un tel�fono (seleccionado), el flujo principal ya abre
+    // WhatsApp directamente con el mensaje. No abrimos otra ventana aquí para
+    // evitar doble apertura o ventanas bloqueadas.
     return 'downloaded';
   }
 

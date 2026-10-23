@@ -96,24 +96,24 @@ window.AppVersion = (() => {
     markModalShown();
 
     const notes = latest && Array.isArray(latest.notes) && latest.notes.length
-      ? latest.notes.slice(0, 6)
+      ? latest.notes.filter(Boolean).slice(0, 4)
       : [];
     const versionText = latest && latest.version ? UI.escapeHtml(String(latest.version)) : '';
 
     const modal = UI.openModal({
       title: `🎉 Nueva versión disponible${versionText ? ` — v${versionText}` : ''}`,
       body: `
-        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, tu CRM se acaba de actualizar. Estas son las novedades:</p>
+        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, tu CRM se acaba de actualizar. Estas son algunas de las novedades:</p>
         ${notes.length
           ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
               ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
              </ul>`
           : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
-        <p class="text-muted" style="font-size:12px;margin:14px 0 0;">Si notas algo raro, ve a <strong>Actualizaciones</strong> y pulsa "Actualizar ahora" para refrescar la app.</p>
+        <h4 class="update-modal-title">Actualiza tu app desde el módulo de Actualizaciones y da clic en “Actualizar ahora”.</h4>
       `,
       footer: `
         <button class="btn btn-secondary" type="button" data-update-later>Después</button>
-        <a class="btn btn-primary" href="actualizaciones.html" data-update-go>Ver mejoras</a>
+        <a class="btn btn-primary" href="actualizaciones.html" data-update-go>Ir a Actualizaciones</a>
       `,
     });
 

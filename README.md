@@ -168,6 +168,36 @@ para habilitar las notificaciones push en producción. El paquete no depende de
 Web Push externos (motor integrado), por lo que no hace falta `npm install`
 adicional.
 
+### Escalabilidad (1000+ peticiones)
+
+Los valores por defecto ya están preparados para picos de más de 1000
+peticiones concurrentes. Se pueden ajustar por variables de entorno sin tocar el
+código:
+
+```
+API_RATE_MAX=20000            # peticiones por usuario cada 15 min
+API_RATE_MAX_ANON=2000        # peticiones por IP sin sesión cada 15 min
+API_RATE_WINDOW_MS=900000     # ventana del límite (15 min)
+
+MONGO_MAX_POOL=100            # conexiones simultáneas a MongoDB
+MONGO_MIN_POOL=10
+MONGO_MAX_CONNECTING=10
+MONGO_WAIT_QUEUE_MS=30000
+
+SERVER_MAX_CONNECTIONS=2048
+SERVER_KEEPALIVE_TIMEOUT=65000
+SERVER_HEADERS_TIMEOUT=66000
+SERVER_REQUEST_TIMEOUT=600000
+```
+
+Si el plan de MongoDB Atlas tiene un límite de conexiones menor, baja
+`MONGO_MAX_POOL` (por ejemplo a 50).
+
+Los avisos internos de tipo "nueva propiedad que le puede interesar a un
+cliente" están desactivados por defecto. Para volver a generarlos define
+`NOTIFY_INTERESTED_CLIENTS=true`; al arrancar con la opción desactivada se
+eliminan los avisos antiguos de ese tipo.
+
 ## Contacto directo con clientes
 
 Desde el módulo de Clientes, cada fila muestra botones para:

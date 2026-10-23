@@ -22,7 +22,7 @@ const maintenanceJob = require('./src/jobs/maintenance.job');
 const storageJob = require('./src/jobs/storage.job');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { User, Session } = require('./src/models');
+const { User, Session, Notification } = require('./src/models');
 const { getOrCreateGeneralChat, getOrCreateSupportChat, persistAndBroadcast } = require('./src/controllers/chat.controller');
 const { setIo } = require('./src/services/notification.service');
 const sessionService = require('./src/services/session.service');
@@ -51,6 +51,25 @@ async function start() {
   if (connection) {
     await seed();
     startJobs();
+    // Los avisos internos de tipo "nueva_propiedad" ("Se publicó una casa…
+    // coincide con los intereses de X") ya no se generan por defecto. Aquí se
+    // eliminan los que quedaron de versiones anteriores para que la campana
+    // del equipo quede limpia. Si se reactivan con
+    // NOTIFY_INTERESTED_CLIENTS=true, la limpieza NO se ejecuta (de lo
+    // contrario borraría los avisos nuevos en cada reinicio).
+    const notifyInterestedClients = /^(1|true|si|sí)$/i.test(
+      String(process.env.NOTIFY_INTERESTED_CLIENTS || 'false')
+    );
+    if (!notifyInterestedClients) {
+      try {
+        const removed = await Notification.deleteMany({ type: 'nueva_propiedad' });
+        if (removed.deletedCount) {
+          console.log(`[Notificaciones] Eliminados ${removed.deletedCount} avisos antiguos de "nueva propiedad".`);
+        }
+      } catch (e) {
+        console.warn('[Notificaciones] No se pudieron limpiar los avisos antiguos:', e.message);
+      }
+    }
     // Asegura el canal grupal general y el canal de Soporte accesibles para el equipo.
     try { await getOrCreateGeneralChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal general:', e.message); }
     try { await getOrCreateSupportChat(); } catch (e) { console.error('[Chat] No se pudo crear el canal de soporte:', e.message); }
@@ -69,6 +88,20 @@ async function start() {
   const server = app.listen(port, () => {
     console.log(`Servidor iniciado en el puerto ${port} (${nodeEnv})`);
   });
+
+  // Soporte para 1000+ conexiones concurrentes:
+  //  - `maxConnections`: tope alto de sockets simultáneos (Node no limita por
+  //    defecto, pero un valor explícito evita agotar descriptores del sistema
+  //    sin control).
+  //  - `keepAliveTimeout`/`headersTimeout`: mantiene vivas las conexiones
+  //    reutilizables (el CRM hace muchas peticiones seguidas) sin cortar
+  //    cabeceras que todavía se están enviando.
+  //  - `requestTimeout`: 10 min para que una subida de fotos grande no se
+  //    corte a la mitad; el cliente sigue viendo el aviso de "subiendo".
+  server.maxConnections = Number(process.env.SERVER_MAX_CONNECTIONS || 2048);
+  server.keepAliveTimeout = Number(process.env.SERVER_KEEPALIVE_TIMEOUT || 65000);
+  server.headersTimeout = Number(process.env.SERVER_HEADERS_TIMEOUT || 66000);
+  server.requestTimeout = Number(process.env.SERVER_REQUEST_TIMEOUT || 10 * 60 * 1000);
 
   const io = new Server(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },

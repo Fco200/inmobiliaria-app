@@ -179,7 +179,7 @@ window.Pages.inventory = {
 
         modal.bodyEl.innerHTML = `
           ${negociosHtml}
-          <div class="grid grid-2" style="align-items:start;">
+          <div class="inventory-detail-grid">
             <div>
               ${photos.length
                 ? `<div class="property-carousel" data-carousel>

@@ -32,6 +32,26 @@ const INTENTIONS_BY_OPERATION = {
   renta: ['rentar', 'alquilar'],
 };
 
+// Las notificaciones internas de tipo "nueva_propiedad" ("Se publicó una casa…
+// coincide con los intereses de X") se desactivaron porque llenaban la campana
+// con avisos que el equipo no utiliza. Se pueden reactivar con la variable de
+// entorno NOTIFY_INTERESTED_CLIENTS=true sin tocar el código.
+const NOTIFY_INTERESTED_CLIENTS = /^(1|true|si|sí)$/i.test(
+  String(process.env.NOTIFY_INTERESTED_CLIENTS || 'false')
+);
+
+// Ejecuta tareas secundarias (correos, avisos automáticos) DESPUÉS de responder
+// al cliente. Antes el guardado de una propiedad esperaba a enviar el
+// newsletter a todos los suscriptores, uno por uno, y por eso el asesor veía
+// que "se tardaba en subir la propiedad".
+function runInBackground(label, task) {
+  setImmediate(() => {
+    Promise.resolve()
+      .then(task)
+      .catch((error) => console.error(`[Segundo plano] ${label}:`, error && error.message));
+  });
+}
+
 // Catálogo LIGERO de propiedades para selects con búsqueda (citas, negocios,
 // documentos, inventario, egresos). Devuelve solo _id, folio, tipo, operación y
 // ubicación para no arrastrar el documento completo, y acepta ?q para filtrar
@@ -81,6 +101,7 @@ const options = asyncHandler(async (req, res) => {
 // su propia publicación (era la causa de que al asesor le llegara el aviso de
 // "nueva propiedad" que él mismo había generado).
 async function notifyInterestedClients(property, excludeUserId) {
+  if (!NOTIFY_INTERESTED_CLIENTS) return 0;
   const intentions = INTENTIONS_BY_OPERATION[property.operationType] || [];
   if (!intentions.length || !property.isPublished) return 0;
 
@@ -255,17 +276,22 @@ const create = asyncHandler(async (req, res) => {
     action: 'creacion',
     message: `Se registró la propiedad (${property.type} en ${property.zone || property.city || 'sin ubicación'})`,
   });
-  await notifyInterestedClients(property, req.user._id);
-  await notifyNewsletter(property);
 
   // Si se registró ya compartida, aparece de inmediato en el inventario general.
   if (property.isPublished) {
     await syncInventoryOnPublish(property, true, property.responsibleUser);
-    // Aviso por correo al asesor responsable (además del newsletter).
-    await notifyAdvisorPublished(property, 0);
   }
 
+  // Se responde YA con la propiedad creada. Los correos/avisos secundarios se
+  // procesan en segundo plano para que el asesor no tenga que esperar (y pueda
+  // cerrar la ventana) mientras se subieron las fotos.
   res.status(201).json({ success: true, data: property });
+
+  runInBackground('avisos de propiedad creada', async () => {
+    await notifyInterestedClients(property, req.user._id);
+    await notifyNewsletter(property);
+    if (property.isPublished) await notifyAdvisorPublished(property, 0);
+  });
 });
 
 const update = asyncHandler(async (req, res) => {
@@ -294,15 +320,9 @@ const update = asyncHandler(async (req, res) => {
   await property.save();
 
   const nowPublished = Boolean(property.isPublished);
+  const justPublished = nowPublished && !previousPublished;
   if (nowPublished !== previousPublished) {
     await syncInventoryOnPublish(property, nowPublished, req.body.assignedAgent || property.responsibleUser);
-    // Publicar desde la edición también avisa a los asesores con clientes
-    // interesados (nunca al propio autor de la publicación).
-    if (nowPublished && !previousPublished) {
-      const interesados = await notifyInterestedClients(property, req.user._id);
-      await notifyNewsletter(property);
-      await notifyAdvisorPublished(property, interesados);
-    }
   }
 
   // Fotos quitadas en la edición: se borran del almacenamiento si ya ninguna
@@ -332,6 +352,16 @@ const update = asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, data: property });
+
+  // Publicar desde la edición avisa a clientes interesados y al asesor, pero
+  // sin retrasar la respuesta (el envío de correos puede tardar varios segundos).
+  if (justPublished) {
+    runInBackground('avisos de publicación', async () => {
+      const interesados = await notifyInterestedClients(property, req.user._id);
+      await notifyNewsletter(property);
+      await notifyAdvisorPublished(property, interesados);
+    });
+  }
 });
 
 const remove = asyncHandler(async (req, res) => {
@@ -384,9 +414,7 @@ const togglePublish = asyncHandler(async (req, res) => {
 
   await syncInventoryOnPublish(property, isPublished, req.body.assignedAgent || null);
 
-  if (isPublished && !previousPublished) {
-    await notifyNewsletter(property);
-  }
+  const justPublished = isPublished && !previousPublished;
 
   await logActivity({
     entityType: 'Property',
@@ -396,13 +424,10 @@ const togglePublish = asyncHandler(async (req, res) => {
     message: isPublished ? 'Propiedad publicada en inventario' : 'Propiedad despublicada',
   });
 
+  // Con la generación de avisos "nueva_propiedad" desactivada, esta llamada
+  // devuelve 0 de inmediato. Se conserva para poder reactivarla con
+  // NOTIFY_INTERESTED_CLIENTS=true.
   const notified = isPublished ? await notifyInterestedClients(property, req.user._id) : 0;
-
-  // Aviso por correo al asesor responsable (nunca al propio autor, que ya sabe
-  // que publicó): cierra el ciclo para que el flujo quede limpio.
-  if (isPublished && !previousPublished) {
-    await notifyAdvisorPublished(property, notified);
-  }
 
   res.json({
     success: true,
@@ -410,6 +435,14 @@ const togglePublish = asyncHandler(async (req, res) => {
     notifiedClients: notified,
     data: property,
   });
+
+  // El newsletter y el correo al asesor se envían después de responder.
+  if (justPublished) {
+    runInBackground('avisos de publicación', async () => {
+      await notifyNewsletter(property);
+      await notifyAdvisorPublished(property, notified);
+    });
+  }
 });
 
 // Añade una o varias fotos a una propiedad (multipart: campo "photos").

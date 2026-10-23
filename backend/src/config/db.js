@@ -8,21 +8,24 @@ async function connectDB() {
     mongoose.set('strictQuery', true);
     const conn = await mongoose.connect(mongodbUri, {
       serverSelectionTimeoutMS: 5000,
-      // Tamaño del pool de conexiones a MongoDB. Por defecto el driver abre
-      // hasta 100 conexiones, pero en una instancia de Render (1 vCPU) cada
-      // conexión abierta consume memoria y CPU. Con 50+ usuarios simultáneos
-      // se dimensiona un pool acotado y con espera máxima corta: si se
-      // agota, la petición espera un momento en vez de quedarse colgada
-      // indefinidamente (que era lo que producía la app "travada").
+      // Tamaño del pool de conexiones a MongoDB. Con 1000+ peticiones
+      // concurrentes (o picos de cargas de fotos y listados) un pool de 40 se
+      // agotaba y las peticiones esperaban en cola hasta expirar, lo que se
+      // veía como la app "travada".
       //
-      // 40 conexiones: suficiente para atender a 50+ usuarios a la vez sin
-      // abrir documentaciones innecesarias en MongoDB Atlas (cada conexión
-      // cuenta para el límite del plan). Si se sube el número de usuarios
-      // simultáneos, se ajusta con MONGO_MAX_POOL sin tocar el código.
-      maxPoolSize: Number(process.env.MONGO_MAX_POOL || 40),
-      minPoolSize: Number(process.env.MONGO_MIN_POOL || 5),
+      // 100 conexiones + `maxConnecting` 10: atiende ráfagas grandes sin
+      // abrir conexiones de más en Atlas. Si el plan de MongoDB tiene un
+      // límite menor, se ajusta con MONGO_MAX_POOL (p. ej. 50) sin tocar el
+      // código. La cola espera hasta 30 s, tiempo suficiente para que una
+      // operación pesada (subida de varias fotos) libere una conexión.
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL || 100),
+      minPoolSize: Number(process.env.MONGO_MIN_POOL || 10),
+      // Cuántas conexiones nuevas puede abrir el driver a la vez. Con el
+      // valor por defecto (2) una ráfaga de 1000 peticiones tardaba en llenar
+      // el pool; 10 lo llena en una fracción del tiempo.
+      maxConnecting: Number(process.env.MONGO_MAX_CONNECTING || 10),
       maxIdleTimeMS: Number(process.env.MONGO_MAX_IDLE_MS || 60000),
-      waitQueueTimeoutMS: Number(process.env.MONGO_WAIT_QUEUE_MS || 15000),
+      waitQueueTimeoutMS: Number(process.env.MONGO_WAIT_QUEUE_MS || 30000),
       // Recupera rápido ante un corte de red de MongoDB (Render reinicia la
       // base en los planes gratuitos) en lugar de quedarse colgado 30 s.
       heartbeatFrequencyMS: 10000,

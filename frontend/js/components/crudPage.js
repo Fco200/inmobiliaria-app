@@ -474,9 +474,38 @@ ${rowXml}
             form.reportValidity();
             return;
           }
-          const submitBtn = form.querySelector('[type="submit"]');
-          if (submitBtn && submitBtn.disabled) return;
-          if (submitBtn) submitBtn.disabled = true;
+          // El botón de guardar vive en el footer del modal (fuera del <form>),
+          // por eso se busca en el overlay y no dentro del formulario. Antes no
+          // se encontraba y se podía enviar dos veces el mismo registro.
+          const submitBtn = overlay
+            ? overlay.querySelector('[type="submit"][form="crud-form"]')
+            : form.querySelector('[type="submit"]');
+          if (form._crudSubmitting || (submitBtn && submitBtn.disabled)) return;
+          form._crudSubmitting = true;
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.dataset.originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Guardando...';
+          }
+
+          // Aviso persistente mientras suben las fotos y se guarda el registro.
+          // El usuario puede cerrar el modal: la petición continúa en segundo
+          // plano y al terminar se refresca el listado.
+          const noticeText = typeof config.submitNotice === 'function'
+            ? config.submitNotice(isEdit)
+            : config.submitNotice;
+          let noticeEl = null;
+          if (noticeText && bodyEl) {
+            noticeEl = document.createElement('div');
+            noticeEl.className = 'submit-progress';
+            noticeEl.setAttribute('role', 'status');
+            noticeEl.setAttribute('aria-live', 'polite');
+            noticeEl.innerHTML = `
+              <span class="submit-progress-spinner" aria-hidden="true"></span>
+              <span>${UI.escapeHtml(noticeText)}</span>`;
+            bodyEl.insertBefore(noticeEl, bodyEl.firstChild);
+          }
+
           try {
             const values = UI.collectForm(form);
             const body = config.formData ? config.formData(values, record, form) : values;
@@ -488,11 +517,20 @@ ${rowXml}
               UI.toast('Registro creado', 'success');
             }
             if (window.Sounds) window.Sounds.confirmation().catch(() => {});
-            UI.closeModal();
+            // Cierra SOLO el modal desde el que se envió: si el usuario ya lo
+            // había cerrado (o abrió otro) no se debe cerrar la ventana nueva.
+            if (overlay && document.getElementById('modal-overlay') === overlay) {
+              UI.closeModal();
+            }
             load();
           } catch (error) {
             UI.toast(error.message, 'error');
-            if (submitBtn) submitBtn.disabled = false;
+            form._crudSubmitting = false;
+            if (noticeEl && noticeEl.parentNode) noticeEl.remove();
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              if (submitBtn.dataset.originalText) submitBtn.textContent = submitBtn.dataset.originalText;
+            }
           }
         });
       },

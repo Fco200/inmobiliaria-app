@@ -93,21 +93,21 @@ if (!isProduction) {
 //    recursos públicos) se recurre a la IP.
 //  - Cada usuario tiene SU PROPIO cubo: 50 personas conectadas no se estorban
 //    entre sí, así que el límite se puede subir sin castigar a nadie.
-//  - 3000 por usuario cada 15 min (~200/min sostenidos). Es de sobra para el
-//    uso real del CRM (un asesor escribiendo en un buscador no llega a
-//    30/min) y deja margen para los picos: 50 usuarios a la vez golpeando el
-//    mismo listado.
+//  - 20000 por usuario cada 15 min (~1300/min sostenidos): el CRM soporta
+//    operaciones masivas (cargas de fotos, actualizaciones de inventario y
+//    varios módulos abiertos) sin que el equipo vea "Demasiadas peticiones".
+//    Sigue siendo configurable con API_RATE_MAX.
 //  - Para lo que NO lleva token (catálogo público, consultas sin sesión) se
-//    usa un tope más bajo POR IP, porque ahí sí pueden coincidir muchas
-//    personas detrás de la misma salida.
+//    usa un tope de 2000 POR IP, porque ahí sí pueden coincidir muchas
+//    personas detrás de la misma salida. Se ajusta con API_RATE_MAX_ANON.
 //  - `skipSuccessfulRequests` NO se usa (queremos contar todo), pero se
 //    excluyen del conteo los preflight CORS (OPTIONS), que no son peticiones
 //    de datos reales.
 //  - Se usa el store en memoria por defecto; con `trust proxy` la IP real del
 //    cliente se respeta detrás de Render/Nginx.
 const API_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
-const API_RATE_MAX = Number(process.env.API_RATE_MAX || 3000);
-const API_RATE_MAX_ANON = Number(process.env.API_RATE_MAX_ANON || 600);
+const API_RATE_MAX = Number(process.env.API_RATE_MAX || 20000);
+const API_RATE_MAX_ANON = Number(process.env.API_RATE_MAX_ANON || 2000);
 
 // Extrae el id del usuario del token Bearer (verificando la firma con el
 // mismo secreto que usa la autenticación) para poder limitar por usuario.

@@ -1,20 +1,14 @@
 {
-  "version": "2.20",
+  "version": "2.25",
   "channel": "estable",
-  "title": "Actualización 2.20",
-  "date": "2026-10-21",
+  "title": "Actualización 2.25",
+  "date": "2026-10-23",
   "notes": [
-    "Citas: se corrigió el diseño de la barra de filtros y del formulario, que se veían separados y desalineados en computadora.",
-    "Calendario: se corrigió la zona horaria que dejaba citas fuera del rango y ahora administración y gerencia ven las citas de todo el equipo.",
-    "Selectores de cliente, propiedad, negocio y asesor: se corrigió el envío de valores que el servidor rechazaba.",
-    "Chat: se corrigió que en computadora el chat se cortaba por abajo y no se veían los mensajes.",
-    "Chat: se corrigió que al abrir la burbuja de chat aparecía la lista de participantes tapando la conversación; ahora el chat se ve de inmediato y la lista se abre a un botón.",
-    "Chat: se corrigieron los mensajes duplicados y la lentitud al cargar; ahora muestra el día de cada mensaje y avisa cuando se pierde la conexión.",
-    "Chat: se agregaron mensajes rápidos con los saludos (buenos días, buenas tardes, buenas noches, hola equipo) para todo el equipo.",
-    "Acceso: se corrigió que los intentos de inicio de sesión de una persona bloquearan al resto del equipo; ahora cada quien tiene su propio límite.",
-    "Rendimiento: los listados y el chat cargan mucho más rápido cuando hay 50 o más usuarios conectados a la vez.",
-    "Propiedades: se quitó el botón Editar del inventario general, que abría un formulario que no lograba cerrarse al guardar.",
-    "Propiedades: se reorganizaron los filtros del inventario general para que se vean ordenados en computadora y en celular.",
-    "Logo: el logo de la app ahora es la versión en blanco, y se ve mejor en la pestaña del navegador, en el ícono del celular y en las páginas públicas."
+    "Inventario en celular: las fotos del detalle ya no se abren gigantes ni se corrompen; el carrusel y las miniaturas quedan contenidos en la pantalla horizontal.",
+    "Propiedades: al guardar o crear una propiedad se muestra un aviso de que se está subiendo y que ya se puede cerrar la ventana; el listado se actualiza aunque se cierre el formulario.",
+    "Propiedades: las fotos se suben de 3 en 3 conservando el orden (la portada sigue siendo la primera), por lo que la carga es más rápida.",
+    "Notificaciones: se dejaron de generar los avisos de \"se publicó una propiedad que le puede interesar a un cliente\" y se limpiaron los existentes. Se pueden reactivar con NOTIFY_INTERESTED_CLIENTS=true.",
+    "Rendimiento: se aumentaron los límites de peticiones y el pool de MongoDB, y los correos/avisos de una propiedad se envían en segundo plano para soportar más de 1000 peticiones.",
+    "Rendimiento: el servidor mantiene más conexiones simultáneas y espera hasta 10 minutos una subida de fotos grande sin cortarla."
   ]
 }

@@ -659,19 +659,19 @@ window.LoginPage = (() => {
     if (readStorage(MODAL_VERSION_KEY) === String(data.hash)) return;
     writeStorage(MODAL_VERSION_KEY, data.hash);
 
-    const notes = Array.isArray(data.notes) ? data.notes.slice(0, 6).filter(Boolean) : [];
+    const notes = Array.isArray(data.notes) ? data.notes.filter(Boolean).slice(0, 4) : [];
     const versionText = data.version ? ` — v${data.version}` : '';
     const modal = UI.openModal({
       title: `&#127881;&nbsp; Nueva versión disponible${versionText}`,
       size: 520,
       body: `
-        <p style="margin-top:0;">Tu aplicación se ha actualizado. Estas son las novedades:</p>
+        <p style="margin-top:0;">Tu aplicación se ha actualizado. Estas son algunas de las novedades:</p>
         ${notes.length
           ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
               ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
              </ul>`
           : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
-        <p class="text-muted" style="font-size:12px;margin:14px 0 0;">Pulsa <strong>Actualizar ahora</strong> para cargar la última versión. Puedes entrar igualmente y actualizarla después desde el módulo <strong>Actualizaciones</strong>.</p>
+        <h4 class="update-modal-title">Actualiza tu app desde el módulo de Actualizaciones y da clic en “Actualizar ahora”.</h4>
       `,
       footer: `
         <button class="btn btn-secondary" type="button" data-update-later>Entrar sin actualizar</button>

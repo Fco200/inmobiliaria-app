@@ -1897,6 +1897,13 @@ body.lightbox-open {
      inactividad 3000). Si algo se cuela por delante, el asesor no puede cerrar
      la foto y se queda atrapado en la pantalla. */
   z-index: 5000;
+  width: 100vw;
+  height: 100vh;
+  /* dvh evita que la barra del navegador móvil tape la parte inferior del visor
+     (antes la imagen podía quedar más alta que el área visible y "salirse"). */
+  height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
   background: rgba(9, 12, 18, 0.94);
   display: flex;
   flex-direction: column;
@@ -1990,16 +1997,22 @@ body.lightbox-open {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 8px 56px;
-  /* Las fotos altas se pueden desplazar dentro del visor. */
-  overflow: auto;
+  /* El visor nunca debe generar scroll horizontal: la foto se ajusta al área
+     disponible. En móvil esto era lo que obligaba a "mover la pantalla". */
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
 .lightbox-photo {
+  display: block;
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -2082,13 +2095,17 @@ body.lightbox-open {
 
 @media (max-width: 640px) {
   .image-lightbox { height: 100vh; height: 100dvh; }
-  .lightbox-stage { padding: 8px 10px; overflow: hidden; }
+  .lightbox-stage {
+    padding: 6px 8px;
+    overflow: hidden;
+    /* Deja respirar la foto entre la barra superior y las miniaturas. */
+    max-height: calc(100dvh - 132px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
   .lightbox-photo {
     width: auto;
     height: auto;
     max-width: 100%;
-    max-height: calc(100vh - 150px);
-    max-height: calc(100dvh - 150px);
+    max-height: 100%;
   }
   .lightbox-nav { width: 40px; height: 56px; font-size: 26px; }
   .lightbox-prev { left: 4px; }
@@ -2727,11 +2744,13 @@ body.page-chat .assistant-panel {
 .property-carousel {
   margin-bottom: 12px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .pc-stage {
   position: relative;
   width: 100%;
+  max-width: 100%;
   border-radius: 12px;
   overflow: hidden;
   background: #0b0e13;
@@ -2744,6 +2763,8 @@ body.page-chat .assistant-panel {
 .pc-photo {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: cover;
   display: block;
   cursor: zoom-in;
@@ -2831,9 +2852,14 @@ body.page-chat .assistant-panel {
 .pc-thumbs {
   display: flex;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 8px 2px 4px;
   scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pc-thumb {
@@ -2880,6 +2906,68 @@ body.page-chat .assistant-panel {
   color: var(--text-muted);
   font-size: 13px;
   background: var(--bg);
+}
+
+/* Rejilla del detalle del inventario: en escritorio la ficha y el comparativo
+   van lado a lado; en tablet/celular pasan a UNA columna. Antes se reutilizaba
+   .grid-2 y en pantallas medianas (601-768 px) el carrusel quedaba apretado y
+   empujaba el contenido fuera del cuadro. */
+.inventory-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.inventory-detail-grid > * { min-width: 0; }
+
+@media (max-width: 900px) {
+  .inventory-detail-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* El contenido de los modales nunca debe generar desplazamiento horizontal:
+   las tablas anchas ya tienen su propio contenedor con scroll. */
+#modal-overlay [data-body] {
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+#modal-overlay [data-body] img {
+  max-width: 100%;
+}
+
+/* Aviso persistente mientras se guarda/sube una propiedad. Se coloca dentro
+   del modal, sobre el formulario, y el usuario puede cerrar la ventana: la
+   carga continúa en segundo plano. */
+.submit-progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  background: #f5f3ff;
+  color: #3b0764;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.submit-progress-spinner {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 2px solid #c4b5fd;
+  border-top-color: var(--primary, #5b2d8e);
+  border-radius: 50%;
+  animation: submitSpin 0.8s linear infinite;
+}
+
+@keyframes submitSpin {
+  to { transform: rotate(360deg); }
 }
 
 @media (max-width: 640px) {
@@ -3787,6 +3875,17 @@ body.page-chat .assistant-panel {
 .version-banner .text-muted { color: rgba(255, 255, 255, 0.85) !important; }
 .version-banner .icon-btn { color: #fff; }
 .version-banner-icon { font-size: 22px; line-height: 1; }
+
+/* Título que cierra el aviso de nueva versión: indica al asesor que aplique la
+   actualización desde el módulo Actualizaciones. */
+.update-modal-title {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--primary);
+}
 
 /* ── Módulo de Actualizaciones ───────────────────────────────────────────── */
 .update-card {

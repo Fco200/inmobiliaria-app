@@ -286,20 +286,33 @@ window.Pages.properties = {
     // subidas. Tolera fallos por archivo (p. ej. HEIC no reconocido o imagen
     // pesada en el celular) sin descartar las que sí funcionan, y reintenta
     // una vez cada archivo para redes móviles inestables.
+    //
+    // Las subidas se hacen con una pequeña concurrencia (3 a la vez) en lugar
+    // de una por una: con 10-20 fotos de celular el guardado tardaba varios
+    // minutos y el asesor creía que la aplicación se había quedado colgada.
+    // Se conserva el ORDEN original para que la primera foto siga siendo la
+    // portada.
     const uploadPhotoUrls = async (files) => {
-      const urls = [];
-      let failed = 0;
       const list = Array.from(files || []);
+      const results = new Array(list.length).fill(null);
+      let failed = 0;
+      let completed = 0;
+      let nextIndex = 0;
       let lastToast = 0;
-      for (let i = 0; i < list.length; i += 1) {
-        const file = list[i];
+      const notifyProgress = () => {
+        const now = Date.now();
+        if (now - lastToast < 700 && completed < list.length) return;
+        lastToast = now;
+        UI.toast(`Subiendo fotografías… ${completed}/${list.length}`, 'info');
+      };
+
+      const uploadOne = async (file) => {
         let attempt = 0;
-        let ok = false;
-        while (attempt <= 1 && !ok) {
+        while (attempt <= 1) {
           try {
             const res = await API.documents.upload(file);
-            if (res && res.fileUrl) { urls.push(res.fileUrl); ok = true; }
-            else { attempt += 1; }
+            if (res && res.fileUrl) return res.fileUrl;
+            attempt += 1;
           } catch (error) {
             attempt += 1;
             if (attempt > 1) {
@@ -309,14 +322,24 @@ window.Pages.properties = {
             }
           }
         }
-        if (!ok) failed += 1;
-        const now = Date.now();
-        if (now - lastToast > 800) {
-          lastToast = now;
-          UI.toast(`Subiendo fotografías… ${i + 1}/${list.length}`, 'info');
+        return null;
+      };
+
+      const worker = async () => {
+        while (nextIndex < list.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          const url = await uploadOne(list[index]);
+          results[index] = url;
+          if (!url) failed += 1;
+          completed += 1;
+          notifyProgress();
         }
-      }
-      return { urls, failed };
+      };
+
+      const concurrency = Math.max(1, Math.min(3, list.length));
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      return { urls: results.filter(Boolean), failed };
     };
 
     // Sube fotos de una propiedad YA creada/guardada usando el endpoint
@@ -349,6 +372,12 @@ window.Pages.properties = {
     crudPage(container, {
       title: 'Captar Propiedades',
       newLabel: 'Nueva propiedad',
+      // Aviso que permanece visible mientras se suben las fotos y se guarda la
+      // propiedad. El formulario se puede cerrar: la carga sigue en segundo
+      // plano y el listado se actualiza al terminar.
+      submitNotice: (isEdit) => (isEdit
+        ? 'Guardando propiedad… Estamos subiendo las fotografías nuevas. Puedes revisar este módulo más tarde; ya puedes cerrar esta ventana y el proceso continuará.'
+        : 'Subiendo propiedad… Estamos guardando los datos y las fotografías. Puedes revisar este módulo más tarde; ya puedes cerrar esta ventana y el proceso continuará.'),
       service: {
         list: (params) => API.properties.list(params),
         // Al CREAR: sube las fotos primero (obtiene URLs) y las guarda en la

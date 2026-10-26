@@ -1014,7 +1014,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
       labelField: 'label',
       subtitleField: 'subtitle',
       limit: 30,
-      legend: 'Escribe calle, colonia, ciudad o folio y la lista se filtra.',
+      legend: 'Escribe calle, colonia, ciudad, folio o el nombre completo y la lista se filtra.',
     },
     business: {
       url: '/businesses/options',

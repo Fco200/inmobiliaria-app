@@ -118,23 +118,48 @@ function runInBackground(label, task) {
 // en el servidor (escalable: el select nunca despliega toda la lista).
 const options = asyncHandler(async (req, res) => {
   const filter = {};
-  // Un asesor solo ve las propiedades de las que es responsable; un jefe ve
-  // todas (y puede acotar con ?asesor=).
-  if (!isBoss(req)) filter.responsibleUser = req.user._id;
-  else if (req.query.asesor) filter.responsibleUser = req.query.asesor;
+  const and = [];
+  // Un asesor ve sus propiedades y también las publicadas en el inventario
+  // general (que es la misma lista que alimenta el selector de negocios). Un
+  // jefe ve todas y puede acotar con ?asesor=.
+  if (!isBoss(req)) {
+    and.push({ $or: [{ responsibleUser: req.user._id }, { isPublished: true }] });
+  } else if (req.query.asesor) {
+    filter.responsibleUser = req.query.asesor;
+  }
   if (req.query.operationType) filter.operationType = req.query.operationType;
   if (req.query.type) filter.type = req.query.type;
 
   const q = String(req.query.q || '').trim();
   if (q) {
-    const term = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { folio: { $regex: term, $options: 'i' } },
-      { zone: { $regex: term, $options: 'i' } },
-      { city: { $regex: term, $options: 'i' } },
-      { address: { $regex: term, $options: 'i' } },
-    ];
+    // La etiqueta visible se arma con varios campos ("Casa · Calle 1 ·
+    // Colonia · Folio"), así que se busca por PALABRAS: cada palabra debe
+    // existir en alguno de los campos. Antes se comparaba la frase completa
+    // contra cada campo y por eso escribir la etiqueta literal no filtraba.
+    const stopWords = new Set(['folio', 'propiedad', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'en']);
+    const tokens = String(q)
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t && !stopWords.has(t.toLowerCase()));
+    const fields = ['folio', 'type', 'operationType', 'zone', 'city', 'state', 'address'];
+    if (tokens.length) {
+      tokens.forEach((token) => {
+        const term = String(token).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        and.push({
+          $or: fields.map((field) => ({ [field]: { $regex: term, $options: 'i' } })),
+        });
+      });
+    } else {
+      // Si solo escribió palabras vacías ("folio", "de la", etc.), se usa la
+      // frase tal cual para no dejar la lista sin filtro.
+      const term = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      and.push({
+        $or: fields.map((field) => ({ [field]: { $regex: term, $options: 'i' } })),
+      });
+    }
   }
+  if (and.length) filter.$and = and;
 
   const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
   const items = await Property.find(filter)

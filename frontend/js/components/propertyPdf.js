@@ -13,7 +13,7 @@
 //
 // Uso:
 //   const pdf = await PropertyPdf.build({ property, asesor, fotos });
-//   PropertyPdf.share(pdf, 'casa-norte.pdf'); // navigator.share con fallback
+//   PropertyPdf.share(pdf, telefono, 'mensaje'); // navigator.share o descarga
 window.PropertyPdf = (() => {
   const TYPE_LABELS = {
     casa: 'Casa',
@@ -643,15 +643,22 @@ window.PropertyPdf = (() => {
     return { blob: doc.output('blob'), filename, photosUsed: photos.length, photosTotal: rawPhotos.length };
   }
 
-  // Comparte el PDF: navigator.share (celular/escritorio) con fallback a
-  // descarga directa + enlace wa.me sin adjunto.
+  // Comparte el PDF: navigator.share (celular/escritorio) y, si el navegador
+  // no permite compartir archivos, lo descarga para que el asesor elija el
+  // canal (WhatsApp, correo, etc.).
   async function share(pdf, phone = '', previewText = '') {
-    const file = pdf && pdf.blob
-      ? new File([pdf.blob], pdf.filename || 'propiedad.pdf', { type: 'application/pdf' })
-      : null;
+    let file = null;
+    try {
+      file = pdf && pdf.blob
+        ? new File([pdf.blob], pdf.filename || 'propiedad.pdf', { type: 'application/pdf' })
+        : null;
+    } catch (e) {
+      // Navegadores antiguos sin constructor File: se usa la descarga directa.
+      file = null;
+    }
 
     // Algunos navegadores lanzan al consultar canShare; se protege para que
-    // siempre se caiga al respaldo (descarga + wa.me) en vez de fallar.
+    // siempre se caiga al respaldo de descarga en vez de fallar.
     let canShareFiles = false;
     try {
       canShareFiles = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
@@ -669,10 +676,30 @@ window.PropertyPdf = (() => {
       }
     }
 
-    // Si se llama con un tel�fono (seleccionado), el flujo principal ya abre
-    // WhatsApp directamente con el mensaje. No abrimos otra ventana aquí para
-    // evitar doble apertura o ventanas bloqueadas.
-    return 'downloaded';
+    // Respaldo universal: DESCARGAR el PDF. Sin esto el botón decía "PDF
+    // generado" pero no entregaba ningún archivo (algunos navegadores de
+    // escritorio no soportan compartir archivos por navigator.share).
+    // El asesor decide después por dónde enviarlo (WhatsApp, correo, etc.).
+    const blob = pdf && pdf.blob ? pdf.blob : null;
+    if (!blob) return 'failed';
+    const filename = (pdf && pdf.filename) || 'propiedad.pdf';
+    try {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Se libera el object URL después de que el navegador inició la descarga.
+      setTimeout(() => {
+        try { URL.revokeObjectURL(url); } catch (e) { /* noop */ }
+      }, 4000);
+      return 'downloaded';
+    } catch (e) {
+      return 'failed';
+    }
   }
 
   return { build, share };

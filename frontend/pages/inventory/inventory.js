@@ -112,7 +112,7 @@ window.Pages.inventory = {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
-              <button class="btn btn-success" type="button" data-whatsapp>WhatsApp</button>
+              <button class="btn btn-success" type="button" data-whatsapp>Compartir (PDF)</button>
               ${puedeModificar ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
             </div>
             <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
@@ -607,7 +607,7 @@ window.Pages.inventory = {
             Inventario general del equipo: aquí aparecen las propiedades que los asesores comparten desde "Captar Propiedades", incluidas las externas de otras inmobiliarias o asesores.
             ${isBoss
               ? 'Asigna o quita propiedades desde aquí.'
-              : 'Abre cualquiera para ver el detalle, agendar una cita, crear un negocio o compartir por WhatsApp. La ficha de la propiedad no se modifica desde este módulo.'}
+              : 'Abre cualquiera para ver el detalle, agendar una cita, crear un negocio o compartir su ficha en PDF. La ficha de la propiedad no se modifica desde este módulo.'}
           </p>
           ${meta ? `<div class="home-stats" style="margin-top:14px;">
             <div class="home-stat"><span class="home-stat-icon">&#128230;</span><div><strong>${meta.total}</strong><small>Propiedades</small></div></div>

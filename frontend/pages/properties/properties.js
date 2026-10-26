@@ -150,7 +150,7 @@ window.Pages.properties = {
           ${record.description ? `<div class="card" style="margin-top:12px;"><h4 style="margin:0 0 6px;">Descripción</h4><p class="preserve-lines" style="margin:0;">${UI.escapeHtml(record.description)}</p></div>` : ''}
         `,
         footer: `
-          ${window.WhatsAppGenerator ? '<button class="btn btn-success" type="button" data-share-wa>&#128172;&nbsp; Compartir por WhatsApp (PDF)</button>' : (waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : '')}
+          ${window.WhatsAppGenerator ? '<button class="btn btn-success" type="button" data-share-wa>&#128172;&nbsp; Compartir (PDF)</button>' : (waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : '')}
           ${photos.length > 1 ? `<button class="btn btn-secondary" type="button" data-gallery>Fotografías</button>` : ''}
           <button class="btn btn-secondary" type="button" data-history>Historial</button>
           ${openPropertyForm ? `<button class="btn btn-primary" type="button" data-edit-detail>Editar</button>` : ''}
@@ -231,6 +231,12 @@ window.Pages.properties = {
     }
 
     const userOptions = users.map((x) => ({ value: x._id, label: x.name }));
+    // El asesor responsable es SIEMPRE el usuario que registra la propiedad.
+    // Se asegura que aparezca en las opciones aunque el listado de usuarios
+    // no lo incluya (por permisos o porque la consulta falló).
+    if (stored && stored._id && !userOptions.some((o) => String(o.value) === String(stored._id))) {
+      userOptions.unshift({ value: stored._id, label: stored.name || stored.nombre || 'Yo' });
+    }
     const ownerOptions = owners.map((x) => ({
       value: x._id,
       label: `${x.nombre || 'Cliente'}${x.telefono ? ` — ${x.telefono}` : ''}`,
@@ -282,66 +288,6 @@ window.Pages.properties = {
       form._photoManager = manager;
     };
 
-    // Sube las fotos del input vía /documents/upload y devuelve las URLs ya
-    // subidas. Tolera fallos por archivo (p. ej. HEIC no reconocido o imagen
-    // pesada en el celular) sin descartar las que sí funcionan, y reintenta
-    // una vez cada archivo para redes móviles inestables.
-    //
-    // Las subidas se hacen con una pequeña concurrencia (3 a la vez) en lugar
-    // de una por una: con 10-20 fotos de celular el guardado tardaba varios
-    // minutos y el asesor creía que la aplicación se había quedado colgada.
-    // Se conserva el ORDEN original para que la primera foto siga siendo la
-    // portada.
-    const uploadPhotoUrls = async (files) => {
-      const list = Array.from(files || []);
-      const results = new Array(list.length).fill(null);
-      let failed = 0;
-      let completed = 0;
-      let nextIndex = 0;
-      let lastToast = 0;
-      const notifyProgress = () => {
-        const now = Date.now();
-        if (now - lastToast < 700 && completed < list.length) return;
-        lastToast = now;
-        UI.toast(`Subiendo fotografías… ${completed}/${list.length}`, 'info');
-      };
-
-      const uploadOne = async (file) => {
-        let attempt = 0;
-        while (attempt <= 1) {
-          try {
-            const res = await API.documents.upload(file);
-            if (res && res.fileUrl) return res.fileUrl;
-            attempt += 1;
-          } catch (error) {
-            attempt += 1;
-            if (attempt > 1) {
-              console.error('[Fotos] No se pudo subir una imagen:', error && error.message);
-            } else {
-              await new Promise((r) => setTimeout(r, 500));
-            }
-          }
-        }
-        return null;
-      };
-
-      const worker = async () => {
-        while (nextIndex < list.length) {
-          const index = nextIndex;
-          nextIndex += 1;
-          const url = await uploadOne(list[index]);
-          results[index] = url;
-          if (!url) failed += 1;
-          completed += 1;
-          notifyProgress();
-        }
-      };
-
-      const concurrency = Math.max(1, Math.min(3, list.length));
-      await Promise.all(Array.from({ length: concurrency }, () => worker()));
-      return { urls: results.filter(Boolean), failed };
-    };
-
     // Sube fotos de una propiedad YA creada/guardada usando el endpoint
     // dedicado multipart (campo "photos"). Se envían en LOTES pequeños (4 por
     // petición) para que el asesor no vea "se quedó a medias": cada lote se
@@ -380,35 +326,37 @@ window.Pages.properties = {
         : 'Subiendo propiedad… Estamos guardando los datos y las fotografías. Puedes revisar este módulo más tarde; ya puedes cerrar esta ventana y el proceso continuará.'),
       service: {
         list: (params) => API.properties.list(params),
-        // Al CREAR: sube las fotos primero (obtiene URLs) y las guarda en la
-        // propiedad en el mismo registro. Al menos una foto es obligatoria.
+        // Al CREAR se guarda PRIMERO la propiedad y después se suben las fotos.
+        // Así una foto pesada o en formato no compatible (p. ej. HEIC de iPhone)
+        // ya no impide registrar la propiedad: si alguna falla, se avisa y la
+        // ficha queda guardada para completarla después.
         create: async (body) => {
           const files = pendingPhotoFiles;
-          const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
-          if (!files.length && !existing.length) {
-            throw new Error('La propiedad debe incluir al menos una fotografía.');
-          }
-          if (files.length) {
-            UI.toast(`Subiendo ${files.length} ${files.length === 1 ? 'fotografía' : 'fotografías'}...`, 'info');
-            const { urls, failed } = await uploadPhotoUrls(files);
-            if (urls.length) body.photos = [...(body.photos || []), ...urls];
-            if (failed) UI.toast(`No se subieron ${failed} ${failed === 1 ? 'imagen' : 'imágenes'}.`, 'warning');
-            if (!(body.photos || []).filter(Boolean).length) {
-              throw new Error('No se pudo subir ninguna fotografía. Intenta con imágenes JPG o PNG.');
+          pendingPhotoFiles = [];
+          delete body.photos_files;
+          const created = await API.properties.create(body);
+          const prop = created.data !== undefined ? created.data : created;
+          if (files.length && prop && prop._id) {
+            try {
+              const ok = await uploadPropertyPhotos(prop._id, files);
+              if (ok > 0) {
+                try {
+                  const fresh = await API.properties.get(prop._id);
+                  return fresh.data !== undefined ? fresh.data : fresh;
+                } catch (e) { /* se devuelve lo que ya se creó */ }
+              }
+            } catch (error) {
+              UI.toast('La propiedad se guardó, pero no se pudieron subir las fotografías. Puedes agregarlas editándola.', 'warning');
             }
           }
-          const created = await API.properties.create(body);
-          return created.data !== undefined ? created.data : created;
+          return prop;
         },
         // Al EDITAR: guarda la propiedad y después sube las fotos nuevas con el
         // endpoint dedicado, para que se registren aunque el archivo falle.
         update: async (id, body, record) => {
           delete body.photos_files;
           const files = pendingPhotoFiles;
-          const existing = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
-          if (!files.length && !existing.length) {
-            throw new Error('La propiedad debe incluir al menos una fotografía.');
-          }
+          pendingPhotoFiles = [];
           const saved = await API.properties.update(id, body);
           if (files.length) {
             const ok = await uploadPropertyPhotos(id, files);
@@ -458,7 +406,7 @@ window.Pages.properties = {
         { name: 'state', label: 'Estado', type: 'text' },
         { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
-        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: userOptions, value: stored && stored._id ? stored._id : '' },
+        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: userOptions, value: stored && stored._id ? stored._id : '', hint: 'Se asigna automáticamente al asesor que registra la propiedad.' },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },
         { name: 'externalAdvisor', label: 'Asesor / inmobiliaria externa', type: 'text', placeholder: 'Ej. Inmobiliaria Centro, Asesor Juan Pérez…', hint: 'Solo si la propiedad es externa.' },
         { name: 'paymentMethods', label: 'Se puede vender con', type: 'checkboxGroup', full: true, options: [
@@ -475,6 +423,12 @@ window.Pages.properties = {
       ],
       formData(values, record, form) {
         const body = { ...values };
+        // Al crear, el asesor responsable viaja explícitamente con el ID del
+        // usuario que registra la propiedad (el backend también lo confirma).
+        if (!record) {
+          const me = window.ApiClient ? window.ApiClient.getStoredUser() : null;
+          if (me && me._id) body.responsibleUser = me._id;
+        }
         // Fotografías: las administra el editor visual (URLs existentes ya sin
         // las eliminadas + archivos nuevos pendientes de subir).
         const manager = form ? form._photoManager : null;
@@ -514,6 +468,38 @@ window.Pages.properties = {
       onFormMount(form, record) {
         // Editor visual de fotografías (agregar / quitar / reordenar).
         mountPhotoManager(form, record);
+
+        // Asesor responsable: al CREAR queda fijado al usuario que registra la
+        // propiedad (el backend también lo fuerza). Al editar se conserva el
+        // asesor actual y solo se permite cambiarlo si ya venía asignado.
+        const responsibleSel = form.querySelector('#fld-responsibleUser');
+        if (responsibleSel) {
+          const responsibleHint = responsibleSel.parentElement
+            ? responsibleSel.parentElement.querySelector('small.text-muted')
+            : null;
+          if (responsibleHint) {
+            responsibleHint.textContent = record
+              ? 'Asesor que tiene la propiedad en su cartera.'
+              : 'Se asigna automáticamente al asesor que registra la propiedad.';
+          }
+          if (record) {
+            const currentId = record.responsibleUser && (record.responsibleUser._id || record.responsibleUser);
+            if (currentId) {
+              const exists = Array.from(responsibleSel.options).some((o) => String(o.value) === String(currentId));
+              if (!exists) {
+                const opt = document.createElement('option');
+                opt.value = String(currentId);
+                opt.textContent = (record.responsibleUser && record.responsibleUser.name) || 'Asesor actual';
+                responsibleSel.appendChild(opt);
+              }
+              responsibleSel.value = String(currentId);
+            }
+          } else {
+            if (stored && stored._id) responsibleSel.value = String(stored._id);
+            responsibleSel.disabled = true;
+            responsibleSel.title = 'Se asigna automáticamente al asesor que registra la propiedad.';
+          }
+        }
 
         const wrapOf = (id) => {
           const el = form.querySelector(id);

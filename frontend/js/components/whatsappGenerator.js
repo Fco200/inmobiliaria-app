@@ -1,12 +1,15 @@
 ﻿'use strict';
 
-// Compartir propiedad por WhatsApp. Abre un modal para elegir el telÃ©fono
-// (cliente de la cartera o captura manual) y genera un PDF con:
-//   Â· Portada destacada (primera foto del editor de fotos).
-//   Â· DescripciÃ³n completa respetando los saltos de lÃ­nea.
-//   Â· UbicaciÃ³n y datos clave de la propiedad.
-//   Â· Datos de contacto del asesor que COMPARTEN (usuario activo del CRM),
+// Compartir una propiedad. Abre un modal para elegir el cliente/teléfono
+// (opcional) y genera un PDF real con:
+//   · Portada destacada (primera foto del editor de fotos).
+//   · Descripción completa respetando los saltos de línea.
+//   · Ubicación y datos clave de la propiedad.
+//   · Datos de contacto del asesor que COMPARTE (usuario activo del CRM),
 //     nunca los del creador original de la ficha.
+//
+// Flujo: ver propiedad → Compartir → Crear PDF → el asesor elige dónde
+// compartirlo (menú del sistema, descarga directa o chat de WhatsApp).
 // El mensaje de texto ya NO incluye el "valor ticket": ese dato es interno.
 window.WhatsAppGenerator = (() => {
   const TYPE_LABELS = {
@@ -48,22 +51,22 @@ window.WhatsAppGenerator = (() => {
     return [String(c)];
   }
 
-  // Texto corto que acompaÃ±a al PDF en el chat (sin valor ticket: dato interno).
+  // Texto corto que acompaña al PDF en el chat (sin valor ticket: dato interno).
   function textoMensaje(prop, asesor) {
     const lines = [
-      `Hola, te comparto esta propiedad que creo que te puede interesar:`,
-      ``,
+      'Hola, te comparto esta propiedad que creo que te puede interesar:',
+      '',
       `${descripcion(prop)}`,
     ];
     if (prop && prop.price) lines.push(`Precio: ${window.Format ? Format.currency(prop.price) : prop.price}`);
     const chars = caracteristicas(prop);
-    if (chars.length) lines.push(`CaracterÃ­sticas: ${chars.join(', ')}`);
+    if (chars.length) lines.push(`Características: ${chars.join(', ')}`);
     const place = [prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
-    if (place) lines.push(`UbicaciÃ³n: ${place}`);
-    lines.push(``, `Te envÃ­o el detalle en el archivo adjunto ðŸ“„`);
+    if (place) lines.push(`Ubicación: ${place}`);
+    lines.push('', 'Te envío el detalle en el archivo adjunto 📄');
     if (asesor && (asesor.name || asesor.phone)) {
-      lines.push(``);
-      lines.push(`Para mÃ¡s informaciÃ³n puedes contactarme:`);
+      lines.push('');
+      lines.push('Para más información puedes contactarme:');
       if (asesor.name) lines.push(`Asesor: ${asesor.name}`);
       if (asesor.phone) lines.push(`Tel / WhatsApp: ${asesor.phone}`);
       if (asesor.email) lines.push(`Correo: ${asesor.email}`);
@@ -75,7 +78,7 @@ window.WhatsAppGenerator = (() => {
     return (window.ApiClient && ApiClient.getStoredUser()) || {};
   }
 
-  // Clientes con telÃ©fono, cargados bajo demanda si la pÃ¡gina no los pasÃ³.
+  // Clientes con teléfono, cargados bajo demanda si la página no los pasó.
   async function loadClients(clients) {
     if (Array.isArray(clients) && clients.length) return clients;
     try {
@@ -88,9 +91,9 @@ window.WhatsAppGenerator = (() => {
 
   /**
    * Abre el modal de compartir. Recibe:
-   *   Â· property  â€” objeto Property (o item de inventario poblado)
-   *   Â· clients   â€” lista opcional de clientes (si no, se carga)
-   *   Â· asesor    â€” opcional {name, phone, email}; por defecto el usuario ACTIVO
+   *   · property  — objeto Property (o item de inventario poblado)
+   *   · clients   — lista opcional de clientes (si no, se carga)
+   *   · asesor    — opcional {name, phone, email}; por defecto el usuario ACTIVO
    */
   async function open({ property, clients = [], asesor = null }) {
     const prop = property || {};
@@ -101,52 +104,64 @@ window.WhatsAppGenerator = (() => {
       phone: me.phone || '',
       email: me.email || '',
       // ID del usuario del CRM que comparte: se imprime en el PDF para saber
-      // quiÃ©n enviÃ³ la ficha.
+      // quién envió la ficha.
       id: me._id || me.id || '',
     };
-    const contactName = contact.name || '';
-    const contactPhone = contact.phone || '';
 
     const list = await loadClients(clients);
     const conTelefono = (list || []).filter((c) => c && digits(c.phone));
 
     const clientOptions = conTelefono.length
       ? conTelefono
-          .map((c) => `<option value="${UI.escapeHtml(digits(c.phone))}">${UI.escapeHtml(c.name)} â€” ${UI.escapeHtml(c.phone)}</option>`)
-          .join('')
-      : '<option value="">No hay clientes con telÃ©fono registrado</option>';
+        .map((c) => `<option value="${UI.escapeHtml(digits(c.phone))}">${UI.escapeHtml(c.name)} — ${UI.escapeHtml(c.phone)}</option>`)
+        .join('')
+      : '<option value="">No hay clientes con teléfono registrado</option>';
 
     const body = `
       <div style="display:grid;gap:14px;">
         <div class="stage-notice">
-          ðŸ“„ Se generarÃ¡ un <strong>PDF con fotos, descripciÃ³n y tus datos de contacto</strong>
-          para adjuntarlo al mensaje de WhatsApp.
+          📄 Se generará un <strong>PDF con fotos, descripción y tus datos de contacto</strong>.
+          Al crearlo podrás elegir por dónde compartirlo (WhatsApp, correo u otra app).
         </div>
         <div>
-          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Selecciona un cliente</label>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Selecciona un cliente (opcional)</label>
           <select class="form-control" data-wa-client>
-            <option value="">â€” Elegir cliente â€”</option>
+            <option value="">— Sin cliente / captura el número —</option>
             ${clientOptions}
           </select>
         </div>
         <div>
-          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">O captura el nÃºmero (WhatsApp)</label>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Número de WhatsApp (opcional)</label>
           <input class="form-control" data-wa-phone type="tel" placeholder="Ej. 555 123 4567" autocomplete="off">
         </div>
         <div>
-          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Mensaje que acompaÃ±a al PDF</label>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Mensaje que acompaña al PDF</label>
           <textarea class="form-control" data-wa-text rows="7" readonly></textarea>
+        </div>
+        <div data-wa-result style="display:none;gap:10px;">
+          <div class="stage-notice" data-wa-result-info></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary" type="button" data-wa-share>Compartir PDF</button>
+            <button class="btn btn-secondary" type="button" data-wa-download>Descargar PDF</button>
+            <a class="btn btn-secondary" data-wa-preview target="_blank" rel="noopener">Abrir PDF</a>
+            <button class="btn btn-success" type="button" data-wa-send>Enviar por WhatsApp</button>
+          </div>
+          <small class="text-muted" style="font-size:12px;">
+            En celular, "Compartir PDF" abre el menú del sistema y elige la app (WhatsApp, correo, etc.).
+            En computadora el PDF se descarga para que lo adjuntes donde quieras.
+          </small>
         </div>
       </div>
     `;
 
     const modal = UI.openModal({
-      title: `WhatsApp â€” ${descripcion(prop)}`,
+      title: `Compartir propiedad — ${descripcion(prop)}`,
       body,
       footer: `
         <button class="btn btn-secondary" type="button" data-wa-cancel>Cancelar</button>
-        <button class="btn btn-primary" type="button" data-wa-pdf disabled>Generar PDF y compartir</button>
+        <button class="btn btn-primary" type="button" data-wa-pdf>Crear PDF</button>
       `,
+      size: 680,
     });
 
     const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
@@ -156,99 +171,124 @@ window.WhatsAppGenerator = (() => {
     const phoneInput = overlay.querySelector('[data-wa-phone]');
     const clientSel = overlay.querySelector('[data-wa-client]');
     const pdfBtn = overlay.querySelector('[data-wa-pdf]');
+    const resultBox = overlay.querySelector('[data-wa-result]');
+    const resultInfo = overlay.querySelector('[data-wa-result-info]');
+    const shareBtn = overlay.querySelector('[data-wa-share]');
+    const downloadBtn = overlay.querySelector('[data-wa-download]');
+    const previewLink = overlay.querySelector('[data-wa-preview]');
+    const sendBtn = overlay.querySelector('[data-wa-send]');
+    const cancelBtn = overlay.querySelector('[data-wa-cancel]');
+
+    let lastPdf = null;
+    let previewUrl = null;
+
+    const phoneNumber = () => {
+      const raw = (clientSel && clientSel.value) || (phoneInput && phoneInput.value) || '';
+      return (window.Format && Format.waNumber ? Format.waNumber(raw) : digits(raw)) || '';
+    };
+
+    const cleanup = () => {
+      if (previewUrl) {
+        try { URL.revokeObjectURL(previewUrl); } catch (e) { /* noop */ }
+        previewUrl = null;
+      }
+    };
 
     const refresh = () => {
-      const num = Format.waNumber(clientSel ? clientSel.value : '') || Format.waNumber(phoneInput ? phoneInput.value : '');
-      const text = textoMensaje(prop, contact);
-      if (textArea) textArea.value = text;
-      if (pdfBtn) {
-        if (num) {
-          pdfBtn.disabled = false;
-          pdfBtn.style.pointerEvents = '';
-          pdfBtn.style.opacity = '1';
-        } else {
-          pdfBtn.disabled = true;
-          pdfBtn.style.pointerEvents = 'none';
-          pdfBtn.style.opacity = '.5';
-        }
+      if (textArea) textArea.value = textoMensaje(prop, contact);
+    };
+
+    const showResult = (pdf) => {
+      lastPdf = pdf;
+      cleanup();
+      previewUrl = URL.createObjectURL(pdf.blob);
+      if (previewLink) previewLink.href = previewUrl;
+      if (resultBox) {
+        resultBox.style.display = 'grid';
+        try { resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* noop */ }
+      }
+      const used = pdf.photosUsed || 0;
+      const total = pdf.photosTotal || 0;
+      if (resultInfo) {
+        const fotos = total > 0 && used === 0
+          ? ' Sin fotos: no se pudieron cargar (si son HEIC, súbelas en JPG/PNG).'
+          : used > 0
+            ? ` Con ${used} foto${used === 1 ? '' : 's'}.`
+            : '';
+        resultInfo.innerHTML = `✅ <strong>PDF listo:</strong> ${UI.escapeHtml(pdf.filename || 'propiedad.pdf')}${UI.escapeHtml(fotos)}`;
+      }
+    };
+
+    // Descarga directa (sin pasar por el menú del sistema).
+    const downloadPdf = () => {
+      if (!lastPdf || !lastPdf.blob) return;
+      const url = URL.createObjectURL(lastPdf.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = lastPdf.filename || 'propiedad.pdf';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => {
+        try { URL.revokeObjectURL(url); } catch (e) { /* noop */ }
+      }, 4000);
+      UI.toast('PDF descargado. Adjúntalo en WhatsApp, correo u otra app.', 'success');
+    };
+
+    // Comparte con el menú del sistema; si el navegador no puede, descarga.
+    const sharePdf = async () => {
+      if (!lastPdf) return;
+      const msg = textoMensaje(prop, contact);
+      const result = await PropertyPdf.share(lastPdf, phoneNumber(), msg);
+      if (result === 'shared') {
+        UI.toast('PDF compartido.', 'success');
+        cleanup();
+        UI.closeModal();
+      } else if (result === 'cancelled') {
+        UI.toast('No se compartió. Puedes intentarlo de nuevo o descargar el PDF.', 'info');
+      } else if (result === 'downloaded') {
+        UI.toast('PDF descargado. Elige WhatsApp, correo u otra app para enviarlo.', 'success');
+      } else {
+        UI.toast('No se pudo compartir el PDF. Usa "Descargar PDF".', 'error');
+      }
+    };
+
+    const sendWhatsApp = () => {
+      const num = phoneNumber();
+      if (!num) {
+        UI.toast('Selecciona un cliente o captura un número de WhatsApp', 'warning');
+        return;
+      }
+      const msg = textoMensaje(prop, contact);
+      try {
+        window.open(`https://wa.me/${digits(num)}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+      } catch (e) {
+        UI.toast('No se pudo abrir WhatsApp. Revisa si el navegador bloqueó la ventana.', 'error');
       }
     };
 
     if (clientSel) clientSel.addEventListener('change', refresh);
     if (phoneInput) phoneInput.addEventListener('input', refresh);
-    if (textArea) textArea.value = textoMensaje(prop, contact);
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { cleanup(); UI.closeModal(); });
+    if (shareBtn) shareBtn.addEventListener('click', sharePdf);
+    if (downloadBtn) downloadBtn.addEventListener('click', downloadPdf);
+    if (sendBtn) sendBtn.addEventListener('click', sendWhatsApp);
     refresh();
-
-    const closeBtn = overlay.querySelector('[data-wa-cancel]');
-    if (closeBtn) closeBtn.addEventListener('click', () => UI.closeModal());
 
     if (pdfBtn) {
       pdfBtn.addEventListener('click', async () => {
-        const num = Format.waNumber(clientSel ? clientSel.value : '') || Format.waNumber(phoneInput ? phoneInput.value : '');
-        if (!num) {
-          UI.toast('Selecciona un cliente o captura un nÃºmero de WhatsApp', 'warning');
-          return;
-        }
-        const digits = String(num).replace(/\D/g, '');
-        let waWindow = null;
-        if (digits) {
-          try {
-            waWindow = window.open('', '_blank');
-            if (waWindow) {
-              try {
-                waWindow.document.write('<html><head><meta charset="utf-8"><title>WhatsApp</title></head><body style="font-family:sans-serif;padding:16px;color:#111">Preparando PDF para enviar por WhatsApp...</body></html>');
-                waWindow.document.close();
-              } catch (e) {}
-            }
-          } catch (e) {}
-        }
         pdfBtn.disabled = true;
-        const original = pdfBtn.textContent;
         pdfBtn.textContent = 'Generando PDF…';
         try {
           const pdf = await PropertyPdf.build({ property: prop, asesor: contact });
-          const msg = textoMensaje(prop, contact);
-          const result = await PropertyPdf.share(pdf, num, msg);
-          if (digits && waWindow && !waWindow.closed) {
-            try {
-              waWindow.location.href = `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`;
-            } catch (e) {
-              try { window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener'); } catch (e2) {}
-            }
-          } else if (digits && !waWindow) {
-            try { window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener'); } catch (e) {}
-          }
-          // Aviso segÃºn las fotos que SÃ entraron al PDF: si habÃ­a fotos y
-          // ninguna cargÃ³ (tÃ­pico con HEIC de iPhone), se avisa para que el
-          // asesor las suba en JPG/PNG y vuelva a compartir.
-          const used = pdf.photosUsed || 0;
-          const total = pdf.photosTotal || 0;
-          const faltaFotos = total > 0 && used === 0;
-          if (result === 'shared') {
-            UI.closeModal();
-            UI.toast(
-              faltaFotos
-                ? 'PDF compartido, pero sin fotos: no se pudieron cargar (si son HEIC, sÃºbelas en JPG/PNG).'
-                : used
-                  ? `PDF compartido con ${used} foto${used === 1 ? '' : 's'} por WhatsApp`
-                  : 'PDF compartido por WhatsApp',
-              faltaFotos ? 'warning' : 'success'
-            );
-          } else if (result === 'downloaded') {
-            UI.closeModal();
-            UI.toast(
-              faltaFotos
-                ? 'PDF generado sin fotos (formato no compatible). Se abrió WhatsApp con el mensaje listo.'
-                : 'PDF generado y WhatsApp abierto con el mensaje listo.',
-              faltaFotos ? 'warning' : 'success'
-            );
-          }
+          showResult(pdf);
+          UI.toast('PDF creado. Elige cómo compartirlo.', 'success');
         } catch (error) {
           UI.toast(error.message || 'No se pudo generar el PDF', 'error');
         } finally {
           pdfBtn.disabled = false;
-          pdfBtn.textContent = original;
-          refresh();
+          pdfBtn.textContent = 'Crear PDF de nuevo';
         }
       });
     }

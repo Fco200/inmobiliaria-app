@@ -693,6 +693,7 @@ window.Pages.clients = {
         body: `
           <form id="client-profile-form" novalidate>
             <div class="stage-input-grid">
+              ${UI.field('nombre', 'Nombre completo', { required: true, full: true, value: record.nombre || '', placeholder: 'Ej. María López' })}
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
               ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro', 'Recomendación'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…', otroLabels: { Recomendación: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró' }, otroPlaceholders: { Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)', Otro: 'Ej. Volante, evento, referido por…' } })}
@@ -705,6 +706,7 @@ window.Pages.clients = {
               </div>
               ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 6, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
               ${UI.field('notasGenerales', 'Notas', { type: 'textarea', rows: 4, value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
+              ${isBossUser() ? UI.field('asesorAsignado', 'Asesor asignado', { type: 'select', sinOtros: true, options: [{ value: '', label: '— Yo mismo —' }, ...userOptions], value: record.asesorAsignado || '', hint: 'Solo administración/gerencia puede asignar.' }) : ''}
             </div>
           </form>
         `,
@@ -732,6 +734,11 @@ window.Pages.clients = {
           Object.keys(values).forEach((key) => {
             if (values[key] === null) delete values[key];
           });
+          if (!String(values.nombre || '').trim()) {
+            UI.toast('Escribe el nombre del cliente', 'warning');
+            return;
+          }
+          if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
           if ((values.medio === 'Otro' || values.medio === 'Recomendación') && !String(values.medioOtro || '').trim()) {
             UI.toast(values.medio === 'Recomendación'

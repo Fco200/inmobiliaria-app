@@ -79,7 +79,7 @@ window.Pages.appointments = {
       columns: [
         { key: 'date', label: 'Fecha y hora', render: (r) => Format.dateTime(r.date) },
         { key: 'client', label: 'Cliente', render: (r) => UI.escapeHtml(r.client ? r.client.name : '—') },
-        { key: 'property', label: 'Propiedad', render: (r) => (r.property ? `${UI.escapeHtml(r.property.zone)} ${UI.escapeHtml(r.property.city)}` : '—') },
+        { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
         { key: 'type', label: 'Tipo', render: (r) => UI.badge(appointmentTypeLabel(r), 'info') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         { key: 'user', label: 'Asesor', render: (r) => UI.escapeHtml(r.user ? r.user.name : '—') },
@@ -87,7 +87,7 @@ window.Pages.appointments = {
       fields: [
         { name: 'date', label: 'Fecha y hora', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
         { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }))] },
         { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: me ? me._id : '', options: userOptions },
         { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },

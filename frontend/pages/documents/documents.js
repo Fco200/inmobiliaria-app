@@ -26,7 +26,7 @@ window.Pages.documents = {
     }
 
     const clientOptions = clients.map((x) => ({ value: x._id, label: x.name }));
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }));
+    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
     const businessOptions = businesses.map((x) => ({ value: x._id, label: x.name }));
 
     const TYPES = [
@@ -168,7 +168,7 @@ window.Pages.documents = {
                   <td>${UI.badge(typeLabel(d.type), 'info')}</td>
                   <td>
                     ${d.client ? `Cliente: ${UI.escapeHtml(d.client.name)}<br>` : ''}
-                    ${d.property ? `Propiedad: ${UI.escapeHtml(d.property.zone || '')} ${UI.escapeHtml(d.property.city || '')}<br>` : ''}
+                    ${d.property ? `Propiedad: ${UI.escapeHtml(UI.propertyOptionLabel(d.property))}<br>` : ''}
                     ${d.business ? `Negocio: ${UI.escapeHtml(d.business.name)}` : ''}
                     ${!d.client && !d.property && !d.business ? '<span class="text-muted">—</span>' : ''}
                   </td>

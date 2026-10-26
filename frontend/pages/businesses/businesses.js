@@ -129,7 +129,7 @@ window.Pages.businesses = {
     const userOptions = users.length
       ? users.map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }));
+    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
 
     const state = { view: 'table', processType: 'comprador' };
 
@@ -259,7 +259,7 @@ window.Pages.businesses = {
           { key: 'name', label: 'Negocio', render: (r) => `<strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
-          { key: 'property', label: 'Propiedad', render: (r) => (r.property ? `${UI.escapeHtml(r.property.zone)} ${UI.escapeHtml(r.property.city)}` : '—') },
+          { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
           { key: 'currentStage', label: 'Etapa', render: (r) => UI.statusBadge(stageLabel(r.currentStage)) },
           { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         ],
@@ -270,7 +270,7 @@ window.Pages.businesses = {
           { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
-          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }))] },
+          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
           { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...users.map((x) => ({ value: x._id, label: x.name })), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez de Inmobiliaria Centro', hint: 'Solo si elegiste "Otro / Externo".' },

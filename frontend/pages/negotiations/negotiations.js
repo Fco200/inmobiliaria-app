@@ -66,7 +66,7 @@ window.Pages.negotiations = {
       ? users.map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];
     const clientOptions = clients.map((x) => ({ value: x._id, label: x.name }));
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: `${x.type} — ${x.zone} ${x.city}` }));
+    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
 
     container.innerHTML = `
       <div class="page-header">

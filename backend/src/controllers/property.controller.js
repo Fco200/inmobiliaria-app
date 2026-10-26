@@ -138,18 +138,25 @@ const options = asyncHandler(async (req, res) => {
 
   const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
   const items = await Property.find(filter)
-    .select('folio type operationType zone city address')
+    .select('folio type operationType zone city state address')
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
 
-  // `label`/`subtitle` ya armados para el select remoto: "casa — Villa verde
-  // Hermosillo" + folio. Así el asesor reconoce la propiedad sin abrir la ficha.
-  const data = items.map((p) => ({
-    ...p,
-    label: [p.type, [p.zone, p.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || p.folio || 'Propiedad',
-    subtitle: p.folio || '',
-  }));
+  // `label`/`subtitle` ya armados para el select remoto. La CALLE va antes que
+  // la colonia para distinguir propiedades parecidas de la misma zona.
+  const data = items.map((p) => {
+    const tipo = p.type
+      ? String(p.type).charAt(0).toUpperCase() + String(p.type).slice(1)
+      : '';
+    const ubicacion = [p.zone, p.city].filter(Boolean).join(', ');
+    const label = [tipo, p.address, ubicacion].filter(Boolean).join(' · ') || p.folio || 'Propiedad';
+    return {
+      ...p,
+      label,
+      subtitle: p.folio ? `Folio ${p.folio}` : '',
+    };
+  });
 
   res.json({ success: true, data });
 });

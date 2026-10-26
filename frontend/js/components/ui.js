@@ -7,6 +7,25 @@ const UI = (() => {
     return div.innerHTML;
   }
 
+  // Etiqueta única y legible para selectores/listados de propiedades. Incluye
+  // calle y colonia/ciudad para distinguir inmuebles parecidos de la misma
+  // zona, y el folio al final como identificador del CRM.
+  function propertyOptionLabel(prop, { includeFolio = true } = {}) {
+    if (!prop) return 'Propiedad';
+    const tipo = prop.type
+      ? String(prop.type).charAt(0).toUpperCase() + String(prop.type).slice(1)
+      : '';
+    const calle = String(prop.address || '').trim();
+    const ubicacion = [prop.zone, prop.city].filter(Boolean).join(', ').trim()
+      || String(prop.state || '').trim();
+    const base = [tipo, calle, ubicacion].filter(Boolean).join(' · ');
+    const label = base || (prop.folio ? `Propiedad ${prop.folio}` : 'Propiedad');
+    if (includeFolio && prop.folio && !label.includes(String(prop.folio))) {
+      return `${label} · Folio ${prop.folio}`;
+    }
+    return label;
+  }
+
   function toast(message, type = 'info') {
     let holder = document.getElementById('toast-holder');
     if (!holder) {
@@ -995,7 +1014,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
       labelField: 'label',
       subtitleField: 'subtitle',
       limit: 30,
-      legend: 'Escribe zona, ciudad o folio y la lista se filtra.',
+      legend: 'Escribe calle, colonia, ciudad o folio y la lista se filtra.',
     },
     business: {
       url: '/businesses/options',
@@ -1009,6 +1028,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
 
   return {
     escapeHtml,
+    propertyOptionLabel,
     toast,
     openModal,
     closeModal,

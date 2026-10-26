@@ -41,9 +41,12 @@ window.PropertyPdf = (() => {
   const INK = [45, 16, 72];
   const GOLD = [185, 145, 47];
   const SLATE = [71, 85, 105];
-  const CARD_BG = [248, 247, 252];
   const BORDER = [226, 232, 240];
   const TEXT = [15, 23, 42];
+  // Paneles con más contraste para que la descripción no se pierda en el blanco.
+  const PANEL_BG = [243, 240, 250];
+  const PANEL_BORDER = [213, 202, 236];
+  const ROW_LINE = [234, 229, 244];
 
   // Máximo de fotos que entran al PDF. Se puede subir mucho más alto que antes
   // (era 6): el PDF se mantiene razonable porque cada foto se reduce a JPEG.
@@ -362,9 +365,30 @@ window.PropertyPdf = (() => {
 
     let y = 66;
 
+    // Límite útil de la página: deja libre el pie de página.
+    const PAGE_BOTTOM = pageH - 48;
+    const addPage = (top = 70) => {
+      doc.addPage();
+      paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
+      y = top;
+    };
+    const ensureSpace = (needed, top = 70) => {
+      if (y + needed > PAGE_BOTTOM) addPage(top);
+    };
+    const sectionLabel = (label) => {
+      ensureSpace(32);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(INK[0], INK[1], INK[2]);
+      doc.text(label, margin, y + 10);
+      doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.roundedRect(margin, y + 15, 30, 2.5, 1.2, 1.2, 'F');
+      y += 25;
+    };
+
     // ── Portada destacada (la primera foto) ────────────────────────────
     if (photos.length) {
-      const areaH = 250;
+      const areaH = 230;
       const img = photos[0];
       const dims = doc.getImageProperties(img);
       const ratio = Math.min(contentW / dims.width, areaH / dims.height);
@@ -389,15 +413,23 @@ window.PropertyPdf = (() => {
       y += 12;
     }
 
-    // ── Título y ubicación ─────────────────────────────────────────────
-    doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(21);
+    // ── Título, ubicación y precio destacado ───────────────────────────
     const tipo = TYPE_LABELS[prop.type] || 'Propiedad';
     const operacion = OP_LABELS[prop.operationType] || '';
     const titulo = operacion ? `${tipo} en ${operacion}` : tipo;
+    const estado = prop.status ? (STATUS_LABELS[prop.status] || String(prop.status).replace(/_/g, ' ')) : '';
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.text('FICHA DE PROPIEDAD', margin, y + 8);
+    y += 21;
+
+    doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
     doc.text(titulo, margin, y + 16);
-    y += 28;
+    y += 31;
 
     const place = [prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (place) {
@@ -405,25 +437,63 @@ window.PropertyPdf = (() => {
       doc.setFontSize(11.5);
       doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       wrapText(doc, place, contentW).forEach((line) => {
+        if (y + 16 > PAGE_BOTTOM) addPage();
         doc.text(line, margin, y + 10);
         y += 15;
       });
-      y += 8;
+      y += 7;
+    }
+
+    // Banda de precio y estado: da jerarquía visual a lo más importante.
+    if (prop.price || operacion || estado) {
+      const heroH = 54;
+      ensureSpace(heroH + 16);
+      doc.setFillColor(INK[0], INK[1], INK[2]);
+      doc.roundedRect(margin, y, contentW, heroH, 7, 7, 'F');
+
+      const priceText = prop.price ? currency(prop.price) : 'Precio a consultar';
+      let priceSize = 19;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(priceSize);
+      while (doc.getTextWidth(priceText) > contentW - 230 && priceSize > 12) {
+        priceSize -= 1;
+        doc.setFontSize(priceSize);
+      }
+      doc.setFontSize(8);
+      doc.setTextColor(205, 190, 225);
+      doc.text('PRECIO', margin + 18, y + 15);
+      doc.setFontSize(priceSize);
+      doc.setTextColor(255, 255, 255);
+      doc.text(priceText, margin + 18, y + 40);
+
+      let chipX = pageW - margin - 16;
+      const chipY = y + 17;
+      const chipH = 21;
+      const drawChip = (text, fill, color) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        const chipW = doc.getTextWidth(text) + 18;
+        chipX -= chipW;
+        doc.setFillColor(fill[0], fill[1], fill[2]);
+        doc.roundedRect(chipX, chipY, chipW, chipH, 10.5, 10.5, 'F');
+        doc.setTextColor(color[0], color[1], color[2]);
+        doc.text(text, chipX + chipW / 2, chipY + 13.8, { align: 'center' });
+        chipX -= 6;
+      };
+      if (estado) drawChip(estado.toUpperCase(), [255, 255, 255], INK);
+      if (operacion) drawChip(operacion.toUpperCase(), GOLD, [255, 255, 255]);
+
+      y += heroH + 18;
     }
 
     // ── Datos clave (recuadro de dos columnas etiqueta/valor) ──────────
-    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
-    doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
-    doc.setFontSize(11);
-
     // Primero se calculan las filas para saber la altura del recuadro; el
     // fondo se pinta ANTES del texto (si no, lo taparía).
     const filas = [];
     if (prop.folio) filas.push({ label: 'Folio', value: prop.folio });
-    if (prop.price) filas.push({ label: 'Precio', value: currency(prop.price) });
     if (prop.operationType) filas.push({ label: 'Operación', value: OP_LABELS[prop.operationType] || prop.operationType });
     if (prop.type) filas.push({ label: 'Tipo', value: tipo });
-    if (prop.status) filas.push({ label: 'Estado', value: STATUS_LABELS[prop.status] || String(prop.status).replace(/_/g, ' ') });
+    if (prop.status) filas.push({ label: 'Estado', value: estado || String(prop.status).replace(/_/g, ' ') });
     if (prop.address) filas.push({ label: 'Dirección', value: prop.address });
     const zonaTxt = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (zonaTxt) filas.push({ label: 'Zona / ciudad', value: zonaTxt });
@@ -445,173 +515,231 @@ window.PropertyPdf = (() => {
       try { filas.push({ label: 'Alta en el CRM', value: new Date(prop.createdAt).toLocaleDateString('es-MX') }); } catch (e) { /* opcional */ }
     }
 
+    const VALUE_X = margin + 150;
+    const VALUE_W = contentW - 168;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
     const filasRender = [];
     filas.forEach((f) => {
-      const lines = wrapText(doc, f.value, contentW - 150);
+      const lines = wrapText(doc, f.value, VALUE_W);
       lines.forEach((line, i) => {
         filasRender.push({ label: i === 0 ? f.label : '', value: line });
       });
     });
 
-    const datosTop = y + 6;
-    const datosH = filasRender.length * 18 + 18;
-    // Si el recuadro no cabe, se pasa a una página nueva antes de pintarlo.
-    if (datosTop + datosH > pageH - 60) {
-      doc.addPage();
-      paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-      y = 70;
-    }
-    const datosTop2 = y + 6;
-    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
-    doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
-    doc.roundedRect(margin, datosTop2, contentW, datosH, 6, 6, 'FD');
-    // Acento lateral morado
-    doc.setFillColor(INK[0], INK[1], INK[2]);
-    doc.roundedRect(margin, datosTop2, 3, datosH, 2, 2, 'F');
+    if (filasRender.length) {
+      ensureSpace(25 + 18 + 18);
+      sectionLabel('Datos de la propiedad');
+      let filaIdx = 0;
+      while (filaIdx < filasRender.length) {
+        const rowH = 18;
+        const maxRows = Math.max(1, Math.floor((PAGE_BOTTOM - y - 18) / rowH));
+        const chunk = filasRender.slice(filaIdx, filaIdx + maxRows);
+        const cardH = chunk.length * rowH + 18;
 
-    let datosY = datosTop2 + 24;
-    filasRender.forEach((fila2) => {
-      if (fila2.label) {
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(INK[0], INK[1], INK[2]);
-        doc.text(`${fila2.label}:`, margin + 16, datosY);
-      }
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
-      doc.text(fila2.value, margin + 138, datosY);
-      datosY += 18;
-    });
-    y = datosTop2 + datosH + 20;
+        doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+        doc.setFillColor(253, 252, 255);
+        doc.roundedRect(margin, y, contentW, cardH, 7, 7, 'FD');
+        // Acento lateral dorado + filas separadas por líneas muy suaves.
+        doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+        doc.roundedRect(margin, y, 4, cardH, 2, 2, 'F');
 
-    // ── Descripción completa, con saltos de línea del original ─────────
-    if (prop.description) {
-      if (y > pageH - 160) {
-        doc.addPage();
-        paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 70;
-      }
-      doc.setFillColor(CARD_BG[0], CARD_BG[1], CARD_BG[2]);
-      doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
-      const descText = wrapText(doc, prop.description, contentW - 28);
-      const descH = descText.length * 14 + 38;
-      if (y + descH > pageH - 60) {
-        doc.addPage();
-        paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 70;
-      }
-      doc.roundedRect(margin, y, contentW, descH, 6, 6, 'FD');
-      doc.setFillColor(INK[0], INK[1], INK[2]);
-      doc.roundedRect(margin, y, 3, descH, 2, 2, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(INK[0], INK[1], INK[2]);
-      doc.text('Descripción', margin + 16, y + 22);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10.8);
-      doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
-      let descY = y + 40;
-      descText.forEach((line) => {
-        if (!line) { descY += 8; return; }
-        if (descY > pageH - 60) {
-          doc.addPage();
-          paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-          y = 70;
-          descY = y + 24;
+        let rowY = y + 17;
+        chunk.forEach((fila, i) => {
+          if (i > 0) {
+            doc.setDrawColor(ROW_LINE[0], ROW_LINE[1], ROW_LINE[2]);
+            doc.setLineWidth(0.4);
+            doc.line(margin + 18, rowY - 13, margin + contentW - 18, rowY - 13);
+          }
+          if (fila.label) {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(INK[0], INK[1], INK[2]);
+            doc.text(fila.label, margin + 18, rowY);
+          }
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+          doc.text(fila.value, VALUE_X, rowY);
+          rowY += rowH;
+        });
+        doc.setLineWidth(0.2);
+
+        filaIdx += chunk.length;
+        y += cardH + 18;
+        if (filaIdx < filasRender.length) {
+          addPage();
+          sectionLabel('Datos de la propiedad (continuación)');
         }
-        doc.text(line, margin + 16, descY);
-        descY += 14;
-      });
-      y = y + descH + 18;
+      }
     }
 
-    // ── Galería: TODAS las fotos adicionales en 2 columnas ─────────────
+    // ── Descripción completa, con panel de contraste y paginación ──────
+    if (prop.description) {
+      ensureSpace(130);
+      // Cabecera sólida: separa la descripción del resto de la ficha.
+      doc.setFillColor(INK[0], INK[1], INK[2]);
+      doc.roundedRect(margin, y, contentW, 30, 7, 7, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Descripción', margin + 18, y + 19.5);
+      doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.roundedRect(pageW - margin - 42, y + 13.5, 24, 3, 1.5, 1.5, 'F');
+      y += 38;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      const descLines = wrapText(doc, prop.description, contentW - 40);
+      const descLineH = 15.5;
+      const panelPad = 18;
+      let descIdx = 0;
+      while (descIdx < descLines.length) {
+        if (descIdx > 0) {
+          ensureSpace(40);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9.5);
+          doc.setTextColor(INK[0], INK[1], INK[2]);
+          doc.text('Descripción (continuación)', margin, y + 10);
+          y += 22;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(11);
+        }
+
+        const availableH = PAGE_BOTTOM - y - panelPad * 2;
+        const maxLines = Math.max(1, Math.floor(availableH / descLineH));
+        const chunk = descLines.slice(descIdx, descIdx + maxLines);
+        const panelH = panelPad * 2 + chunk.length * descLineH;
+
+        // Fondo lavanda + borde definido: el texto ya no se pierde en blanco.
+        doc.setFillColor(PANEL_BG[0], PANEL_BG[1], PANEL_BG[2]);
+        doc.setDrawColor(PANEL_BORDER[0], PANEL_BORDER[1], PANEL_BORDER[2]);
+        doc.setLineWidth(0.8);
+        doc.roundedRect(margin, y, contentW, panelH, 8, 8, 'FD');
+        doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+        doc.roundedRect(margin, y, 4, panelH, 2, 2, 'F');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
+        let lineY = y + panelPad + 11;
+        chunk.forEach((line) => {
+          if (line) doc.text(line, margin + 20, lineY);
+          lineY += descLineH;
+        });
+
+        descIdx += chunk.length;
+        y += panelH + 12;
+        if (descIdx < descLines.length) addPage();
+      }
+      y += 6;
+    }
+
+    // ── Galería: TODAS las fotos adicionales en mosaico de 2 columnas ──
     const extras = photos.slice(1);
     if (extras.length) {
-      if (y + 120 > pageH - 60) {
-        doc.addPage();
-        paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 66;
-      }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Galería de fotos (${extras.length})`, margin, y + 10);
-      y += 20;
-      const tileW = (contentW - 12) / 2;
+      ensureSpace(25 + 20 + 150);
+      sectionLabel(`Galería de fotos (${extras.length})`);
+      const tileW = (contentW - 14) / 2;
       const tileH = 150;
-      extras.forEach((img, i) => {
-        const col = i % 2;
-        if (col === 0 && i > 0) y += tileH + 10;
-        if (y + tileH > pageH - 60) {
-          doc.addPage();
-          paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-          y = 66;
+      for (let i = 0; i < extras.length; i += 2) {
+        if (y + tileH + 12 > PAGE_BOTTOM) {
+          addPage();
+          sectionLabel('Galería de fotos (continuación)');
         }
-        let dims;
-        try { dims = doc.getImageProperties(img); } catch (e) { dims = { width: tileW, height: tileH }; }
-        const ratio = Math.min(tileW / dims.width, tileH / dims.height);
-        const w = dims.width * ratio;
-        const h = dims.height * ratio;
-        const x = margin + col * (tileW + 12) + (tileW - w) / 2;
-        try {
-          doc.addImage(img, 'JPEG', x, y, w, h);
-          doc.setDrawColor(226, 232, 240);
+        const row = extras.slice(i, i + 2);
+        row.forEach((img, col) => {
+          const tx = margin + col * (tileW + 14);
+          // Marco claro detrás de cada foto para que el mosaico quede parejo.
+          doc.setFillColor(248, 247, 252);
+          doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
           doc.setLineWidth(0.5);
-          doc.rect(x, y, w, h, 'S');
-        } catch (e) { /* se omite la foto que falle */ }
-      });
-      y += tileH + 18;
+          doc.roundedRect(tx, y, tileW, tileH, 6, 6, 'FD');
+
+          let dims;
+          try { dims = doc.getImageProperties(img); } catch (e) { dims = { width: tileW, height: tileH }; }
+          const ratio = Math.min((tileW - 12) / dims.width, (tileH - 12) / dims.height);
+          const w = dims.width * ratio;
+          const h = dims.height * ratio;
+          const ix = tx + (tileW - w) / 2;
+          const iy = y + (tileH - h) / 2;
+          try {
+            doc.addImage(img, 'JPEG', ix, iy, w, h);
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.4);
+            doc.rect(ix, iy, w, h, 'S');
+          } catch (e) { /* se omite la foto que falle */ }
+        });
+        y += tileH + 12;
+      }
+      y += 4;
+      doc.setLineWidth(0.2);
     }
 
     // ── Contacto del asesor que comparte (usuario activo) + QR ─────────
     if (asesorNombre || asesorTel || asesorEmail || (window.PublicQR && prop._id)) {
-      const boxH = 118;
-      if (y > pageH - (boxH + 44)) {
-        doc.addPage();
-        paintHeader(doc, pageW, margin, logo, prop.folio ? `Folio ${prop.folio}` : '');
-        y = 70;
-      }
-      doc.setFillColor(248, 247, 252);
-      doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
-      doc.setLineWidth(1);
+      const qrWanted = !!(window.PublicQR && prop._id);
+      const boxH = qrWanted ? 132 : 112;
+      ensureSpace(25 + boxH + 12);
+      sectionLabel('Contacto para esta propiedad');
+
+      doc.setFillColor(250, 248, 254);
+      doc.setDrawColor(PANEL_BORDER[0], PANEL_BORDER[1], PANEL_BORDER[2]);
+      doc.setLineWidth(0.8);
       doc.roundedRect(margin, y, contentW, boxH, 8, 8, 'FD');
-      doc.setFillColor(INK[0], INK[1], INK[2]);
-      doc.roundedRect(margin, y, 4, boxH, 3, 3, 'F');
-      doc.setTextColor(INK[0], INK[1], INK[2]);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.text('Contacto para esta propiedad', margin + 18, y + 26);
+      doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.roundedRect(margin, y, 4, boxH, 2, 2, 'F');
+
+      const qrSize = 72;
+      const textW = qrWanted ? contentW - qrSize - 64 : contentW - 40;
+      let contactoY = y + 28;
+
+      if (asesorNombre) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12.5);
+        doc.setTextColor(INK[0], INK[1], INK[2]);
+        doc.text(asesorNombre, margin + 18, contactoY);
+        contactoY += 20;
+      }
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
+      doc.setFontSize(10.5);
       doc.setTextColor(TEXT[0], TEXT[1], TEXT[2]);
-      let contactoY = y + 50;
-      if (asesorNombre) { doc.setFont('helvetica', 'bold'); doc.text(asesorNombre, margin + 18, contactoY); doc.setFont('helvetica', 'normal'); contactoY += 18; }
-      if (asesorTel) { doc.text(`WhatsApp / Teléfono: ${asesorTel}`, margin + 18, contactoY); contactoY += 18; }
-      if (asesorEmail) { doc.text(`Correo electrónico: ${asesorEmail}`, margin + 18, contactoY); contactoY += 18; }
-      doc.setFontSize(9.5);
+      if (asesorTel) {
+        wrapText(doc, `WhatsApp / Teléfono: ${asesorTel}`, textW).forEach((line) => {
+          doc.text(line, margin + 18, contactoY);
+          contactoY += 15;
+        });
+        contactoY += 2;
+      }
+      if (asesorEmail) {
+        wrapText(doc, `Correo electrónico: ${asesorEmail}`, textW).forEach((line) => {
+          doc.text(line, margin + 18, contactoY);
+          contactoY += 15;
+        });
+        contactoY += 2;
+      }
+      doc.setFontSize(9);
       doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       doc.text('Atendido por asesor de INMOBLES', margin + 18, contactoY);
 
       // QR con la ficha pública (si tenemos el QR y el id de la propiedad).
-      if (window.PublicQR && prop._id) {
+      if (qrWanted) {
         try {
           const qrTarget = `https://inmobles.com/propiedades.html?propId=${encodeURIComponent(prop._id)}`;
           const qrData = await window.PublicQR.dataUrl(qrTarget, 240);
           if (qrData) {
-            const size = 82;
-            const qx = pageW - margin - size - 18;
+            const qx = pageW - margin - qrSize - 16;
             const qy = y + 18;
             doc.setFillColor(255, 255, 255);
-            doc.roundedRect(qx - 4, qy - 4, size + 8, size + 26, 6, 6, 'F');
-            doc.addImage(qrData, 'PNG', qx, qy, size, size);
+            doc.roundedRect(qx - 4, qy - 4, qrSize + 8, qrSize + 30, 6, 6, 'F');
+            doc.addImage(qrData, 'PNG', qx, qy, qrSize, qrSize);
             doc.setFontSize(7.8);
             doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
-            doc.text('Escanea para ver', qx + size / 2, qy + size + 14, { align: 'center' });
-            doc.text('más detalles', qx + size / 2, qy + size + 24, { align: 'center' });
+            doc.text('Escanea para ver', qx + qrSize / 2, qy + qrSize + 12, { align: 'center' });
+            doc.text('más detalles', qx + qrSize / 2, qy + qrSize + 22, { align: 'center' });
           }
         } catch (e) { /* el QR es opcional */ }
       }
+      doc.setLineWidth(0.2);
       y += boxH + 12;
     }
 

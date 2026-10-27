@@ -122,7 +122,7 @@ window.Pages.actualizaciones = {
             ${notes.length ? UI.badge(`${notes.length} cambio${notes.length === 1 ? '' : 's'}`, 'success') : ''}
           </div>
           ${notes.length
-            ? `<ol class="updates-changelog">
+            ? `<ol class="updates-changelog" style="list-style-type:disc;padding-left:20px;">
                  ${notes.slice(0, 20).map((n, i) => `
                    <li>
                      <span class="updates-changelog-num">${i + 1}</span>

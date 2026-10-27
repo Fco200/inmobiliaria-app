@@ -103,9 +103,9 @@ window.AppVersion = (() => {
     const modal = UI.openModal({
       title: `🎉 Nueva versión disponible${versionText ? ` — v${versionText}` : ''}`,
       body: `
-        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, tu CRM se acaba de actualizar. Estas son algunas de las novedades:</p>
+        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, hay una nueva actualización disponible. <strong>Puntos de la actualización:</strong></p>
         ${notes.length
-          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
+          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;list-style-type:disc;">
               ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
              </ul>`
           : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}

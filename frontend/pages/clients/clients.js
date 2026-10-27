@@ -201,7 +201,7 @@ window.Pages.clients = {
         const basePlaceholder = input.getAttribute('placeholder') || '';
         const sync = () => {
           const show = otroWhen.includes(select.value);
-          input.style.display = show ? 'block' : 'none';
+          input.style.display = 'block';
           input.required = show && requiredWhen.includes(select.value) && select.required;
           // Texto y label específicos por opción: en "Recomendación" el campo
           // pregunta claramente QUIÉN recomendó (antes solo salía "Otro").
@@ -215,7 +215,7 @@ window.Pages.clients = {
           } else {
             input.setAttribute('placeholder', basePlaceholder);
           }
-          if (!show) input.value = '';
+          // Permitir escribir en ambas opciones, no limpiar
         };
         select.addEventListener('change', sync);
         sync();

@@ -234,6 +234,7 @@ window.Pages.chat = {
     const replyToName = $('#chat-reply-to-name');
     const replyToMsg = $('#chat-reply-to-msg');
     const replyCancel = $('#chat-reply-cancel');
+    let mentionDropdown = null;
 
     let currentChat = null;
     let chats = [];
@@ -586,8 +587,9 @@ window.Pages.chat = {
         // Guardar participantes para menciones
         chatParticipantsList = (currentChat.participants || []).filter(Boolean).map(p => {
           const pid = p._id || p.id || p;
-          return { _id: pid, name: (p.name || p.username) || String(pid), username: p.username };
-        });
+          if (typeof pid === 'object') return null;
+          return { _id: pid, name: (p.name || p.username) || String(pid), username: p.username || p.name };
+        }).filter(Boolean);
         chatTitle.textContent = chatLabel(currentChat);
         // En un canal de equipo con 50 personas, la lista completa de
         // participantes se comía el ancho de la cabecera (y el chat quedaba
@@ -728,15 +730,16 @@ window.Pages.chat = {
         UI.toast('El mensaje es demasiado largo (máximo 2000 caracteres)', 'warning');
         return;
       }
-      // Extraer menciones @nombre
+      // Extraer menciones @nombre/usuario
       const mentions = [];
       const mentionRegex = /@([A-Za-zÀ-ÿ0-9._-]+)/g;
       let m;
       while ((m = mentionRegex.exec(text))) {
-        const uname = m[1].toLowerCase();
+        const uname = m[1].toLowerCase().replace(/\s+/g, '');
         const found = (chatParticipantsList || []).find(p => {
-          const n = (p.name || p.username || '').toLowerCase();
-          return n.replace(/\s+/g,'') === uname.replace(/\s+/g,'') || (p.username && p.username.toLowerCase() === uname);
+          const n = String(p.name || '').toLowerCase().replace(/\s+/g, '');
+          const un = String(p.username || '').toLowerCase().replace(/\s+/g, '');
+          return (n && n.includes(uname)) || (un && un.includes(uname)) || n === uname || un === uname;
         });
         if (found && found._id && !mentions.includes(String(found._id))) mentions.push(String(found._id));
       }
@@ -950,13 +953,91 @@ window.Pages.chat = {
       msgInput.style.height = Math.min(msgInput.scrollHeight, 140) + 'px';
     };
 
-    msgInput.addEventListener('input', autoGrow);
+    function hideMentionDropdown() {
+      if (mentionDropdown && mentionDropdown.parentElement) {
+        mentionDropdown.parentElement.removeChild(mentionDropdown);
+      }
+      mentionDropdown = null;
+    }
+
+    function showMentionDropdown() {
+      if (!msgInput || !chatParticipantsList.length) {
+        hideMentionDropdown();
+        return;
+      }
+      const val = msgInput.value || '';
+      const pos = msgInput.selectionStart || val.length;
+      const before = val.slice(0, pos);
+      const match = before.match(/@([A-Za-zÀ-ÿ0-9._-]*)$/);
+      if (!match) {
+        hideMentionDropdown();
+        return;
+      }
+      const query = (match[1] || '').toLowerCase();
+      const list = chatParticipantsList
+        .filter(p => {
+          if (!query) return true;
+          const n = String(p.name || '').toLowerCase();
+          const u = String(p.username || '').toLowerCase();
+          return n.includes(query) || u.includes(query);
+        })
+        .slice(0, 6);
+      if (!list.length) {
+        hideMentionDropdown();
+        return;
+      }
+      hideMentionDropdown();
+      const wrap = document.createElement('div');
+      wrap.style.position = 'absolute';
+      wrap.style.bottom = '100%';
+      wrap.style.left = '12px';
+      wrap.style.background = 'var(--bg)';
+      wrap.style.border = '1px solid var(--border)';
+      wrap.style.borderRadius = '8px';
+      wrap.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+      wrap.style.zIndex = '20';
+      wrap.style.maxHeight = '200px';
+      wrap.style.overflowY = 'auto';
+      list.forEach((p) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '8px';
+        item.style.width = '100%';
+        item.style.padding = '6px 10px';
+        item.style.border = 'none';
+        item.style.background = 'transparent';
+        item.style.textAlign = 'left';
+        item.style.cursor = 'pointer';
+        item.innerHTML = `<span style="font-weight:500;">${UI.escapeHtml(p.name)}</span>`;
+        item.addEventListener('click', () => {
+          const startAt = before.lastIndexOf('@');
+          const newVal = val.slice(0, startAt) + '@' + (p.username || p.name).split(' ')[0] + ' ' + val.slice(pos);
+          msgInput.value = newVal;
+          autoGrow();
+          hideMentionDropdown();
+          msgInput.focus();
+        });
+        wrap.appendChild(item);
+      });
+      const containerBar = document.querySelector('.chat-input-bar');
+      if (containerBar) {
+        containerBar.style.position = 'relative';
+        containerBar.appendChild(wrap);
+        mentionDropdown = wrap;
+      }
+    }
+
+    msgInput.addEventListener('input', () => {
+      autoGrow();
+      showMentionDropdown();
+    });
     msgInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
-      // En el móvil Enter hace salto de línea (el botón "Enviar" manda);
-      // en el escritorio Enter envía y Shift+Enter hace salto de línea.
       if (isTouch() || e.shiftKey) return;
       e.preventDefault();
+      hideMentionDropdown();
       sendMessage();
     });
     btnSend.addEventListener('click', () => sendMessage());

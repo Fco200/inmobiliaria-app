@@ -30,15 +30,8 @@ async function notifyTeamPropertyBusiness(req, business) {
   }
 }
 
-// Proceso de ventas para un comprador: captación del prospecto hasta la entrega del inmueble.
+// Embudo único de negocios según lo solicitado
 const BUYER_STAGES = [
-  'nuevo',
-  'prospecto',
-  'contactado',
-  'seguimiento',
-  'cita',
-  'negociacion',
-  'contrato',
   'INTEGRACION',
   'AVALUO',
   'REVISION_AVALUO',
@@ -47,69 +40,56 @@ const BUYER_STAGES = [
   'FIRMA',
   'PAGO',
   'ENTREGA',
-  'integracion',
-  'avaluo',
-  'revision',
-  'notarias',
-  'firma',
-  'pago',
-  'entrega',
-  'postventa',
   'concluido',
 ];
 
-// Proceso de ventas para un vendedor: captación del inmueble hasta integrarse al proceso del comprador.
-// Se mantiene el orden que ya usaba el módulo (incluida "revision", que aquí es
-// la revisión de la valuación, no la del embudo de clientes) y se le suma
-// "seguimiento" para hablar el mismo idioma que el resto del CRM.
 const SELLER_STAGES = [
-  'nuevo',
-  'prospecto',
-  'contactado',
-  'seguimiento',
-  'revision',
-  'cita',
-  'captacion',
-  'integracion_expedientes',
-  'negociacion',
-  'promesa',
-  'avaluo',
+  'INTEGRACION',
+  'AVALUO',
+  'REVISION_AVALUO',
+  'INSCRIPCION',
+  'DICTAMEN',
+  'FIRMA',
+  'PAGO',
+  'ENTREGA',
   'concluido',
 ];
 
-const STAGE_ORDER = Array.from(new Set([...BUYER_STAGES, ...SELLER_STAGES, 'negociacion', 'cancelado']));
+const STAGE_ORDER = [
+  'INTEGRACION',
+  'AVALUO',
+  'REVISION_AVALUO',
+  'INSCRIPCION',
+  'DICTAMEN',
+  'FIRMA',
+  'PAGO',
+  'ENTREGA',
+  'concluido',
+  'cancelado',
+  'PAUSA',
+  'CANCELADO_DEFINITIVO',
+];
 
 const STAGE_LABELS = {
-  nuevo: 'Nuevo',
-  prospecto: 'Prospecto',
-  contactado: 'Contactado',
-  seguimiento: 'Seguimiento',
-  cita: 'Cita',
-  contrato: 'Contrato',
-  INTEGRACION: 'INTEGRACION',
-  AVALUO: 'AVALUO',
-  REVISION_AVALUO: 'REVISION AVALUO',
-  INSCRIPCION: 'INSCRIPCION',
-  DICTAMEN: 'DICTAMEN',
-  FIRMA: 'FIRMA',
-  PAGO: 'PAGO',
-  ENTREGA: 'ENTREGA',
+  INTEGRACION: 'Integración',
+  AVALUO: 'Avalúo',
+  REVISION_AVALUO: 'Revisión avalúo',
+  INSCRIPCION: 'Inscripción',
+  DICTAMEN: 'Dictamen',
+  FIRMA: 'Firma',
+  PAGO: 'Pago',
+  ENTREGA: 'Entrega',
+  concluido: 'Concluido',
+  cancelado: 'Cancelado',
+  PAUSA: 'Pausa',
+  CANCELADO_DEFINITIVO: 'Cancelado definitivo',
   integracion: 'Integración',
   avaluo: 'Avalúo',
-  revision: 'Revisión',
+  revision: 'Revisión avalúo',
   notarias: 'Notarías',
   firma: 'Firma',
   pago: 'Pago',
   entrega: 'Entrega',
-  postventa: 'Postventa',
-  captacion: 'Captación',
-  integracion_expedientes: 'Integración de expedientes',
-  promesa: 'Promesa',
-  negociacion: 'Negociación',
-  concluido: 'Concluido',
-  cancelado: 'Cancelar',
-  PAUSA: 'Pausa',
-  CANCELADO_DEFINITIVO: 'Cancelado definitivo',
 };
 
 // El embudo de negocios antes usaba "perfilado"; ahora habla el mismo idioma que
@@ -446,11 +426,11 @@ const changeStage = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'La nota es obligatoria para cambiar de etapa' });
   }
 
-  const allowed = [...stagesFor(business.processType), 'cancelado', 'PAUSA', 'CANCELADO_DEFINITIVO'];
+  const allowed = ['INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido', 'cancelado', 'PAUSA', 'CANCELADO_DEFINITIVO', 'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago', 'entrega'];
   if (!allowed.includes(stage)) {
     return res.status(400).json({
       success: false,
-      message: `La etapa "${stage}" no pertenece al proceso de ${business.processType === 'vendedor' ? 'vendedor' : 'comprador'}.`,
+      message: `La etapa "${stage}" no es válida.`,
     });
   }
 

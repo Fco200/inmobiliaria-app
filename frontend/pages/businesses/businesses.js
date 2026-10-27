@@ -8,14 +8,10 @@ window.Pages.businesses = {
   async render(container) {
     // Etapas de respaldo (idénticas al backend) por si el endpoint no responde.
     const FALLBACK_BUYER = [
-      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'cita', 'negociacion',
-      'contrato', 'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA',
-      'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago', 'entrega', 'postventa', 'concluido',
+      'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido',
     ];
     const FALLBACK_SELLER = [
-      'nuevo', 'prospecto', 'contactado', 'seguimiento', 'revision', 'cita',
-      'captacion', 'integracion_expedientes', 'negociacion', 'promesa',
-      'avaluo', 'concluido',
+      'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido',
     ];
 
     // Las etapas reales las expone el backend (GET /businesses/stages); así el
@@ -103,13 +99,6 @@ window.Pages.businesses = {
     ).map((s) => ({ value: s, label: stageLabel(s) }));
 
     const STAGE_COLORS = {
-      nuevo: '#64748b',
-      prospecto: '#64748b',
-      contactado: '#64748b',
-      seguimiento: '#0ea5e9',
-      cita: '#0ea5e9',
-      negociacion: '#f59e0b',
-      contrato: '#8b5cf6',
       INTEGRACION: '#0d9488',
       AVALUO: '#b45309',
       REVISION_AVALUO: '#2563eb',
@@ -125,10 +114,6 @@ window.Pages.businesses = {
       firma: '#ea580c',
       pago: '#7c3aed',
       entrega: '#0891b2',
-      postventa: '#14b8a6',
-      captacion: '#8b5cf6',
-      integracion_expedientes: '#0d9488',
-      promesa: '#9333ea',
       concluido: '#1f9d55',
       cancelado: '#dc2626',
       PAUSA: '#f59e0b',
@@ -354,21 +339,23 @@ window.Pages.businesses = {
           sync('partnerAdvisor', 'partnerAdvisorName');
         },
         extraActions(record) {
-          const stages = stagesFor(record.processType);
-          const options = [...stages, 'PAUSA', 'CANCELADO_DEFINITIVO'].map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`).join('');
           return `
-            <button class="btn btn-secondary btn-sm" data-extra data-change-stage data-record="${record._id}" style="margin-left:6px;">Cambiar etapa</button>
-            <button class="btn btn-secondary btn-sm" data-history style="margin-left:6px;">Etapas</button>
-            <button class="btn btn-secondary btn-sm" data-extra data-activity data-record="${record._id}" style="margin-left:6px;">Actividad</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Cambiar etapa</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Etapas</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-activity style="margin-left:6px;">Actividad</button>
           `;
         },
         onExtraAction(record, control, ctx) {
-          if (control.dataset.activity) {
+          if (control.dataset.activity !== undefined) {
             UI.showActivityHistory('Business', record._id, `Centro de actividad — ${record.name}`);
             return;
           }
-          if (control.dataset.changeStage) {
+          if (control.dataset.changeStage !== undefined) {
             openChangeStageModal(record, ctx);
+            return;
+          }
+          if (control.dataset.stagesInfo !== undefined) {
+            showStagesInfo(record.processType);
             return;
           }
         },
@@ -377,6 +364,29 @@ window.Pages.businesses = {
       });
 
       renderSummary(summaryEl);
+    }
+
+    function showStagesInfo(processType) {
+      const stages = stagesFor(processType);
+      const items = stages
+        .map((s) => `<li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel(s))}</strong> <span class="text-muted">(${s})</span></li>`)
+        .join('');
+      const extra = `
+        <p style="margin-top:16px;margin-bottom:8px;"><strong>Opciones adicionales</strong></p>
+        <ul style="margin:0;padding-left:18px;">
+          <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('PAUSA'))}</strong> <span class="text-muted">(PAUSA)</span> — Pausar el negocio temporalmente.</li>
+          <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('CANCELADO_DEFINITIVO'))}</strong> <span class="text-muted">(CANCELADO_DEFINITIVO)</span> — Cancelación definitiva del negocio.</li>
+        </ul>
+      `;
+      UI.openModal({
+        title: `Etapas — Proceso ${processType === 'vendedor' ? 'Vendedor' : 'Comprador'}`,
+        body: `
+          <p class="text-muted" style="margin-top:0;">Flujo de etapas configurado para este proceso:</p>
+          <ol style="margin:0;padding-left:18px;">${items}</ol>
+          ${extra}
+        `,
+        size: 520,
+      });
     }
 
     function openChangeStageModal(record, ctx) {

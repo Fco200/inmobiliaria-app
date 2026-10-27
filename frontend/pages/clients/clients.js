@@ -20,8 +20,8 @@ const FLOW_ORDER = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACIO
 // (models/client.model.js) para que ningún valor caiga fuera del enum.
 const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
 // Medios donde el texto libre (medioOtro) está permitido. En "Recomendación"
-// es opcional (puede quedarse "Recomendación" a secas); en "Otro" es obligatorio.
-const MEDIO_OTROS = ['Otro', 'Recomendación'];
+// se pide QUIÉN recomendó; en "Otro" se pide especificar.
+const MEDIO_OTROS = ['Recomendación', 'Recomendacion', 'Otro'];
 // Cinco operaciones exactas: "Alquilar" antes de "Otro".
 const CLIENT_SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
 // Formas de compra/crédito explícitas que pidió el equipo comercial. El campo
@@ -204,14 +204,15 @@ window.Pages.clients = {
           input.style.display = 'block';
           input.required = show && requiredWhen.includes(select.value) && select.required;
           // Texto y label específicos por opción: en "Recomendación" el campo
-          // pregunta claramente QUIÉN recomendó (antes solo salía "Otro").
-          if (labelEl && otroLabels[select.value]) {
-            labelEl.textContent = otroLabels[select.value];
+          // pregunta claramente QUIÉN recomendó; en "Otro" pide especificar.
+          const key = otroLabels[select.value] || otroPlaceholders[select.value] ? select.value : (select.value === 'Recomendacion' ? 'Recomendación' : select.value);
+          if (labelEl && (otroLabels[select.value] || otroLabels[key])) {
+            labelEl.textContent = otroLabels[select.value] || otroLabels[key];
           } else if (labelEl) {
             labelEl.textContent = baseLabel;
           }
-          if (otroPlaceholders[select.value]) {
-            input.setAttribute('placeholder', otroPlaceholders[select.value]);
+          if (otroPlaceholders[select.value] || otroPlaceholders[key]) {
+            input.setAttribute('placeholder', otroPlaceholders[select.value] || otroPlaceholders[key]);
           } else {
             input.setAttribute('placeholder', basePlaceholder);
           }
@@ -602,12 +603,13 @@ window.Pages.clients = {
               ${UI.field('zona', 'Zona de interés', { placeholder: 'Ej. Zona norte, cerca del centro…' })}
               ${fieldConOtro('medio', '¿Cómo se enteró de nosotros?', {
                 options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })),
-                otroWhen: MEDIO_OTROS,
-                requiredWhen: ['Otro', 'Recomendación'],
+                otroWhen: ['Recomendación', 'Recomendacion', 'Otro'],
+                requiredWhen: ['Recomendación', 'Recomendacion', 'Otro'],
                 placeholder: 'Ej. Recomendado por el asesor Juan Pérez…',
-                otroLabels: { Recomendación: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró' },
+                otroLabels: { Recomendación: '¿Quién te recomendó? *', Recomendacion: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró *' },
                 otroPlaceholders: {
                   Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)',
+                  Recomendacion: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)',
                   Otro: 'Ej. Volante, evento, referido por…',
                 },
               })}
@@ -660,8 +662,8 @@ window.Pages.clients = {
           }
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-          if ((values.medio === 'Otro' || values.medio === 'Recomendación') && !String(values.medioOtro || '').trim()) {
-            UI.toast(values.medio === 'Recomendación'
+          if ((values.medio === 'Otro' || values.medio === 'Recomendación' || values.medio === 'Recomendacion') && !String(values.medioOtro || '').trim()) {
+            UI.toast((values.medio === 'Recomendación' || values.medio === 'Recomendacion')
               ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
               : 'Escribe cómo te contactó el cliente', 'warning');
             return;
@@ -696,7 +698,7 @@ window.Pages.clients = {
               ${UI.field('nombre', 'Nombre completo', { required: true, full: true, value: record.nombre || '', placeholder: 'Ej. María López' })}
               ${UI.field('telefono', 'Teléfono', { type: 'tel', value: record.telefono || '' })}
               ${UI.field('email', 'Correo (opcional)', { type: 'email', value: record.email || '', placeholder: 'Puede dejarse vacío' })}
-              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: MEDIO_OTROS, requiredWhen: ['Otro', 'Recomendación'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…', otroLabels: { Recomendación: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró' }, otroPlaceholders: { Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)', Otro: 'Ej. Volante, evento, referido por…' } })}
+              ${fieldConOtro('medio', 'Medio de contacto', { value: record.medio || 'Otro', otroValue: record.medioOtro || '', options: CLIENT_MEDIOS.map((m) => ({ value: m, label: m })), otroWhen: ['Recomendación', 'Recomendacion', 'Otro'], requiredWhen: ['Recomendación', 'Recomendacion', 'Otro'], placeholder: 'Ej. Recomendado por el asesor Juan Pérez…', otroLabels: { Recomendación: '¿Quién te recomendó? *', Recomendacion: '¿Quién te recomendó? *', Otro: 'Especifica cómo se enteró *' }, otroPlaceholders: { Recomendación: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)', Recomendacion: 'Escribe el nombre de quien lo recomendó (cliente, asesor, familiar…)', Otro: 'Ej. Volante, evento, referido por…' } })}
               ${fieldConOtro('servicio', 'Operación', { value: record.servicio || 'Comprar', otroValue: record.servicioOtro || '', options: CLIENT_SERVICIOS.map((s) => ({ value: s, label: s })), placeholder: 'Ej. Permuta, herencia, ampliación…' })}
               ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, Predio industrial…' })}
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
@@ -740,8 +742,8 @@ window.Pages.clients = {
           }
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
-          if ((values.medio === 'Otro' || values.medio === 'Recomendación') && !String(values.medioOtro || '').trim()) {
-            UI.toast(values.medio === 'Recomendación'
+          if ((values.medio === 'Otro' || values.medio === 'Recomendación' || values.medio === 'Recomendacion') && !String(values.medioOtro || '').trim()) {
+            UI.toast((values.medio === 'Recomendación' || values.medio === 'Recomendacion')
               ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
               : 'Escribe cómo te contactó el cliente', 'warning');
             return;

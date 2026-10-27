@@ -54,7 +54,7 @@ window.Pages.businesses = {
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.auth.me().catch(() => null),
-        fetchAllBusinesses({ status: 'activo' }).catch(() => []),
+        fetchAllBusinesses().catch(() => []),
       ]);
       // El inventario devuelve items { property, assignedAgent }: se normaliza
       // a la forma de Property que espera el formulario, con respaldo a la
@@ -161,7 +161,8 @@ window.Pages.businesses = {
       });
     });
 
-    container.querySelector('[data-new]').addEventListener('click', () => openNew());
+    const newBtnEl = container.querySelector('[data-new]');
+    if (newBtnEl) newBtnEl.addEventListener('click', () => openNew());
 
     function columnsFor(processType) {
       const columns = stagesFor(processType)
@@ -187,35 +188,53 @@ window.Pages.businesses = {
     async function renderSummary(summaryEl) {
       if (!summaryEl) return;
       try {
-        const [totalR, activeR, doneR, cancelledR, negR] = await Promise.all([
-          API.businesses.list({ limit: 1 }),
-          API.businesses.list({ limit: 1, status: 'activo' }),
-          API.businesses.list({ limit: 1, status: 'concluido' }),
-          API.businesses.list({ limit: 1, status: 'cancelado' }),
-          API.businesses.list({ limit: 1, currentStage: 'negociacion' }),
-        ]);
-        const total = (totalR.meta && totalR.meta.total) || 0;
-        const activos = (activeR.meta && activeR.meta.total) || 0;
-        const concluidos = (doneR.meta && doneR.meta.total) || 0;
-        const cancelados = (cancelledR.meta && cancelledR.meta.total) || 0;
-        const enNeg = (negR.meta && negR.meta.total) || 0;
-        const kpi = (title, value, tone, icon) => `
-          <div class="kpi-card tone-${tone}">
-            <div class="kpi-icon">${icon}</div>
-            <div class="kpi-body">
-              <small>${title}</small>
-              <strong>${value}</strong>
-            </div>
-          </div>`;
-        summaryEl.innerHTML = `<div class="kpi-grid" style="margin-bottom:16px;">${[
-          kpi('Total de negocios', total, 'blue', '&#128179;'),
-          kpi('Activos', activos, 'green', '&#10004;'),
-          kpi('En negociación', enNeg, 'amber', '&#129309;'),
-          kpi('Concluidos', concluidos, 'teal', '&#127919;'),
-          kpi('Cancelados', cancelados, 'red', '&#10060;'),
-        ].join('')}</div>`;
+        const all = await API.businesses.list({ limit: 1000 }).catch(() => ({ data: [] }));
+        const items = (all && (all.data || all)) || [];
+        const counts = {};
+        items.forEach((b) => {
+          const s = b && b.currentStage ? String(b.currentStage) : '';
+          if (!s) return;
+          counts[s] = (Number(counts[s]) || 0) + 1;
+        });
+        const total = items.length;
+        // Mostrar todas las etapas conocidas + cualquier otra que aparezca
+        const known = [
+          ...new Set([...(stageMeta.byProcess.comprador || []), ...(stageMeta.byProcess.vendedor || []), 'PAUSA', 'concluido', 'cancelado', 'CANCELADO_DEFINITIVO']),
+        ];
+        const others = Object.keys(counts).filter((k) => !known.includes(k));
+        const stages = [...known, ...others];
+        summaryEl.innerHTML = `
+          <div class="pipeline-strip" style="margin-bottom:16px;">
+            <button class="pipeline-step pipeline-all is-active" type="button" style="--pipeline-color:var(--primary);">
+              <span class="pipeline-label">Total de negocios</span>
+              <span class="pipeline-count">${total}</span>
+            </button>
+            ${stages
+              .map((s) => {
+                if (s === 'concluido' || s === 'CANCELADO_DEFINITIVO') return '';
+                const label = stageLabel(s) || s;
+                const color = colorFor(s);
+                const c = Number(counts[s]) || 0;
+                return `
+                  <button class="pipeline-step" type="button" style="--pipeline-color:${color};">
+                    <span class="pipeline-label">${UI.escapeHtml(label)}</span>
+                    <span class="pipeline-count">${c}</span>
+                  </button>
+                `;
+              })
+              .join('')}
+            <button class="pipeline-step" type="button" style="--pipeline-color:#1f9d55;">
+              <span class="pipeline-label">Concluidos</span>
+              <span class="pipeline-count">${Number(counts.concluido) || 0}</span>
+            </button>
+            <button class="pipeline-step" type="button" style="--pipeline-color:#dc2626;">
+              <span class="pipeline-label">Cancelados</span>
+              <span class="pipeline-count">${(Number(counts.cancelado) || 0) + (Number(counts.CANCELADO_DEFINITIVO) || 0) + (Number(counts.PAUSA) || 0)}</span>
+            </button>
+          </div>
+        `;
       } catch (error) {
-        // los indicadores son informativos; la vista principal no debe romperse
+        summaryEl.innerHTML = '';
       }
     }
 
@@ -699,9 +718,13 @@ window.Pages.businesses = {
       await refrescarActivos();
       // Alta ágil para la llamada/visita: solo lo esencial. Contraoferta,
       // promesa, cierre y comisión se capturan después desde el detalle.
+      const stageOptionsForNew = (processType) => (stagesFor(processType) || [])
+        .filter((s) => s !== 'concluido' && s !== 'cancelado')
+        .map((s) => ({ value: s, label: stageLabel(s) }));
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
-        { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
+        { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }], value: 'comprador' },
+        { name: 'currentStage', label: 'Etapa inicial', type: 'select', options: stageOptionsForNew('comprador') },
         { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
@@ -740,6 +763,20 @@ window.Pages.businesses = {
       if (form) {
         // Conecta los buscadores remotos de comprador/vendedor.
         if (UI.wireSearchSelects) UI.wireSearchSelects(form);
+        // Actualiza las etapas cuando cambia el proceso (comprador/vendedor).
+        const procSel = form.querySelector('#fld-processType');
+        const stageSel = form.querySelector('#fld-currentStage');
+        if (procSel && stageSel) {
+          const syncStages = () => {
+            const opts = stageOptionsForNew(procSel.value);
+            stageSel.innerHTML = opts.map((o) => `<option value="${UI.escapeHtml(o.value)}">${UI.escapeHtml(o.label)}</option>`).join('');
+            if (opts.length && !opts.find((o) => o.value === stageSel.value)) {
+              stageSel.value = opts[0].value;
+            }
+          };
+          procSel.addEventListener('change', syncStages);
+          syncStages();
+        }
         // Comprador/vendedor/asesor "Otro / Externo": muestra el campo de
         // nombre libre solo cuando la opción externa está elegida.
         const syncExt = (selName, wrapName) => {

@@ -193,8 +193,15 @@ window.Pages.chat = {
             </div>
             <div class="chat-quick-list" id="chat-quick-list"></div>
           </div>
+          <div id="chat-reply-bar" style="display:none;padding:8px 16px;background:var(--bg);border-top:1px solid var(--border);align-items:center;gap:8px;flex-shrink:0;">
+            <div style="flex:1;min-width:0;font-size:12px;color:var(--text-muted);">
+              <div style="font-weight:600;color:var(--text);">Respondiendo a <span id="chat-reply-to-name"></span></div>
+              <div id="chat-reply-to-msg" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            </div>
+            <button class="icon-btn" id="chat-reply-cancel" type="button" title="Cancelar respuesta" aria-label="Cancelar respuesta">&times;</button>
+          </div>
           <div class="chat-input-bar" id="chat-input" style="display:none;">
-            <textarea class="form-control chat-textarea" id="msg-input" rows="1" maxlength="2000" placeholder="Escribe un mensaje..." autocomplete="off" autocapitalize="sentences"></textarea>
+            <textarea class="form-control chat-textarea" id="msg-input" rows="1" maxlength="2000" placeholder="Escribe un mensaje... Usa @ para mencionar" autocomplete="off" autocapitalize="sentences"></textarea>
             <button class="btn btn-primary" id="btn-send">Enviar</button>
           </div>
         </div>
@@ -223,6 +230,10 @@ window.Pages.chat = {
     const chatConn = $('#chat-conn');
     const quickBox = $('#chat-quick');
     const quickList = $('#chat-quick-list');
+    const replyBar = $('#chat-reply-bar');
+    const replyToName = $('#chat-reply-to-name');
+    const replyToMsg = $('#chat-reply-to-msg');
+    const replyCancel = $('#chat-reply-cancel');
 
     let currentChat = null;
     let chats = [];
@@ -236,6 +247,10 @@ window.Pages.chat = {
     let flushing = false;
     let chatsReloadTimer = null;
     let markReadTimer = null;
+    // Responder a mensaje
+    let replyTo = null; // { _id, message, sender: { _id, name } }
+    // Menciones
+    let chatParticipantsList = [];
 
     if (isAdmin) btnNewAnnouncement.style.display = '';
 
@@ -304,6 +319,9 @@ window.Pages.chat = {
             if (idxByClient >= 0) {
               currentChat.messages[idxByClient] = { ...msg, clientId: data.clientId };
               clearPendingWatch(data.clientId);
+              // Eliminar de cola si existe
+              const qi = pendingQueue.findIndex((q) => q.clientId === data.clientId);
+              if (qi >= 0) pendingQueue.splice(qi, 1);
             } else if (idxById >= 0) {
               currentChat.messages[idxById] = msg;
             } else if (msg._id) {
@@ -533,13 +551,43 @@ window.Pages.chat = {
     // -----------------------------------------------------------------------
     // Conversación
     // -----------------------------------------------------------------------
+    function clearReply() {
+      replyTo = null;
+      if (replyBar) replyBar.style.display = 'none';
+    }
+
+    function setReply(msg) {
+      if (!msg) return;
+      const s = msg.sender || {};
+      const sName = (s && (s.name || s.username)) || msg.emisorNombre || 'Usuario';
+      replyTo = {
+        _id: msg._id || msg.clientId,
+        message: String(msg.message || '').slice(0, 200),
+        sender: { _id: s._id || s.id, name: sName }
+      };
+      if (replyBar) replyBar.style.display = 'flex';
+      if (replyToName) replyToName.textContent = sName;
+      if (replyToMsg) replyToMsg.textContent = replyTo.message;
+      if (msgInput) msgInput.focus();
+    }
+
+    if (replyCancel) {
+      replyCancel.addEventListener('click', clearReply);
+    }
+
     async function openChat(chatId) {
       if (currentChat) leaveChat(currentChat._id);
+      clearReply();
       try {
         const result = await API.chats.get(chatId);
         currentChat = pickData(result);
         if (!currentChat || !currentChat._id) throw new Error('Chat no disponible');
         if (!Array.isArray(currentChat.messages)) currentChat.messages = [];
+        // Guardar participantes para menciones
+        chatParticipantsList = (currentChat.participants || []).filter(Boolean).map(p => {
+          const pid = p._id || p.id || p;
+          return { _id: pid, name: (p.name || p.username) || String(pid), username: p.username };
+        });
         chatTitle.textContent = chatLabel(currentChat);
         // En un canal de equipo con 50 personas, la lista completa de
         // participantes se comía el ancho de la cabecera (y el chat quedaba
@@ -643,16 +691,25 @@ window.Pages.chat = {
           ? '<span class="msg-state">Enviando…</span>'
           : (m.failed ? '<span class="msg-state">No se envió</span>' : '');
 
-        return `${sep}${unreadSep}<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}${extra}${state}"${m.clientId ? ` data-client="${UI.escapeHtml(m.clientId)}"` : ''}>
+        const replyHtml = m.replyToMessage ? `<div style="background:rgba(0,0,0,0.05);border-left:2px solid var(--primary);padding:4px 6px;margin-bottom:4px;border-radius:4px;font-size:11px;opacity:0.8;"><strong>${UI.escapeHtml(m.replyToMessage.sender && m.replyToMessage.sender.name ? m.replyToMessage.sender.name : '')}</strong>: ${UI.escapeHtml(String(m.replyToMessage.message || '').slice(0,80))}</div>` : '';
+        return `${sep}${unreadSep}<div class="msg-bubble ${isMine ? 'msg-sent' : 'msg-received'}${extra}${state}"${m.clientId ? ` data-client="${UI.escapeHtml(m.clientId)}"` : ''} data-msg-id="${UI.escapeHtml(m._id || '')}">
           ${!isMine ? `<div class="msg-sender">${supportMsg ? '&#128736;&#65039; ' : ''}${UI.escapeHtml(senderName)}</div>` : ''}
+          ${replyHtml}
           <div>${linkify(m.message)}</div>
-          <div class="msg-time">${Format.time(m.createdAt)}${status}${retry}</div>
+          <div class="msg-time">${Format.time(m.createdAt)}${status}${retry} <button class="msg-retry" type="button" data-reply-msg="${UI.escapeHtml(m._id || m.clientId || '')}">Responder</button></div>
         </div>`;
       }).join('');
 
       chatMessages.innerHTML = html;
       chatMessages.querySelectorAll('[data-retry]').forEach(btn => {
         btn.addEventListener('click', () => retryMessage(btn.dataset.retry));
+      });
+      chatMessages.querySelectorAll('[data-reply-msg]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mid = btn.dataset.replyMsg;
+          const msg = currentChat.messages.find(m => m && (String(m._id) === String(mid) || String(m.clientId) === String(mid)));
+          if (msg) setReply(msg);
+        });
       });
       if (nearBottom || unreadDivider === 0) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -671,11 +728,26 @@ window.Pages.chat = {
         UI.toast('El mensaje es demasiado largo (máximo 2000 caracteres)', 'warning');
         return;
       }
+      // Extraer menciones @nombre
+      const mentions = [];
+      const mentionRegex = /@([A-Za-zÀ-ÿ0-9._-]+)/g;
+      let m;
+      while ((m = mentionRegex.exec(text))) {
+        const uname = m[1].toLowerCase();
+        const found = (chatParticipantsList || []).find(p => {
+          const n = (p.name || p.username || '').toLowerCase();
+          return n.replace(/\s+/g,'') === uname.replace(/\s+/g,'') || (p.username && p.username.toLowerCase() === uname);
+        });
+        if (found && found._id && !mentions.includes(String(found._id))) mentions.push(String(found._id));
+      }
       const clientId = newClientId();
       const item = {
         clientId,
         chatId: String(currentChat._id),
         text,
+        replyTo: replyTo ? replyTo._id : null,
+        replyToMessage: replyTo ? { _id: replyTo._id, message: replyTo.message, sender: replyTo.sender } : null,
+        mentions: mentions,
       };
       // Se pinta de inmediato (mensaje "optimista"): el asesor no espera a la
       // red para ver lo que escribió.
@@ -687,9 +759,14 @@ window.Pages.chat = {
         sender: { _id: userId, name: myName, role: user.role || null },
         emisorNombre: myName,
         pending: true,
+        replyTo: replyTo ? replyTo._id : null,
+        replyToMessage: replyTo ? { _id: replyTo._id, message: replyTo.message, sender: replyTo.sender } : null,
+        mentions: mentions,
       });
+      const wasReply = replyTo;
       msgInput.value = '';
       autoGrow();
+      clearReply();
       renderMessages();
       pendingQueue.push(item);
       flushQueue();
@@ -715,19 +792,19 @@ window.Pages.chat = {
     }
 
     async function deliver(item) {
-      if (socket && socket.connected) {
-        socket.emit('send-message', { chatId: item.chatId, message: item.text, clientId: item.clientId });
-        // Si el eco no llega (se cayó la red), el mensaje se marca como fallido.
-        watchPending(item.clientId);
-        return true;
-      }
+      // Intentar primero por REST para mayor fiabilidad (funciona siempre aunque socket falle)
       try {
-        const res = await API.chats.sendMessage(item.chatId, { message: item.text, clientId: item.clientId });
+        const payload = { message: item.text, clientId: item.clientId };
+        if (item.replyTo) payload.replyTo = item.replyTo;
+        if (item.replyToMessage) payload.replyToMessage = item.replyToMessage;
+        if (Array.isArray(item.mentions) && item.mentions.length) payload.mentions = item.mentions;
+        const res = await API.chats.sendMessage(item.chatId, payload);
         const data = pickData(res);
         clearPendingWatch(item.clientId);
         if (data && currentChat) {
           const idx = currentChat.messages.findIndex((m) => m && m.clientId === item.clientId);
           if (idx >= 0) currentChat.messages[idx] = { ...data, clientId: item.clientId };
+          else currentChat.messages.push({ ...data, clientId: item.clientId });
           renderMessages();
         }
         return true;
@@ -738,6 +815,16 @@ window.Pages.chat = {
           markFailed(item.clientId, (e && e.message) || 'No se pudo enviar');
           UI.toast((e && e.message) || 'No se pudo enviar el mensaje', 'error');
           return true;
+        }
+        // Intentar por socket como respaldo
+        if (socket && socket.connected) {
+          try {
+            socket.emit('send-message', { chatId: item.chatId, message: item.text, clientId: item.clientId });
+            watchPending(item.clientId);
+            return true;
+          } catch (err2) {
+            return false;
+          }
         }
         // Error de red: se deja en la cola para reintentar.
         return false;
@@ -779,7 +866,7 @@ window.Pages.chat = {
       item.pending = true;
       item.failed = false;
       renderMessages();
-      const queueItem = { clientId, chatId: String(currentChat._id), text: item.message };
+      const queueItem = { clientId, chatId: String(currentChat._id), text: item.message, replyTo: item.replyTo || null, replyToMessage: item.replyToMessage || null, mentions: item.mentions || [] };
       pendingQueue.push(queueItem);
       flushQueue();
     }

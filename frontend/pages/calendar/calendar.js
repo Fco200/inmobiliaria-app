@@ -155,6 +155,7 @@ window.Pages.calendar = (() => {
         </div>
         <div class="cal-filter-bar">${filterChips}</div>
         <div class="cal-view" data-cal-view>${renderView()}</div>
+        ${renderDaySummary()}
         <div class="cal-setup-note">&#128467;&nbsp; Integración con Google Calendar próximamente.</div>
       </div>
     `;
@@ -296,6 +297,56 @@ window.Pages.calendar = (() => {
   }
 
   // ---- Vistas ----
+  function renderDaySummary() {
+    let targetDate = null;
+    if (state.view === 'day') {
+      targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
+    } else if (state.view === 'week') {
+      const range = rangeForView();
+      targetDate = keyToDate(range.start);
+    } else {
+      targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
+    }
+    const events = eventsOnDay(targetDate).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+    if (!events.length) {
+      return `
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:16px;">Resumen del día — ${WEEK_NAMES_FULL[targetDate.getDay()]}, ${targetDate.getDate()} ${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}</h3>
+          </div>
+          <div class="card-body"><p class="text-muted" style="margin:0;">Sin eventos para este día.</p></div>
+        </div>
+      `;
+    }
+    const items = events.map((e) => {
+      const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+      const color = meta.color || '#64748b';
+      const clientName = e.client && (e.client.nombre || e.client.name) ? (e.client.nombre || e.client.name) : null;
+      const advisor = e.advisor || (e.creator && e.creator.name) || null;
+      return `
+        <button class="cal-summary-item" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="border-left:3px solid ${color};">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:600;">${UI.escapeHtml(e.title)}</div>
+              <div class="text-muted" style="font-size:12px;margin-top:2px;">${(meta.label || e.type).toUpperCase()}${e.location ? ` · ${UI.escapeHtml(e.location)}` : ''}${clientName ? ` · Cliente: ${UI.escapeHtml(clientName)}` : ''}${advisor ? ` · Asesor: ${UI.escapeHtml(advisor)}` : ''}</div>
+              ${e.description ? `<div class="text-muted" style="font-size:12px;margin-top:4px;">${UI.escapeHtml(e.description)}</div>` : ''}
+            </div>
+            <div class="text-muted" style="font-size:12px;text-align:right;">${Format.time(e.start)}${e.end && e.type !== 'goal' ? ` – ${Format.time(e.end)}` : ''}</div>
+          </div>
+        </button>
+      `;
+    }).join('');
+    return `
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <h3 style="margin:0;font-size:16px;">Resumen del día — ${WEEK_NAMES_FULL[targetDate.getDay()]}, ${targetDate.getDate()} ${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}</h3>
+          <span class="text-muted" style="font-size:12px;">${events.length} ${events.length === 1 ? 'evento' : 'eventos'}</span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">${items}</div>
+      </div>
+    `;
+  }
+
   function renderView() {
     if (state.view === 'month') return renderMonth();
     if (state.view === 'week') return renderWeek();
@@ -342,8 +393,8 @@ window.Pages.calendar = (() => {
         const events = eventsOnDay(d);
         const isToday = key === todayKey;
         const isOtherMonth = d.getMonth() !== month;
-        const chips = events.slice(0, 3).map((e) => eventChip(e, true)).join('');
-        const more = events.length > 3 ? `<div class="cal-more">+${events.length - 3} más</div>` : '';
+        const chips = events.slice(0, 4).map((e) => eventChip(e, true)).join('');
+        const more = events.length > 4 ? `<div class="cal-more">+${events.length - 4} más</div>` : '';
         return `
           <div class="cal-cell ${isOtherMonth ? 'cal-other-month' : ''}" data-date="${key}">
             <div class="cal-cell-head ${isToday ? 'cal-today' : ''}">${d.getDate()}</div>

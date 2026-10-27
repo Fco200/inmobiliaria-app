@@ -489,13 +489,22 @@ window.Pages.properties = {
               if (!exists) {
                 const opt = document.createElement('option');
                 opt.value = String(currentId);
-                opt.textContent = (record.responsibleUser && record.responsibleUser.name) || 'Asesor actual';
+                opt.textContent = (record.responsibleUser && record.responsibleUser.name) || stored?.name || 'Asesor actual';
                 responsibleSel.appendChild(opt);
               }
               responsibleSel.value = String(currentId);
             }
           } else {
-            if (stored && stored._id) responsibleSel.value = String(stored._id);
+            if (stored && stored._id) {
+              // Asegurar que la opción existe con el nombre correcto
+              if (!Array.from(responsibleSel.options).some((o) => String(o.value) === String(stored._id))) {
+                const opt = document.createElement('option');
+                opt.value = String(stored._id);
+                opt.textContent = stored.name || stored.nombre || stored.username || 'Yo';
+                responsibleSel.appendChild(opt);
+              }
+              responsibleSel.value = String(stored._id);
+            }
             responsibleSel.disabled = true;
             responsibleSel.title = 'Se asigna automáticamente al asesor que registra la propiedad.';
           }

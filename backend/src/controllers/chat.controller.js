@@ -323,7 +323,7 @@ const createChat = asyncHandler(async (req, res) => {
 //   3) el emisor viaja ya resuelto en el payload del socket (sin populate).
 const MAX_CHAT_MESSAGES = 5000;
 
-const persistAndBroadcastMessage = async (io, chatId, userId, userName, message, senderRoleCode, clientId) => {
+const persistAndBroadcastMessage = async (io, chatId, userId, userName, message, senderRoleCode, clientId, extra = {}) => {
   const text = String(message || '').trim();
   if (!text) throw new Error('El mensaje no puede estar vacío');
   if (text.length > 2000) throw new Error('El mensaje no puede superar los 2000 caracteres');
@@ -364,6 +364,9 @@ const persistAndBroadcastMessage = async (io, chatId, userId, userName, message,
     readBy: [senderId],
     createdAt: now,
     updatedAt: now,
+    replyTo: extra.replyTo || null,
+    replyToMessage: extra.replyToMessage || undefined,
+    mentions: Array.isArray(extra.mentions) ? extra.mentions : [],
   };
 
   // Escritura atómica: una sola operación contra MongoDB. `$slice` acota el
@@ -458,8 +461,8 @@ const persistAndBroadcastMessage = async (io, chatId, userId, userName, message,
 // Punto de entrada usado por el endpoint REST y por el socket 'send-message'.
 // `senderRoleCode` es opcional: si no se pasa, el mensaje se emite sin rol
 // (el frontend solo lo usa para etiquetar los mensajes de Soporte Técnico).
-const persistAndBroadcast = (io, chatId, userId, userName, message, senderRoleCode, clientId) =>
-  persistAndBroadcastMessage(io, chatId, userId, userName, message, senderRoleCode || null, clientId || null);
+const persistAndBroadcast = (io, chatId, userId, userName, message, senderRoleCode, clientId, extra) =>
+  persistAndBroadcastMessage(io, chatId, userId, userName, message, senderRoleCode || null, clientId || null, extra || {});
 
 // Enviar mensaje (vía REST)
 const sendMessage = asyncHandler(async (req, res) => {
@@ -482,9 +485,13 @@ const sendMessage = asyncHandler(async (req, res) => {
   const roleCode = req.user.role && typeof req.user.role === 'object'
     ? (req.user.role.code || null)
     : null;
+  const extra = {};
+  if (req.body.replyTo) extra.replyTo = req.body.replyTo;
+  if (req.body.replyToMessage) extra.replyToMessage = req.body.replyToMessage;
+  if (Array.isArray(req.body.mentions)) extra.mentions = req.body.mentions;
 
   try {
-    const newMsg = await persistAndBroadcast(io, chatId, req.user._id.toString(), nameUser, text, roleCode, clientId);
+    const newMsg = await persistAndBroadcast(io, chatId, req.user._id.toString(), nameUser, text, roleCode, clientId, extra);
     return res.status(201).json({ success: true, data: newMsg });
   } catch (error) {
     if (error.message === 'Chat no encontrado') {

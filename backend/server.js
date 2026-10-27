@@ -204,8 +204,12 @@ async function start() {
         ? (socket.user.role.code || null)
         : null;
       const clientId = data.clientId ? String(data.clientId) : null;
+      const extra = {};
+      if (data.replyTo) extra.replyTo = data.replyTo;
+      if (data.replyToMessage) extra.replyToMessage = data.replyToMessage;
+      if (Array.isArray(data.mentions)) extra.mentions = data.mentions;
       try {
-        await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text, roleCode, clientId);
+        await persistAndBroadcast(io, chatId, socket.user._id.toString(), nameUser, text, roleCode, clientId, extra);
       } catch (err) {
         logger.error('Error al enviar mensaje por Socket.io', {
           chatId,

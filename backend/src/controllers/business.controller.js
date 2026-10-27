@@ -39,6 +39,14 @@ const BUYER_STAGES = [
   'cita',
   'negociacion',
   'contrato',
+  'INTEGRACION',
+  'AVALUO',
+  'REVISION_AVALUO',
+  'INSCRIPCION',
+  'DICTAMEN',
+  'FIRMA',
+  'PAGO',
+  'ENTREGA',
   'integracion',
   'avaluo',
   'revision',
@@ -78,6 +86,14 @@ const STAGE_LABELS = {
   seguimiento: 'Seguimiento',
   cita: 'Cita',
   contrato: 'Contrato',
+  INTEGRACION: 'INTEGRACION',
+  AVALUO: 'AVALUO',
+  REVISION_AVALUO: 'REVISION AVALUO',
+  INSCRIPCION: 'INSCRIPCION',
+  DICTAMEN: 'DICTAMEN',
+  FIRMA: 'FIRMA',
+  PAGO: 'PAGO',
+  ENTREGA: 'ENTREGA',
   integracion: 'Integración',
   avaluo: 'Avalúo',
   revision: 'Revisión',
@@ -91,7 +107,9 @@ const STAGE_LABELS = {
   promesa: 'Promesa',
   negociacion: 'Negociación',
   concluido: 'Concluido',
-  cancelado: 'Cancelado',
+  cancelado: 'Cancelar',
+  PAUSA: 'Pausa',
+  CANCELADO_DEFINITIVO: 'Cancelado definitivo',
 };
 
 // El embudo de negocios antes usaba "perfilado"; ahora habla el mismo idioma que
@@ -417,13 +435,18 @@ const remove = asyncHandler(async (req, res) => {
 
 const changeStage = asyncHandler(async (req, res) => {
   const stage = normalizarEtapa(req.body.stage);
+  const note = String((req.body.nota || req.body.comments || req.body.note || '')).trim();
   const business = await Business.findById(req.params.id);
   if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
   }
 
-  const allowed = [...stagesFor(business.processType), 'cancelado'];
+  if (!note) {
+    return res.status(400).json({ success: false, message: 'La nota es obligatoria para cambiar de etapa' });
+  }
+
+  const allowed = [...stagesFor(business.processType), 'cancelado', 'PAUSA', 'CANCELADO_DEFINITIVO'];
   if (!allowed.includes(stage)) {
     return res.status(400).json({
       success: false,
@@ -436,8 +459,6 @@ const changeStage = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'El negocio ya está en esa etapa' });
   }
 
-  // Se buscan las dos escrituras porque un negocio creado antes de la migración
-  // puede seguir teniendo el historial guardado con el código viejo ("perfilado").
   const previousStageRecord = await BusinessStage.findOne({
     business: business._id,
     stageCode: { $in: Array.from(new Set([previousStage, business.currentStage])) },
@@ -446,6 +467,7 @@ const changeStage = asyncHandler(async (req, res) => {
   if (previousStageRecord) {
     previousStageRecord.finishedAt = new Date();
     previousStageRecord.status = 'completada';
+    if (!previousStageRecord.comments && note) previousStageRecord.comments = note;
     await previousStageRecord.save();
   }
 
@@ -453,9 +475,11 @@ const changeStage = asyncHandler(async (req, res) => {
   if (stage === 'concluido') {
     business.status = 'concluido';
     business.finishedAt = new Date();
-  } else if (stage === 'cancelado') {
+  } else if (stage === 'cancelado' || stage === 'CANCELADO_DEFINITIVO') {
     business.status = 'cancelado';
     business.finishedAt = new Date();
+  } else if (stage === 'PAUSA') {
+    business.status = 'cancelado';
   } else {
     business.status = 'activo';
   }
@@ -468,6 +492,8 @@ const changeStage = asyncHandler(async (req, res) => {
     order: STAGE_ORDER.indexOf(stage),
     startedAt: new Date(),
     status: 'en_proceso',
+    comments: note,
+    responsibleUser: req.user._id,
   });
 
   await logAudit({

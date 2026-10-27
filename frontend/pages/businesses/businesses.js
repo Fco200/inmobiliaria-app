@@ -9,8 +9,8 @@ window.Pages.businesses = {
     // Etapas de respaldo (idénticas al backend) por si el endpoint no responde.
     const FALLBACK_BUYER = [
       'nuevo', 'prospecto', 'contactado', 'seguimiento', 'cita', 'negociacion',
-      'contrato', 'integracion', 'avaluo', 'revision', 'notarias', 'firma',
-      'pago', 'entrega', 'postventa', 'concluido',
+      'contrato', 'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA',
+      'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago', 'entrega', 'postventa', 'concluido',
     ];
     const FALLBACK_SELLER = [
       'nuevo', 'prospecto', 'contactado', 'seguimiento', 'revision', 'cita',
@@ -110,6 +110,14 @@ window.Pages.businesses = {
       cita: '#0ea5e9',
       negociacion: '#f59e0b',
       contrato: '#8b5cf6',
+      INTEGRACION: '#0d9488',
+      AVALUO: '#b45309',
+      REVISION_AVALUO: '#2563eb',
+      INSCRIPCION: '#8b5cf6',
+      DICTAMEN: '#9333ea',
+      FIRMA: '#ea580c',
+      PAGO: '#7c3aed',
+      ENTREGA: '#0891b2',
       integracion: '#0d9488',
       avaluo: '#b45309',
       revision: '#2563eb',
@@ -123,6 +131,8 @@ window.Pages.businesses = {
       promesa: '#9333ea',
       concluido: '#1f9d55',
       cancelado: '#dc2626',
+      PAUSA: '#f59e0b',
+      CANCELADO_DEFINITIVO: '#dc2626',
     };
     const colorFor = (stage) => STAGE_COLORS[stage] || '#64748b';
 
@@ -172,8 +182,10 @@ window.Pages.businesses = {
       const columns = stagesFor(processType)
         .filter((s) => s !== 'concluido' && s !== 'cancelado')
         .map((s) => ({ stage: s, label: stageLabel(s), color: colorFor(s) }));
+      columns.push({ stage: 'PAUSA', label: stageLabel('PAUSA'), color: colorFor('PAUSA') });
       columns.push({ stage: 'concluido', label: stageLabel('concluido'), color: '#1f9d55' });
       columns.push({ stage: 'cancelado', label: stageLabel('cancelado'), color: '#dc2626' });
+      columns.push({ stage: 'CANCELADO_DEFINITIVO', label: stageLabel('CANCELADO_DEFINITIVO'), color: colorFor('CANCELADO_DEFINITIVO') });
       return columns;
     }
 
@@ -240,7 +252,7 @@ window.Pages.businesses = {
         statusOptions: [
           { value: 'activo', label: 'Activo' },
           { value: 'concluido', label: 'Concluido' },
-          { value: 'cancelado', label: 'Cancelado' },
+          { value: 'cancelado', label: 'Cancelado/Pausa' },
         ],
         filters: [
           { key: 'buyerClient', label: 'Comprador', searchSource: UI.remoteSources.client, placeholder: 'Todos los compradores' },
@@ -342,42 +354,83 @@ window.Pages.businesses = {
           sync('partnerAdvisor', 'partnerAdvisorName');
         },
         extraActions(record) {
-          const options = stagesFor(record.processType).map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`).join('');
-          // El select de etapa guarda SOLO al cambiar (data-extra-auto): el
-          // botón "Cambiar" se retiró porque ahora no hace falta pulsarlo.
+          const stages = stagesFor(record.processType);
+          const options = [...stages, 'PAUSA', 'CANCELADO_DEFINITIVO'].map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`).join('');
           return `
-            <select class="form-control" data-stage data-extra-auto data-field="currentStage" data-record="${record._id}" style="display:inline-block;width:150px;padding:5px 8px;font-size:12px;margin-left:6px;" title="Cambiar etapa (se guarda al elegir)">${options}</select>
+            <button class="btn btn-secondary btn-sm" data-extra data-change-stage data-record="${record._id}" style="margin-left:6px;">Cambiar etapa</button>
             <button class="btn btn-secondary btn-sm" data-history style="margin-left:6px;">Etapas</button>
             <button class="btn btn-secondary btn-sm" data-extra data-activity data-record="${record._id}" style="margin-left:6px;">Actividad</button>
           `;
         },
         onExtraAction(record, control, ctx) {
-          // Historial de actividad del negocio.
           if (control.dataset.activity) {
             UI.showActivityHistory('Business', record._id, `Centro de actividad — ${record.name}`);
             return;
           }
-          // Cambio de etapa: llega desde el select auto-guardado (o un botón).
-          const sel = control.matches && control.matches('select[data-stage]')
-            ? control
-            : (control.parentElement && control.parentElement.querySelector('[data-stage]'));
-          if (!sel) return;
-          API.businesses
-            .stage(record._id, { stage: sel.value })
-            .then((res) => {
-              ctx.toast((res && res.message) || 'Etapa actualizada', 'success');
-              ctx.reload();
-            })
-            .catch((error) => {
-              ctx.toast(error.message, 'error');
-              ctx.reload();
-            });
+          if (control.dataset.changeStage) {
+            openChangeStageModal(record, ctx);
+            return;
+          }
         },
         onEdit: true,
         onRemove: true,
       });
 
       renderSummary(summaryEl);
+    }
+
+    function openChangeStageModal(record, ctx) {
+      const stages = stagesFor(record.processType);
+      const stageOptions = [...stages, 'PAUSA', 'CANCELADO_DEFINITIVO']
+        .map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`)
+        .join('');
+      const modal = UI.openModal({
+        title: `Cambiar etapa — ${record.name}`,
+        body: `
+          <form id="biz-stage-form" novalidate>
+            <div class="form-field">
+              <label>Etapa</label>
+              <select class="form-control" name="stage" required>${stageOptions}</select>
+            </div>
+            <div class="form-field">
+              <label>Nota / Comentario (obligatorio)</label>
+              <textarea class="form-control" name="nota" rows="4" required placeholder="Describe el motivo del cambio de etapa..."></textarea>
+              <small class="text-muted">Es obligatorio agregar una nota, igual que en el módulo de Clientes.</small>
+            </div>
+          </form>
+        `,
+        footer: `
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="submit" form="biz-stage-form">Guardar</button>
+        `,
+        size: 520,
+      });
+      const overlay = modal.bodyEl.closest('#modal-overlay');
+      overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+      const form = modal.bodyEl.querySelector('#biz-stage-form');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const v = UI.collectForm(e.target);
+        const stage = v.stage;
+        const nota = String(v.nota || '').trim();
+        if (!stage) {
+          UI.toast('Selecciona una etapa', 'warning');
+          return;
+        }
+        if (!nota) {
+          UI.toast('La nota es obligatoria para cambiar de etapa', 'warning');
+          return;
+        }
+        try {
+          const res = await API.businesses.stage(record._id, { stage, nota, comments: nota });
+          UI.closeModal();
+          UI.toast((res && res.message) || 'Etapa actualizada', 'success');
+          if (ctx && typeof ctx.reload === 'function') ctx.reload();
+          else renderView();
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+      });
     }
 
     function getRecordIdFromRow(btn) {

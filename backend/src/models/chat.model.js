@@ -35,6 +35,25 @@ const chatMessageSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     }],
+    // Responder a mensaje específico
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Chat.messages',
+      default: null,
+    },
+    replyToMessage: {
+      _id: { type: mongoose.Schema.Types.ObjectId },
+      message: { type: String, default: '' },
+      sender: {
+        _id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        name: { type: String, default: '' },
+      },
+    },
+    // Menciones a usuarios
+    mentions: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    }],
   },
   { timestamps: true }
 );

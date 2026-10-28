@@ -27,13 +27,24 @@ function isFolioDuplicateError(err) {
 
 async function nextAutomaticFolio(extra = 0) {
   const year = new Date().getFullYear();
-  const docs = await Property.find({ folio: { $regex: `^INMO-\\d+-${year}$` } })
+  const docs = await Property.find({
+    $or: [
+      { folio: { $regex: `^${year}-\\d+$` } },
+      { folio: { $regex: `^INMO-\\d+-${year}$` } },
+    ],
+  })
     .select('folio')
     .lean();
   let max = 0;
   docs.forEach((doc) => {
     const folio = String(doc.folio || '');
-    const match = folio.match(/^INMO-(\d+)-(\d{4})$/);
+    let match = folio.match(new RegExp(`^${year}-(\\d+)$`));
+    if (match) {
+      const num = Number(match[1]);
+      if (!Number.isNaN(num) && num > max) max = num;
+      return;
+    }
+    match = folio.match(/^INMO-(\d+)-(\d{4})$/);
     if (match && Number(match[2]) === year) {
       const num = Number(match[1]);
       if (!Number.isNaN(num) && num > max) max = num;
@@ -42,9 +53,8 @@ async function nextAutomaticFolio(extra = 0) {
   let seq = max + 1 + Number(extra || 0);
   let candidate;
   do {
-    candidate = `INMO-${String(seq).padStart(3, '0')}-${year}`;
+    candidate = `${year}-${String(seq).padStart(3, '0')}`;
     seq += 1;
-    // avoid infinite loop
     if (seq > max + 5000) break;
   } while (await Property.exists({ folio: candidate }));
   return candidate;
@@ -53,6 +63,7 @@ async function nextAutomaticFolio(extra = 0) {
 async function resolveUniqueFolio(requested, excludeId) {
   let base = normalizeFolio(requested);
   if (!base) return nextAutomaticFolio();
+  const year = new Date().getFullYear();
   // try base first
   let candidate = base;
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -61,10 +72,16 @@ async function resolveUniqueFolio(requested, excludeId) {
     } else {
       candidate = `${base}-${attempt + 1}`;
     }
-    const query = { folio: candidate };
+    // Normalize old INMO-###-YYYY to YYYY-### when possible
+    let normalized = candidate;
+    const inmoMatch = String(candidate).match(/^INMO-(\d+)-(\d{4})$/i);
+    if (inmoMatch) {
+      normalized = `${inmoMatch[2]}-${String(inmoMatch[1]).padStart(3, '0')}`;
+    }
+    const query = { folio: normalized };
     if (excludeId) query._id = { $ne: excludeId };
     const exists = await Property.exists(query);
-    if (!exists) return candidate;
+    if (!exists) return normalized;
   }
   // fallback
   return nextAutomaticFolio(1000 + Math.floor(Math.random() * 1000));

@@ -166,13 +166,35 @@ const generalList = asyncHandler(async (req, res) => {
 // Folio correlativo con reintento ante colisiones del índice único.
 async function nextFolio() {
   const year = new Date().getFullYear();
+  const docs = await Property.find({
+    $or: [
+      { folio: { $regex: `^${year}-\\d+$` } },
+      { folio: { $regex: `^INMO-\\d+-${year}$` } },
+    ],
+  })
+    .select('folio')
+    .lean();
+  let max = 0;
+  docs.forEach((doc) => {
+    const folio = String(doc.folio || '');
+    let match = folio.match(new RegExp(`^${year}-(\\d+)$`));
+    if (match) {
+      const num = Number(match[1]);
+      if (!Number.isNaN(num) && num > max) max = num;
+      return;
+    }
+    match = folio.match(/^INMO-(\d+)-(\d{4})$/);
+    if (match && Number(match[2]) === year) {
+      const num = Number(match[1]);
+      if (!Number.isNaN(num) && num > max) max = num;
+    }
+  });
   for (let i = 0; i < 10; i += 1) {
-    const count = await Property.countDocuments();
-    const folio = `INMO-${String(count + 1 + i).padStart(3, '0')}-${year}`;
+    const folio = `${year}-${String(max + 1 + i).padStart(3, '0')}`;
     const exists = await Property.findOne({ folio }).select('_id').lean();
     if (!exists) return folio;
   }
-  return `INMO-${Date.now()}-${year}`;
+  return `${year}-${Date.now().toString().slice(-6)}`;
 }
 
 // Sube una propiedad NUEVA al inventario general (crea Property + Inventory)

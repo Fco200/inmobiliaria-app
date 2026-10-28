@@ -394,7 +394,7 @@ window.Pages.properties = {
         { key: 'isExternal', label: 'Origen', render: (r) => (r.isExternal ? `${UI.badge('Externa', 'warning')}${r.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(r.externalAdvisor)}</div>` : ''}` : '<span class="text-muted" style="font-size:12px;">Equipo</span>') },
       ],
       fields: [
-        { name: 'folio', label: 'Folio', type: 'text', placeholder: 'Automático (ej. INMO-001-2026)', hint: 'Déjalo vacío para generar automático. Puedes escribir uno si lo prefieres.' },
+        { name: 'folio', label: 'Folio', type: 'text', placeholder: 'Automático (ej. 2026-001)', hint: 'Déjalo vacío para generar automático en formato 2026-###. Si ya tiene folio INMO-, se ajustará al nuevo formato.' },
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
         { name: 'operationType', label: 'Tipo de operación', type: 'select', required: true, options: ['venta', 'renta'] },
         { name: 'price', label: 'Precio', type: 'number' },
@@ -482,6 +482,15 @@ window.Pages.properties = {
               ? 'Asesor que tiene la propiedad en su cartera.'
               : 'Se asigna automáticamente al asesor que registra la propiedad.';
           }
+          // Siempre asegurar que el usuario en sesión esté presente y seleccionado cuando aplique
+          if (stored && stored._id) {
+            if (!Array.from(responsibleSel.options).some((o) => String(o.value) === String(stored._id))) {
+              const opt = document.createElement('option');
+              opt.value = String(stored._id);
+              opt.textContent = stored.name || stored.nombre || stored.username || 'Yo';
+              responsibleSel.appendChild(opt);
+            }
+          }
           if (record) {
             const currentId = record.responsibleUser && (record.responsibleUser._id || record.responsibleUser);
             if (currentId) {
@@ -493,16 +502,11 @@ window.Pages.properties = {
                 responsibleSel.appendChild(opt);
               }
               responsibleSel.value = String(currentId);
+            } else if (stored && stored._id) {
+              responsibleSel.value = String(stored._id);
             }
           } else {
             if (stored && stored._id) {
-              // Asegurar que la opción existe con el nombre correcto
-              if (!Array.from(responsibleSel.options).some((o) => String(o.value) === String(stored._id))) {
-                const opt = document.createElement('option');
-                opt.value = String(stored._id);
-                opt.textContent = stored.name || stored.nombre || stored.username || 'Yo';
-                responsibleSel.appendChild(opt);
-              }
               responsibleSel.value = String(stored._id);
             }
             responsibleSel.disabled = true;

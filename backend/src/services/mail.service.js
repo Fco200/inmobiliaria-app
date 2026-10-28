@@ -199,6 +199,23 @@ function mailPropertyProcessNotice(property, opts = {}) {
   };
 }
 
+// Correo de confirmación de solicitud de acceso al CRM.
+function mailAccessRequestApproved({ name, email }) {
+  const subject = 'Tu acceso al CRM ha sido habilitado';
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Hola ${escapeHtml(name || '')},</p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Tu solicitud de acceso al CRM INMOBLES ha sido aprobada y tu cuenta ya está habilitada.</p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Puedes ingresar desde: <a href="${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html">${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html</a></p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Te recomendamos cambiar tu contraseña al primer inicio de sesión.</p>
+  `;
+  return {
+    to: email,
+    subject,
+    html: wrapLayout(subject, inner),
+    text: `Hola ${name || ''}, tu acceso ha sido habilitado. Ingresa a ${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html. Cambia tu contraseña al primer ingreso.`,
+  };
+}
+
 module.exports = {
   sendMail,
   resetTransporter,
@@ -206,5 +223,6 @@ module.exports = {
   mailNewProperty,
   mailPropertyPublishedToAdvisor,
   mailPropertyProcessNotice,
+  mailAccessRequestApproved,
   hasSmtp,
 };

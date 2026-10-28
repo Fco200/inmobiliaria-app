@@ -4,7 +4,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { UserRequest, Role, User } = require('../models');
 const { ensure } = require('../services/notification.service');
 const { logAudit } = require('../services/log.service');
-const { sendMail } = require('../services/mail.service');
+const { sendMail, mailAccessRequestApproved } = require('../services/mail.service');
 const { generatePassword } = require('../utils/password');
 
 // Solicitud pública de creación de un usuario nuevo. Cualquier persona desde el
@@ -150,12 +150,8 @@ const handle = asyncHandler(async (req, res) => {
           status: 'activo',
         });
         try {
-          await sendMail({
-            to: requestDoc.email,
-            subject: 'Tu acceso al CRM ha sido habilitado',
-            html: '<p>Hola ' + requestDoc.name + ',</p><p>Tu solicitud de acceso al CRM INMOBLES ha sido aprobada y tu cuenta ya esta habilitada.</p><p>Puedes ingresar desde: <a href="' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html">' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html</a></p><p>Te recomendamos cambiar tu contrasena al primer inicio de sesion.</p>',
-            text: 'Hola ' + requestDoc.name + ', tu acceso ha sido habilitado. Ingresa a ' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html. Cambia tu contrasena al primer ingreso.'
-          });
+          const mail = mailAccessRequestApproved({ name: requestDoc.name, email: requestDoc.email });
+          await sendMail(mail);
         } catch (e) { /* ignore */ }
       }
     } catch (e) {
@@ -187,12 +183,8 @@ const handle = asyncHandler(async (req, res) => {
           status: 'activo',
         });
         try {
-          await sendMail({
-            to: requestDoc.email,
-            subject: 'Tu acceso al CRM ha sido habilitado',
-            html: '<p>Hola ' + requestDoc.name + ',</p><p>Tu solicitud de acceso al CRM INMOBLES ha sido aprobada y tu cuenta ya esta habilitada.</p><p>Puedes ingresar desde: <a href="' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html">' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html</a></p><p>Te recomendamos cambiar tu contrasena al primer inicio de sesion.</p>',
-            text: 'Hola ' + requestDoc.name + ', tu acceso ha sido habilitado. Ingresa a ' + (process.env.FRONTEND_URL || 'https://crm.inmobles.com') + '/index.html. Cambia tu contrasena al primer ingreso.'
-          });
+          const mail = mailAccessRequestApproved({ name: requestDoc.name, email: requestDoc.email });
+          await sendMail(mail);
         } catch (e) { /* ignore */ }
       }
     } catch (e) {

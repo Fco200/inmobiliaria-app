@@ -10,9 +10,10 @@ function crudPage(container, config) {
     el.className = 'page-header';
     el.innerHTML = `
       <h2>${UI.escapeHtml(config.title)}</h2>
-      <button class="btn btn-primary" type="button" data-new>+ ${UI.escapeHtml(config.newLabel)}</button>
+      ${config.hideNew ? '' : `<button class="btn btn-primary" type="button" data-new>+ ${UI.escapeHtml(config.newLabel)}</button>`}
     `;
-    el.querySelector('[data-new]').addEventListener('click', () => {
+    const newButton = el.querySelector('[data-new]');
+    if (newButton) newButton.addEventListener('click', () => {
       if (config.onNew) config.onNew(openForm);
       else openForm();
     });

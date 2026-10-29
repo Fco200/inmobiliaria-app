@@ -2,11 +2,68 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
-const { Business, BusinessStage, Client } = require('../models');
+const {
+  isBoss,
+  isBusinessStaff,
+  hasRole,
+} = require('../utils/scope');
+const {
+  Business,
+  BusinessStage,
+  BusinessNote,
+  Client,
+  Property,
+  Document,
+} = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
 const { ensure } = require('../services/notification.service');
 const { getOrCreateGeneralChat, persistAndBroadcast } = require('./chat.controller');
+const {
+  STAGE_ORDER,
+  STAGE_LABELS,
+  STAGE_ALIASES,
+  normalizeStage,
+  stageLabel,
+  stageOrder,
+} = require('../constants/business-stages');
+
+// Etapas del embudo "en curso". Las terminales (concluido/cancelado/pausa)
+// se agregan aparte en el tablero y en los selectores.
+const ACTIVE_STAGES = STAGE_ORDER.filter(
+  (s) => !['concluido', 'cancelado', 'PAUSA'].includes(s)
+);
+
+// Se conservan ambos procesos (comprador/vendedor) apuntando al mismo flujo
+// oficial: la etapa ya no cambia según el tipo de proceso.
+const STAGES_BY_PROCESS = {
+  comprador: ACTIVE_STAGES,
+  vendedor: ACTIVE_STAGES,
+};
+
+function stagesFor(processType) {
+  return STAGES_BY_PROCESS[processType] || ACTIVE_STAGES;
+}
+
+// Etapas válidas para el PATCH /stage (canónicas + alias heredados que el
+// controlador normaliza antes de guardar).
+const VALID_STAGE_CODES = new Set([
+  ...STAGE_ORDER,
+  ...Object.keys(STAGE_ALIASES),
+]);
+
+function canManageBusiness(req) {
+  return isBoss(req) || hasRole(req, ['asistencia']);
+}
+
+// Escrituración cambia etapas, concluye negocios, agrega notas/checklist y
+// sube documentos. Gerencia (jefe) también puede cancelar/concluir.
+function canChangeStage(req) {
+  return isBoss(req) || hasRole(req, ['escrituracion']);
+}
+
+function canManageChecklist(req) {
+  return isBoss(req) || hasRole(req, ['escrituracion']);
+}
 
 // Cuando se abre un negocio con una propiedad, el resto del equipo debe saberlo
 // para no duplicar trabajo. Se deja una nota automática en el chat interno
@@ -30,92 +87,9 @@ async function notifyTeamPropertyBusiness(req, business) {
   }
 }
 
-// Embudo único de negocios según lo solicitado
-const BUYER_STAGES = [
-  'INTEGRACION',
-  'AVALUO',
-  'REVISION_AVALUO',
-  'INSCRIPCION',
-  'DICTAMEN',
-  'FIRMA',
-  'PAGO',
-  'ENTREGA',
-  'concluido',
-];
-
-const SELLER_STAGES = [
-  'INTEGRACION',
-  'AVALUO',
-  'REVISION_AVALUO',
-  'INSCRIPCION',
-  'DICTAMEN',
-  'FIRMA',
-  'PAGO',
-  'ENTREGA',
-  'concluido',
-];
-
-const STAGE_ORDER = [
-  'INTEGRACION',
-  'AVALUO',
-  'REVISION_AVALUO',
-  'INSCRIPCION',
-  'DICTAMEN',
-  'FIRMA',
-  'PAGO',
-  'ENTREGA',
-  'concluido',
-  'cancelado',
-  'PAUSA',
-  'CANCELADO_DEFINITIVO',
-];
-
-const STAGE_LABELS = {
-  INTEGRACION: 'Integración',
-  AVALUO: 'Avalúo',
-  REVISION_AVALUO: 'Revisión avalúo',
-  INSCRIPCION: 'Inscripción',
-  DICTAMEN: 'Dictamen',
-  FIRMA: 'Firma',
-  PAGO: 'Pago',
-  ENTREGA: 'Entrega',
-  concluido: 'Concluido',
-  cancelado: 'Cancelado',
-  PAUSA: 'Pausa',
-  CANCELADO_DEFINITIVO: 'Cancelado definitivo',
-  integracion: 'Integración',
-  avaluo: 'Avalúo',
-  revision: 'Revisión avalúo',
-  notarias: 'Notarías',
-  firma: 'Firma',
-  pago: 'Pago',
-  entrega: 'Entrega',
-};
-
-// El embudo de negocios antes usaba "perfilado"; ahora habla el mismo idioma que
-// el embudo de clientes (Seguimiento, la etapa que sigue a la cita). Los datos
-// viejos se corrigen con `npm run migrate:negocios`, pero esta tabla evita que
-// un negocio guardado antes de la migración quede fuera de las etapas válidas.
-const STAGE_LEGACY = {
-  perfilado: 'seguimiento',
-};
-
-function normalizarEtapa(stage) {
-  return STAGE_LEGACY[stage] || stage;
-}
-
-const STAGES_BY_PROCESS = {
-  comprador: BUYER_STAGES,
-  vendedor: SELLER_STAGES,
-};
-
-function stagesFor(processType) {
-  return STAGES_BY_PROCESS[processType] || BUYER_STAGES;
-}
-
-// Expone las etapas disponibles por tipo de proceso (comprador/vendedor) junto
-// con sus etiquetas y el orden global. Lo usa el frontend para renderizar el
-// embudo sin duplicar la lógica.
+// Expone las etapas disponibles por tipo de proceso junto con sus etiquetas y
+// el orden global. Lo usa el frontend para renderizar el embudo sin duplicar
+// la lógica.
 const stages = asyncHandler(async (req, res) => {
   res.json({
     success: true,
@@ -134,13 +108,15 @@ const businessCrud = buildCrud(Business, {
   extraFilters: { currentStage: 'currentStage', processType: 'processType', buyerClient: 'buyerClient', sellerClient: 'sellerClient', property: 'property' },
   // Un negocio pertenece al asesor principal o al socio que participa.
   ownerMatch: (userId) => ({ $or: [{ mainAdvisor: userId }, { partnerAdvisor: userId }] }),
+  // Asistencia y escrituración operan todos los negocios sin ser jefes.
+  wideRoles: ['asistencia', 'escrituracion'],
 });
 
 const list = businessCrud.list;
 const get = businessCrud.get;
 
 function assertOwnership(req, business) {
-  if (isBoss(req)) return true;
+  if (isBusinessStaff(req)) return true;
   const uid = String(req.user._id);
   const main = String((business.mainAdvisor && business.mainAdvisor._id) || business.mainAdvisor || '');
   const partner = String((business.partnerAdvisor && business.partnerAdvisor._id) || business.partnerAdvisor || '');
@@ -201,7 +177,7 @@ async function conflictoNegocioActivo({ buyerClient, sellerClient, excludeId }) 
   const cliente = encontrado[coincideComprador ? 'buyerClient' : 'sellerClient'];
   const nombre = (cliente && (cliente.nombre || cliente.name)) || 'ese cliente';
   const rol = coincideComprador ? 'comprador' : 'vendedor';
-  const etapa = STAGE_LABELS[encontrado.currentStage] || encontrado.currentStage;
+  const etapa = stageLabel(encontrado.currentStage);
 
   return `${nombre} ya tiene el negocio activo "${encontrado.name}" como ${rol} (etapa: ${etapa}). `
     + 'Concluye o cancela ese negocio antes de abrir otro para el mismo cliente.';
@@ -213,24 +189,138 @@ function esErrorDuplicado(error) {
   return Boolean(error) && (error.code === 11000 || error.code === 11001);
 }
 
-const create = asyncHandler(async (req, res) => {
-  const body = { ...req.body };
-  if (body.currentStage) body.currentStage = normalizarEtapa(body.currentStage);
-  if (!isBoss(req)) {
-    body.mainAdvisor = req.user._id; // un asesor solo crea negocios propios
-    if (body.partnerAdvisor && String(body.partnerAdvisor) === String(req.user._id)) {
-      body.partnerAdvisor = undefined;
+// Completa el vendedor con el PROPIETARIO de la propiedad elegida. El
+// propietario puede ser un cliente de la cartera (`owner`) o un nombre libre
+// (`ownerName`); solo se rellena cuando el formulario no trajo vendedor.
+async function completarVendedorDesdePropiedad(body) {
+  if (!body || !body.property) return body;
+  if (body.sellerClient || String(body.sellerExternalName || '').trim()) return body;
+  const prop = await Property.findById(body.property)
+    .select('owner ownerName')
+    .lean()
+    .catch(() => null);
+  if (!prop) return body;
+  if (prop.owner) {
+    body.sellerClient = prop.owner;
+  } else if (prop.ownerName) {
+    body.sellerExternalName = prop.ownerName;
+  }
+  return body;
+}
+
+// Sincroniza el estado de la propiedad ligada con el ciclo de vida del negocio:
+//  - negocio activo (incluida pausa) → propiedad APARTADA
+//  - negocio concluido             → propiedad CONCLUIDA
+//  - negocio cancelado             → propiedad DISPONIBLE (se libera)
+async function sincronizarPropiedad(business, previousStatus = null) {
+  const propertyId = idOf(business && business.property);
+  if (!propertyId) return;
+  const property = await Property.findById(propertyId);
+  if (!property) return;
+
+  let nextStatus = null;
+  if (business.status === 'concluido') {
+    nextStatus = 'concluida';
+  } else if (business.status === 'cancelado') {
+    nextStatus = 'disponible';
+  } else if (business.status === 'activo') {
+    // Al reabrir un negocio, la propiedad vuelve a quedar apartada.
+    if (previousStatus !== 'activo' || property.status === 'disponible' || !property.status) {
+      nextStatus = 'apartada';
     }
   }
-  // Los jefes pueden crear negocios sin elegir asesor: se asigna por defecto
-  // el usuario que los creó (el esquema exige mainAdvisor).
+
+  if (!nextStatus || property.status === nextStatus) return;
+  property.status = nextStatus;
+  await property.save();
+  await logActivity({
+    entityType: 'Property',
+    entityId: property._id,
+    user: business.mainAdvisor || null,
+    action: 'cambio_estado',
+    message: `El negocio "${business.name}" actualizó la propiedad a "${nextStatus}".`,
+  });
+}
+
+// Registro de bitácora de etapas (BusinessStage). Se usa tanto al crear como
+// al cambiar de etapa o al reabrir un negocio.
+async function registrarEtapa(business, stage, { note = '', user = null, status = 'en_proceso' } = {}) {
+  return BusinessStage.create({
+    business: business._id,
+    stageCode: stage,
+    name: stageLabel(stage),
+    order: stageOrder(stage),
+    startedAt: new Date(),
+    status,
+    comments: note,
+    responsibleUser: user,
+  });
+}
+
+async function crearNota(business, req, text, stage) {
+  const note = await BusinessNote.create({
+    business: business._id,
+    stage: stage || normalizeStage(business.currentStage),
+    text,
+    createdBy: req.user._id,
+  });
+  await note.populate('createdBy', 'name username');
+  return note;
+}
+
+// Aplica la transición de ciclo de vida al negocio a partir de la etapa.
+function aplicarCicloDeVida(business, stage, { finished = true } = {}) {
+  const code = normalizeStage(stage);
+  if (code === 'concluido') {
+    business.status = 'concluido';
+    business.finishedAt = finished ? new Date() : business.finishedAt;
+  } else if (code === 'cancelado') {
+    business.status = 'cancelado';
+    business.finishedAt = finished ? new Date() : business.finishedAt;
+  } else if (code === 'PAUSA') {
+    business.status = 'activo';
+    business.finishedAt = null;
+  } else {
+    business.status = 'activo';
+    business.finishedAt = null;
+  }
+  business.currentStage = code;
+}
+
+const create = asyncHandler(async (req, res) => {
+  if (!canManageBusiness(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o asistencia pueden crear negocios.',
+    });
+  }
+
+  const body = { ...req.body };
+  if (body.currentStage) body.currentStage = normalizeStage(body.currentStage);
+  // Asistencia puede asignar a cualquier asesor; el resto de quien crea queda
+  // como asesor principal por defecto.
+  if (!canManageBusiness(req) && !isBoss(req)) {
+    body.mainAdvisor = req.user._id;
+  }
+  if (body.partnerAdvisor && String(body.partnerAdvisor) === String(req.user._id)) {
+    body.partnerAdvisor = undefined;
+  }
+  // Los jefes/asistencia pueden crear negocios sin elegir asesor: se asigna por
+  // defecto el usuario que los creó (el esquema exige mainAdvisor).
   if (!body.mainAdvisor) {
     body.mainAdvisor = req.user._id;
   }
 
+  // El vendedor sale del propietario de la propiedad si no se eligió uno.
+  await completarVendedorDesdePropiedad(body);
+
+  const initialStage = normalizeStage(body.currentStage) || 'PROMESA';
+  if (!body.currentStage) body.currentStage = initialStage;
+  aplicarCicloDeVida(body, initialStage, { finished: false });
+
   // Solo se revisa el duplicado si el negocio va a quedar activo, que es lo que
   // cubre el índice único: uno creado ya cerrado no bloquea al cliente.
-  if (body.status !== 'concluido' && body.status !== 'cancelado') {
+  if (body.status === 'activo') {
     const conflicto = await conflictoNegocioActivo({
       buyerClient: body.buyerClient,
       sellerClient: body.sellerClient,
@@ -257,17 +347,14 @@ const create = asyncHandler(async (req, res) => {
     throw error;
   }
 
-  await BusinessStage.create({
-    business: business._id,
-    stageCode: business.currentStage,
-    name: STAGE_LABELS[business.currentStage],
-    order: STAGE_ORDER.indexOf(business.currentStage),
-    startedAt: new Date(),
-    status: 'en_proceso',
+  await registrarEtapa(business, business.currentStage, {
+    user: req.user._id,
+    status: business.status === 'activo' ? 'en_proceso' : 'completada',
   });
 
-  // Vínculo con el cliente (no bloquea la creación si el update falla).
+  // Vínculo con el cliente y estado de la propiedad (no bloquean la creación).
   await sincronizarClientes(business).catch(() => {});
+  await sincronizarPropiedad(business).catch(() => {});
 
   await logActivity({
     entityType: 'Business',
@@ -306,11 +393,37 @@ const update = asyncHandler(async (req, res) => {
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
   }
+  if (!canManageBusiness(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o asistencia pueden editar los datos del negocio.',
+    });
+  }
+
+  const previousStatus = business.status;
+  const previousStage = normalizeStage(business.currentStage);
+  const body = { ...req.body };
+
+  if (body.currentStage !== undefined) {
+    body.currentStage = normalizeStage(body.currentStage);
+    if (body.currentStage !== previousStage && !canChangeStage(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo dirección, gerencia o escrituración pueden cambiar la etapa del negocio.',
+      });
+    }
+  }
+  if (body.status !== undefined && body.status !== previousStatus && !canChangeStage(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o escrituración pueden concluir o cancelar negocios.',
+    });
+  }
 
   const changed = {};
-  Object.keys(req.body).forEach((key) => {
-    if (JSON.stringify(req.body[key]) !== JSON.stringify(business[key])) {
-      changed[key] = { previous: business[key], current: req.body[key] };
+  Object.keys(body).forEach((key) => {
+    if (JSON.stringify(body[key]) !== JSON.stringify(business[key])) {
+      changed[key] = { previous: business[key], current: body[key] };
     }
   });
 
@@ -318,16 +431,19 @@ const update = asyncHandler(async (req, res) => {
   // comprador o el vendedor hay que soltar el vínculo del que quedó fuera.
   const clientesPrevios = [idOf(business.buyerClient), idOf(business.sellerClient)].filter(Boolean);
 
+  // Si se cambió la propiedad y no hay vendedor, se toma el propietario de la
+  // nueva propiedad.
+  if (body.property && String(body.property) !== String(idOf(business.property) || '')) {
+    await completarVendedorDesdePropiedad(body);
+  }
+
   // Si el formulario mueve el negocio a otro cliente, ese cliente tampoco puede
   // tener ya otro negocio activo (el negocio actual se excluye del chequeo).
-  // Solo se revisa si este negocio sigue activo, que es exactamente lo que
-  // cubre el índice único parcial: un negocio ya cerrado puede vincularse con un
-  // cliente que tenga otro negocio en curso sin problema.
   if (business.status === 'activo'
-    && (req.body.buyerClient !== undefined || req.body.sellerClient !== undefined)) {
+    && (body.buyerClient !== undefined || body.sellerClient !== undefined)) {
     const conflicto = await conflictoNegocioActivo({
-      buyerClient: req.body.buyerClient !== undefined ? req.body.buyerClient : idOf(business.buyerClient),
-      sellerClient: req.body.sellerClient !== undefined ? req.body.sellerClient : idOf(business.sellerClient),
+      buyerClient: body.buyerClient !== undefined ? body.buyerClient : idOf(business.buyerClient),
+      sellerClient: body.sellerClient !== undefined ? body.sellerClient : idOf(business.sellerClient),
       excludeId: business._id,
     });
     if (conflicto) {
@@ -335,7 +451,27 @@ const update = asyncHandler(async (req, res) => {
     }
   }
 
-  Object.assign(business, req.body);
+  Object.assign(business, body);
+
+  // Si la etapa o el estado cambiaron, se aplica el ciclo de vida completo.
+  if (body.currentStage !== undefined || body.status !== undefined) {
+    const targetStage = body.currentStage !== undefined
+      ? normalizeStage(body.currentStage)
+      : normalizeStage(business.currentStage);
+
+    if (body.status === 'concluido' && targetStage !== 'concluido') {
+      aplicarCicloDeVida(business, 'concluido');
+    } else if (body.status === 'cancelado' && targetStage !== 'cancelado') {
+      aplicarCicloDeVida(business, 'cancelado');
+    } else if (body.status === 'activo' && ['concluido', 'cancelado'].includes(targetStage)) {
+      // Reapertura: vuelve al inicio del embudo y libera la fecha de cierre.
+      aplicarCicloDeVida(business, 'PROMESA', { finished: false });
+      if (body.currentStage === undefined) business.currentStage = 'PROMESA';
+    } else {
+      aplicarCicloDeVida(business, targetStage);
+    }
+  }
+
   try {
     await business.save();
   } catch (error) {
@@ -353,7 +489,15 @@ const update = asyncHandler(async (req, res) => {
     throw error;
   }
 
+  if (normalizeStage(business.currentStage) !== previousStage) {
+    await registrarEtapa(business, business.currentStage, {
+      user: req.user._id,
+      status: business.status === 'activo' ? 'en_proceso' : 'completada',
+    }).catch(() => {});
+  }
+
   await sincronizarClientes(business, clientesPrevios).catch(() => {});
+  await sincronizarPropiedad(business, previousStatus).catch(() => {});
 
   Object.entries(changed).forEach(([field, values]) => {
     logAudit({
@@ -382,13 +526,18 @@ const update = asyncHandler(async (req, res) => {
 
 // Borrado propio (NO se reutiliza businessCrud.remove): el CRUD genérico exige
 // un `ownerField` y este modelo no lo tiene, así que un asesor nunca pasaba la
-// comprobación y el botón "Eliminar" siempre respondía 403. Aquí se usa la
-// misma regla que update/changeStage: jefe, asesor principal o partner.
+// comprobación y el botón "Eliminar" siempre respondía 403.
 const remove = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
   if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  if (!canManageBusiness(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o asistencia pueden eliminar negocios.',
+    });
   }
 
   const clientes = [idOf(business.buyerClient), idOf(business.sellerClient)].filter(Boolean);
@@ -399,7 +548,17 @@ const remove = asyncHandler(async (req, res) => {
     ).catch(() => {});
   }
 
+  // La propiedad se libera si seguía apartada por este negocio.
+  const propertyId = idOf(business.property);
+  if (propertyId) {
+    await Property.updateOne(
+      { _id: propertyId, status: 'apartada' },
+      { $set: { status: 'disponible' } }
+    ).catch(() => {});
+  }
+
   await BusinessStage.deleteMany({ business: business._id });
+  await BusinessNote.deleteMany({ business: business._id });
   await business.deleteOne();
 
   await logActivity({
@@ -414,27 +573,33 @@ const remove = asyncHandler(async (req, res) => {
 });
 
 const changeStage = asyncHandler(async (req, res) => {
-  const stage = normalizarEtapa(req.body.stage);
+  const stage = normalizeStage(req.body.stage);
   const note = String((req.body.nota || req.body.comments || req.body.note || '')).trim();
   const business = await Business.findById(req.params.id);
   if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
   }
+  if (!canChangeStage(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o escrituración pueden cambiar la etapa del negocio.',
+    });
+  }
 
   if (!note) {
     return res.status(400).json({ success: false, message: 'La nota es obligatoria para cambiar de etapa' });
   }
 
-  const allowed = ['INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido', 'cancelado', 'PAUSA', 'CANCELADO_DEFINITIVO', 'integracion', 'avaluo', 'revision', 'notarias', 'firma', 'pago', 'entrega'];
-  if (!allowed.includes(stage)) {
+  if (!stage || !VALID_STAGE_CODES.has(stage) || !STAGE_ORDER.includes(stage)) {
     return res.status(400).json({
       success: false,
-      message: `La etapa "${stage}" no es válida.`,
+      message: `La etapa "${req.body.stage}" no es válida.`,
     });
   }
 
-  const previousStage = normalizarEtapa(business.currentStage);
+  const previousStatus = business.status;
+  const previousStage = normalizeStage(business.currentStage);
   if (previousStage === stage) {
     return res.status(400).json({ success: false, message: 'El negocio ya está en esa etapa' });
   }
@@ -451,30 +616,19 @@ const changeStage = asyncHandler(async (req, res) => {
     await previousStageRecord.save();
   }
 
-  business.currentStage = stage;
-  if (stage === 'concluido') {
-    business.status = 'concluido';
-    business.finishedAt = new Date();
-  } else if (stage === 'cancelado' || stage === 'CANCELADO_DEFINITIVO') {
-    business.status = 'cancelado';
-    business.finishedAt = new Date();
-  } else if (stage === 'PAUSA') {
-    business.status = 'cancelado';
-  } else {
-    business.status = 'activo';
-  }
+  aplicarCicloDeVida(business, stage);
   await business.save();
 
-  await BusinessStage.create({
-    business: business._id,
-    stageCode: stage,
-    name: STAGE_LABELS[stage],
-    order: STAGE_ORDER.indexOf(stage),
-    startedAt: new Date(),
-    status: 'en_proceso',
-    comments: note,
-    responsibleUser: req.user._id,
+  await registrarEtapa(business, stage, {
+    note,
+    user: req.user._id,
+    status: business.status === 'activo' ? 'en_proceso' : 'completada',
   });
+
+  // La nota del cambio de etapa también queda en la bitácora visible.
+  await crearNota(business, req, note, stage).catch(() => {});
+
+  await sincronizarPropiedad(business, previousStatus).catch(() => {});
 
   await logAudit({
     user: req.user._id,
@@ -491,7 +645,7 @@ const changeStage = asyncHandler(async (req, res) => {
     entityId: business._id,
     user: req.user._id,
     action: 'cambio_etapa',
-    message: `Cambió de ${STAGE_LABELS[previousStage]} a ${STAGE_LABELS[stage]}`,
+    message: `Cambió de ${stageLabel(previousStage)} a ${stageLabel(stage)}`,
   });
 
   const stageAdvisorId = idOf(business.mainAdvisor);
@@ -500,7 +654,7 @@ const changeStage = asyncHandler(async (req, res) => {
       type: 'cambio_etapa',
       key: `stage-${business._id}-${stage}`,
       title: 'Cambio de etapa',
-      message: `El negocio "${business.name}" cambió a ${STAGE_LABELS[stage]}.`,
+      message: `El negocio "${business.name}" cambió a ${stageLabel(stage)}.`,
       userId: stageAdvisorId,
       data: { entityId: business._id },
     }).catch(() => {});
@@ -508,16 +662,247 @@ const changeStage = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: `Etapa actualizada a ${STAGE_LABELS[stage]}`,
+    message: `Etapa actualizada a ${stageLabel(stage)}`,
     data: business,
   });
 });
 
 const history = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor');
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
   const stages = await BusinessStage.find({ business: req.params.id })
     .populate('responsibleUser')
     .sort({ order: 1, startedAt: 1 });
   res.json({ success: true, data: stages });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bitácora / notas del negocio
+// ─────────────────────────────────────────────────────────────────────────────
+
+const listNotes = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor name');
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  const notes = await BusinessNote.find({ business: business._id })
+    .populate('createdBy', 'name username')
+    .sort({ createdAt: -1 });
+  res.json({ success: true, data: notes });
+});
+
+const addNote = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  const text = String(req.body.text || req.body.note || req.body.nota || '').trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: 'La nota es obligatoria' });
+  }
+  const note = await crearNota(business, req, text, normalizeStage(business.currentStage));
+  await logActivity({
+    entityType: 'Business',
+    entityId: business._id,
+    user: req.user._id,
+    action: 'nota',
+    message: `Se agregó una nota al negocio ${business.name}`,
+  });
+  res.status(201).json({ success: true, data: note });
+});
+
+const removeNote = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor');
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  const note = await BusinessNote.findOne({ _id: req.params.noteId, business: business._id });
+  if (!note) return res.status(404).json({ success: false, message: 'Nota no encontrada' });
+  const isAuthor = String(note.createdBy) === String(req.user._id);
+  if (!isAuthor && !canManageChecklist(req)) {
+    return res.status(403).json({ success: false, message: 'No puedes eliminar esta nota.' });
+  }
+  await note.deleteOne();
+  res.json({ success: true, message: 'Nota eliminada' });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Checklist del negocio
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function findBusinessForChecklist(req, res) {
+  const business = await Business.findById(req.params.id);
+  if (!business) {
+    res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+    return null;
+  }
+  if (!assertOwnership(req, business)) {
+    res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+    return null;
+  }
+  return business;
+}
+
+const addChecklistItem = asyncHandler(async (req, res) => {
+  const business = await findBusinessForChecklist(req, res);
+  if (!business) return undefined;
+  if (!canManageChecklist(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+    });
+  }
+  const text = String(req.body.text || req.body.otro || '').trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: 'Escribe el pendiente del checklist' });
+  }
+  business.checklist.push({ text, createdBy: req.user._id });
+  await business.save();
+  await logActivity({
+    entityType: 'Business',
+    entityId: business._id,
+    user: req.user._id,
+    action: 'checklist',
+    message: `Se agregó un pendiente al checklist de ${business.name}`,
+  });
+  res.status(201).json({ success: true, data: business.checklist });
+});
+
+const updateChecklistItem = asyncHandler(async (req, res) => {
+  const business = await findBusinessForChecklist(req, res);
+  if (!business) return undefined;
+  if (!canManageChecklist(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+    });
+  }
+  const item = business.checklist.id(req.params.itemId);
+  if (!item) return res.status(404).json({ success: false, message: 'Pendiente no encontrado' });
+
+  if (req.body.text !== undefined) {
+    const text = String(req.body.text || '').trim();
+    if (!text) return res.status(400).json({ success: false, message: 'El texto no puede estar vacío' });
+    item.text = text;
+  }
+  if (req.body.done !== undefined) {
+    item.done = Boolean(req.body.done);
+    item.completedAt = item.done ? new Date() : null;
+    item.completedBy = item.done ? req.user._id : null;
+  }
+  await business.save();
+  res.json({ success: true, data: business.checklist });
+});
+
+const removeChecklistItem = asyncHandler(async (req, res) => {
+  const business = await findBusinessForChecklist(req, res);
+  if (!business) return undefined;
+  if (!canManageChecklist(req)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+    });
+  }
+  const item = business.checklist.id(req.params.itemId);
+  if (!item) return res.status(404).json({ success: false, message: 'Pendiente no encontrado' });
+  item.deleteOne();
+  await business.save();
+  res.json({ success: true, data: business.checklist });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Documentos / fotos ligeras del negocio
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function findBusinessForDocuments(req, res) {
+  const business = await Business.findById(req.params.id);
+  if (!business) {
+    res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+    return null;
+  }
+  if (!assertOwnership(req, business)) {
+    res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+    return null;
+  }
+  return business;
+}
+
+const listDocuments = asyncHandler(async (req, res) => {
+  const business = await findBusinessForDocuments(req, res);
+  if (!business) return undefined;
+  const documents = await Document.find({ business: business._id })
+    .populate('uploadedBy', 'name username')
+    .sort({ createdAt: -1 });
+  res.json({ success: true, data: documents });
+});
+
+const uploadDocument = asyncHandler(async (req, res) => {
+  const business = await findBusinessForDocuments(req, res);
+  if (!business) return undefined;
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+  }
+
+  await require('../services/storage.service').persistFile(req.file);
+
+  const name = String(req.body.name || '').trim() || req.file.originalname || 'Documento';
+  const doc = await Document.create({
+    name,
+    type: req.body.type || 'otros',
+    status: 'recibido',
+    date: new Date(),
+    uploadedBy: req.user._id,
+    business: business._id,
+    observations: req.body.observations || '',
+    fileName: req.file.filename,
+    fileUrl: `/uploads/${req.file.filename}`,
+  });
+
+  if (!Array.isArray(business.documents)) business.documents = [];
+  business.documents.push(doc._id);
+  await business.save();
+
+  await logActivity({
+    entityType: 'Business',
+    entityId: business._id,
+    user: req.user._id,
+    action: 'documento',
+    message: `Se subió el documento "${doc.name}" al negocio ${business.name}`,
+  });
+
+  await doc.populate('uploadedBy', 'name username');
+  res.status(201).json({ success: true, data: doc });
+});
+
+const removeDocument = asyncHandler(async (req, res) => {
+  const business = await findBusinessForDocuments(req, res);
+  if (!business) return undefined;
+  const doc = await Document.findOne({ _id: req.params.docId, business: business._id });
+  if (!doc) return res.status(404).json({ success: false, message: 'Documento no encontrado' });
+
+  const isAuthor = String(doc.uploadedBy) === String(req.user._id);
+  if (!isAuthor && !canManageChecklist(req)) {
+    return res.status(403).json({ success: false, message: 'No puedes eliminar este documento.' });
+  }
+
+  const fileUrl = doc.fileUrl;
+  await Document.deleteOne({ _id: doc._id });
+  business.documents = (business.documents || []).filter((id) => String(id) !== String(doc._id));
+  await business.save();
+
+  try {
+    await require('../services/storage.service').deleteFileIfUnused(fileUrl);
+  } catch (error) {
+    console.warn('[Storage] No se pudo eliminar el archivo del negocio:', error.message);
+  }
+
+  res.json({ success: true, message: 'Documento eliminado' });
 });
 
 // Catálogo LIGERO de negocios para selects con búsqueda (cita/prospecto/
@@ -526,9 +911,9 @@ const history = asyncHandler(async (req, res) => {
 // el select nunca despliega toda la lista).
 const options = asyncHandler(async (req, res) => {
   const filter = {};
-  // Un asesor solo ve los negocios de los que es principal o socio; un jefe ve
-  // todos (y puede acotar con ?asesor=).
-  if (!isBoss(req)) {
+  // Un asesor solo ve los negocios de los que es principal o socio; staff de
+  // negocios ve todos (y puede acotar con ?asesor=).
+  if (!isBusinessStaff(req)) {
     filter.$or = [{ mainAdvisor: req.user._id }, { partnerAdvisor: req.user._id }];
   } else if (req.query.asesor) {
     filter.$or = [{ mainAdvisor: req.query.asesor }, { partnerAdvisor: req.query.asesor }];
@@ -552,7 +937,7 @@ const options = asyncHandler(async (req, res) => {
   const data = items.map((b) => ({
     ...b,
     label: b.name || 'Negocio',
-    subtitle: STAGE_LABELS[b.currentStage] || String(b.currentStage || '').replace(/_/g, ' '),
+    subtitle: stageLabel(b.currentStage),
   }));
 
   res.json({ success: true, data });
@@ -574,4 +959,28 @@ const propertyBusinesses = asyncHandler(async (req, res) => {
   res.json({ success: true, data: items });
 });
 
-module.exports = { list, get, options, create, update, remove, changeStage, history, propertyBusinesses, stages, stagesFor, STAGE_ORDER, STAGE_LABELS, STAGES_BY_PROCESS };
+module.exports = {
+  list,
+  get,
+  options,
+  create,
+  update,
+  remove,
+  changeStage,
+  history,
+  listNotes,
+  addNote,
+  removeNote,
+  addChecklistItem,
+  updateChecklistItem,
+  removeChecklistItem,
+  listDocuments,
+  uploadDocument,
+  removeDocument,
+  propertyBusinesses,
+  stages,
+  stagesFor,
+  STAGE_ORDER,
+  STAGE_LABELS,
+  STAGES_BY_PROCESS,
+};

@@ -71,6 +71,15 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024, files: 12 },
 });
 
+// Subida de documentos adjuntos a un negocio. Se limita a archivos LIGEROS
+// (8 MB) para no saturar MongoDB/Atlas con expedientes pesados. Solo se acepta
+// un archivo por petición; el asesor puede subir varios de a uno.
+const uploadBusiness = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+});
+
 // ── Validación de contenido real (magic bytes) ──────────────────────────────
 const SIGNATURES = [
   { exts: ['pdf'], test: (b) => b.slice(0, 4).toString('ascii') === '%PDF' },
@@ -172,11 +181,14 @@ function uploadErrorHandler(err, req, res, next) {
   const multer = require('multer');
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ success: false, message: 'El archivo supera el límite de 15 MB' });
+      return res.status(400).json({
+        success: false,
+        message: 'El archivo supera el tamaño máximo permitido (8 MB en negocios).',
+      });
     }
     return res.status(400).json({ success: false, message: `No se pudo subir el archivo: ${err.code}` });
   }
   return next(err);
 }
 
-module.exports = { upload, verifyUpload, verifyUploads, uploadErrorHandler, ALLOWED_EXTS, IMAGE_EXTS, MIME_EXTS, effectiveExt };
+module.exports = { upload, uploadBusiness, verifyUpload, verifyUploads, uploadErrorHandler, ALLOWED_EXTS, IMAGE_EXTS, MIME_EXTS, effectiveExt };

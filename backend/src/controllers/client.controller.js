@@ -2,7 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
+const { isClientStaff, CLIENT_WIDE_ROLES } = require('../utils/scope');
 const { Client, Appointment, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { logActivity, logAudit } = require('../services/log.service');
@@ -108,6 +108,8 @@ const clientCrud = buildCrud(Client, {
   populate: ['asesorAsignado'],
   searchFields: ['nombre', 'telefono', 'email'],
   ownerField: 'asesorAsignado',
+  // Asistencia ve y reasigna toda la cartera (reparte prospectos entre asesores).
+  wideRoles: CLIENT_WIDE_ROLES,
   // Filtros avanzados del módulo de clientes:
   //  - etapaActual: selección del embudo (pipeline superior).
   //  - servicio / tipoPropiedad: tipo de operación y tipo de propiedad.
@@ -128,7 +130,7 @@ const get = clientCrud.get;
 // filtrar en el servidor cuando la cartera es grande.
 const options = asyncHandler(async (req, res) => {
   const filter = {};
-  if (!isBoss(req)) filter.asesorAsignado = req.user._id;
+  if (!isClientStaff(req)) filter.asesorAsignado = req.user._id;
   else if (req.query.asesor) filter.asesorAsignado = req.query.asesor;
 
   if (req.query.servicio) filter.servicio = req.query.servicio;
@@ -154,7 +156,7 @@ const options = asyncHandler(async (req, res) => {
 });
 
 function assertOwnership(req, client) {
-  if (isBoss(req)) return true;
+  if (isClientStaff(req)) return true;
   const ownerId = String((client.asesorAsignado && client.asesorAsignado._id) || client.asesorAsignado || '');
   return ownerId === String(req.user._id);
 }
@@ -196,7 +198,7 @@ async function syncCitaToGoogle(doc, user) {
 // Conteo de clientes por etapa para la barra del embudo.
 const conteoEtapas = asyncHandler(async (req, res) => {
   const filter = {};
-  if (!isBoss(req)) filter.asesorAsignado = req.user._id;
+  if (!isClientStaff(req)) filter.asesorAsignado = req.user._id;
 
   // Sólo se normaliza `etapaActual` ausente/ vacío a `PROSPECTO` para que el
   // total del embudo siempre cuadre con el listado. `PERFILADO` cuenta con su
@@ -242,7 +244,7 @@ const conteoEtapas = asyncHandler(async (req, res) => {
 const create = asyncHandler(async (req, res) => {
   const body = sinNulos(req.body);
   // Un asesor siempre es el dueño de sus clientes; el jefe puede asignar a cualquiera.
-  if (!isBoss(req) || !body.asesorAsignado) body.asesorAsignado = req.user._id;
+  if (!isClientStaff(req) || !body.asesorAsignado) body.asesorAsignado = req.user._id;
 
   if (!body.etapaActual) body.etapaActual = 'PROSPECTO';
   body.etapaActual = normalizarEtapa(body.etapaActual) || 'PROSPECTO';
@@ -297,7 +299,7 @@ const update = asyncHandler(async (req, res) => {
 
   const body = sinNulos(req.body);
   // Un asesor no puede reasignar el cliente; solo el jefe.
-  if (!isBoss(req)) body.asesorAsignado = client.asesorAsignado || req.user._id;
+  if (!isClientStaff(req)) body.asesorAsignado = client.asesorAsignado || req.user._id;
 
   // `vigencia` se eliminó del formulario: si llega, se descarta.
   delete body.vigencia;
@@ -535,7 +537,7 @@ const exportCsv = asyncHandler(async (req, res) => {
   if (req.query.etapaActual) filter.etapaActual = req.query.etapaActual;
   if (req.query.servicio) filter.servicio = req.query.servicio;
   if (req.query.tipoPropiedad) filter.tipoPropiedad = req.query.tipoPropiedad;
-  if (!isBoss(req)) {
+  if (!isClientStaff(req)) {
     filter.asesorAsignado = req.user._id;
   } else if (req.query.asesor) {
     filter.asesorAsignado = req.query.asesor;

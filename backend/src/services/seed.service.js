@@ -24,6 +24,92 @@ const PERMISSIONS = [
   { code: 'prospecting_manage', name: 'Administrar prospectación', module: 'prospecting' },
 ];
 
+// Roles del sistema y módulos que habilita cada uno. Se crean/actualizan en
+// CADA arranque (no solo en la primera siembra) para que una instalación
+// existente reciba los roles nuevos sin perder usuarios ni datos.
+const ROLE_DEFINITIONS = [
+  {
+    name: 'Administrador',
+    code: 'admin',
+    description: 'Control total del sistema',
+    permissions: '*',
+  },
+  {
+    name: 'Dirección',
+    code: 'direccion',
+    description: 'Administración total de la inmobiliaria',
+    permissions: '*',
+  },
+  {
+    name: 'Asistencia',
+    code: 'asistencia',
+    description: 'Clientes, asignación de prospectos, negocios, usuarios y formatos',
+    permissions: [
+      'dashboard_view',
+      'users_manage',
+      'clients_manage',
+      'businesses_manage',
+      'appointments_manage',
+      'documents_manage',
+      'prospecting_manage',
+      'settings_manage',
+    ],
+  },
+  {
+    name: 'Gerencia',
+    code: 'gerencia',
+    description: 'Supervisión comercial, tareas, metas y reportes',
+    permissions: [
+      'dashboard_view',
+      'clients_manage',
+      'businesses_manage',
+      'tasks_manage',
+      'goals_manage',
+      'reports_view',
+      'reports_gerencia',
+      'audit_view',
+      'prospecting_manage',
+    ],
+  },
+  {
+    name: 'Escrituración',
+    code: 'escrituracion',
+    description: 'Etapas, conclusión, notas, checklist y documentos de negocios',
+    permissions: [
+      'dashboard_view',
+      'clients_manage',
+      'businesses_manage',
+      'documents_manage',
+      'reports_view',
+    ],
+  },
+  {
+    name: 'Asesor',
+    code: 'asesor',
+    description: 'Gestión comercial de sus clientes, prospectos y propiedades',
+    permissions: [
+      'dashboard_view',
+      'clients_manage',
+      'properties_manage',
+      'businesses_manage',
+      'appointments_manage',
+      'tasks_manage',
+      'goals_manage',
+      'documents_manage',
+      'expenses_manage',
+      'tickets_manage',
+      'reports_view',
+      'prospecting_manage',
+    ],
+  },
+  {
+    name: 'SuperAdmin (Soporte Técnico)',
+    code: 'superadmin',
+    description: 'Soporte técnico con acceso total al sistema',
+    permissions: '*',
+  },
+];
+
 async function seed() {
   let permissions = [];
   if ((await Permission.countDocuments()) === 0) {
@@ -34,90 +120,56 @@ async function seed() {
   }
 
   const permissionCodes = new Set(permissions.map((p) => p.code));
+  const allPermissionIds = permissions.map((p) => p._id);
+  const idsFor = (codes) => permissions
+    .filter((p) => codes.includes(p.code))
+    .map((p) => p._id);
 
-  if ((await Role.countDocuments()) === 0) {
-    const roleDefs = [
-      {
-        name: 'Administrador',
-        code: 'admin',
-        description: 'Control total del sistema',
+  let rolesCreated = 0;
+  let rolesUpdated = 0;
+  for (const def of ROLE_DEFINITIONS) {
+    const permissionIds = def.permissions === '*' ? allPermissionIds : idsFor(def.permissions);
+    const existing = await Role.findOne({ code: def.code });
+    if (existing) {
+      existing.name = def.name;
+      existing.description = def.description;
+      existing.isSystem = true;
+      existing.permissions = permissionIds;
+      existing.status = 'activo';
+      await existing.save();
+      rolesUpdated += 1;
+    } else {
+      await Role.create({
+        name: def.name,
+        code: def.code,
+        description: def.description,
         isSystem: true,
-        permissions: permissions.map((p) => p._id),
-      },
-      {
-        name: 'Gerencia',
-        code: 'gerencia',
-        description: 'Supervisión y consulta de reportes',
-        isSystem: true,
-        permissions: permissions
-          .filter((p) =>
-            ['reports_view', 'reports_gerencia', 'dashboard_view', 'audit_view'].includes(p.code)
-          )
-          .map((p) => p._id),
-      },
-      {
-        name: 'Asesor',
-        code: 'asesor',
-        description: 'Gestión comercial de sus clientes y negocios',
-        isSystem: true,
-        permissions: permissions
-          .filter((p) =>
-            [
-              'dashboard_view',
-              'clients_manage',
-              'properties_manage',
-              'businesses_manage',
-              'appointments_manage',
-              'tasks_manage',
-              'goals_manage',
-              'documents_manage',
-              'expenses_manage',
-              'tickets_manage',
-              'reports_view',
-              'prospecting_manage',
-            ].includes(p.code)
-          )
-          .map((p) => p._id),
-      },
-      {
-        name: 'SuperAdmin (Soporte Técnico)',
-        code: 'superadmin',
-        description: 'Soporte técnico con acceso total al sistema',
-        isSystem: true,
-        permissions: permissions.map((p) => p._id),
-      },
-    ];
-
-    const roles = await Role.insertMany(roleDefs);
-    console.log(`Roles sembrados: ${roles.length}`);
-
-    if ((await User.countDocuments()) === 0) {
-      const adminRole = roles.find((r) => r.code === 'admin');
-      await User.create({
-        name: 'Administrador',
-        username: 'admin',
-        email: adminEmail,
-        password: adminPassword,
-        role: adminRole._id,
-        position: 'Administrador del sistema',
+        permissions: permissionIds,
+        status: 'activo',
       });
-      console.log(`Administrador inicial creado: ${adminEmail}`);
+      rolesCreated += 1;
     }
+  }
+  if (rolesCreated || rolesUpdated) {
+    console.log(`Roles del sistema asegurados: ${rolesCreated} nuevo(s), ${rolesUpdated} actualizado(s).`);
+  }
+
+  if ((await User.countDocuments()) === 0) {
+    const adminRole = await Role.findOne({ code: 'admin' });
+    await User.create({
+      name: 'Administrador',
+      username: 'admin',
+      email: adminEmail,
+      password: adminPassword,
+      role: adminRole._id,
+      position: 'Administrador del sistema',
+    });
+    console.log(`Administrador inicial creado: ${adminEmail}`);
   }
 
   // Asegurar rol SUPERADMIN y usuario de soporte técnico TAMBIÉN en sistemas
   // ya existentes (actualización), no solo en la primera siembra.
   let superadminRole = await Role.findOne({ code: 'superadmin' });
-  if (!superadminRole) {
-    superadminRole = await Role.create({
-      name: 'SuperAdmin (Soporte Técnico)',
-      code: 'superadmin',
-      description: 'Soporte técnico con acceso total al sistema',
-      isSystem: true,
-      permissions: permissions.map((p) => p._id),
-    });
-    console.log('Rol SuperAdmin (Soporte Técnico) creado');
-  }
 
   // Usuario de soporte técnico: se crea solo si no existe. El admin/asesores
   // no deben poder eliminarlo ni degradarlo.

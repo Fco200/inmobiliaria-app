@@ -187,6 +187,26 @@ window.API = {
     remove: (id) => ApiClient.remove(`/businesses/${id}`),
     stage: (id, body) => ApiClient.patch(`/businesses/${id}/stage`, body),
     history: (id) => ApiClient.get(`/businesses/${id}/history`),
+
+    // Bitácora / notas visibles del negocio.
+    notes: (id) => ApiClient.get(`/businesses/${id}/notes`),
+    addNote: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+    removeNote: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+
+    // Checklist operativo del negocio.
+    addChecklistItem: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
+    updateChecklistItem: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
+    removeChecklistItem: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
+
+    // Documentos y fotos ligeras del negocio (multipart, campo "file").
+    documents: (id) => ApiClient.get(`/businesses/${id}/documents`),
+    uploadDocument: (id, file, name) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (name) form.append('name', name);
+      return ApiClient.postMultipart(`/businesses/${id}/documents`, form);
+    },
+    removeDocument: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
   },
 
   appointments: {

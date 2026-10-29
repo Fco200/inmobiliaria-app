@@ -15,6 +15,7 @@ const https = require('https');
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
+const { runDataMigrations } = require('./src/services/migration.service');
 const { port, nodeEnv, jwtSecret } = require('./src/config/env');
 const { hasSmtp, resetTransporter } = require('./src/services/mail.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
@@ -50,6 +51,13 @@ async function start() {
 
   if (connection) {
     await seed();
+    // Normaliza folios, estados de propiedad y etapas heredadas de negocios.
+    // Es idempotente y no bloquea el arranque si algo falla.
+    try {
+      await runDataMigrations({ log: true });
+    } catch (error) {
+      console.warn('[Migración] No se pudieron normalizar los datos:', error.message);
+    }
     startJobs();
     // Los avisos internos de tipo "nueva_propiedad" ("Se publicó una casa…
     // coincide con los intereses de X") ya no se generan por defecto. Aquí se

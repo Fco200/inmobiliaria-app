@@ -10,10 +10,6 @@ const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
 const { normalizePhotos } = require('../utils/photos');
 
-function normalizeFolio(value) {
-  return String(value == null ? '' : value).trim().replace(/\s+/g, ' ').slice(0, 60);
-}
-
 function isFolioDuplicateError(err) {
   if (!err) return false;
   if (err.code === 11000) {
@@ -58,33 +54,6 @@ async function nextAutomaticFolio(extra = 0) {
     if (seq > max + 5000) break;
   } while (await Property.exists({ folio: candidate }));
   return candidate;
-}
-
-async function resolveUniqueFolio(requested, excludeId) {
-  let base = normalizeFolio(requested);
-  if (!base) return nextAutomaticFolio();
-  const year = new Date().getFullYear();
-  // try base first
-  let candidate = base;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    if (attempt === 0) {
-      candidate = base;
-    } else {
-      candidate = `${base}-${attempt + 1}`;
-    }
-    // Normalize old INMO-###-YYYY to YYYY-### when possible
-    let normalized = candidate;
-    const inmoMatch = String(candidate).match(/^INMO-(\d+)-(\d{4})$/i);
-    if (inmoMatch) {
-      normalized = `${inmoMatch[2]}-${String(inmoMatch[1]).padStart(3, '0')}`;
-    }
-    const query = { folio: normalized };
-    if (excludeId) query._id = { $ne: excludeId };
-    const exists = await Property.exists(query);
-    if (!exists) return normalized;
-  }
-  // fallback
-  return nextAutomaticFolio(1000 + Math.floor(Math.random() * 1000));
 }
 
 const propertyCrud = buildCrud(Property, {
@@ -365,18 +334,16 @@ const create = asyncHandler(async (req, res) => {
   if (body.photos !== undefined) body.photos = normalizePhotos(body.photos);
   // El asesor responsable siempre debe ser el usuario que sube la propiedad
   body.responsibleUser = req.user._id;
+  // El folio es SIEMPRE generado por el servidor (YYYY-###) y no se puede
+  // editar desde el formulario. Cualquier valor enviado por el cliente se
+  // descarta para conservar la secuencia oficial.
+  delete body.folio;
 
-  const requestedFolio = body.folio;
   let property = null;
   let lastErr = null;
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
-      let folioToUse;
-      if (attempt === 0) {
-        folioToUse = await resolveUniqueFolio(requestedFolio);
-      } else {
-        folioToUse = await resolveUniqueFolio(requestedFolio ? `${requestedFolio}-${attempt + 1}` : '');
-      }
+      const folioToUse = await nextAutomaticFolio();
       const createBody = { ...body, folio: folioToUse };
       property = await Property.create(createBody);
       break;
@@ -437,6 +404,9 @@ const update = asyncHandler(async (req, res) => {
     // consistencia con la solicitud, si es el propio usuario se mantiene
   }
 
+  // El folio es inmutable: aunque un cliente lo envíe, se ignora.
+  delete body.folio;
+
   Object.assign(property, body);
   if (req.body.photos !== undefined) property.photos = normalizePhotos(req.body.photos);
 
@@ -448,41 +418,7 @@ const update = asyncHandler(async (req, res) => {
     });
   }
 
-  if (req.body.folio !== undefined) {
-    const requestedFolio = req.body.folio;
-    if (normalizeFolio(requestedFolio) !== String(property.folio || '').trim()) {
-      let saved = null;
-      let lastErr = null;
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        try {
-          let folioToUse;
-          if (attempt === 0) {
-            folioToUse = await resolveUniqueFolio(requestedFolio, property._id);
-          } else {
-            folioToUse = await resolveUniqueFolio(requestedFolio ? `${requestedFolio}-${attempt + 1}` : '', property._id);
-          }
-          property.folio = folioToUse;
-          await property.save();
-          saved = property;
-          break;
-        } catch (err) {
-          lastErr = err;
-          if (isFolioDuplicateError(err)) {
-            continue;
-          }
-          throw err;
-        }
-      }
-      if (!saved) {
-        if (lastErr) throw lastErr;
-        throw new Error('No se pudo actualizar el folio');
-      }
-    } else {
-      await property.save();
-    }
-  } else {
-    await property.save();
-  }
+  await property.save();
 
   const nowPublished = Boolean(property.isPublished);
   const justPublished = nowPublished && !previousPublished;

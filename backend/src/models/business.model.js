@@ -63,18 +63,28 @@ const businessSchema = new mongoose.Schema(
     currentStage: {
       type: String,
       enum: [
+        // Flujo oficial solicitado.
+        'PROMESA',
         'INTEGRACION',
         'AVALUO',
         'REVISION_AVALUO',
-        'INSCRIPCION',
-        'DICTAMEN',
+        'NOTARIA',
+        'DICTAMEN_PRESUPUESTO',
         'FIRMA',
         'PAGO',
         'ENTREGA',
         'concluido',
         'cancelado',
         'PAUSA',
+        // Valores heredados (se conservan para poder leer/guardar registros
+        // viejos hasta que corre la migración de etapas).
+        'INSCRIPCION',
+        'DICTAMEN',
+        'CONCLUIDO',
+        'CANCELADO',
         'CANCELADO_DEFINITIVO',
+        'REVISION',
+        'NOTARIAS',
         'integracion',
         'avaluo',
         'revision',
@@ -83,7 +93,7 @@ const businessSchema = new mongoose.Schema(
         'pago',
         'entrega',
       ],
-      default: 'INTEGRACION',
+      default: 'PROMESA',
     },
     status: {
       type: String,
@@ -129,6 +139,18 @@ const businessSchema = new mongoose.Schema(
     },
     startedAt: { type: Date, default: Date.now },
     finishedAt: { type: Date, default: null },
+    // Checklist operativo del negocio (documentos por integrar, trámites,
+    // pendientes antes de firma, etc.). Cada elemento puede marcarse hecho.
+    checklist: [
+      {
+        text: { type: String, trim: true, required: true },
+        done: { type: Boolean, default: false },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        completedAt: { type: Date, default: null },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

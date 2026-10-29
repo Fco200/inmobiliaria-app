@@ -9,7 +9,15 @@ const { PROPERTY_PAYMENT_METHODS } = require('../constants/appointment-types');
 // precio fallaba con "Propietario no válido" / "El precio no puede ser negativo".
 const propertyRules = [
   body('type').notEmpty().withMessage('El tipo de inmueble es obligatorio'),
-  body('operationType').notEmpty().withMessage('El tipo de operación es obligatorio'),
+  body('operationType')
+    .notEmpty()
+    .withMessage('El tipo de operación es obligatorio')
+    .isIn(['venta', 'renta', 'compra_localizada'])
+    .withMessage('El tipo de operación no es válido'),
+  body('status')
+    .optional({ values: 'falsy' })
+    .isIn(['disponible', 'apartada', 'inactiva', 'concluida'])
+    .withMessage('El estado de la propiedad no es válido'),
   body('price').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('El precio no puede ser negativo'),
   body('owner').optional({ values: 'falsy' }).isMongoId().withMessage('Propietario no válido'),
   body('responsibleUser').optional({ values: 'falsy' }).isMongoId().withMessage('Usuario responsable no válido'),

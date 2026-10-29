@@ -26,15 +26,17 @@ window.PropertyPdf = (() => {
     otro: 'Otro',
   };
 
-  const OP_LABELS = { venta: 'Venta', renta: 'Renta' };
+  const OP_LABELS = { venta: 'Venta', renta: 'Renta', compra_localizada: 'Compra Localizada' };
 
   const STATUS_LABELS = {
     disponible: 'Disponible',
-    en_proceso: 'En proceso',
     apartada: 'Apartada',
+    inactiva: 'Inactiva',
+    concluida: 'Concluida',
+    // Valores heredados para PDFs de fichas aún no migradas.
+    en_proceso: 'En proceso',
     vendida: 'Vendida',
     rentada: 'Rentada',
-    inactiva: 'Inactiva',
   };
 
   // Paleta de marca (morado INMOBLES + dorado).

@@ -2,19 +2,28 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
+const { isBoss, hasRole } = require('../utils/scope');
 const { Document } = require('../models');
 const { logActivity } = require('../services/log.service');
 
 const documentCrud = buildCrud(Document, {
   populate: ['uploadedBy', 'client', 'property', 'business'],
   ownerField: 'uploadedBy',
+  wideRoles: ['asistencia', 'escrituracion'],
 });
 
 const populate = ['uploadedBy', 'client', 'property', 'business'];
 
+// Asistencia y escrituración administran los formatos/documentos de toda la
+// empresa sin ser "jefes" del sistema.
+const DOCUMENT_STAFF_ROLES = ['asistencia', 'escrituracion'];
+
+function isDocumentStaff(req) {
+  return isBoss(req) || hasRole(req, DOCUMENT_STAFF_ROLES);
+}
+
 function assertOwnership(req, doc) {
-  if (isBoss(req)) return true;
+  if (isDocumentStaff(req)) return true;
   const ownerId = String((doc.uploadedBy && doc.uploadedBy._id) || doc.uploadedBy || '');
   return ownerId === String(req.user._id);
 }
@@ -36,8 +45,9 @@ const list = asyncHandler(async (req, res) => {
   if (req.query.property) filter.property = req.query.property;
   if (req.query.business) filter.business = req.query.business;
 
-  // admin/gerencia ven todos los documentos; cada asesor solo los suyos.
-  if (!isBoss(req)) {
+  // Los jefes, asistencia y escrituración ven todos los documentos; cada asesor
+  // solo los suyos.
+  if (!isDocumentStaff(req)) {
     filter.uploadedBy = req.user._id;
   } else if (req.query.mine === 'true' || req.query.uploadedBy) {
     filter.uploadedBy = req.query.mine === 'true' ? req.user._id : req.query.uploadedBy;

@@ -8,7 +8,25 @@ window.Pages.properties = {
   async render(container) {
     const stored = window.ApiClient ? window.ApiClient.getStoredUser() : null;
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
-    const isBossUser = role === 'admin' || role === 'gerencia' || role === 'superadmin';
+    const isBossUser = role === 'admin' || role === 'gerencia' || role === 'superadmin' || role === 'direccion';
+
+    const OPERATION_LABELS = {
+      venta: 'Venta',
+      renta: 'Renta',
+      compra_localizada: 'Compra Localizada',
+    };
+    const operationLabel = (value) => OPERATION_LABELS[value] || String(value || '').replace(/_/g, ' ');
+    const operationOptions = [
+      { value: 'venta', label: 'Venta' },
+      { value: 'renta', label: 'Renta' },
+      { value: 'compra_localizada', label: 'Compra Localizada' },
+    ];
+    const PROPERTY_STATUS = [
+      { value: 'disponible', label: 'Disponible' },
+      { value: 'apartada', label: 'Apartada' },
+      { value: 'inactiva', label: 'Inactiva' },
+      { value: 'concluida', label: 'Concluida' },
+    ];
 
     const statMini = (label, value) => `
       <div class="stat-card" style="padding:10px;">
@@ -81,7 +99,7 @@ window.Pages.properties = {
     };
 
     // Enlace wa.me de respaldo para una propiedad (solo si no hay PDF).
-    const waHref = (record) => waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`);
+    const waHref = (record) => waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${operationLabel(record.operationType)}).`);
 
     // Imagen por defecto (SVG) cuando una propiedad no tiene fotografías.
     const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -116,7 +134,7 @@ window.Pages.properties = {
             <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:4px;">
               ${UI.badge(UI.escapeHtml(record.type || '—'), 'info')}
               ${UI.statusBadge(record.status)}
-              ${UI.badge(UI.escapeHtml((record.operationType || '').toUpperCase()), 'primary')}
+              ${UI.badge(UI.escapeHtml(operationLabel(record.operationType)), 'primary')}
               ${record.isPublished ? UI.badge('Compartida al inventario', 'success') : UI.badge('Privada', 'muted')}
             </div>
           </div>
@@ -132,8 +150,9 @@ window.Pages.properties = {
           <div class="table-wrapper card" style="padding:0;">
             <table class="table">
               <tbody>
+                ${detailRow('Folio', UI.escapeHtml(record.folio || '—'))}
                 ${detailRow('Tipo', UI.escapeHtml(record.type || '—'))}
-                ${detailRow('Operación', UI.escapeHtml((record.operationType || '').toUpperCase()))}
+                ${detailRow('Operación', UI.escapeHtml(operationLabel(record.operationType)))}
                 ${detailRow('Dirección', UI.escapeHtml(record.address || '—'))}
                 ${detailRow('Zona / Colonia', UI.escapeHtml(record.zone || '—'))}
                 ${detailRow('Ciudad', UI.escapeHtml(record.city || '—'))}
@@ -150,7 +169,7 @@ window.Pages.properties = {
           ${record.description ? `<div class="card" style="margin-top:12px;"><h4 style="margin:0 0 6px;">Descripción</h4><p class="preserve-lines" style="margin:0;">${UI.escapeHtml(record.description)}</p></div>` : ''}
         `,
         footer: `
-          ${window.WhatsAppGenerator ? '<button class="btn btn-success" type="button" data-share-wa>&#128172;&nbsp; Compartir (PDF)</button>' : (waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${(record.operationType || '').toUpperCase()}).`)}">&#128172;&nbsp; WhatsApp</a>` : '')}
+          ${window.WhatsAppGenerator ? '<button class="btn btn-success" type="button" data-share-wa>&#128172;&nbsp; Compartir (PDF)</button>' : (waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${operationLabel(record.operationType)}).`) ? `<a class="btn btn-success" target="_blank" rel="noopener" href="${waLink(`Hola, me interesa la propiedad: ${record.type || ''} en ${record.zone || record.city || ''} (${operationLabel(record.operationType)}).`)}">&#128172;&nbsp; WhatsApp</a>` : '')}
           ${photos.length > 1 ? `<button class="btn btn-secondary" type="button" data-gallery>Fotografías</button>` : ''}
           <button class="btn btn-secondary" type="button" data-history>Historial</button>
           ${openPropertyForm ? `<button class="btn btn-primary" type="button" data-edit-detail>Editar</button>` : ''}
@@ -369,10 +388,10 @@ window.Pages.properties = {
         },
         remove: (id) => API.properties.remove(id),
       },
-      statusOptions: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'],
+      statusOptions: PROPERTY_STATUS,
       filters: [
         { key: 'owner', label: 'Propietario', searchSource: UI.remoteSources.client, placeholder: 'Todos los propietarios' },
-        { key: 'operationType', label: 'Operación', placeholder: 'Todas las operaciones', options: ['venta', 'renta'] },
+        { key: 'operationType', label: 'Operación', placeholder: 'Todas las operaciones', options: operationOptions },
         { key: 'type', label: 'Tipo', placeholder: 'Todos los tipos', options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
         { key: 'minPrice', label: 'Precio mínimo', type: 'number', placeholder: 'Precio mín.', width: 130 },
         { key: 'maxPrice', label: 'Precio máximo', type: 'number', placeholder: 'Precio máx.', width: 130 },
@@ -384,7 +403,7 @@ window.Pages.properties = {
             return `<img src="${src.replace(/"/g, '&quot;')}" alt="${hasPhoto ? '' : 'Sin foto'}" style="width:52px;height:40px;object-fit:cover;border-radius:6px;" loading="lazy" ${window.AppConfig.imgFallback}>`;
           } },
         { key: 'type', label: 'Tipo', render: (r) => UI.badge(typeLabel(r.type), 'info') },
-        { key: 'operationType', label: 'Operación', render: (r) => UI.escapeHtml((r.operationType || '').toUpperCase()) },
+        { key: 'operationType', label: 'Operación', render: (r) => UI.escapeHtml(operationLabel(r.operationType)) },
         { key: 'address', label: 'Ubicación', render: (r) => `${UI.escapeHtml(r.zone || '')} ${UI.escapeHtml(r.city || '')}${r.state ? `, ${UI.escapeHtml(r.state)}` : ''}`.trim() || '—' },
         { key: 'price', label: 'Precio', render: (r) => Format.currency(r.price) },
         { key: 'ticketValue', label: 'Valor ticket', render: (r) => (r.ticketValue ? Format.currency(r.ticketValue) : '—') },
@@ -394,12 +413,12 @@ window.Pages.properties = {
         { key: 'isExternal', label: 'Origen', render: (r) => (r.isExternal ? `${UI.badge('Externa', 'warning')}${r.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(r.externalAdvisor)}</div>` : ''}` : '<span class="text-muted" style="font-size:12px;">Equipo</span>') },
       ],
       fields: [
-        { name: 'folio', label: 'Folio', type: 'text', placeholder: 'Automático (ej. 2026-001)', hint: 'Déjalo vacío para generar automático en formato 2026-###. Si ya tiene folio INMO-, se ajustará al nuevo formato.' },
+        { name: 'folio', label: 'Folio', type: 'text', readonly: true, placeholder: 'Se genera automáticamente', hint: 'Folio inmutable con formato AÑO-###. Lo asigna el sistema y no se puede editar.' },
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
-        { name: 'operationType', label: 'Tipo de operación', type: 'select', required: true, options: ['venta', 'renta'] },
+        { name: 'operationType', label: 'Tipo de operación', type: 'select', required: true, options: operationOptions },
         { name: 'price', label: 'Precio', type: 'number' },
         { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
-        { name: 'status', label: 'Estado', type: 'select', options: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'] },
+        { name: 'status', label: 'Estado', type: 'select', options: PROPERTY_STATUS },
         { name: 'address', label: 'Dirección', type: 'text', full: true },
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
         { name: 'city', label: 'Ciudad', type: 'text' },

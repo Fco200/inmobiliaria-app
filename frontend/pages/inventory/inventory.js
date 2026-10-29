@@ -27,6 +27,14 @@ window.Pages.inventory = {
       ['otro', 'Otro (especificar)'],
     ];
 
+    // Etiquetas visibles de la operación (incluye Compra Localizada).
+    const OPERATION_LABELS = {
+      venta: 'Venta',
+      renta: 'Renta',
+      compra_localizada: 'Compra Localizada',
+    };
+    const operationLabel = (value) => OPERATION_LABELS[value] || String(value || '').replace(/_/g, ' ');
+
     // Único listado: el inventario general del equipo.
     const state = {
       page: 1,
@@ -211,7 +219,7 @@ window.Pages.inventory = {
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
                 ${UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info')}
-                ${UI.badge(String(prop.operationType || ''), 'primary')}
+                ${UI.badge(operationLabel(prop.operationType), 'primary')}
                 ${prop.status ? UI.badge(String(prop.status).replace(/_/g, ' '), 'warning') : ''}
                 ${prop.isExternal ? UI.badge('Externa', 'warning') : ''}
               </div>
@@ -636,15 +644,14 @@ window.Pages.inventory = {
         ['', 'Todas las operaciones'],
         ['venta', 'Venta'],
         ['renta', 'Renta'],
+        ['compra_localizada', 'Compra Localizada'],
       ];
       const estadoOpciones = [
         ['', 'Todos los estados'],
         ['disponible', 'Disponibles'],
-        ['en_proceso', 'En proceso'],
         ['apartada', 'Apartadas'],
-        ['vendida', 'Vendidas'],
-        ['rentada', 'Rentadas'],
         ['inactiva', 'Inactivas'],
+        ['concluida', 'Concluidas'],
       ];
       const pagoOpciones = [
         ['', 'Todos los financiamientos'],
@@ -761,7 +768,7 @@ window.Pages.inventory = {
             </td>
             <td data-label="Ubicación"><strong>${UI.escapeHtml(propertyLabel(prop))}</strong>${prop && prop.folio ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.folio)}</div>` : ''}${prop && prop.isExternal ? ` ${UI.badge('Externa', 'warning')}${prop.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(prop.externalAdvisor)}</div>` : ''}` : ''}</td>
             <td data-label="Tipo">${prop ? UI.badge(String(prop.type || '').replace(/_/g, ' '), 'info') : '—'}</td>
-            <td data-label="Operación">${prop ? UI.badge(String(prop.operationType || ''), 'primary') : '—'}</td>
+            <td data-label="Operación">${prop ? UI.badge(operationLabel(prop.operationType), 'primary') : '—'}</td>
             <td data-label="Estado">${prop ? UI.statusBadge(prop.status) : '—'}</td>
             <td data-label="Precio">${prop ? Format.currency(prop.price) : '—'}</td>
             <td data-label="Financiamiento">${prop ? UI.escapeHtml(paymentLabel(prop)) : '—'}</td>

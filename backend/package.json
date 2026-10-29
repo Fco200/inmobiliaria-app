@@ -11,6 +11,7 @@
     "migrate:clientes": "node scripts/migrar-clientes-legacy.js",
     "migrate:seguimiento": "node scripts/migrar-clientes-seguimiento.js",
     "migrate:negocios": "node scripts/migrar-negocios-seguimiento.js",
+    "migrate:folios": "node scripts/migrar_folios_prop.js",
     "migrate:uploads": "node scripts/migrar-uploads-a-gridfs.js",
     "verificar:media": "node scripts/verificar-media.js",
     "test": "node --test"

@@ -6,18 +6,22 @@ window.Pages.businesses = {
   title: 'Negocios',
 
   async render(container) {
-    // Etapas de respaldo (idénticas al backend) por si el endpoint no responde.
-    const FALLBACK_BUYER = [
-      'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido',
+    const FALLBACK_STAGES = [
+      'PROMESA',
+      'INTEGRACION',
+      'AVALUO',
+      'REVISION_AVALUO',
+      'NOTARIA',
+      'DICTAMEN_PRESUPUESTO',
+      'FIRMA',
+      'PAGO',
+      'ENTREGA',
     ];
-    const FALLBACK_SELLER = [
-      'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'INSCRIPCION', 'DICTAMEN', 'FIRMA', 'PAGO', 'ENTREGA', 'concluido',
-    ];
+    const TERMINAL_STAGES = ['concluido', 'cancelado', 'PAUSA'];
 
-    // Las etapas reales las expone el backend (GET /businesses/stages); así el
-    // embudo, el select de cambio de etapa y las etiquetas nunca se desincronizan.
     let stageMeta = {
-      byProcess: { comprador: FALLBACK_BUYER.slice(), vendedor: FALLBACK_SELLER.slice() },
+      byProcess: { comprador: FALLBACK_STAGES.slice(), vendedor: FALLBACK_STAGES.slice() },
+      order: [...FALLBACK_STAGES, ...TERMINAL_STAGES],
       labels: {},
     };
     try {
@@ -27,13 +31,14 @@ window.Pages.businesses = {
         stageMeta = {
           byProcess: {
             comprador: data.byProcess.comprador,
-            vendedor: (data.byProcess.vendedor || FALLBACK_SELLER.slice()),
+            vendedor: (data.byProcess.vendedor || FALLBACK_STAGES.slice()),
           },
+          order: data.order || [...FALLBACK_STAGES, ...TERMINAL_STAGES],
           labels: data.labels || {},
         };
       }
     } catch (error) {
-      // respaldo: las listas por defecto arriba
+      // respaldo predeterminado
     }
 
     let properties = [];
@@ -42,23 +47,13 @@ window.Pages.businesses = {
     let me = null;
     let negociosActivos = [];
     try {
-      // Los negocios activos se piden de entrada porque un cliente no puede tener
-      // dos a la vez: sirven para marcar en el formulario quién ya está
-      // ocupado y no llevar al error del backend.
       const [inv, u, c, m, activos] = await Promise.all([
-        // Propiedades: se toma el INVENTARIO GENERAL del equipo (propiedades
-        // compartidas por cualquier asesor + externas de otras inmobiliarias),
-        // no solo "mis propiedades". Así al crear un negocio aparecen TODAS
-        // las propiedades que están en el inventario.
         API.inventory.general({ limit: 100 }).catch(() => ({ data: [] })),
         API.users.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.auth.me().catch(() => null),
         fetchAllBusinesses().catch(() => []),
       ]);
-      // El inventario devuelve items { property, assignedAgent }: se normaliza
-      // a la forma de Property que espera el formulario, con respaldo a la
-      // lista propia si el inventario general viniera vacío.
       properties = (inv.data || [])
         .map((item) => (item && item.property ? item.property : null))
         .filter(Boolean);
@@ -74,16 +69,11 @@ window.Pages.businesses = {
       // sin opciones
     }
 
-    // Un mismo catálogo de clientes se parte por tipo (comprador/vendedor):
-    // el cliente sí distingue "Comprar"/"Vender" (campo servicio / type).
     const isBuyerClient = (x) => x && ((x.type === 'comprador') || /Comprar/i.test(x.servicio || ''));
     const isSellerClient = (x) => x && ((x.type === 'vendedor') || /Vender/i.test(x.servicio || ''));
     const buyers = clients.filter(isBuyerClient);
     const sellers = clients.filter(isSellerClient);
 
-    // Un cliente solo puede pertenecer a un negocio activo por rol (el backend
-    // lo rechaza con 409 y el índice único del modelo lo blinda). Aquí se marca
-    // en el desplegable para que el asesor lo vea antes de elegirlo.
     const refId = (valor) => String((valor && (valor._id || valor)) || '');
     const yaTieneNegocio = (cliente, campo) => negociosActivos.some((b) => refId(b[campo]) === refId(cliente));
     const opcionesCliente = (lista, campo) => lista.map((x) => ({
@@ -94,30 +84,30 @@ window.Pages.businesses = {
     const stagesFor = (processType) => stageMeta.byProcess[processType] || stageMeta.byProcess.comprador;
     const stageLabel = (code) => stageMeta.labels[code] || String(code || '').replace(/_/g, ' ');
 
-    const allStageOptions = Array.from(
-      new Set([...stageMeta.byProcess.comprador, ...stageMeta.byProcess.vendedor])
-    ).map((s) => ({ value: s, label: stageLabel(s) }));
+    const roleCode = String((me && me.role && (me.role.code || me.role)) || '');
+    const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
+    const canChangeStage = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
+    const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
+    const canWriteNotes = true;
+
+    const allStages = stageMeta.order && stageMeta.order.length
+      ? stageMeta.order
+      : Array.from(new Set([...stageMeta.byProcess.comprador, ...stageMeta.byProcess.vendedor, ...TERMINAL_STAGES]));
+    const allStageOptions = allStages.map((s) => ({ value: s, label: stageLabel(s) }));
 
     const STAGE_COLORS = {
+      PROMESA: '#8b5cf6',
       INTEGRACION: '#0d9488',
       AVALUO: '#b45309',
       REVISION_AVALUO: '#2563eb',
-      INSCRIPCION: '#8b5cf6',
-      DICTAMEN: '#9333ea',
+      NOTARIA: '#db2777',
+      DICTAMEN_PRESUPUESTO: '#9333ea',
       FIRMA: '#ea580c',
       PAGO: '#7c3aed',
       ENTREGA: '#0891b2',
-      integracion: '#0d9488',
-      avaluo: '#b45309',
-      revision: '#2563eb',
-      notarias: '#db2777',
-      firma: '#ea580c',
-      pago: '#7c3aed',
-      entrega: '#0891b2',
       concluido: '#1f9d55',
       cancelado: '#dc2626',
       PAUSA: '#f59e0b',
-      CANCELADO_DEFINITIVO: '#dc2626',
     };
     const colorFor = (stage) => STAGE_COLORS[stage] || '#64748b';
 
@@ -136,7 +126,7 @@ window.Pages.businesses = {
             <button class="process-tab active" type="button" data-view="table">&#128203; Lista</button>
             <button class="process-tab" type="button" data-view="kanban">&#128200; Kanban</button>
           </div>
-          <button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>
+          ${canManage ? '<button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>' : ''}
         </div>
       </div>
       <div id="biz-content"></div>
@@ -144,8 +134,6 @@ window.Pages.businesses = {
 
     const contentEl = container.querySelector('#biz-content');
 
-    // Delegación persistente para "Etapas" (historial) del listado: se registra
-    // una sola vez, aunque la vista tabla se reconstruya varias veces.
     contentEl.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-history]');
       if (!btn) return;
@@ -166,12 +154,11 @@ window.Pages.businesses = {
 
     function columnsFor(processType) {
       const columns = stagesFor(processType)
-        .filter((s) => s !== 'concluido' && s !== 'cancelado')
+        .filter((s) => !TERMINAL_STAGES.includes(s))
         .map((s) => ({ stage: s, label: stageLabel(s), color: colorFor(s) }));
       columns.push({ stage: 'PAUSA', label: stageLabel('PAUSA'), color: colorFor('PAUSA') });
       columns.push({ stage: 'concluido', label: stageLabel('concluido'), color: '#1f9d55' });
       columns.push({ stage: 'cancelado', label: stageLabel('cancelado'), color: '#dc2626' });
-      columns.push({ stage: 'CANCELADO_DEFINITIVO', label: stageLabel('CANCELADO_DEFINITIVO'), color: colorFor('CANCELADO_DEFINITIVO') });
       return columns;
     }
 
@@ -182,8 +169,6 @@ window.Pages.businesses = {
         renderTable();
       }
     }
-
-    // ============ INDICADORES ============
 
     async function renderSummary(summaryEl) {
       if (!summaryEl) return;
@@ -197,9 +182,8 @@ window.Pages.businesses = {
           counts[s] = (Number(counts[s]) || 0) + 1;
         });
         const total = items.length;
-        // Mostrar todas las etapas conocidas + cualquier otra que aparezca
         const known = [
-          ...new Set([...(stageMeta.byProcess.comprador || []), ...(stageMeta.byProcess.vendedor || []), 'PAUSA', 'concluido', 'cancelado', 'CANCELADO_DEFINITIVO']),
+          ...new Set([...(stageMeta.byProcess.comprador || []), ...(stageMeta.byProcess.vendedor || []), 'PAUSA', 'concluido', 'cancelado']),
         ];
         const others = Object.keys(counts).filter((k) => !known.includes(k));
         const stages = [...known, ...others];
@@ -211,7 +195,7 @@ window.Pages.businesses = {
             </button>
             ${stages
               .map((s) => {
-                if (s === 'concluido' || s === 'CANCELADO_DEFINITIVO') return '';
+                if (s === 'concluido' || s === 'cancelado') return '';
                 const label = stageLabel(s) || s;
                 const color = colorFor(s);
                 const c = Number(counts[s]) || 0;
@@ -228,8 +212,8 @@ window.Pages.businesses = {
               <span class="pipeline-count">${Number(counts.concluido) || 0}</span>
             </button>
             <button class="pipeline-step" type="button" style="--pipeline-color:#dc2626;">
-              <span class="pipeline-label">Cancelados</span>
-              <span class="pipeline-count">${(Number(counts.cancelado) || 0) + (Number(counts.CANCELADO_DEFINITIVO) || 0) + (Number(counts.PAUSA) || 0)}</span>
+              <span class="pipeline-label">Cancelados / Pausa</span>
+              <span class="pipeline-count">${(Number(counts.cancelado) || 0) + (Number(counts.PAUSA) || 0)}</span>
             </button>
           </div>
         `;
@@ -237,8 +221,6 @@ window.Pages.businesses = {
         summaryEl.innerHTML = '';
       }
     }
-
-    // ============ VISTA TABLA (CRUD) ============
 
     function renderTable() {
       contentEl.innerHTML = '<div id="biz-summary"></div><div id="biz-list"></div>';
@@ -276,35 +258,29 @@ window.Pages.businesses = {
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
-          { key: 'currentStage', label: 'Etapa', render: (r) => UI.statusBadge(stageLabel(r.currentStage)) },
+          { key: 'currentStage', label: 'Etapa', render: (r) => `${UI.statusBadge(stageLabel(r.currentStage))}${r.status === 'concluido' ? ' ' + UI.statusBadge('Concluido', 'success') : ''}` },
           { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         ],
         fields: [
           { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
           { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
           { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, value: (r) => (r.buyerClient ? (r.buyerClient._id || r.buyerClient) : (r.buyerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(buyers, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-          { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-          { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
           { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...users.map((x) => ({ value: x._id, label: x.name })), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-          { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez de Inmobiliaria Centro', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
           { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate) },
           { name: 'closing_commission', label: 'Comisión', type: 'number', value: (r) => (r.closing || {}).commission || 0 },
         ],
-        // Montos: solo los esenciales (valor de la operación, propuesta
-        // inicial y comisión). Contraoferta, monto de promesa y monto de
-        // cierre se quitaron del formulario por ser redundantes entre
-        // etapas; los que ya estaban guardados se conservan tal cual.
         formData(values, record) {
           const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = values;
 
-          // "Otro / Externo": el ObjectId queda vacío y el nombre viaja en el
-          // campo de texto libre correspondiente.
           const externo = (valor, nombre) => {
             if (valor === '__externo__') return { id: null, nombre: String(nombre || '').trim() };
             return { id: valor || null, nombre: '' };
@@ -342,8 +318,6 @@ window.Pages.businesses = {
           };
         },
         onFormMount(form) {
-          // Comprador/vendedor/asesor "Otro / Externo": muestra el campo de
-          // nombre libre solo cuando la opción externa está elegida.
           const sync = (selName, wrapName) => {
             const sel = form.querySelector(`#fld-${selName}`);
             const wrap = form.querySelector(`#fld-${wrapName}`);
@@ -359,18 +333,28 @@ window.Pages.businesses = {
         },
         extraActions(record) {
           return `
-            <button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Cambiar etapa</button>
-            <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Etapas</button>
-            <button class="btn btn-secondary btn-sm" data-extra data-activity style="margin-left:6px;">Actividad</button>
+            ${canChangeStage ? '<button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Etapa</button>' : ''}
+            <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Bitácora</button>
+            ${canChecklist ? '<button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>' : ''}
+            <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
           `;
         },
         onExtraAction(record, control, ctx) {
-          if (control.dataset.activity !== undefined) {
-            UI.showActivityHistory('Business', record._id, `Centro de actividad — ${record.name}`);
-            return;
-          }
           if (control.dataset.changeStage !== undefined) {
             openChangeStageModal(record, ctx);
+            return;
+          }
+          if (control.dataset.bitacora !== undefined) {
+            openBitacoraModal(record);
+            return;
+          }
+          if (control.dataset.checklist !== undefined) {
+            openChecklistModal(record);
+            return;
+          }
+          if (control.dataset.docs !== undefined) {
+            openDocumentsModal(record);
             return;
           }
           if (control.dataset.stagesInfo !== undefined) {
@@ -378,8 +362,8 @@ window.Pages.businesses = {
             return;
           }
         },
-        onEdit: true,
-        onRemove: true,
+        onEdit: canManage,
+        onRemove: canManage,
       });
 
       renderSummary(summaryEl);
@@ -391,10 +375,11 @@ window.Pages.businesses = {
         .map((s) => `<li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel(s))}</strong> <span class="text-muted">(${s})</span></li>`)
         .join('');
       const extra = `
-        <p style="margin-top:16px;margin-bottom:8px;"><strong>Opciones adicionales</strong></p>
+        <p style="margin-top:16px;margin-bottom:8px;"><strong>Opciones terminales / especiales</strong></p>
         <ul style="margin:0;padding-left:18px;">
           <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('PAUSA'))}</strong> <span class="text-muted">(PAUSA)</span> — Pausar el negocio temporalmente.</li>
-          <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('CANCELADO_DEFINITIVO'))}</strong> <span class="text-muted">(CANCELADO_DEFINITIVO)</span> — Cancelación definitiva del negocio.</li>
+          <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('concluido'))}</strong> <span class="text-muted">(concluido)</span> — Cierre exitoso del negocio.</li>
+          <li style="margin-bottom:8px;"><strong>${UI.escapeHtml(stageLabel('cancelado'))}</strong> <span class="text-muted">(cancelado)</span> — Cancelación del negocio.</li>
         </ul>
       `;
       UI.openModal({
@@ -410,7 +395,7 @@ window.Pages.businesses = {
 
     function openChangeStageModal(record, ctx) {
       const stages = stagesFor(record.processType);
-      const stageOptions = [...stages, 'PAUSA', 'CANCELADO_DEFINITIVO']
+      const stageOptions = [...stages, 'PAUSA', 'concluido', 'cancelado']
         .map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`)
         .join('');
       const modal = UI.openModal({
@@ -424,7 +409,7 @@ window.Pages.businesses = {
             <div class="form-field">
               <label>Nota / Comentario (obligatorio)</label>
               <textarea class="form-control" name="nota" rows="4" required placeholder="Describe el motivo del cambio de etapa..."></textarea>
-              <small class="text-muted">Es obligatorio agregar una nota, igual que en el módulo de Clientes.</small>
+              <small class="text-muted">Es obligatorio agregar una nota para registrar el cambio.</small>
             </div>
           </form>
         `,
@@ -462,6 +447,218 @@ window.Pages.businesses = {
       });
     }
 
+    // ============ MODAL DE BITÁCORA ============
+    async function openBitacoraModal(record) {
+      const modal = UI.openModal({
+        title: `Bitácora / Notas — ${record.name}`,
+        body: `<div id="biz-notes-container"><div class="loading">Cargando notas...</div></div>`,
+        size: 600,
+      });
+
+      const loadNotesContent = async () => {
+        const containerEl = modal.bodyEl.querySelector('#biz-notes-container');
+        if (!containerEl) return;
+        try {
+          const res = await API.businesses.notes.list(record._id);
+          const notes = (res && res.data) || res || [];
+          containerEl.innerHTML = `
+            ${canWriteNotes ? `
+              <form id="add-note-form" style="margin-bottom:16px;display:flex;gap:8px;">
+                <input type="text" class="form-control" name="content" placeholder="Escribe una nueva nota o comentario..." required />
+                <button class="btn btn-primary" type="submit">Agregar</button>
+              </form>
+            ` : ''}
+            <div style="max-height:350px;overflow-y:auto;">
+              ${notes.length ? notes.map((n) => `
+                <div style="padding:10px;margin-bottom:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);">
+                  <div style="font-size:13px;margin-bottom:4px;">${UI.escapeHtml(n.content || n.note)}</div>
+                  <div class="text-muted" style="font-size:11px;">
+                    ${n.author ? UI.escapeHtml(n.author.name || n.author) : 'Sistema'} · ${Format.dateTime(n.createdAt || n.date)}
+                  </div>
+                </div>
+              `).join('') : '<p class="text-muted">No hay notas registradas en la bitácora.</p>'}
+            </div>
+          `;
+
+          const addForm = containerEl.querySelector('#add-note-form');
+          if (addForm) {
+            addForm.addEventListener('submit', async (ev) => {
+              ev.preventDefault();
+              const val = UI.collectForm(ev.target);
+              if (!String(val.content || '').trim()) return;
+              try {
+                await API.businesses.notes.create(record._id, { content: val.content });
+                UI.toast('Nota agregada', 'success');
+                loadNotesContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          }
+        } catch (err) {
+          containerEl.innerHTML = UI.errorAlert(err.message);
+        }
+      };
+
+      loadNotesContent();
+    }
+
+    // ============ MODAL DE CHECKLIST ============
+    async function openChecklistModal(record) {
+      const modal = UI.openModal({
+        title: `Checklist — ${record.name}`,
+        body: `<div id="biz-checklist-container"><div class="loading">Cargando checklist...</div></div>`,
+        size: 550,
+      });
+
+      const loadChecklistContent = async () => {
+        const containerEl = modal.bodyEl.querySelector('#biz-checklist-container');
+        if (!containerEl) return;
+        try {
+          const res = await API.businesses.checklist.list(record._id).catch(() => ({ data: record.checklist || [] }));
+          const items = (res && res.data) || res || [];
+          containerEl.innerHTML = `
+            ${canChecklist ? `
+              <form id="add-check-form" style="margin-bottom:16px;display:flex;gap:8px;">
+                <input type="text" class="form-control" name="text" placeholder="Nuevo elemento para el checklist..." required />
+                <button class="btn btn-primary" type="submit">Añadir</button>
+              </form>
+            ` : ''}
+            <div style="max-height:350px;overflow-y:auto;">
+              ${items.length ? items.map((item, idx) => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+                    <input type="checkbox" data-check-id="${item._id || idx}" ${item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
+                    <span style="${item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
+                  </label>
+                  ${canChecklist ? `<button class="btn btn-danger btn-sm" data-delete-check="${item._id || idx}" style="padding:2px 6px;font-size:11px;">✕</button>` : ''}
+                </div>
+              `).join('') : '<p class="text-muted">No hay elementos en el checklist.</p>'}
+            </div>
+          `;
+
+          const addForm = containerEl.querySelector('#add-check-form');
+          if (addForm) {
+            addForm.addEventListener('submit', async (ev) => {
+              ev.preventDefault();
+              const val = UI.collectForm(ev.target);
+              if (!String(val.text || '').trim()) return;
+              try {
+                await API.businesses.checklist.create(record._id, { text: val.text });
+                loadChecklistContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          }
+
+          containerEl.querySelectorAll('[data-check-id]').forEach((chk) => {
+            chk.addEventListener('change', async (ev) => {
+              const itemId = ev.target.dataset.checkId;
+              const completed = ev.target.checked;
+              try {
+                await API.businesses.checklist.update(record._id, itemId, { completed });
+              } catch (err) {
+                UI.toast(err.message, 'error');
+                ev.target.checked = !completed;
+              }
+            });
+          });
+
+          containerEl.querySelectorAll('[data-delete-check]').forEach((delBtn) => {
+            delBtn.addEventListener('click', async (ev) => {
+              const itemId = ev.target.dataset.deleteCheck;
+              try {
+                await API.businesses.checklist.remove(record._id, itemId);
+                loadChecklistContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
+        } catch (err) {
+          containerEl.innerHTML = UI.errorAlert(err.message);
+        }
+      };
+
+      loadChecklistContent();
+    }
+
+    // ============ MODAL DE DOCUMENTOS ============
+    async function openDocumentsModal(record) {
+      const modal = UI.openModal({
+        title: `Documentos — ${record.name}`,
+        body: `<div id="biz-docs-container"><div class="loading">Cargando documentos...</div></div>`,
+        size: 600,
+      });
+
+      const loadDocsContent = async () => {
+        const containerEl = modal.bodyEl.querySelector('#biz-docs-container');
+        if (!containerEl) return;
+        try {
+          const res = await API.businesses.documents.list(record._id).catch(() => ({ data: [] }));
+          const docs = (res && res.data) || res || [];
+          containerEl.innerHTML = `
+            <form id="upload-doc-form" style="margin-bottom:16px;padding:12px;background:var(--bg-subtle,#f8fafc);border-radius:6px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <input type="text" class="form-control" name="name" placeholder="Nombre o título del documento" required />
+                <input type="file" class="form-control" name="file" required style="padding:4px;" />
+              </div>
+              <button class="btn btn-primary btn-sm" type="submit">Subir documento (máx. 8 MB)</button>
+            </form>
+            <div style="max-height:300px;overflow-y:auto;">
+              ${docs.length ? docs.map((doc) => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color,#e2e8f0);">
+                  <div>
+                    <strong>${UI.escapeHtml(doc.name || doc.originalName || 'Documento')}</strong>
+                    <br><small class="text-muted">${Format.dateTime(doc.createdAt)}</small>
+                  </div>
+                  <div style="display:flex;gap:8px;">
+                    ${doc.url ? `<a href="${doc.url}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>` : ''}
+                    <button class="btn btn-danger btn-sm" data-delete-doc="${doc._id}">Eliminar</button>
+                  </div>
+                </div>
+              `).join('') : '<p class="text-muted">No hay documentos adjuntos a este negocio.</p>'}
+            </div>
+          `;
+
+          const uploadForm = containerEl.querySelector('#upload-doc-form');
+          if (uploadForm) {
+            uploadForm.addEventListener('submit', async (ev) => {
+              ev.preventDefault();
+              const formData = new FormData(ev.target);
+              try {
+                UI.toast('Subiendo documento...', 'info');
+                await API.businesses.documents.create(record._id, formData);
+                UI.toast('Documento subido con éxito', 'success');
+                loadDocsContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          }
+
+          containerEl.querySelectorAll('[data-delete-doc]').forEach((delBtn) => {
+            delBtn.addEventListener('click', async (ev) => {
+              const docId = ev.target.dataset.deleteDoc;
+              if (!confirm('¿Estás seguro de eliminar este documento?')) return;
+              try {
+                await API.businesses.documents.remove(record._id, docId);
+                UI.toast('Documento eliminado', 'success');
+                loadDocsContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
+        } catch (err) {
+          containerEl.innerHTML = UI.errorAlert(err.message);
+        }
+      };
+
+      loadDocsContent();
+    }
+
     function getRecordIdFromRow(btn) {
       const rows = contentEl.querySelectorAll('tbody tr');
       for (let i = 0; i < rows.length; i++) {
@@ -476,7 +673,7 @@ window.Pages.businesses = {
     async function showHistory(id) {
       try {
         const result = await API.businesses.history(id);
-        const rows = result.data
+        const rows = (result.data || result || [])
           .map((s) => `
             <li style="margin-bottom:10px;border-left:3px solid var(--primary);padding-left:12px;">
               <strong>${UI.escapeHtml(s.name || s.stageCode)}</strong>
@@ -494,8 +691,6 @@ window.Pages.businesses = {
         UI.toast(error.message, 'error');
       }
     }
-
-    // ============ VISTA KANBAN (NEGOCIACIONES) ============
 
     async function renderKanban() {
       contentEl.innerHTML = `
@@ -534,14 +729,11 @@ window.Pages.businesses = {
       return all;
     }
 
-    // Se releen los negocios activos justo antes de abrir el formulario de alta:
-    // el aviso "ya tiene un negocio activo" tiene que reflejar el estado de este
-    // momento, no el de cuando se cargó la página.
     async function refrescarActivos() {
       try {
         negociosActivos = await fetchAllBusinesses({ status: 'activo' });
       } catch (error) {
-        // si la lista falla se conserva la anterior; el backend sigue rechazando duplicados
+        // conserva anterior
       }
     }
 
@@ -623,7 +815,7 @@ window.Pages.businesses = {
         { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate) },
         { name: 'closing_commission', label: 'Comisión', type: 'number', value: closing.commission || 0 },
         { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : (business.partnerAdvisorName ? '__externo__' : '') },
-        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez de Inmobiliaria Centro', value: business.partnerAdvisorName || '' },
+        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', value: business.partnerAdvisorName || '' },
         { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: neg.notes || '' },
       ];
       const modal = UI.openModal({
@@ -632,8 +824,8 @@ window.Pages.businesses = {
           <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px;">
             ${UI.badge(business.processType === 'vendedor' ? 'Proceso vendedor' : 'Proceso comprador', 'info')}
             ${UI.badge(stageLabel(business.currentStage), 'info')}
-            <span class="text-muted">Comprador: ${UI.escapeHtml(business.buyerClient ? business.buyerClient.name : (business.buyerExternalName || '—'))}${business.buyerExternalName && !business.buyerClient ? ' (externo)' : ''}</span>
-            <span class="text-muted">Vendedor: ${UI.escapeHtml(business.sellerClient ? business.sellerClient.name : (business.sellerExternalName || '—'))}${business.sellerExternalName && !business.sellerClient ? ' (externo)' : ''}</span>
+            <span class="text-muted">Comprador: ${UI.escapeHtml(business.buyerClient ? business.buyerClient.name : (business.buyerExternalName || '—'))}</span>
+            <span class="text-muted">Vendedor: ${UI.escapeHtml(business.sellerClient ? business.sellerClient.name : (business.sellerExternalName || '—'))}</span>
           </div>
           <form id="neg-form" novalidate>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
@@ -655,8 +847,6 @@ window.Pages.businesses = {
       }
       const form = bodyEl ? bodyEl.querySelector('#neg-form') : null;
       if (form) {
-        // El nombre del asesor externo solo se muestra con la opción "Otro /
-        // Externo" seleccionada en el desplegable del compañero.
         const partnerSel = form.querySelector('#fld-partnerAdvisor');
         const partnerWrap = form.querySelector('#fld-partnerAdvisorName');
         if (partnerSel && partnerWrap) {
@@ -668,10 +858,7 @@ window.Pages.businesses = {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const v = UI.collectForm(e.target);
-          // Solo se editan los montos no redundantes (propuesta inicial y
-          // comisión); contraoferta/promesa/cierre conservan su valor guardado.
           const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
-          // Asesor externo: ObjectId vacío + nombre en texto libre.
           if (rest.partnerAdvisor === '__externo__') {
             if (!String(partnerAdvisorName || '').trim()) return UI.toast('Escribe el nombre del asesor externo', 'warning');
             rest.partnerAdvisor = null;
@@ -696,11 +883,9 @@ window.Pages.businesses = {
             },
           };
           try {
-            // Solo se avanza/regresa de etapa cuando realmente cambió; la
-            // actualización del proceso se resuelve en el update.
             const hasProcessChange = Boolean(processType && processType !== business.processType);
             if (!hasProcessChange && stage && stage !== business.currentStage) {
-              await API.businesses.stage(business._id, { stage });
+              await API.businesses.stage(business._id, { stage, nota: 'Actualización desde detalle', comments: 'Actualización desde detalle' });
             }
             await API.businesses.update(business._id, body);
             UI.toast('Cambios guardados', 'success');
@@ -716,8 +901,6 @@ window.Pages.businesses = {
 
     async function openNew() {
       await refrescarActivos();
-      // Alta ágil para la llamada/visita: solo lo esencial. Contraoferta,
-      // promesa, cierre y comisión se capturan después desde el detalle.
       const stageOptionsForNew = (processType) => (stagesFor(processType) || [])
         .filter((s) => s !== 'concluido' && s !== 'cancelado')
         .map((s) => ({ value: s, label: stageLabel(s) }));
@@ -726,14 +909,14 @@ window.Pages.businesses = {
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }], value: 'comprador' },
         { name: 'currentStage', label: 'Etapa inicial', type: 'select', options: stageOptionsForNew('comprador') },
         { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-        { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-        { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López (no está en la cartera)', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
         { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'number' },
         { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez de Inmobiliaria Centro', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
       ];
       const modal = UI.openModal({
@@ -761,9 +944,7 @@ window.Pages.businesses = {
       }
       const form = bodyEl ? bodyEl.querySelector('#new-neg-form') : null;
       if (form) {
-        // Conecta los buscadores remotos de comprador/vendedor.
         if (UI.wireSearchSelects) UI.wireSearchSelects(form);
-        // Actualiza las etapas cuando cambia el proceso (comprador/vendedor).
         const procSel = form.querySelector('#fld-processType');
         const stageSel = form.querySelector('#fld-currentStage');
         if (procSel && stageSel) {
@@ -777,8 +958,6 @@ window.Pages.businesses = {
           procSel.addEventListener('change', syncStages);
           syncStages();
         }
-        // Comprador/vendedor/asesor "Otro / Externo": muestra el campo de
-        // nombre libre solo cuando la opción externa está elegida.
         const syncExt = (selName, wrapName) => {
           const sel = form.querySelector(`#fld-${selName}`);
           const wrap = form.querySelector(`#fld-${wrapName}`);
@@ -796,7 +975,6 @@ window.Pages.businesses = {
           e.preventDefault();
           const v = UI.collectForm(e.target);
           const { negotiation_offer, negotiation_notes, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = v;
-          // "Otro / Externo": ObjectId vacío + nombre en texto libre.
           const externo = (valor, nombre) => {
             if (valor === '__externo__') return { id: null, nombre: String(nombre || '').trim() };
             return { id: valor || null, nombre: '' };

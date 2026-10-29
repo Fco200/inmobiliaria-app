@@ -134,10 +134,13 @@ const removeUser = asyncHandler(async (req, res) => {
   }
 
   const targetCode = target.role && target.role.code ? target.role.code : '';
-  const protectedCodes = ['admin', 'gerencia', 'superadmin'];
+  const protectedCodes = ['admin', 'direccion', 'gerencia', 'superadmin'];
 
   if (protectedCodes.includes(targetCode)) {
-    return res.status(403).json({ success: false, message: 'No puedes eliminar cuentas de Administrador, Gerencia o Soporte.' });
+    return res.status(403).json({
+      success: false,
+      message: 'No puedes eliminar cuentas de Administrador, Dirección, Gerencia o Soporte.',
+    });
   }
 
   await target.deleteOne();

@@ -146,7 +146,9 @@ const UI = (() => {
     activo: 'success',
     disponible: 'success',
     concluido: 'success',
+    concluida: 'success',
     vendida: 'success',
+    rentada: 'success',
     cobrado: 'success',
     completada: 'success',
     realizada: 'success',
@@ -233,8 +235,10 @@ const UI = (() => {
       multiple = false,
       rows = null,
       sinOtros = false,
+      readonly = false,
     } = options;
     const req = required ? 'required' : '';
+    const ro = readonly ? 'readonly' : '';
     const id = `fld-${name}`;
     let control = '';
     if (type === 'select') {
@@ -288,7 +292,7 @@ const UI = (() => {
       // tener que forzar estilos inline en cada pantalla.
       const rowsAttr = rows ? ` rows="${Number(rows)}"` : '';
       const sizeClass = rows && Number(rows) >= 6 ? ' textarea-tall' : '';
-      control = `<textarea class="form-control${sizeClass}" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}"${rowsAttr} ${req}>${escapeHtml(value)}</textarea>`;
+      control = `<textarea class="form-control${sizeClass}" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}"${rowsAttr} ${req} ${ro}>${escapeHtml(value)}</textarea>`;
     } else if (type === 'file') {
       const attrs = [
         accept ? `accept="${escapeHtml(accept)}"` : '',
@@ -297,7 +301,7 @@ const UI = (() => {
       ].filter(Boolean).join(' ');
       control = `<input class="form-control" id="${id}" name="${name}" type="file" placeholder="${escapeHtml(placeholder)}" ${attrs}>`;
     } else {
-      control = `<input class="form-control" id="${id}" name="${name}" type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ${req}>`;
+      control = `<input class="form-control" id="${id}" name="${name}" type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ${req} ${ro}>`;
     }
     return `
       <div class="form-field${full ? ' form-field-full' : ''}">

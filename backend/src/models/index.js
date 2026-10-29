@@ -10,6 +10,7 @@ const Property = require('./property.model');
 const Inventory = require('./inventory.model');
 const Business = require('./business.model');
 const BusinessStage = require('./businessStage.model');
+const BusinessNote = require('./businessNote.model');
 const Appointment = require('./appointment.model');
 const Task = require('./task.model');
 const Goal = require('./goal.model');
@@ -40,6 +41,7 @@ module.exports = {
   Inventory,
   Business,
   BusinessStage,
+  BusinessNote,
   Appointment,
   Task,
   Goal,

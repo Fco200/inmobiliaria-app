@@ -1,7 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { isBoss, scopeCondition } = require('./scope');
+const { isBoss, hasRole, scopeCondition } = require('./scope');
 
 function ownerIdOf(doc, ownerField) {
   if (!ownerField) return null;
@@ -64,16 +64,23 @@ function buildCrud(model, {
   priceField = null,
   baseFilter = null,
   publicationFilter = null,
+  // Roles adicionales (además de los jefes) que ven/administran todos los
+  // registros de este CRUD. Se usa en Negocios para asistencia/escrituración.
+  wideRoles = [],
 } = {}) {
+  function hasWideAccess(req) {
+    return isBoss(req) || hasRole(req, wideRoles);
+  }
+
   function assertOwnership(req, doc) {
-    if (isBoss(req)) return true;
+    if (hasWideAccess(req)) return true;
     return ownerIdOf(doc, ownerField) === String(req.user._id);
   }
 
   function forceOwner(req, body) {
     if (!ownerField) return body;
     const assigned = body[ownerField];
-    if (isBoss(req)) {
+    if (hasWideAccess(req)) {
       if (assigned === '' || assigned === undefined) delete body[ownerField];
       return body;
     }
@@ -166,9 +173,9 @@ function buildCrud(model, {
       }
 
       // Filtro por usuario:
-      //  - jefe   → opcional vía ?user=
-      //  - asesor → SIEMPRE forzado a su propio usuario.
-      if (!isBoss(req)) {
+      //  - jefe / rol ampliado → opcional vía ?user=
+      //  - asesor              → SIEMPRE forzado a su propio usuario.
+      if (!hasWideAccess(req)) {
         Object.assign(filter, scopeCondition(ownerField, ownerMatch, req.user._id));
       } else if (req.query.user) {
         Object.assign(filter, scopeCondition(ownerField, ownerMatch, req.query.user));

@@ -18,7 +18,7 @@ const propertySchema = new mongoose.Schema(
     },
     operationType: {
       type: String,
-      enum: ['venta', 'renta'],
+      enum: ['venta', 'renta', 'compra_localizada'],
       required: [true, 'El tipo de operación es obligatorio'],
     },
     address: { type: String, trim: true, default: '' },
@@ -57,7 +57,13 @@ const propertySchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['disponible', 'en_proceso', 'apartada', 'vendida', 'rentada', 'inactiva'],
+      // Estados oficiales del inventario. Se conservan los valores antiguos en
+      // el enum para que los documentos viejos que aún no pasan por la
+      // migración se puedan guardar sin errores de validación.
+      enum: [
+        'disponible', 'apartada', 'inactiva', 'concluida',
+        'en_proceso', 'vendida', 'rentada',
+      ],
       default: 'disponible',
     },
     isPublished: { type: Boolean, default: false },

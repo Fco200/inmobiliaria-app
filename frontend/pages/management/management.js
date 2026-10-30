@@ -9,7 +9,7 @@ window.Pages.management = {
     let users = [];
     try {
       const result = await API.users.list({ limit: 100 });
-      users = result.data;
+      users = UI.sortByLabel(result.data, (u) => u.name);
     } catch (error) {
       users = [];
     }

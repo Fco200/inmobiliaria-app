@@ -8,7 +8,10 @@ const { APPOINTMENT_TYPES } = require('../constants/appointment-types');
 // vacíos; con `.optional()` simple express-validator los valida igual y una
 // cita sin negocio (o sin propiedad) no se podía guardar.
 const appointmentRules = [
-  body('user').notEmpty().withMessage('El usuario es obligatorio'),
+  // El asesor se toma de la sesión cuando el formulario no lo envía (por
+  // ejemplo al agendar desde el inventario). Antes era obligatorio en el
+  // body y la cita fallaba aunque el usuario estuviera autenticado.
+  body('user').optional({ values: 'falsy' }).isMongoId().withMessage('Usuario no válido'),
   body('date').notEmpty().withMessage('La fecha es obligatoria').isISO8601().withMessage('Fecha no válida'),
   body('client').optional({ values: 'falsy' }).isMongoId().withMessage('Cliente no válido'),
   body('business').optional({ values: 'falsy' }).isMongoId().withMessage('Negocio no válido'),

@@ -58,6 +58,11 @@ function buildUserResponse(user) {
     : user.role;
 
   return {
+    // `_id` se conserva como alias de `id` por compatibilidad: varios módulos
+    // del frontend (citas, metas, negocios, inventario…) lo usan para asignar
+    // al usuario actual. Sin este alias, `user` llegaba vacío a la API y las
+    // citas fallaban con "El usuario es obligatorio".
+    _id: user._id,
     id: user._id,
     name: user.name,
     username: user.username,

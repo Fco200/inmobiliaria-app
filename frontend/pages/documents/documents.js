@@ -25,9 +25,12 @@ window.Pages.documents = {
       // sin opciones
     }
 
-    const clientOptions = clients.map((x) => ({ value: x._id, label: x.name }));
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
-    const businessOptions = businesses.map((x) => ({ value: x._id, label: x.name }));
+    const clientOptions = UI.sortByLabel(clients, (x) => x.name)
+      .map((x) => ({ value: x._id, label: x.name }));
+    const propertyOptions = UI.sortByLabel(properties, UI.propertyOptionLabel)
+      .map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
+    const businessOptions = UI.sortByLabel(businesses, (x) => x.name)
+      .map((x) => ({ value: x._id, label: x.name }));
 
     const TYPES = [
       { value: 'formato', label: 'Formato' },

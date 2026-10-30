@@ -54,9 +54,13 @@ window.Pages.appointments = {
       // sin opciones
     }
 
+    // `auth.me` devuelve el usuario con `id` y `_id`; se acepta cualquiera de
+    // los dos y se cae al usuario guardado para no dejar el asesor vacío.
+    const currentUser = me || ApiClient.getStoredUser();
+    const currentUserId = currentUser ? (currentUser._id || currentUser.id || '') : '';
     const userOptions = users.length
-      ? users.map((x) => ({ value: x._id, label: x.name }))
-      : [{ value: me ? me._id : '', label: me ? me.name : '' }];
+      ? UI.sortByLabel(users, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))
+      : [{ value: currentUserId, label: currentUser ? currentUser.name : '' }];
 
     crudPage(container, {
       title: 'Citas',
@@ -86,10 +90,10 @@ window.Pages.appointments = {
       ],
       fields: [
         { name: 'date', label: 'Fecha y hora', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
-        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clients.map((x) => ({ value: x._id, label: x.name }))] },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }))] },
-        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businesses.map((x) => ({ value: x._id, label: x.name }))] },
-        { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: me ? me._id : '', options: userOptions },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...UI.sortByLabel(clients, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...UI.sortByLabel(properties, UI.propertyOptionLabel).map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }))] },
+        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...UI.sortByLabel(businesses, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))] },
+        { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: currentUserId, options: userOptions },
         { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },
         { name: 'typeOther', label: 'Especifica el tipo de cita', type: 'text', placeholder: 'Ej. Revisión de escrituras…' },
         { name: 'status', label: 'Estado', type: 'select', sinOtros: true, options: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'], value: (r) => r.status || 'pendiente' },

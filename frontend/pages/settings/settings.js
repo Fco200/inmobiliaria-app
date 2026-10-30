@@ -511,7 +511,7 @@ window.Pages.settings = {
         const assignableCodes = ['asesor', 'asistencia', 'escrituracion'];
         const allowedRoles = isAdmin ? roles : roles.filter((r) => assignableCodes.includes(r.code));
         const roleOptions = [
-          ...allowedRoles.map((x) => ({ value: x._id, label: x.name })),
+          ...UI.sortByLabel(allowedRoles, (x) => x.name).map((x) => ({ value: x._id, label: x.name })),
           ...(isAdmin ? [{ value: '__custom__', label: 'Personalizado (elegir permisos)' }] : []),
         ];
 

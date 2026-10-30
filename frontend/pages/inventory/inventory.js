@@ -72,8 +72,14 @@ window.Pages.inventory = {
     }
 
     // Asesores y jefes que pueden verse como responsables.
-    const agents = users.filter((u) => u && u.role && ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'].includes(u.role.code || u.role));
-    const myId = (me && me._id) || (stored && stored._id) || '';
+    const agents = UI.sortByLabel(
+      users.filter((u) => u && u.role && ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'].includes(u.role.code || u.role)),
+      (u) => u.name
+    );
+    // `auth.me` y el usuario guardado pueden traer `id` (respuesta de auth) o
+    // `_id` (resto de endpoints). Se aceptan ambos para que la cita y el
+    // negocio siempre queden asignados al asesor de la sesión.
+    const myId = (me && (me._id || me.id)) || (stored && (stored._id || stored.id)) || '';
 
     const propertyLabel = (prop) => {
       if (!prop) return '—';
@@ -417,7 +423,7 @@ window.Pages.inventory = {
         body: `
           <div class="form-group">
             <label>Cliente</label>
-            ${UI.searchSelect('inv-appt-client', 'Cliente', { source: UI.remoteSources.client, placeholder: '— Selecciona un cliente —', options: [{ value: '', label: '— Selecciona un cliente —' }, ...clients.map((c) => ({ value: c._id, label: c.name }))] })}
+            ${UI.searchSelect('inv-appt-client', 'Cliente', { source: UI.remoteSources.client, placeholder: '— Selecciona un cliente —', options: [{ value: '', label: '— Selecciona un cliente —' }, ...UI.sortByLabel(clients, (c) => c.name).map((c) => ({ value: c._id, label: c.name }))] })}
           </div>
           <div class="form-group">
             <label>Fecha y hora</label>
@@ -485,7 +491,7 @@ window.Pages.inventory = {
           </div>
           <div class="form-group">
             <label>Cliente comprador</label>
-            ${UI.searchSelect('inv-biz-client', 'Cliente comprador', { source: UI.remoteSources.client, placeholder: '— Selecciona el cliente comprador —', options: [{ value: '', label: '— Selecciona el cliente comprador —' }, ...clients.map((c) => ({ value: c._id, label: c.name }))] })}
+            ${UI.searchSelect('inv-biz-client', 'Cliente comprador', { source: UI.remoteSources.client, placeholder: '— Selecciona el cliente comprador —', options: [{ value: '', label: '— Selecciona el cliente comprador —' }, ...UI.sortByLabel(clients, (c) => c.name).map((c) => ({ value: c._id, label: c.name }))] })}
           </div>
           <div class="form-group">
             <label>Valor de la operación</label>

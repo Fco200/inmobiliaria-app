@@ -13,7 +13,13 @@ window.ApiClient = (() => {
 
   function getStoredUser() {
     try {
-      return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+      const user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+      if (!user || typeof user !== 'object') return user;
+      // Respuestas antiguas de /auth guardaban solo `id`; el resto del
+      // frontend usa `_id`. Se aceptan ambos sin obligar a cerrar sesión.
+      if (!user._id && user.id) user._id = user.id;
+      if (!user.id && user._id) user.id = user._id;
+      return user;
     } catch (error) {
       return null;
     }

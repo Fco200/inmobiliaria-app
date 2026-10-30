@@ -249,17 +249,20 @@ window.Pages.properties = {
       owners = [];
     }
 
-    const userOptions = users.map((x) => ({ value: x._id, label: x.name }));
+    const userOptions = UI.sortByLabel(users, (x) => x.name)
+      .map((x) => ({ value: x._id, label: x.name }));
     // El asesor responsable es SIEMPRE el usuario que registra la propiedad.
     // Se asegura que aparezca en las opciones aunque el listado de usuarios
     // no lo incluya (por permisos o porque la consulta falló).
-    if (stored && stored._id && !userOptions.some((o) => String(o.value) === String(stored._id))) {
-      userOptions.unshift({ value: stored._id, label: stored.name || stored.nombre || 'Yo' });
+    const storedId = stored ? (stored._id || stored.id || '') : '';
+    if (storedId && !userOptions.some((o) => String(o.value) === String(storedId))) {
+      userOptions.unshift({ value: storedId, label: stored.name || stored.nombre || 'Yo' });
     }
-    const ownerOptions = owners.map((x) => ({
-      value: x._id,
-      label: `${x.nombre || 'Cliente'}${x.telefono ? ` — ${x.telefono}` : ''}`,
-    }));
+    const ownerOptions = UI.sortByLabel(owners, (x) => `${x.nombre || 'Cliente'} ${x.telefono || ''}`)
+      .map((x) => ({
+        value: x._id,
+        label: `${x.nombre || 'Cliente'}${x.telefono ? ` — ${x.telefono}` : ''}`,
+      }));
 
     const typeLabel = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '—');
 
@@ -425,7 +428,7 @@ window.Pages.properties = {
         { name: 'state', label: 'Estado', type: 'text' },
         { name: 'owner', label: 'Propietario', type: 'select', sinOtros: true, search: true, placeholder: 'Escribe nombre o teléfono para buscar…', searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin propietario —' }, ...ownerOptions, { value: '__externo__', label: 'Otro (propietario externo) — escribir nombre' }] },
         { name: 'ownerName', label: 'Nombre del propietario externo', type: 'text', placeholder: 'Ej. Juan Pérez (no está en la cartera)', hint: 'Solo si elegiste "propietario externo" en el campo anterior.' },
-        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: userOptions, value: stored && stored._id ? stored._id : '', hint: 'Se asigna automáticamente al asesor que registra la propiedad.' },
+        { name: 'responsibleUser', label: 'Asesor responsable', type: 'select', sinOtros: true, options: userOptions, value: storedId, hint: 'Se asigna automáticamente al asesor que registra la propiedad.' },
         { name: 'isExternal', label: 'Propiedad externa (ajena al equipo / de otra inmobiliaria)', type: 'checkbox', full: true, hint: 'Aparecerá en el inventario general del equipo con la etiqueta Externa.' },
         { name: 'externalAdvisor', label: 'Asesor / inmobiliaria externa', type: 'text', placeholder: 'Ej. Inmobiliaria Centro, Asesor Juan Pérez…', hint: 'Solo si la propiedad es externa.' },
         { name: 'paymentMethods', label: 'Se puede vender con', type: 'checkboxGroup', full: true, options: [

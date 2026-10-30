@@ -38,6 +38,13 @@ const appointmentCrud = buildCrud(Appointment, {
   // Permite filtrar el listado por cliente, propiedad o negocio desde la barra
   // de filtros (los selects con búsqueda remota envían ?client=…).
   extraFilters: { client: 'client', property: 'property', business: 'business', type: 'type' },
+  // Toda cita pertenece a un asesor. Si el formulario no envía `user` (p. ej.
+  // la cita se agenda desde el inventario general), se asigna al usuario de la
+  // sesión en lugar de rechazarla por validación.
+  beforeCreate: (body, req) => {
+    if (!body.user && req.user && req.user._id) body.user = req.user._id;
+    return body;
+  },
   afterCreate: async (doc, req) => {
     await syncToGoogle(doc, req, 'appointment').catch(() => {});
     const ownerId = doc.user && (doc.user._id || doc.user);

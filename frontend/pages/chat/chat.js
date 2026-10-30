@@ -1156,10 +1156,10 @@ window.Pages.chat = {
         users = [];
       }
       // Quién puede iniciar un chat 1:1: todos pueden con todos (menos ellos mismos).
-      const others = users.filter(u =>
+      const others = UI.sortByLabel(users.filter(u =>
         u && u.role && ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'].includes(u.role.code || u.role) &&
         String(u._id || u.id) !== String(userId)
-      );
+      ), (u) => u.name);
       const modal = UI.openModal({
         title: 'Nuevo chat 1:1',
         body: `

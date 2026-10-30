@@ -21,7 +21,7 @@ window.Pages.prospecting = {
 
     const isGerencia = me && me.role && ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(me.role.code || me.role);
     const userOptions = users.length
-      ? users.map((x) => ({ value: x._id, label: x.name }))
+      ? UI.sortByLabel(users, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];
 
     const TYPE_LABELS = {

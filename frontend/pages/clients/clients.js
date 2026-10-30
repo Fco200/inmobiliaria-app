@@ -99,7 +99,8 @@ window.Pages.clients = {
         users = [];
       }
     }
-    const userOptions = users.map((u) => ({ value: u._id, label: u.name }));
+    const userOptions = UI.sortByLabel(users, (u) => u.name)
+      .map((u) => ({ value: u._id, label: u.name }));
 
     container.innerHTML = `
       <div class="pipeline-strip" id="clients-pipeline">${pipelineHTML()}</div>
@@ -187,8 +188,12 @@ window.Pages.clients = {
     // Muestra/oculta el texto "Otro" y limpia el valor cuando ya no aplica.
     function wireOtros(root) {
       root.querySelectorAll('select[data-otro-input]').forEach((select) => {
+        // Se busca por id y, como respaldo, por el nombre del campo
+        // (`medioOtro`, `servicioOtro`…). Así el campo de "¿Quién te
+        // recomendó?" aparece aunque el navegador haya regenerado el DOM.
         const input = root.querySelector('#' + select.dataset.otroInput)
-          || document.getElementById(select.dataset.otroInput);
+          || document.getElementById(select.dataset.otroInput)
+          || root.querySelector(`[name="${select.name}Otro"]`);
         if (!input) return;
         const otroWhen = parseWhen(select.dataset.otroWhen, ['Otro']);
         const requiredWhen = parseWhen(select.dataset.requiredWhen, ['Otro']);
@@ -229,10 +234,26 @@ window.Pages.clients = {
       if (!raw) return fallback;
       try {
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+        // `otroWhen`/`requiredWhen` son arreglos, pero `otroLabels` y
+        // `otroPlaceholders` son objetos. Antes se exigía Array siempre y los
+        // textos de "Recomendación"/"Otro" se perdían.
+        if (Array.isArray(fallback)) {
+          return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+        }
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
       } catch (error) {
         return fallback;
       }
+    }
+
+    // Lleva el cursor al campo de texto que falta (p. ej. "¿Quién te
+    // recomendó?") y se asegura de que esté visible antes de mostrar el aviso.
+    function focusOtro(root, name) {
+      if (!root) return;
+      const input = root.querySelector(`[name="${name}Otro"]`);
+      if (!input) return;
+      input.style.display = 'block';
+      try { input.focus(); } catch (error) { /* noop */ }
     }
 
     // Elimina los campos "…Otro" que no aplican antes de enviar al servidor.
@@ -650,6 +671,7 @@ window.Pages.clients = {
             return;
           }
           if (values.servicio === 'Otro' && !String(values.servicioOtro || '').trim()) {
+            focusOtro(e.target, 'servicio');
             UI.toast('Escribe qué operación quiere hacer el cliente', 'warning');
             return;
           }
@@ -657,12 +679,14 @@ window.Pages.clients = {
           // exige texto cuando se eligió "Otro". Si el cliente viene a
           // VENDER, el bloque ni se muestra y no se envía al servidor.
           if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
+            focusOtro(e.target, 'formaPago');
             UI.toast('Especifica la forma de pago del cliente', 'warning');
             return;
           }
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
           if ((values.medio === 'Otro' || values.medio === 'Recomendación' || values.medio === 'Recomendacion') && !String(values.medioOtro || '').trim()) {
+            focusOtro(e.target, 'medio');
             UI.toast((values.medio === 'Recomendación' || values.medio === 'Recomendacion')
               ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
               : 'Escribe cómo te contactó el cliente', 'warning');
@@ -743,12 +767,14 @@ window.Pages.clients = {
           if (values.asesorAsignado === '') delete values.asesorAsignado;
           if (values.medio && !CLIENT_MEDIOS.includes(values.medio)) values.medio = 'Otro';
           if ((values.medio === 'Otro' || values.medio === 'Recomendación' || values.medio === 'Recomendacion') && !String(values.medioOtro || '').trim()) {
+            focusOtro(e.target, 'medio');
             UI.toast((values.medio === 'Recomendación' || values.medio === 'Recomendacion')
               ? 'Escribe quién recomendó al cliente (nombre del asesor o recomendador)'
               : 'Escribe cómo te contactó el cliente', 'warning');
             return;
           }
           if (values.formaPago === 'Otro' && !String(values.formaPagoOtro || '').trim()) {
+            focusOtro(e.target, 'formaPago');
             UI.toast('Especifica la forma de pago del cliente', 'warning');
             return;
           }

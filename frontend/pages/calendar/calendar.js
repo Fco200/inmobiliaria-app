@@ -559,7 +559,7 @@ window.Pages.calendar = (() => {
     if (isBossUser()) {
       try {
         const res = await window.API.users.list({ limit: 200 });
-        state.users = (res && res.data) || [];
+        state.users = UI.sortByLabel((res && res.data) || [], (u) => u.name);
       } catch (error) {
         state.users = [];
       }

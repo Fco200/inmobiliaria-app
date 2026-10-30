@@ -151,8 +151,6 @@ const options = asyncHandler(async (req, res) => {
   const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
   const items = await Property.find(filter)
     .select('folio type operationType zone city state address')
-    .sort({ createdAt: -1 })
-    .limit(limit)
     .lean();
 
   // `label`/`subtitle` ya armados para el select remoto. La CALLE va antes que
@@ -170,7 +168,15 @@ const options = asyncHandler(async (req, res) => {
     };
   });
 
-  res.json({ success: true, data });
+  // El selector se presenta en orden alfabético por su etiqueta visible, sin
+  // importar el orden de captura. El límite se aplica después de ordenar para
+  // que las primeras opciones sean siempre las que empiezan con A/B/C…
+  data.sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }));
+
+  res.json({ success: true, data: data.slice(0, limit) });
 });
 
 // Avisa a los clientes cuyo embudo/intención y presupuesto coinciden con la

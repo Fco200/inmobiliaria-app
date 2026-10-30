@@ -20,7 +20,8 @@ window.Pages.reports = {
     if (isGerencia) {
       try {
         const result = await API.users.list({ limit: 100 });
-        userOptions = result.data.map((u) => ({ value: u._id, label: u.name }));
+        userOptions = UI.sortByLabel(result.data, (u) => u.name)
+        .map((u) => ({ value: u._id, label: u.name }));
       } catch (error) {
         userOptions = [];
       }

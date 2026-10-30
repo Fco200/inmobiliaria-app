@@ -1,14 +1,13 @@
 {
-  "version": "2.25",
+  "version": "2.26",
   "channel": "estable",
-  "title": "Actualización 2.25",
-  "date": "2026-10-23",
+  "title": "Actualización 2.26",
+  "date": "2026-10-30",
   "notes": [
-    "Inventario en celular: las fotos del detalle ya no se abren gigantes ni se corrompen; el carrusel y las miniaturas quedan contenidos en la pantalla horizontal.",
-    "Propiedades: al guardar o crear una propiedad se muestra un aviso de que se está subiendo y que ya se puede cerrar la ventana; el listado se actualiza aunque se cierre el formulario.",
-    "Propiedades: las fotos se suben de 3 en 3 conservando el orden (la portada sigue siendo la primera), por lo que la carga es más rápida.",
-    "Notificaciones: se dejaron de generar los avisos de \"se publicó una propiedad que le puede interesar a un cliente\" y se limpiaron los existentes. Se pueden reactivar con NOTIFY_INTERESTED_CLIENTS=true.",
-    "Rendimiento: se aumentaron los límites de peticiones y el pool de MongoDB, y los correos/avisos de una propiedad se envían en segundo plano para soportar más de 1000 peticiones.",
-    "Rendimiento: el servidor mantiene más conexiones simultáneas y espera hasta 10 minutos una subida de fotos grande sin cortarla."
+    "Negocios: los botones Ver bitácora, Checklist y Documentos vuelven a abrir y guardar correctamente, incluso si el navegador conserva una copia anterior de los servicios.",
+    "Citas: al agendar desde el inventario o desde cualquier propiedad, el asesor se asigna automáticamente con el usuario de la sesión; ya no aparece el error \"El usuario es obligatorio\".",
+    "Clientes: al elegir el medio \"Recomendación\" aparece el campo para escribir quién recomendó al cliente y el cursor se coloca ahí si falta llenarlo.",
+    "Selectores: clientes, asesores, propiedades, negocios y demás catálogos aparecen ordenados alfabéticamente para localizarlos más rápido.",
+    "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos."
   ]
 }

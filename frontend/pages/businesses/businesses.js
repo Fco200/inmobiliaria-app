@@ -76,7 +76,7 @@ window.Pages.businesses = {
 
     const refId = (valor) => String((valor && (valor._id || valor)) || '');
     const yaTieneNegocio = (cliente, campo) => negociosActivos.some((b) => refId(b[campo]) === refId(cliente));
-    const opcionesCliente = (lista, campo) => lista.map((x) => ({
+    const opcionesCliente = (lista, campo) => UI.sortByLabel(lista, (x) => x.name).map((x) => ({
       value: x._id,
       label: `${x.name}${yaTieneNegocio(x, campo) ? ' — ya tiene un negocio activo' : ''}`,
     }));
@@ -111,10 +111,35 @@ window.Pages.businesses = {
     };
     const colorFor = (stage) => STAGE_COLORS[stage] || '#64748b';
 
+    const currentUser = me || ApiClient.getStoredUser();
+    const currentUserId = currentUser ? (currentUser._id || currentUser.id || '') : '';
     const userOptions = users.length
-      ? users.map((x) => ({ value: x._id, label: x.name }))
-      : [{ value: me ? me._id : '', label: me ? me.name : '' }];
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
+      ? UI.sortByLabel(users, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))
+      : [{ value: currentUserId, label: currentUser ? currentUser.name : '' }];
+    const propertyOptions = UI.sortByLabel(properties, UI.propertyOptionLabel)
+      .map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
+
+    // Compatibilidad: si el navegador conserva un bundle viejo de
+    // `services/index.js` sin los subobjetos de checklist/notas/documentos, se
+    // usan las rutas REST directamente en lugar de romper los botones con
+    // "API.businesses.documents.list is not a function".
+    const bizApi = API.businesses || {};
+    const notesApi = (bizApi.notes && typeof bizApi.notes.list === 'function') ? bizApi.notes : {
+      list: (id) => ApiClient.get(`/businesses/${id}/notes`),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+      remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+    };
+    const checklistApi = (bizApi.checklist && typeof bizApi.checklist.list === 'function') ? bizApi.checklist : {
+      list: (id) => ApiClient.get(`/businesses/${id}`).then((res) => ((res && res.checklist) || (res && res.data && res.data.checklist) || [])),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
+      update: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
+      remove: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
+    };
+    const documentsApi = (bizApi.documents && typeof bizApi.documents.list === 'function') ? bizApi.documents : {
+      list: (id) => ApiClient.get(`/businesses/${id}/documents`),
+      create: (id, form) => ApiClient.postMultipart(`/businesses/${id}/documents`, form),
+      remove: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
+    };
 
     const state = { view: 'table', processType: 'comprador' };
 
@@ -270,7 +295,7 @@ window.Pages.businesses = {
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
-          { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...users.map((x) => ({ value: x._id, label: x.name })), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+          { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
@@ -459,7 +484,7 @@ window.Pages.businesses = {
         const containerEl = modal.bodyEl.querySelector('#biz-notes-container');
         if (!containerEl) return;
         try {
-          const res = await API.businesses.notes.list(record._id);
+          const res = await notesApi.list(record._id);
           const notes = (res && res.data) || res || [];
           containerEl.innerHTML = `
             ${canWriteNotes ? `
@@ -487,7 +512,7 @@ window.Pages.businesses = {
               const val = UI.collectForm(ev.target);
               if (!String(val.text || '').trim()) return;
               try {
-                await API.businesses.notes.create(record._id, { text: val.text });
+                await notesApi.create(record._id, { text: val.text });
                 UI.toast('Nota agregada', 'success');
                 loadNotesContent();
               } catch (err) {
@@ -515,7 +540,7 @@ window.Pages.businesses = {
         const containerEl = modal.bodyEl.querySelector('#biz-checklist-container');
         if (!containerEl) return;
         try {
-          const res = await API.businesses.checklist.list(record._id).catch(() => ({ data: record.checklist || [] }));
+          const res = await checklistApi.list(record._id).catch(() => record.checklist || []);
           const items = (res && res.data) || res || [];
           containerEl.innerHTML = `
             ${canChecklist ? `
@@ -544,7 +569,7 @@ window.Pages.businesses = {
               const val = UI.collectForm(ev.target);
               if (!String(val.text || '').trim()) return;
               try {
-                await API.businesses.checklist.create(record._id, { text: val.text });
+                await checklistApi.create(record._id, { text: val.text });
                 loadChecklistContent();
               } catch (err) {
                 UI.toast(err.message, 'error');
@@ -557,7 +582,7 @@ window.Pages.businesses = {
               const itemId = ev.target.dataset.checkId;
               const done = ev.target.checked;
               try {
-                await API.businesses.checklist.update(record._id, itemId, { done });
+                await checklistApi.update(record._id, itemId, { done });
               } catch (err) {
                 UI.toast(err.message, 'error');
                 ev.target.checked = !done;
@@ -569,7 +594,7 @@ window.Pages.businesses = {
             delBtn.addEventListener('click', async (ev) => {
               const itemId = ev.target.dataset.deleteCheck;
               try {
-                await API.businesses.checklist.remove(record._id, itemId);
+                await checklistApi.remove(record._id, itemId);
                 loadChecklistContent();
               } catch (err) {
                 UI.toast(err.message, 'error');
@@ -596,7 +621,7 @@ window.Pages.businesses = {
         const containerEl = modal.bodyEl.querySelector('#biz-docs-container');
         if (!containerEl) return;
         try {
-          const res = await API.businesses.documents.list(record._id).catch(() => ({ data: [] }));
+          const res = await documentsApi.list(record._id).catch(() => []);
           const docs = (res && res.data) || res || [];
           containerEl.innerHTML = `
             <form id="upload-doc-form" style="margin-bottom:16px;padding:12px;background:var(--bg-subtle,#f8fafc);border-radius:6px;">
@@ -629,7 +654,7 @@ window.Pages.businesses = {
               const formData = new FormData(ev.target);
               try {
                 UI.toast('Subiendo documento...', 'info');
-                await API.businesses.documents.create(record._id, formData);
+                await documentsApi.create(record._id, formData);
                 UI.toast('Documento subido con éxito', 'success');
                 loadDocsContent();
               } catch (err) {
@@ -643,7 +668,7 @@ window.Pages.businesses = {
               const docId = ev.target.dataset.deleteDoc;
               if (!confirm('¿Estás seguro de eliminar este documento?')) return;
               try {
-                await API.businesses.documents.remove(record._id, docId);
+                await documentsApi.remove(record._id, docId);
                 UI.toast('Documento eliminado', 'success');
                 loadDocsContent();
               } catch (err) {

@@ -346,6 +346,10 @@ const UI = (() => {
   // valor genérico "Otros" (__ui_otros__) o un valor nativo "otro/otros/otra".
   function toggleOtros(select) {
     if (!select) return;
+    // Los selects con `data-otro-input` los controla `wireOtros` (clientes):
+    // ese mecanismo conoce opciones como "Recomendación" y no debe ser
+    // ocultado ni vaciado por el manejador genérico de "Otros".
+    if (select.dataset && select.dataset.otroInput) return;
     const isOther = isOtherValue(select.value);
     // Se auto-crea el input dentro de un formulario: modal o <form> inline.
     // Los selects de filtros/barras sin <form> no generan casillas espurias.
@@ -999,6 +1003,29 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     });
   }
 
+  // Ordena alfabéticamente una lista de registros u opciones sin mutar el
+  // arreglo original. `labelOf` puede ser una función (p. ej. para usar el
+  // nombre del cliente o la etiqueta armada de una propiedad) o un campo.
+  // Se usa en TODOS los selectores para que clientes, asesores, propiedades,
+  // negocios, etc. aparezcan siempre en el mismo orden.
+  function sortByLabel(items, labelOf) {
+    const label = typeof labelOf === 'function'
+      ? labelOf
+      : (item) => {
+          if (item && typeof item === 'object') {
+            return item[labelOf || 'label'] || item.label || item.nombre || item.name || '';
+          }
+          return item;
+        };
+    return (Array.isArray(items) ? items.slice() : []).sort((a, b) => (
+      String(label(a) == null ? '' : label(a)).localeCompare(
+        String(label(b) == null ? '' : label(b)),
+        'es',
+        { numeric: true, sensitivity: 'base' }
+      )
+    ));
+  }
+
   // Fuentes de búsqueda remota estándar para los selectores de clientes,
   // propiedades y negocios. Centralizarlas evita repetir la misma configuración
   // (URL + campos + leyenda) en cada módulo y garantiza que TODOS los selectores
@@ -1044,6 +1071,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     field,
     searchSelect,
     wireSearchSelects,
+    sortByLabel,
     remoteSources,
     collectForm,
     toggleOtros,

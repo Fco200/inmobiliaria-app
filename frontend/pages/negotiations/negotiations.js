@@ -63,10 +63,12 @@ window.Pages.negotiations = {
     }
 
     const userOptions = users.length
-      ? users.map((x) => ({ value: x._id, label: x.name }))
+      ? UI.sortByLabel(users, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];
-    const clientOptions = clients.map((x) => ({ value: x._id, label: x.name }));
-    const propertyOptions = properties.map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
+    const clientOptions = UI.sortByLabel(clients, (x) => x.name)
+      .map((x) => ({ value: x._id, label: x.name }));
+    const propertyOptions = UI.sortByLabel(properties, UI.propertyOptionLabel)
+      .map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }));
 
     container.innerHTML = `
       <div class="page-header">

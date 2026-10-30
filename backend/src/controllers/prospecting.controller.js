@@ -26,7 +26,7 @@ const list = asyncHandler(async (req, res) => {
     if (req.query.to) filter.date.$lte = new Date(req.query.to);
   }
 
-  if (['admin', 'gerencia'].includes(req.user.role.code)) {
+  if (['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(req.user.role.code)) {
     if (req.query.user) filter.user = req.query.user;
   } else {
     filter.user = req.user._id;
@@ -75,7 +75,7 @@ const update = asyncHandler(async (req, res) => {
 const summary = asyncHandler(async (req, res) => {
   const user = req.user;
   const filter = {};
-  if (!['admin', 'gerencia'].includes(user.role.code)) filter.user = user._id;
+  if (!['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(user.role.code)) filter.user = user._id;
   if (req.query.from || req.query.to) {
     filter.date = {};
     if (req.query.from) filter.date.$gte = new Date(req.query.from);

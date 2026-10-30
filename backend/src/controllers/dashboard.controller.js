@@ -10,7 +10,7 @@ const summary = asyncHandler(async (req, res) => {
   const user = req.user;
   updateGoalsAuto().catch(() => {});
 
-  const isAdminOrGerencia = ['admin', 'gerencia'].includes(user.role.code);
+  const isAdminOrGerencia = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(user.role.code);
   const myFilter = isAdminOrGerencia ? {} : { mainAdvisor: user._id };
 
   const [clients, properties, businessesActive, businessesConcluded, businessesCancelled, businessesNegotiation, businessesPromesa, appointmentsUpcoming, tasksPending, unread, expensesThisMonth, activeGoals, pipelineAgg, thisMonthAgg] =
@@ -193,7 +193,7 @@ const userReport = asyncHandler(async (req, res) => {
 });
 
 const executive = asyncHandler(async (req, res) => {
-  const isBoss = ['admin', 'gerencia'].includes(req.user.role.code);
+  const isBoss = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code);
   if (!isBoss) {
     return res.status(403).json({ success: false, message: 'Reporte solo para gerencia y administración' });
   }

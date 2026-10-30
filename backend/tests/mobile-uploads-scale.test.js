@@ -30,6 +30,7 @@ test('el visor de fotos no desborda la pantalla en celular', () => {
 test('al guardar una propiedad se avisa que se puede cerrar la ventana', () => {
   const crud = read('frontend', 'js', 'components', 'crudPage.js');
   const properties = read('frontend', 'pages', 'properties', 'properties.js');
+  const services = read('frontend', 'js', 'services', 'index.js');
   const css = read('frontend', 'css', 'base.css');
 
   assert.match(crud, /config\.submitNotice/, 'crudPage no usa el aviso configurable');
@@ -38,8 +39,9 @@ test('al guardar una propiedad se avisa que se puede cerrar la ventana', () => {
 
   assert.match(properties, /submitNotice:/, 'Propiedades no define el aviso de subida');
   assert.match(properties, /ya puedes cerrar esta ventana/, 'el aviso no menciona que se puede cerrar la ventana');
-  assert.match(properties, /const concurrency = Math\.max\(1, Math\.min\(3, list\.length\)\)/, 'la subida de fotos no es concurrente');
-  assert.match(properties, /results\[index\] = url/, 'la subida no conserva el orden de las fotos');
+  assert.match(properties, /uploadPhotosBatch\(/, 'la subida de fotos no usa el cargador por lotes');
+  assert.match(properties, /chunkSize:\s*4/, 'la subida no usa lotes pequeños');
+  assert.match(services, /for \(let i = 0; i < total; i \+= chunkSize\)/, 'la subida por lotes no conserva el orden de las fotos');
 
   assert.match(css, /\.submit-progress\s*\{/, 'falta el estilo del aviso de subida');
   assert.match(css, /@keyframes submitSpin/, 'falta la animación del aviso de subida');

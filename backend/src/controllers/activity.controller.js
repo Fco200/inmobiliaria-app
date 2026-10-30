@@ -12,7 +12,11 @@ const list = asyncHandler(async (req, res) => {
 
   if (req.query.entityType) filter.entityType = req.query.entityType;
   if (req.query.entityId) filter.entityId = req.query.entityId;
-  if (req.query.user) filter.user = req.query.user;
+  if (!isBoss(req)) {
+    filter.user = req.user._id;
+  } else if (req.query.user) {
+    filter.user = req.query.user;
+  }
 
   const query = ActivityLog.find(filter).populate('user', 'name photo');
   const [total, items] = await Promise.all([

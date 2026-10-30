@@ -16,6 +16,6 @@ router.get('/mantenimiento', configController.getMantenimientoPublico);
 router.get('/version', versionController.getVersion);
 
 // Configurar/programar mantenimiento (admin, gerencia o superadmin).
-router.post('/mantenimiento', protect, authorize('admin', 'gerencia', 'superadmin'), configController.setMantenimiento);
+router.post('/mantenimiento', protect, authorize('admin', 'direccion', 'gerencia', 'superadmin'), configController.setMantenimiento);
 
 module.exports = router;

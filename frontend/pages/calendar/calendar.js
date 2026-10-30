@@ -200,7 +200,7 @@ window.Pages.calendar = (() => {
       const u = window.ApiClient ? window.ApiClient.getStoredUser() : null;
       if (!u || !u.role) return false;
       const code = typeof u.role === 'string' ? u.role : (u.role && u.role.code);
-      return code === 'admin' || code === 'gerencia';
+      return ['admin', 'direccion', 'gerencia', 'superadmin'].includes(code);
     } catch (error) {
       return false;
     }

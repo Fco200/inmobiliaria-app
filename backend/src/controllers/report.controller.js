@@ -165,7 +165,7 @@ async function buildManagementData(req) {
 }
 
 const management = asyncHandler(async (req, res) => {
-  if (!['admin', 'gerencia'].includes(req.user.role.code)) {
+  if (!['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code)) {
     return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
   }
 
@@ -174,7 +174,7 @@ const management = asyncHandler(async (req, res) => {
 });
 
 const managementCsv = asyncHandler(async (req, res) => {
-  if (!['admin', 'gerencia'].includes(req.user.role.code)) {
+  if (!['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code)) {
     return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
   }
 

@@ -8,7 +8,7 @@ window.Pages.home = {
     const name = (user && (user.name || user.username)) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';
     const roleCode = user && user.role ? (typeof user.role === 'object' ? (user.role.code || '') : String(user.role)) : '';
-    const isBoss = roleCode === 'admin' || roleCode === 'gerencia';
+    const isBoss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
 
     const now = new Date();
     const hour = now.getHours();

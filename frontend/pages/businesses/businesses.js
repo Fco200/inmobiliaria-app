@@ -334,7 +334,7 @@ window.Pages.businesses = {
         extraActions(record) {
           return `
             ${canChangeStage ? '<button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Etapa</button>' : ''}
-            <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Bitácora</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Ver bitácora</button>
             ${canChecklist ? '<button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>' : ''}
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
             <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
@@ -464,16 +464,16 @@ window.Pages.businesses = {
           containerEl.innerHTML = `
             ${canWriteNotes ? `
               <form id="add-note-form" style="margin-bottom:16px;display:flex;gap:8px;">
-                <input type="text" class="form-control" name="content" placeholder="Escribe una nueva nota o comentario..." required />
+                <input type="text" class="form-control" name="text" placeholder="Escribe una nueva nota o comentario..." required />
                 <button class="btn btn-primary" type="submit">Agregar</button>
               </form>
             ` : ''}
             <div style="max-height:350px;overflow-y:auto;">
               ${notes.length ? notes.map((n) => `
                 <div style="padding:10px;margin-bottom:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);">
-                  <div style="font-size:13px;margin-bottom:4px;">${UI.escapeHtml(n.content || n.note)}</div>
+                  <div style="font-size:13px;margin-bottom:4px;">${UI.escapeHtml(n.text || n.content || n.note)}</div>
                   <div class="text-muted" style="font-size:11px;">
-                    ${n.author ? UI.escapeHtml(n.author.name || n.author) : 'Sistema'} · ${Format.dateTime(n.createdAt || n.date)}
+                    ${n.createdBy ? UI.escapeHtml(n.createdBy.name || n.createdBy.username || n.createdBy) : 'Sistema'} · ${Format.dateTime(n.createdAt || n.date)}
                   </div>
                 </div>
               `).join('') : '<p class="text-muted">No hay notas registradas en la bitácora.</p>'}
@@ -485,9 +485,9 @@ window.Pages.businesses = {
             addForm.addEventListener('submit', async (ev) => {
               ev.preventDefault();
               const val = UI.collectForm(ev.target);
-              if (!String(val.content || '').trim()) return;
+              if (!String(val.text || '').trim()) return;
               try {
-                await API.businesses.notes.create(record._id, { content: val.content });
+                await API.businesses.notes.create(record._id, { text: val.text });
                 UI.toast('Nota agregada', 'success');
                 loadNotesContent();
               } catch (err) {
@@ -528,8 +528,8 @@ window.Pages.businesses = {
               ${items.length ? items.map((item, idx) => `
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
                   <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-                    <input type="checkbox" data-check-id="${item._id || idx}" ${item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
-                    <span style="${item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
+                    <input type="checkbox" data-check-id="${item._id || idx}" ${item.done || item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
+                    <span style="${item.done || item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
                   </label>
                   ${canChecklist ? `<button class="btn btn-danger btn-sm" data-delete-check="${item._id || idx}" style="padding:2px 6px;font-size:11px;">✕</button>` : ''}
                 </div>
@@ -555,12 +555,12 @@ window.Pages.businesses = {
           containerEl.querySelectorAll('[data-check-id]').forEach((chk) => {
             chk.addEventListener('change', async (ev) => {
               const itemId = ev.target.dataset.checkId;
-              const completed = ev.target.checked;
+              const done = ev.target.checked;
               try {
-                await API.businesses.checklist.update(record._id, itemId, { completed });
+                await API.businesses.checklist.update(record._id, itemId, { done });
               } catch (err) {
                 UI.toast(err.message, 'error');
-                ev.target.checked = !completed;
+                ev.target.checked = !done;
               }
             });
           });
@@ -614,7 +614,7 @@ window.Pages.businesses = {
                     <br><small class="text-muted">${Format.dateTime(doc.createdAt)}</small>
                   </div>
                   <div style="display:flex;gap:8px;">
-                    ${doc.url ? `<a href="${doc.url}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>` : ''}
+                    ${(doc.fileUrl || doc.url) ? `<a href="${doc.fileUrl || doc.url}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>` : ''}
                     <button class="btn btn-danger btn-sm" data-delete-doc="${doc._id}">Eliminar</button>
                   </div>
                 </div>

@@ -141,7 +141,7 @@ const ask = asyncHandler(async (req, res) => {
     });
   }
 
-  const isBoss = ['admin', 'gerencia'].includes(req.user.role.code);
+  const isBoss = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code);
   const uid = req.user._id;
   const all = isBoss;
   const countFilter = all ? {} : { responsibleUser: uid };

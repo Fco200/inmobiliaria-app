@@ -17,13 +17,19 @@ window.Pages.settings = {
     }
 
     const roleCode = me.role ? (me.role.code || me.role) : '';
-    const isAdmin = roleCode === 'admin';
-    const isBoss = isAdmin || roleCode === 'gerencia';
+    const permissions = me.role && Array.isArray(me.role.permissions) ? me.role.permissions : [];
+    const isAdmin = ['admin', 'direccion', 'superadmin'].includes(roleCode);
+    const canManageUsers = isAdmin || roleCode === 'asistencia';
+    const canViewActivity = isAdmin || permissions.includes('audit_view');
+    const isBoss = isAdmin
+      || roleCode === 'gerencia'
+      || roleCode === 'asistencia'
+      || permissions.includes('settings_manage');
     if (!isBoss) {
       container.innerHTML = `
         <div class="card">
           <div class="empty-state">
-            <p>La configuración del sistema está reservada para el administrador o la gerencia.</p>
+            <p>No tienes permiso para ver la configuración del sistema.</p>
           </div>
         </div>
       `;
@@ -33,22 +39,40 @@ window.Pages.settings = {
     container.innerHTML = `
       <div class="page-header">
         <h2>Configuración</h2>
+        ${isAdmin ? '<button class="btn btn-secondary" type="button" data-normalize-folios>Normalizar folios</button>' : ''}
       </div>
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <button class="btn btn-primary" data-tab="users" type="button">Usuarios</button>
-        <button class="btn btn-secondary" data-tab="roles" type="button">Roles y permisos</button>
+        ${isAdmin ? '<button class="btn btn-secondary" data-tab="roles" type="button">Roles y permisos</button>' : ''}
         <button class="btn btn-secondary" data-tab="register" type="button">&#128274;&nbsp; Registro</button>
         <button class="btn btn-secondary" data-tab="alerts" type="button">&#128276;&nbsp; Avisos</button>
         <button class="btn btn-secondary" data-tab="sessions" type="button">&#128275;&nbsp; Sesiones</button>
         <button class="btn btn-secondary" data-tab="catalog" type="button">&#127760;&nbsp; Catálogo público</button>
         <button class="btn btn-secondary" data-tab="guide" type="button">&#128214;&nbsp; Guía del sistema</button>
-        <button class="btn btn-secondary" data-tab="activity" type="button">&#128221;&nbsp; Actividad del sistema</button>
+        ${canViewActivity ? '<button class="btn btn-secondary" data-tab="activity" type="button">&#128221;&nbsp; Actividad del sistema</button>' : ''}
       </div>
       <div id="tab-content"></div>
     `;
 
     const tabContent = container.querySelector('#tab-content');
     let currentTab = null;
+
+    const normalizeFoliosBtn = container.querySelector('[data-normalize-folios]');
+    if (normalizeFoliosBtn) {
+      normalizeFoliosBtn.addEventListener('click', async () => {
+        const ok = await UI.confirm('Se convertirán los folios heredados al formato AÑO-###. ¿Continuar?');
+        if (!ok) return;
+        normalizeFoliosBtn.disabled = true;
+        try {
+          const result = await API.properties.normalizeFolios();
+          UI.toast(`Folios normalizados: ${result.updated || 0} de ${result.total || 0}.`, 'success');
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        } finally {
+          normalizeFoliosBtn.disabled = false;
+        }
+      });
+    }
 
     // Refresco en tiempo real: cuando alguien abre o cierra una sesión en
     // cualquier dispositivo, el servidor emite 'sessions-changed' y esta
@@ -476,7 +500,7 @@ window.Pages.settings = {
     };
 
     function renderUsers() {
-      if (!isAdmin) return renderAdminOnly();
+      if (!canManageUsers) return renderAdminOnly();
       tabContent.innerHTML = `
         <div id="solicitudes-admin-card" style="margin-bottom:18px;"></div>
         <div id="users-crud"></div>
@@ -484,7 +508,12 @@ window.Pages.settings = {
       renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
       API.permissions.list().then((perms) => {
         const permissions = Array.isArray(perms) ? perms : (perms && perms.data ? perms.data : []);
-        const roleOptions = [...roles.map((x) => ({ value: x._id, label: x.name })), { value: '__custom__', label: 'Personalizado (elegir permisos)' }];
+        const assignableCodes = ['asesor', 'asistencia', 'escrituracion'];
+        const allowedRoles = isAdmin ? roles : roles.filter((r) => assignableCodes.includes(r.code));
+        const roleOptions = [
+          ...allowedRoles.map((x) => ({ value: x._id, label: x.name })),
+          ...(isAdmin ? [{ value: '__custom__', label: 'Personalizado (elegir permisos)' }] : []),
+        ];
 
         crudPage(tabContent.querySelector('#users-crud'), {
           title: 'Usuarios',
@@ -629,12 +658,17 @@ window.Pages.settings = {
           // personalizado se puede ajustar sus datos.
           onEdit: true,
           onRemove: true,
-          // No permitir borrar cuentas de Administrador / Gerencia / Soporte.
+          canEdit(record) {
+            if (isAdmin) return true;
+            const code = record && record.role && record.role.code ? record.role.code : '';
+            return ['asesor', 'asistencia', 'escrituracion'].includes(code);
+          },
+          // No permitir borrar cuentas de Administrador / Dirección / Gerencia / Soporte.
           // Tampoco los usuarios con rol personalizado pueden borrarlas (aquí
           // se oculta el botón directamente).
           canRemove(record) {
             const code = record && record.role && record.role.code ? record.role.code : '';
-            return !['admin', 'gerencia', 'superadmin'].includes(code);
+            return !['admin', 'direccion', 'gerencia', 'superadmin'].includes(code);
           },
         });
       }).catch((error) => {
@@ -1223,6 +1257,7 @@ window.Pages.settings = {
     }
 
     function renderActivity() {
+      if (!canViewActivity) return renderAdminOnly();
       tabContent.innerHTML = '<div class="loading">Cargando actividad...</div>';
       const contentEl = tabContent;
       API.activity.list({ limit: 50 })

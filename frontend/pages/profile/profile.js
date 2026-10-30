@@ -24,7 +24,7 @@ window.Pages.profile = {
 
     const roleCode = me.role ? (me.role.code || me.role) : '';
     const roleName = me.role ? (me.role.name || me.role.code || me.role) : 'Sin rol';
-    const isAdmin = ['admin', 'gerencia'].includes(roleCode);
+    const isAdmin = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
     const myId = me._id || me.id;
 
     const roleOf = (u) => {

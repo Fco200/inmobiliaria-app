@@ -5,7 +5,7 @@ const { Session, User } = require('../models');
 const sessionService = require('../services/session.service');
 const { hashToken } = sessionService;
 
-const BOSS_ROLES = ['admin', 'gerencia', 'superadmin'];
+const BOSS_ROLES = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'];
 
 const list = asyncHandler(async (req, res) => {
   const isBoss = BOSS_ROLES.includes(req.user.role.code);

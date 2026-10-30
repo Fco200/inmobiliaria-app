@@ -6,6 +6,36 @@ const { User, Role, Permission } = require('../models');
 const { logActivity } = require('../services/log.service');
 const sessionService = require('../services/session.service');
 
+const ASSISTANCE_ASSIGNABLE_ROLES = ['asesor', 'asistencia', 'escrituracion'];
+
+function requesterRoleCode(req) {
+  const role = req.user && req.user.role;
+  return String((role && (role.code || role)) || '');
+}
+
+async function assertCanAssignRole(req, roleValue, targetUserId) {
+  if (['admin', 'direccion', 'superadmin'].includes(requesterRoleCode(req))) return;
+
+  if (roleValue === '__custom__') {
+    throw Object.assign(new Error('Solo dirección o administración pueden crear roles personalizados.'), { statusCode: 403 });
+  }
+
+  if (roleValue) {
+    const nextRole = await Role.findById(roleValue).select('code');
+    if (nextRole && !ASSISTANCE_ASSIGNABLE_ROLES.includes(nextRole.code)) {
+      throw Object.assign(new Error('Solo puedes asignar roles de asesor, asistencia o escrituración.'), { statusCode: 403 });
+    }
+  }
+
+  if (targetUserId) {
+    const target = await User.findById(targetUserId).populate('role');
+    const targetCode = target && target.role ? target.role.code : '';
+    if (targetCode && !ASSISTANCE_ASSIGNABLE_ROLES.includes(targetCode)) {
+      throw Object.assign(new Error('No puedes editar cuentas con un rol superior al tuyo.'), { statusCode: 403 });
+    }
+  }
+}
+
 const userCrud = buildCrud(User, {
   populate: ['role'],
   searchFields: ['name', 'email', 'username', 'phone'],
@@ -63,6 +93,8 @@ const updateUser = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   const customPerms = Array.isArray(body.customPermissions) ? body.customPermissions.filter(Boolean) : [];
 
+  await assertCanAssignRole(req, body.role, req.params.id);
+
   // Edición con rol personalizado: se crea un rol nuevo con los permisos
   // elegidos y se asigna al usuario (igual que en la creación).
   if (body.role === '__custom__') {
@@ -97,6 +129,8 @@ const updateUser = asyncHandler(async (req, res) => {
 const createUser = asyncHandler(async (req, res) => {
   let body = { ...req.body };
   const customPerms = Array.isArray(body.customPermissions) ? body.customPermissions.filter(Boolean) : [];
+
+  await assertCanAssignRole(req, body.role);
 
   if (body.role === '__custom__') {
     if (!customPerms.length) {

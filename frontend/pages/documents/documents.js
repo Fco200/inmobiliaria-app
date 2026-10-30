@@ -42,10 +42,13 @@ window.Pages.documents = {
       { value: 'otros', label: 'Otros' },
     ];
     const STATUS = ['pendiente', 'recibido', 'validado', 'rechazado'];
-    const boss = (() => {
+    const roleCode = (() => {
       const user = ApiClient.getStoredUser();
-      return Boolean(user && user.role && ['admin', 'gerencia'].includes(user.role.code));
+      const role = user && user.role;
+      return (role && (role.code || role)) || '';
     })();
+    const boss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
+    const canUpload = boss || ['asesor', 'escrituracion'].includes(roleCode);
     const typeLabel = (t) => {
       const found = TYPES.find((x) => x.value === t);
       return found ? found.label : (t || 'otros');
@@ -57,7 +60,7 @@ window.Pages.documents = {
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-primary" type="button" data-open-formatos>&#128196; Generar Formato PDF</button>
           ${boss ? '<button class="btn btn-secondary" type="button" data-new-template>+ Crear plantilla</button>' : ''}
-          ${boss ? '<button class="btn btn-secondary" type="button" data-new>+ Subir formato</button>' : ''}
+          ${canUpload ? '<button class="btn btn-secondary" type="button" data-new>+ Subir formato</button>' : ''}
         </div>
       </div>
       <div style="margin-bottom:20px;">
@@ -252,9 +255,14 @@ window.Pages.documents = {
     }
 
     async function openForm(record) {
-      if (!boss) return;
       const isEdit = Boolean(record);
-      const fields = [
+      if (isEdit ? !boss : !canUpload) return;
+      const restricted = !boss;
+      const fields = restricted ? [
+        { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: '' },
+        { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },
+        { name: 'observations', label: 'Observaciones', type: 'textarea', full: true, value: '' },
+      ] : [
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: record ? record.name : '' },
         { name: 'type', label: 'Tipo', type: 'select', options: TYPES, value: record ? record.type : 'formato' },
         { name: 'status', label: 'Estado', type: 'select', options: STATUS, value: record ? record.status : 'pendiente' },
@@ -296,7 +304,9 @@ window.Pages.documents = {
           e.preventDefault();
           const values = UI.collectForm(e.target);
           const { file, ...rest } = values;
-          const body = { ...rest };
+          const body = restricted
+            ? { name: rest.name, observations: rest.observations, type: 'formato', status: 'pendiente' }
+            : { ...rest };
           for (const key of ['client', 'property', 'business']) {
             if (!body[key]) body[key] = null;
           }

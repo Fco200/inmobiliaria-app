@@ -70,7 +70,7 @@ function nextOf(key) {
 
 function isBossUser() {
   const user = ApiClient.getStoredUser();
-  return Boolean(user && user.role && ['admin', 'gerencia'].includes(user.role.code));
+  return Boolean(user && user.role && ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(user.role.code || user.role));
 }
 
 window.Pages.clients = {
@@ -201,7 +201,7 @@ window.Pages.clients = {
         const basePlaceholder = input.getAttribute('placeholder') || '';
         const sync = () => {
           const show = otroWhen.includes(select.value);
-          input.style.display = 'block';
+          input.style.display = show ? 'block' : 'none';
           input.required = show && requiredWhen.includes(select.value) && select.required;
           // Texto y label específicos por opción: en "Recomendación" el campo
           // pregunta claramente QUIÉN recomendó; en "Otro" pide especificar.

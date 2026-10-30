@@ -10,7 +10,7 @@ const router = Router();
 router.post('/', controller.create);
 
 // Protegidas: solo administradores o soporte técnico pueden revisar/atender.
-router.use(protect, authorize('admin', 'superadmin'));
+router.use(protect, authorize('admin', 'direccion', 'asistencia', 'superadmin'));
 router.get('/', controller.list);
 router.patch('/:id', controller.handle);
 router.delete('/:id', controller.remove);

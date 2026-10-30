@@ -102,7 +102,7 @@ window.Pages.chat = {
     // acotan al contenedor de esta página (no a document global).
     const isBossUser = (u) => {
       const role = u && u.role ? (u.role.code || u.role) : '';
-      return role === 'admin' || role === 'gerencia';
+      return ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(role);
     };
     const user = (window.ApiClient && window.ApiClient.getStoredUser()) || {};
     const userId = user ? (user._id || user.id) : null;
@@ -1157,7 +1157,7 @@ window.Pages.chat = {
       }
       // Quién puede iniciar un chat 1:1: todos pueden con todos (menos ellos mismos).
       const others = users.filter(u =>
-        u && u.role && ['admin', 'gerencia', 'asesor', 'superadmin'].includes(u.role.code || u.role) &&
+        u && u.role && ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'].includes(u.role.code || u.role) &&
         String(u._id || u.id) !== String(userId)
       );
       const modal = UI.openModal({

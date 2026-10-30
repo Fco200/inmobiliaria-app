@@ -51,7 +51,7 @@ window.Pages.inventory = {
 
     const stored = window.ApiClient.getStoredUser();
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
-    const isBoss = role === 'admin' || role === 'gerencia';
+    const isBoss = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(role);
 
     let me = null;
     let users = [];
@@ -72,7 +72,7 @@ window.Pages.inventory = {
     }
 
     // Asesores y jefes que pueden verse como responsables.
-    const agents = users.filter((u) => u && u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code || u.role));
+    const agents = users.filter((u) => u && u.role && ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'].includes(u.role.code || u.role));
     const myId = (me && me._id) || (stored && stored._id) || '';
 
     const propertyLabel = (prop) => {

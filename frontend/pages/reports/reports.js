@@ -14,7 +14,7 @@ window.Pages.reports = {
       return;
     }
 
-    const isGerencia = me && me.role && ['admin', 'gerencia'].includes(me.role.code || me.role);
+    const isGerencia = me && me.role && ['admin', 'direccion', 'gerencia', 'superadmin'].includes(me.role.code || me.role);
 
     let userOptions = [];
     if (isGerencia) {

@@ -91,6 +91,7 @@ const ROLE_DEFINITIONS = [
       'dashboard_view',
       'clients_manage',
       'properties_manage',
+      'inventory_manage',
       'businesses_manage',
       'appointments_manage',
       'tasks_manage',
@@ -111,12 +112,18 @@ const ROLE_DEFINITIONS = [
 ];
 
 async function seed() {
-  let permissions = [];
-  if ((await Permission.countDocuments()) === 0) {
+  let permissions = await Permission.find();
+  if (permissions.length === 0) {
     permissions = await Permission.insertMany(PERMISSIONS);
     console.log(`Permisos sembrados: ${permissions.length}`);
   } else {
-    permissions = await Permission.find();
+    const existingCodes = new Set(permissions.map((p) => p.code));
+    const missing = PERMISSIONS.filter((p) => !existingCodes.has(p.code));
+    if (missing.length) {
+      const created = await Permission.insertMany(missing);
+      permissions = permissions.concat(created);
+      console.log(`Permisos nuevos agregados: ${created.length}`);
+    }
   }
 
   const permissionCodes = new Set(permissions.map((p) => p.code));

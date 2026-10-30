@@ -13,7 +13,7 @@ const { pushNative } = require('../services/notification.service');
 const MAX_MESSAGES_RETURNED = 200;
 
 // Códigos de rol que participan en el canal grupal general.
-const TEAM_ROLES = ['admin', 'gerencia', 'asesor', 'superadmin'];
+const TEAM_ROLES = ['admin', 'direccion', 'gerencia', 'asesor', 'superadmin', 'asistencia', 'escrituracion'];
 
 // Nombre del canal grupal accesible para todo el equipo.
 const GENERAL_NAME = 'general';
@@ -663,7 +663,7 @@ const clearMessages = asyncHandler(async (req, res) => {
   }
 
   const role = req.user.role && typeof req.user.role === 'object' ? (req.user.role.code || '') : req.user.role;
-  const isBoss = role === 'admin' || role === 'gerencia';
+  const isBoss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(role);
 
   if (chat.type === 'grupal' && !isBoss) {
     return res.status(403).json({

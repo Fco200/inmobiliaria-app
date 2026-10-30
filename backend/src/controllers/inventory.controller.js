@@ -6,7 +6,7 @@ const { logActivity } = require('../services/log.service');
 const { notifyInterestedClients } = require('./property.controller');
 
 function isBoss(user) {
-  return ['admin', 'gerencia'].includes(user.role && user.role.code);
+  return ['admin', 'direccion', 'gerencia', 'superadmin'].includes(user.role && user.role.code);
 }
 
 const list = asyncHandler(async (req, res) => {

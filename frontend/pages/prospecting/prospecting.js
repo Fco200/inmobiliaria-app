@@ -19,7 +19,7 @@ window.Pages.prospecting = {
       // sin opciones
     }
 
-    const isGerencia = me && me.role && ['admin', 'gerencia'].includes(me.role.code || me.role);
+    const isGerencia = me && me.role && ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(me.role.code || me.role);
     const userOptions = users.length
       ? users.map((x) => ({ value: x._id, label: x.name }))
       : [{ value: me ? me._id : '', label: me ? me.name : '' }];

@@ -328,7 +328,8 @@ ${rowXml}
         .join('');
       let actions = '';
       if (config.extraActions) actions += config.extraActions(record);
-      if (config.onEdit) {
+      const canEdit = typeof config.canEdit === 'function' ? config.canEdit(record) : true;
+      if (config.onEdit && canEdit) {
         const editHandler = typeof config.onEdit === 'function' ? config.onEdit : (rec) => openForm(rec);
         actions += `<button class="btn btn-secondary btn-sm" data-edit="${record._id}" style="margin-left:6px;">Editar</button>`;
         editButtons.push({ id: record._id, rec: record, handler: editHandler });

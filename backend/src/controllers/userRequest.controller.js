@@ -44,9 +44,11 @@ const create = asyncHandler(async (req, res) => {
 
   const recipients = await Promise.all([
     Role.findOne({ code: 'admin' }),
+    Role.findOne({ code: 'direccion' }),
+    Role.findOne({ code: 'asistencia' }),
     Role.findOne({ code: 'superadmin' }),
-  ]).then(([adminRole, supportRole]) => {
-    const roleIds = [adminRole && adminRole._id, supportRole && supportRole._id].filter(Boolean);
+  ]).then((roleDocs) => {
+    const roleIds = roleDocs.map((r) => r && r._id).filter(Boolean);
     return roleIds.length ? User.find({ role: { $in: roleIds }, status: 'activo' }) : [];
   });
 

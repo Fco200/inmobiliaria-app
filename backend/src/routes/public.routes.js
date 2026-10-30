@@ -18,6 +18,6 @@ router.post('/assistant', publicController.ask);
 router.post('/appointments', publicController.createAppointment);
 
 // Suscriptores del newsletter (solo administración/gerencia).
-router.get('/newsletter', protect, authorize('admin', 'gerencia'), publicController.listNewsletter);
+router.get('/newsletter', protect, authorize('admin', 'direccion', 'gerencia', 'superadmin'), publicController.listNewsletter);
 
 module.exports = router;

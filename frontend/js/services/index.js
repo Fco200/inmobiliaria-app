@@ -111,6 +111,7 @@ window.API = {
     remove: (id) => ApiClient.remove(`/properties/${id}`),
     publish: (id, body) => ApiClient.patch(`/properties/${id}/publish`, body),
     market: (id) => ApiClient.get(`/properties/${id}/market`),
+    normalizeFolios: () => ApiClient.post('/properties/normalize-folios'),
     // Sube una o varias fotos a una propiedad (multipart, campo "photos").
     uploadPhotos: (id, files) => {
       const form = new FormData();
@@ -189,17 +190,43 @@ window.API = {
     history: (id) => ApiClient.get(`/businesses/${id}/history`),
 
     // Bitácora / notas visibles del negocio.
-    notes: (id) => ApiClient.get(`/businesses/${id}/notes`),
+    notes: {
+      list: (id) => ApiClient.get(`/businesses/${id}/notes`),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+      remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+    },
     addNote: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
     removeNote: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
 
     // Checklist operativo del negocio.
+    checklist: {
+      list: (id) => ApiClient.get(`/businesses/${id}`).then((res) => (
+        (res && res.checklist)
+        || (res && res.data && res.data.checklist)
+        || []
+      )),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
+      update: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
+      remove: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
+    },
     addChecklistItem: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
     updateChecklistItem: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
     removeChecklistItem: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
 
     // Documentos y fotos ligeras del negocio (multipart, campo "file").
-    documents: (id) => ApiClient.get(`/businesses/${id}/documents`),
+    documents: {
+      list: (id) => ApiClient.get(`/businesses/${id}/documents`),
+      create: (id, fileOrForm, name) => {
+        let form = fileOrForm;
+        if (!(form instanceof FormData)) {
+          form = new FormData();
+          if (fileOrForm) form.append('file', fileOrForm);
+          if (name) form.append('name', name);
+        }
+        return ApiClient.postMultipart(`/businesses/${id}/documents`, form);
+      },
+      remove: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
+    },
     uploadDocument: (id, file, name) => {
       const form = new FormData();
       form.append('file', file);

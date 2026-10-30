@@ -17,7 +17,7 @@ window.Pages.dashboard = {
       const prospection = result.prospection || {};
 
       const user = window.ApiClient.getStoredUser();
-      const isBoss = user && user.role && ['admin', 'gerencia'].includes(user.role.code || user.role);
+      const isBoss = user && user.role && ['admin', 'direccion', 'gerencia', 'superadmin'].includes(user.role.code || user.role);
 
       let execSection = '';
       if (isBoss) {

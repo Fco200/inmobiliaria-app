@@ -13,7 +13,7 @@ function roleCode(user) {
 
 function isBossRole(user) {
   const role = roleCode(user);
-  return role === 'admin' || role === 'gerencia';
+  return ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(role);
 }
 
 const listAnnouncements = asyncHandler(async (req, res) => {

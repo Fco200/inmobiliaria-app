@@ -22,9 +22,9 @@ window.AppShell = (() => {
     { key: 'actualizaciones', label: 'Actualizaciones', href: 'actualizaciones.html', icon: '&#128260;', section: 'Recursos' },
     { key: 'profile', label: 'Perfil', href: 'profile.html', icon: '&#128100;', section: 'Sistema' },
     { key: 'ayuda', label: 'Ayuda', href: 'ayuda.html', icon: '&#128172;', section: 'Sistema' },
-    { key: 'guia', label: 'Guía del sistema', href: 'GUIA.HTML', icon: '&#128214;', section: 'Sistema', boss: true },
+    { key: 'guia', label: 'Guía del sistema', href: 'GUIA.HTML', icon: '&#128214;', section: 'Sistema' },
     { key: 'guiausuario', label: 'Guía de uso', href: 'GUIAUSUARIO.HTML', icon: '&#128214;', section: 'Sistema', user: true },
-    { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema', boss: true },
+    { key: 'settings', label: 'Configuración', href: 'settings.html', icon: '&#9881;', section: 'Sistema' },
   ];
 
   // Módulos del menú ligados a un permiso: si el rol del usuario no tiene el
@@ -45,6 +45,7 @@ window.AppShell = (() => {
     reports: 'reports_view',
     management: 'reports_gerencia',
     documents: 'documents_manage',
+    guia: 'settings_manage',
     settings: 'settings_manage',
   };
 
@@ -56,18 +57,15 @@ window.AppShell = (() => {
     return (typeof role === 'object' && role !== null ? role.code : role) || '';
   }
 
-  // Códigos de permiso del usuario actual. Devuelve null (= sin restricción)
-  // para los roles de SISTEMA (admin, gerencia, asesor, superadmin…), que ya
-  // tienen su propio control de acceso y no deben perder módulos. Solo los
-  // roles PERSONALIZADOS (creados a medida) traen una lista explícita que
-  // oculta los módulos no autorizados.
+  // Códigos de permiso del usuario actual. Se aplican a TODOS los roles (de
+  // sistema y personalizados): el menú solo muestra los módulos autorizados.
+  // Devuelve null cuando el rol aún no trae la lista (sesiones antiguas), para
+  // no dejar la app sin menú mientras se refresca el usuario.
   function currentUserPermissions() {
     if (!window.ApiClient || !window.ApiClient.getStoredUser) return null;
     const user = window.ApiClient.getStoredUser();
     const role = user && user.role;
     if (!role || typeof role !== 'object') return null;
-    const code = String(role.code || '');
-    if (!code.startsWith('custom_')) return null;
     if (!Array.isArray(role.permissions)) return null;
     return role.permissions;
   }
@@ -79,7 +77,7 @@ window.AppShell = (() => {
 
   function isBoss() {
     const role = currentUserRoleCode();
-    return role === 'admin' || role === 'gerencia';
+    return ['admin', 'direccion', 'gerencia', 'superadmin'].includes(role);
   }
 
   function visibleNav() {
@@ -87,7 +85,7 @@ window.AppShell = (() => {
     const perms = currentUserPermissions();
     return NAV.filter((n) => {
       if (n.boss && !boss) return false;   // p. ej. Configuración, Gerencia, guía del admin
-      if (n.user && boss) return false;    // guía de usuarios solo para no-admin
+      if (n.user && (boss || (Array.isArray(perms) && perms.includes('settings_manage')))) return false; // guía del sistema para quien administra
       // Filtro por permiso: solo cuando el rol trae una lista explícita.
       const needed = NAV_PERMISSION[n.key];
       if (needed && Array.isArray(perms) && !perms.includes(needed)) return false;
@@ -1206,12 +1204,11 @@ window.AppShell = (() => {
     if (!content) return;
     const key = currentKey();
     const page = currentPage();
-    if ((key === 'settings' || key === 'management') && !isBoss()) {
+    if (key === 'management' && !isBoss()) {
       content.innerHTML = '<div class="card"><div class="empty-state"><p>No tienes permiso para ver este módulo.</p></div></div>';
       return;
     }
-    // Bloqueo por permiso si el rol trae una lista explícita (roles
-    // personalizados): evita abrir por URL un módulo no autorizado.
+    // Bloqueo por permiso del rol: evita abrir por URL un módulo no autorizado.
     const needed = NAV_PERMISSION[key];
     const perms = currentUserPermissions();
     if (needed && Array.isArray(perms) && !perms.includes(needed)) {

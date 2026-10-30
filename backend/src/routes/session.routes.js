@@ -11,7 +11,7 @@ router.use(protect);
 
 router.get('/', sessionsController.list);
 router.post('/logout-all', sessionsController.revokeAllMine);
-router.delete('/user/:userId', authorize('admin', 'gerencia'), sessionsController.revokeUserSessions);
+router.delete('/user/:userId', authorize('admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'), sessionsController.revokeUserSessions);
 router.delete('/:id', idParam, sessionsController.revoke);
 
 module.exports = router;

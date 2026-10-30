@@ -8,6 +8,7 @@ const { isBoss } = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
+const { migratePropertyFolios } = require('../services/migration.service');
 const { normalizePhotos } = require('../utils/photos');
 
 function isFolioDuplicateError(err) {
@@ -654,4 +655,25 @@ const market = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { ...stats, prices } });
 });
 
-module.exports = { list, get, options, create, update, remove, togglePublish, market, uploadPhotos, notifyInterestedClients };
+const normalizeFolios = asyncHandler(async (req, res) => {
+  const result = await migratePropertyFolios();
+  res.json({
+    success: true,
+    message: `Folios normalizados: ${result.updated} de ${result.total}.`,
+    data: result,
+  });
+});
+
+module.exports = {
+  list,
+  get,
+  options,
+  create,
+  update,
+  remove,
+  togglePublish,
+  market,
+  uploadPhotos,
+  notifyInterestedClients,
+  normalizeFolios,
+};

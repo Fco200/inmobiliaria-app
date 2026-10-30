@@ -7,7 +7,7 @@ window.Pages.notifications = {
 
   async render(container) {
     const user = ApiClient.getStoredUser();
-    const isBoss = Boolean(user && user.role && ['admin', 'gerencia'].includes(user.role.code || user.role));
+    const isBoss = Boolean(user && user.role && ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(user.role.code || user.role));
     const myId = user && (user._id || user.id);
 
     container.innerHTML = `

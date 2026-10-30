@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2d1048" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="INMOBLES" />
+  <meta name="description" content="Contacta a nuestros asesores inmobiliarios por WhatsApp, teléfono o correo. Sin registros, atención directa." />
+  <title id="contacto-title">Contacto — INMOBLES</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/landing.css" />
+</head>
+<body class="landing-body">
+
+  <!-- HEADER -->
+  <header class="landing-header">
+    <a class="landing-brand" href="landing.html">
+      <img src="logoinmobles-blanco.png" alt="INMOBLES" class="landing-brand-logo">
+      <span><strong id="brand-name">INMOBLES</strong><br /><small id="brand-tagline">Profesionales en Negocios Inmobiliarios</small></span>
+    </a>
+    <nav class="landing-nav" id="landing-nav">
+      <a href="landing.html">Inicio</a>
+      <a href="propiedades.html">Propiedades</a>
+      <a href="equipo.html">Equipo</a>
+      <a href="servicios.html">Servicios</a>
+      <a href="contacto.html">Contacto</a>
+      <a id="nav-website" href="https://inmobles.com" target="_blank" rel="noopener">inmobles.com</a>
+      <a class="btn btn-primary btn-sm" href="index.html">Acceso equipo</a>
+    </nav>
+    <div class="landing-header-actions">
+      <a href="tel:+5216623188580" class="header-phone" id="header-phone">&#128222; <span id="header-phone-text">+52 1 662 318 8580</span></a>
+      <button class="landing-nav-toggle" id="nav-toggle" aria-label="Menú">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ENCABEZADO -->
+  <section class="landing-hero landing-hero-compact contact-hero" id="inicio">
+    <h1 id="hero-title">Estamos para ayudarte</h1>
+    <p class="landing-hero-sub">Cuéntanos qué buscas y un asesor te responde el mismo día.</p>
+  </section>
+
+  <!-- FORMULARIO + INFO -->
+  <section class="landing-section" id="formulario">
+    <div class="contact-layout">
+      <div class="card landing-contact contact-form-card">
+        <h2 style="margin-top:0;">Envíanos un mensaje</h2>
+        <p class="text-muted" id="form-note">
+          Completa el formulario y lo enviamos directo a nuestro WhatsApp.
+        </p>
+
+        <form id="contact-form" novalidate>
+          <div class="form-group">
+            <label for="c-name">Nombre completo *</label>
+            <input class="form-control" id="c-name" name="name" type="text" placeholder="Tu nombre" required />
+          </div>
+          <div class="contact-2col">
+            <div class="form-group">
+              <label for="c-phone">Teléfono</label>
+              <input class="form-control" id="c-phone" name="phone" type="tel" placeholder="612 123 4567" />
+            </div>
+            <div class="form-group">
+              <label for="c-email">Correo</label>
+              <input class="form-control" id="c-email" name="email" type="email" placeholder="tucorreo@ejemplo.com" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="c-interest">Me interesa</label>
+            <select class="form-control" id="c-interest" name="interest">
+              <option value="comprar">Comprar un inmueble</option>
+              <option value="rentar">Rentar un inmueble</option>
+              <option value="vender">Vender mi propiedad</option>
+              <option value="avaluo">Un avalúo o asesoría</option>
+              <option value="otro">Otro tema</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="c-message">Mensaje *</label>
+            <textarea class="form-control" id="c-message" name="message" rows="4"
+              placeholder="Ej. Busco casa de 3 recámaras en la zona norte con presupuesto de $3,500,000." required></textarea>
+          </div>
+
+          <div id="contact-feedback" class="alert hide" role="alert" style="margin-bottom:12px;"></div>
+
+          <button class="btn btn-primary btn-block contact-submit" id="btn-send-wa" type="submit">
+            &#128172;&nbsp; Enviar por WhatsApp
+          </button>
+          <button class="btn btn-secondary btn-block" id="btn-send-mail" type="button" style="margin-top:8px;">
+            &#9993;&nbsp; Enviar por correo
+          </button>
+          <p class="text-muted" style="font-size:12px;margin-top:10px;">
+            Al enviar se abrirá tu app de WhatsApp o de correo con el mensaje listo. No almacenamos tus datos en este sitio.
+          </p>
+        </form>
+      </div>
+
+      <aside class="contact-info-col">
+        <div class="card landing-feature contact-info-card">
+          <strong>&#128172;&nbsp; WhatsApp</strong>
+          <p class="text-muted"><a id="info-wa-link" href="https://wa.me/5216623188580" target="_blank" rel="noopener" class="contact-link">Iniciar chat ahora</a></p>
+        </div>
+        <div class="card landing-feature contact-info-card">
+          <strong>&#128222;&nbsp; Teléfono</strong>
+          <p class="text-muted"><a id="info-tel-link" href="tel:+5216623188580" class="contact-link">Llamar a la oficina</a></p>
+        </div>
+        <div class="card landing-feature contact-info-card">
+          <strong>&#9993;&nbsp; Correo</strong>
+          <p class="text-muted"><a id="info-mail-link" href="mailto:asesor@inmobiliaria.com" class="contact-link">Escribir un correo</a></p>
+        </div>
+        <div class="card landing-feature contact-info-card">
+          <strong>&#128337;&nbsp; Horario</strong>
+          <p class="text-muted">Lunes a viernes 9:00–18:00<br />Sábados 9:00–14:00</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- NEWSLETTER -->
+  <section class="landing-section" id="newsletter">
+    <div class="card landing-newsletter">
+      <div class="landing-section-head"><h2>&#128231;&nbsp; Recibe promociones</h2></div>
+      <p class="text-muted" style="margin:0 0 16px;max-width:560px;">Suscríbete y entérate primero de nuevas propiedades, preventas y ofertas exclusivas.</p>
+      <form id="newsletter-form" style="display:flex;gap:10px;flex-wrap:wrap;max-width:520px;">
+        <input class="form-control" id="newsletter-email" type="email" placeholder="Tu correo electrónico" required style="flex:1;min-width:220px;" />
+        <button class="btn btn-primary" type="submit">&#128276;&nbsp; Suscribirme</button>
+      </form>
+      <p class="text-muted" id="newsletter-msg" style="margin:12px 0 0;font-size:14px;"></p>
+    </div>
+  </section>
+
+  <!-- ASISTENTE VIRTUAL -->
+  <div class="landing-assistant" id="assistant-root"></div>
+
+  <!-- FOOTER -->
+  <footer class="landing-footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <img src="logoinmobles-blanco.png" alt="INMOBLES" class="footer-logo">
+        <p>Profesionales en Negocios Inmobiliarios. Tu hogar es nuestra prioridad.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Enlaces</h4>
+        <a href="landing.html">Inicio</a>
+        <a href="propiedades.html">Propiedades</a>
+        <a href="equipo.html">Equipo</a>
+        <a href="servicios.html">Servicios</a>
+        <a id="footer-website" href="https://inmobles.com" target="_blank" rel="noopener">inmobles.com</a>
+        <a href="contacto.html">Contacto</a>
+      </div>
+      <div class="footer-col">
+        <h4>Contacto</h4>
+        <a href="tel:+5216623188580" id="footer-phone">&#128222; <span id="footer-phone-text">+52 1 662 318 8580</span></a>
+        <a href="mailto:asesor@inmobiliaria.com" id="footer-email">&#128231; asesor@inmobiliaria.com</a>
+        <a href="https://wa.me/5216623188580" target="_blank" rel="noopener" id="footer-wa">&#128172; WhatsApp</a>
+      </div>
+      <div class="footer-col">
+        <h4>Síguenos</h4>
+        <div class="footer-social">
+          <a href="https://www.facebook.com/inmoblesbr/" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+          <a href="https://www.instagram.com/inmoblesbr/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&#169; <span id="footer-year"></span> <strong id="footer-brand">INMOBLES</strong>. Todos los derechos reservados.</span>
+      <span class="footer-promo"><span>¿Te interesa un proyecto como este?</span> <a id="footer-promo-tel" href="tel:+526625374491">Llámame 6625374491</a> <span>· <strong>FVO DIGITAL HMO</strong>. Soluciones y desarrollos</span></span>
+      <div class="footer-legal">
+        <a href="#">Aviso de privacidad</a>
+        <a href="#">Términos y condiciones</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Botón flotante: WhatsApp / Llamada -->
+  <div class="landing-fab">
+    <a class="landing-fab-btn landing-fab-wa" id="cta-wa-float" href="https://wa.me/5216623188580" target="_blank" rel="noopener" title="Escríbenos por WhatsApp" aria-label="Escríbenos por WhatsApp">&#128172;</a>
+    <a class="landing-fab-btn landing-fab-call" id="cta-call-float" href="tel:+5216623188580" title="Llámanos" aria-label="Llámanos">&#128222;</a>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/utils/cache.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/lib/qrcode-generator.min.js"></script>
+  <script src="js/components/qr.js"></script>
+  <script src="js/public-common.js"></script>
+  <script src="pages/contacto/contacto.js"></script>
+</body>
+</html>

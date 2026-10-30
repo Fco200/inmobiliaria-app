@@ -1,0 +1,1065 @@
+'use strict';
+
+const UI = (() => {
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  // Etiqueta única y legible para selectores/listados de propiedades. Incluye
+  // calle y colonia/ciudad para distinguir inmuebles parecidos de la misma
+  // zona, y el folio al final como identificador del CRM.
+  function propertyOptionLabel(prop, { includeFolio = true } = {}) {
+    if (!prop) return 'Propiedad';
+    const tipo = prop.type
+      ? String(prop.type).charAt(0).toUpperCase() + String(prop.type).slice(1)
+      : '';
+    const calle = String(prop.address || '').trim();
+    const ubicacion = [prop.zone, prop.city].filter(Boolean).join(', ').trim()
+      || String(prop.state || '').trim();
+    const base = [tipo, calle, ubicacion].filter(Boolean).join(' · ');
+    const label = base || (prop.folio ? `Propiedad ${prop.folio}` : 'Propiedad');
+    if (includeFolio && prop.folio && !label.includes(String(prop.folio))) {
+      return `${label} · Folio ${prop.folio}`;
+    }
+    return label;
+  }
+
+  function toast(message, type = 'info') {
+    let holder = document.getElementById('toast-holder');
+    if (!holder) {
+      holder = document.createElement('div');
+      holder.id = 'toast-holder';
+      // Los avisos aparecen CENTRADOS en la pantalla (no en una esquina), para
+      // que confirmaciones y errores no pasen desapercibidos.
+      holder.style.cssText =
+        'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4000;display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:min(460px,calc(100vw - 32px));pointer-events:none;';
+      document.body.appendChild(holder);
+    }
+    const el = document.createElement('div');
+    el.style.cssText =
+      'padding:13px 20px;border-radius:12px;color:#fff;font-size:14px;line-height:1.4;text-align:center;box-shadow:0 16px 40px rgba(0,0,0,0.3);max-width:100%;pointer-events:auto;animation:toastSlideIn 0.3s ease-out;';
+    const colors = { success: '#1f9d55', error: '#dc2626', warning: '#d97706', info: '#5B2D8E' };
+    el.style.background = colors[type] || colors.info;
+    el.textContent = message;
+    holder.appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+      setTimeout(() => el.remove(), 300);
+    }, 3500);
+  }
+
+  function openModal({ title, body, footer, onMount, size }) {
+    closeModal();
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-overlay';
+    overlay.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:40px 16px;overflow:auto;' +
+      '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);animation:modalFadeIn 0.25s ease-out;';
+    const dialog = document.createElement('div');
+    dialog.style.cssText =
+      `background:var(--white);border-radius:10px;width:100%;max-width:${size || 640}px;box-shadow:0 10px 40px rgba(0,0,0,0.25);` +
+      'margin:auto;animation:modalScaleIn 0.3s cubic-bezier(0.16,1,0.3,1);';
+    dialog.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+        <h3 style="margin:0;font-size:16px;">${title}</h3>
+        <button type="button" class="icon-btn" data-close>&times;</button>
+      </div>
+      <div style="padding:20px;" data-body>${body}</div>
+      ${footer ? `<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;">${footer}</div>` : ''}
+    `;
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.closest('[data-close]')) closeModal();
+    });
+    document.body.appendChild(overlay);
+    // Revela los campos "Otros (especificar)" de selects cuyo valor ya es
+    // "Otro/__ui_otros__" al abrir el formulario (por ejemplo en modo edición).
+    syncOtros(dialog);
+    if (onMount) onMount(dialog.querySelector('[data-body]'));
+    return {
+      close: closeModal,
+      bodyEl: dialog.querySelector('[data-body]'),
+    };
+  }
+
+  function closeModal() {
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) overlay.remove();
+    closeLightbox();
+  }
+
+  function confirm(message, { danger = true } = {}) {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const safeResolve = (val) => { if (!resolved) { resolved = true; resolve(val); } };
+      const footer = `
+        <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" type="button" data-ok>Aceptar</button>
+      `;
+      const modal = openModal({
+        title: 'Confirmación',
+        body: `<p style="margin:0;">${escapeHtml(message)}</p>`,
+        footer,
+      });
+      const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+      if (overlay) {
+        const cancelBtn = overlay.querySelector('[data-cancel]');
+        if (cancelBtn) cancelBtn.addEventListener('click', () => {
+          closeModal();
+          safeResolve(false);
+        });
+        const okBtn = overlay.querySelector('[data-ok]');
+        if (okBtn) okBtn.addEventListener('click', () => {
+          closeModal();
+          safeResolve(true);
+        });
+        const observer = new MutationObserver(() => {
+          if (!document.getElementById('modal-overlay')) {
+            observer.disconnect();
+            safeResolve(false);
+          }
+        });
+        observer.observe(document.body, { childList: true });
+      } else {
+        safeResolve(false);
+      }
+    });
+  }
+
+  const BADGE_COLORS = {
+    success: 'badge-success',
+    warning: 'badge-warning',
+    danger: 'badge-danger',
+    info: 'badge-info',
+    primary: 'badge-primary',
+    muted: 'badge-muted',
+  };
+
+  function badge(text, type = 'muted') {
+    const cls = BADGE_COLORS[type] || 'badge-muted';
+    return `<span class="badge ${cls}">${escapeHtml(text)}</span>`;
+  }
+
+  const STATUS_TYPES = {
+    activo: 'success',
+    disponible: 'success',
+    concluido: 'success',
+    concluida: 'success',
+    vendida: 'success',
+    rentada: 'success',
+    cobrado: 'success',
+    completada: 'success',
+    realizada: 'success',
+    validado: 'success',
+    cumplida: 'success',
+    publicado: 'success',
+    pendiente: 'warning',
+    en_proceso: 'info',
+    confirmada: 'info',
+    en_promesa: 'info',
+    promesa: 'info',
+    parcial: 'warning',
+    prospecto: 'info',
+    inactivo: 'muted',
+    cancelado: 'danger',
+    cancelada: 'danger',
+    vencida: 'danger',
+    rechazado: 'danger',
+    no_asistio: 'danger',
+    apartada: 'info',
+    en_proceso2: 'info',
+    seguimiento: 'primary',
+    captacion: 'primary',
+    revision: 'primary',
+    notarias: 'primary',
+    entrega: 'success',
+    contratado: 'info',
+    en_captacion: 'info',
+  };
+
+  function statusBadge(value) {
+    if (value == null || value === '') return badge('—', 'muted');
+    const key = String(value).replace(/ /g, '_');
+    const type = STATUS_TYPES[key] || 'info';
+    const label = String(value).replace(/_/g, ' ');
+    return badge(label.charAt(0).toUpperCase() + label.slice(1), type);
+  }
+
+  function pagination(meta, onPage) {
+    if (!meta || meta.pages <= 1) return '';
+    const total = meta.pages;
+    const current = meta.page;
+
+    // Ventana de hasta 9 páginas centrada en la actual + saltos a extremos.
+    let start = Math.max(1, current - 4);
+    const end = Math.min(total, start + 8);
+    start = Math.max(1, end - 8);
+
+    const btn = (page, label, active = false, title = '') =>
+      `<button class="btn btn-secondary btn-sm" style="${active ? 'background:var(--primary);color:#fff;' : ''}margin-right:3px;" data-page="${page}" ${title ? `title="${title}"` : ''}>${label}</button>`;
+
+    let buttons = '';
+    if (current > 1) buttons += btn(current - 1, '&#8249;', false, 'Anterior');
+    if (start > 1) buttons += btn(1, '1') + '<span style="align-self:center;">…</span>';
+    for (let i = start; i <= end; i += 1) {
+      buttons += btn(i, String(i), i === current);
+    }
+    if (end < total) buttons += '<span style="align-self:center;">…</span>' + btn(total, String(total));
+    if (current < total) buttons += btn(current + 1, '&#8250;', false, 'Siguiente');
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;justify-content:center;margin-top:16px;gap:3px;flex-wrap:wrap;';
+    wrap.innerHTML = buttons;
+    wrap.querySelectorAll('[data-page]').forEach((el) => {
+      el.addEventListener('click', () => onPage(Number(el.dataset.page)));
+    });
+    return wrap;
+  }
+
+  function errorAlert(message) {
+    return `<div class="alert alert-error">${escapeHtml(message)}</div>`;
+  }
+
+  function field(name, label, options = {}) {
+    const {
+      type = 'text',
+      required = false,
+      options: selectOptions = [],
+      value = '',
+      placeholder = '',
+      hint = '',
+      full = false,
+      accept = '',
+      multiple = false,
+      rows = null,
+      sinOtros = false,
+      readonly = false,
+    } = options;
+    const req = required ? 'required' : '';
+    const ro = readonly ? 'readonly' : '';
+    const id = `fld-${name}`;
+    let control = '';
+    if (type === 'select') {
+      const valStr = value && typeof value === 'object' && value._id ? String(value._id) : String(value == null ? '' : value);
+      const opts = selectOptions
+        .map((o) => {
+          const optValue = typeof o === 'object' ? o.value : o;
+          const optLabel = typeof o === 'object' ? o.label : o;
+          const selected = valStr === String(optValue) ? 'selected' : '';
+          return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(optLabel)}</option>`;
+        })
+        .join('');
+      // Soporte genérico "Otro/otros": agrega la opción "especificar" y un campo
+      // de texto que aparece cuando se selecciona. Aplica a todos los selects.
+      // Los selects que traen su PROPIA opción "Otro" (con su campo de texto
+      // dedicado) pasan `sinOtros: true` para no duplicar la opción ni enviar
+      // el centinela "__ui_otros__" al servidor.
+      const otrosId = `otros-${id}`;
+      control = sinOtros
+        ? `<select class="form-control" id="${id}" name="${name}" ${req}>${opts}</select>`
+        : `
+        <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros>${opts}
+          <option value="__ui_otros__">Otros (especificar)</option>
+        </select>
+        <input class="form-control" id="${otrosId}" name="__ui_otros_${name}" type="text" placeholder="Especifica..." style="display:none;margin-top:8px;">
+      `;
+    } else if (type === 'checkboxGroup') {
+      // Varias casillas con el MISMO name: collectForm las devuelve como array.
+      const list = (Array.isArray(value) ? value : []).map(String);
+      const boxes = selectOptions
+        .map((o) => {
+          const optValue = typeof o === 'object' ? o.value : o;
+          const optLabel = typeof o === 'object' ? o.label : o;
+          const checked = list.includes(String(optValue)) ? 'checked' : '';
+          return `<label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" name="${name}" value="${escapeHtml(optValue)}" ${checked}> ${escapeHtml(optLabel)}
+          </label>`;
+        })
+        .join('');
+      control = `<div id="${id}" style="display:flex;flex-direction:column;gap:2px;">${boxes}</div>`;
+    } else if (type === 'checkbox') {
+      const checked = value ? 'checked' : '';
+      control = `
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;margin-top:8px;">
+          <input type="checkbox" id="${id}" name="${name}" ${checked}> ${escapeHtml(label)}
+        </label>
+      `;
+      return `<div class="form-field${full ? ' form-field-full' : ''}">${control}${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}</div>`;
+    } else if (type === 'textarea') {
+      // `rows` permite ampliar campos largos (descripciones, notas) sin
+      // tener que forzar estilos inline en cada pantalla.
+      const rowsAttr = rows ? ` rows="${Number(rows)}"` : '';
+      const sizeClass = rows && Number(rows) >= 6 ? ' textarea-tall' : '';
+      control = `<textarea class="form-control${sizeClass}" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}"${rowsAttr} ${req} ${ro}>${escapeHtml(value)}</textarea>`;
+    } else if (type === 'file') {
+      const attrs = [
+        accept ? `accept="${escapeHtml(accept)}"` : '',
+        multiple ? 'multiple' : '',
+        req,
+      ].filter(Boolean).join(' ');
+      control = `<input class="form-control" id="${id}" name="${name}" type="file" placeholder="${escapeHtml(placeholder)}" ${attrs}>`;
+    } else {
+      control = `<input class="form-control" id="${id}" name="${name}" type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ${req} ${ro}>`;
+    }
+    return `
+      <div class="form-field${full ? ' form-field-full' : ''}">
+        <label class="form-label" for="${id}">${escapeHtml(label)}${required ? ' *' : ''}</label>
+        ${control}
+        ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
+      </div>
+    `;
+  }
+
+  // Detecta si el valor de un <select> representa la opción "Otros": el valor
+  // genérico "Otro" de UI.field (__ui_otros__) o un valor nativo "otro/otros".
+  function isOtherValue(value) {
+    return value === '__ui_otros__' || /^otr/i.test(String(value == null ? '' : value));
+  }
+
+  // Obtiene el input "especificar" de un select. Si `create` es true y no
+  // existe, lo crea justo después del select siguiendo la convención de
+  // UI.field (id `otros-<selectId>` y name `__ui_otros_<selectName>`). De este
+  // modo también funciona en selects escritos a mano sin data-ui-otros.
+  function otrosInput(select, create) {
+    if (!select) return null;
+    if (!select.id) {
+      if (!create) return null;
+      otrosInput.seq = (otrosInput.seq || 0) + 1;
+      select.id = `ui-select-${otrosInput.seq}`;
+    }
+    let input = document.getElementById(`otros-${select.id}`);
+    if (input || !create) return input;
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control';
+    input.id = `otros-${select.id}`;
+    input.placeholder = 'Especifica...';
+    input.style.cssText = 'display:none;margin-top:8px;';
+    if (select.name) input.name = `__ui_otros_${select.name}`;
+    select.insertAdjacentElement('afterend', input);
+    return input;
+  }
+
+  // Muestra/oculta el campo de texto "especificar" cuando un select tiene el
+  // valor genérico "Otros" (__ui_otros__) o un valor nativo "otro/otros/otra".
+  function toggleOtros(select) {
+    if (!select) return;
+    const isOther = isOtherValue(select.value);
+    // Se auto-crea el input dentro de un formulario: modal o <form> inline.
+    // Los selects de filtros/barras sin <form> no generan casillas espurias.
+    const canCreate = isOther && !!(
+      select.closest &&
+      (select.closest('#modal-overlay') || select.closest('form'))
+    );
+    const input = otrosInput(select, canCreate);
+    if (!input) return;
+    input.style.display = isOther ? 'block' : 'none';
+    if (!isOther) input.value = '';
+  }
+
+  // Aplica el estado "especificar" a TODOS los selects de `root` (por defecto
+  // el documento), ya provengan de UI.field o estén escritos a mano. Útil al
+  // abrir un formulario con un select que ya viene en "Otro" (modo edición).
+  function syncOtros(root) {
+    const scope = root || document;
+    scope.querySelectorAll('select').forEach((select) => toggleOtros(select));
+  }
+
+  // Devuelve el texto escrito en la casilla "especificar" de un select, o ''
+  // si el select no está en "Otros". Para consumidores que leen el valor
+  // directamente (formularios con selects escritos a mano).
+  function otrosText(select) {
+    if (!select || !isOtherValue(select.value)) return '';
+    const input = otrosInput(select, false);
+    return input ? String(input.value || '').trim() : '';
+  }
+
+  function collectForm(form) {
+    const others = {};
+    const data = {};
+    const seen = {};
+    const groupValue = (nodes) => Array.from(nodes).filter((n) => n.checked).map((n) => n.value);
+
+    new FormData(form).forEach((value, key) => {
+      if (key.indexOf('__ui_otros_') === 0) {
+        others[key.slice('__ui_otros_'.length)] = value;
+        return;
+      }
+      const nodes = form.querySelectorAll(`[name="${key}"]`);
+      if (!nodes.length) return;
+      const input = nodes[0];
+      if (input.type === 'file') return;
+      seen[key] = true;
+      if (input.type === 'checkbox') {
+        // Varias casillas con el mismo name → array de los marcados.
+        // Una sola → booleano (antes se perdía el "desmarcar" y las casillas
+        // múltiples sólo reflejaban la primera).
+        data[key] = nodes.length > 1 ? groupValue(nodes) : input.checked;
+      } else if (input.type === 'number') {
+        data[key] = value === '' ? null : Number(value);
+      } else if (value === '') {
+        data[key] = null;
+      } else {
+        data[key] = value;
+      }
+    });
+
+    // FormData omite las casillas NO marcadas: sin este pase, desmarcar una
+    // casilla en modo edición no se enviaba al servidor y el valor no cambiaba.
+    form.querySelectorAll('input[type="checkbox"][name]').forEach((box) => {
+      const key = box.name;
+      if (Object.prototype.hasOwnProperty.call(seen, key)) return;
+      const nodes = form.querySelectorAll(`[name="${key}"]`);
+      data[key] = nodes.length > 1 ? groupValue(nodes) : false;
+    });
+
+    // Si el usuario eligió "Otros" y escribió algo, se usa ese texto como valor.
+    // Si eligió el genérico "Otros (especificar)" pero no escribió nada, se
+    // evita enviar el valor centinela __ui_otros__ al servidor.
+    Object.keys(others).forEach((name) => {
+      const select = form.querySelector(`select[name="${name}"]`);
+      if (!select || !isOtherValue(select.value)) return;
+      const text = String(others[name] || '').trim();
+      if (text) {
+        data[name] = text;
+      } else if (select.value === '__ui_otros__') {
+        data[name] = null;
+      }
+    });
+    return data;
+  }
+
+  function progressBar(percent) {
+    const safe = Math.max(0, Math.min(100, Number(percent) || 0));
+    return `
+      <div class="progress"><div class="progress-bar" style="width:${safe}%;"></div></div>
+      <small class="text-muted">${safe.toFixed(1)}%</small>
+    `;
+  }
+
+  // Cierra el visor de fotos si sigue abierto (lo llama closeModal).
+function closeLightbox() {
+  const box = document.getElementById('image-lightbox');
+  if (box) {
+    // Se retira el listener de teclado para no dejar enganchados los handlers
+    // de los visores anteriores (provocaba que "Esc" no respondiera bien).
+    if (typeof box._onKey === 'function') document.removeEventListener('keydown', box._onKey);
+    box._onKey = null;
+    box.remove();
+  }
+  // El bloqueo de scroll se libera SIEMPRE, exista o no el visor: si el
+  // elemento se hubiera perdido (recarga parcial, restauración desde la caché
+  // del navegador, error al pintar) el body se quedaba con overflow:hidden y
+  // la interfaz parecía congelada, obligando a recargar la aplicación.
+  document.body.classList.remove('lightbox-open');
+}
+
+// Red de seguridad: al volver de la caché del navegador (bfcache) o al
+// mostrar de nuevo la pestaña se limpia cualquier visor huérfano.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pageshow', closeLightbox);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') closeLightbox();
+  });
+}
+
+// Nombre de archivo seguro para una foto. Usa el nombre original del archivo
+// cuando existe y, si no, el título de la propiedad + posición.
+function imageFileName(url, index = 0, title = '') {
+  const safeTitle = String(title || 'imagen')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 70) || 'imagen';
+  let base = '';
+  try {
+    const pathname = new URL(String(url), window.location.href).pathname;
+    base = decodeURIComponent((pathname.split('/').pop() || '')).split('?')[0];
+  } catch (error) { base = ''; }
+  if (base && /\.[a-z0-9]{2,5}$/i.test(base)) return base;
+  const match = String(url || '').match(/\.(jpe?g|png|webp|gif|avif|bmp)(?:$|\?)/i);
+  const ext = match ? match[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
+  return `${safeTitle}-${index + 1}.${ext}`;
+}
+
+// Descarga una imagen como archivo. En escritorio y Android funciona con
+// fetch + blob (respeta el nombre y no abre otra pestaña); si el navegador o
+// el almacenamiento remoto lo impiden, cae al enlace de descarga directa.
+// En iPhone (Safari/PWA) también funciona desde iOS 13.
+async function downloadImage(url, name, options = {}) {
+  const absolute = window.AppConfig && window.AppConfig.resolveUrl
+    ? window.AppConfig.resolveUrl(url)
+    : String(url);
+  const filename = name || 'imagen.jpg';
+  const sameOrigin = absolute.indexOf(window.location.origin) === 0;
+  try {
+    const response = await fetch(absolute, {
+      credentials: sameOrigin ? 'include' : 'omit',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    if (!options.silent) toast('Imagen descargada', 'success');
+    return true;
+  } catch (error) {
+    // Respaldo: descarga directa del navegador (sin salir del CRM si puede).
+    try {
+      const link = document.createElement('a');
+      link.href = absolute;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (!options.silent) toast('Descarga iniciada', 'info');
+      return true;
+    } catch (fallbackError) {
+      if (!options.silent) toast('No se pudo descargar la imagen', 'error');
+      return false;
+    }
+  }
+}
+
+// Descarga varias fotos en secuencia. Los navegadores piden permiso para
+// descargas múltiples la primera vez; en móvil conviene bajar una por una.
+async function downloadImages(images, title = 'fotos') {
+  const photos = (Array.isArray(images) ? images : []).filter(Boolean);
+  if (!photos.length) return;
+  if (photos.length > 1) {
+    toast(`Descargando ${photos.length} fotos…`, 'info');
+  }
+  for (let i = 0; i < photos.length; i += 1) {
+    // Se espera un instante entre descargas para que el navegador no las
+    // bloquee por considerarlas una ráfaga automática.
+    // eslint-disable-next-line no-await-in-loop
+    await downloadImage(photos[i], imageFileName(photos[i], i, title), { silent: true });
+    // eslint-disable-next-line no-await-in-loop
+    if (i < photos.length - 1) await new Promise((resolve) => setTimeout(resolve, 450));
+  }
+  toast(photos.length === 1 ? 'Imagen descargada' : `${photos.length} fotos descargadas`, 'success');
+}
+
+// Visor de fotos dentro de la misma pantalla. Antes cada clic hacía
+// window.open(), lo que sacaba al asesor del CRM (y en algunos navegadores
+// móviles congela la interfaz). Ahora hay navegación, teclado, gestos táctiles,
+// descarga y cierre propio.
+function showImages(images, title = 'Galería de imágenes', options = {}) {
+  const photos = (Array.isArray(images) ? images : []).filter(Boolean);
+  if (!photos.length) {
+    toast('No hay imágenes para mostrar.', 'info');
+    return;
+  }
+
+  // Si ya había un visor abierto se cierra con su cleanup completo (no solo
+  // con .remove()), porque de lo contrario el listener de teclado del visor
+  // anterior quedaba enganchado y respondía sobre el visor nuevo.
+  closeLightbox();
+  document.body.classList.add('lightbox-open');
+
+  let index = Math.min(
+    Math.max(0, Number(options.startIndex) || 0),
+    photos.length - 1
+  );
+  let swiped = false;
+  const box = document.createElement('div');
+  box.id = 'image-lightbox';
+  box.className = 'image-lightbox';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.setAttribute('aria-label', title);
+  box.innerHTML = `
+    <div class="lightbox-bar">
+      <span class="lightbox-title"></span>
+      <span class="lightbox-counter" aria-live="polite"></span>
+      <div class="lightbox-actions">
+        <button type="button" class="lightbox-btn" data-lb-download title="Descargar esta foto" aria-label="Descargar esta foto">
+          <span aria-hidden="true">&#11015;</span><span class="lightbox-btn-text">Descargar</span>
+        </button>
+        ${photos.length > 1 ? `<button type="button" class="lightbox-btn" data-lb-download-all title="Descargar todas las fotos" aria-label="Descargar todas las fotos">
+          <span aria-hidden="true">&#128229;</span><span class="lightbox-btn-text">Todas</span>
+        </button>` : ''}
+        <button type="button" class="icon-btn" data-lb-close title="Cerrar (Esc)" aria-label="Cerrar">&times;</button>
+      </div>
+    </div>
+    <div class="lightbox-stage">
+      <button type="button" class="lightbox-nav lightbox-prev" data-lb-prev title="Anterior" aria-label="Foto anterior">&#8249;</button>
+      <img class="lightbox-photo" alt="">
+      <button type="button" class="lightbox-nav lightbox-next" data-lb-next title="Siguiente" aria-label="Foto siguiente">&#8250;</button>
+    </div>
+    <div class="lightbox-thumbs"></div>
+  `;
+  document.body.appendChild(box);
+
+  const imgEl = box.querySelector('.lightbox-photo');
+  const counterEl = box.querySelector('.lightbox-counter');
+  const titleEl = box.querySelector('.lightbox-title');
+  const thumbsEl = box.querySelector('.lightbox-thumbs');
+  const stageEl = box.querySelector('.lightbox-stage');
+
+  function render() {
+    const src = window.AppConfig.resolveUrl(photos[index]);
+    imgEl.src = src;
+    imgEl.alt = `${title} — foto ${index + 1}`;
+    counterEl.textContent = `${index + 1} / ${photos.length}`;
+    titleEl.textContent = title;
+    const single = photos.length < 2;
+    box.querySelector('.lightbox-prev').style.display = single ? 'none' : '';
+    box.querySelector('.lightbox-next').style.display = single ? 'none' : '';
+    box.querySelectorAll('.lightbox-thumb').forEach((t, i) => {
+      t.classList.toggle('is-active', i === index);
+    });
+    // Centra la miniatura activa cuando hay varias.
+    const active = thumbsEl.querySelector('.lightbox-thumb.is-active');
+    if (active && thumbsEl.scrollWidth > thumbsEl.clientWidth) {
+      thumbsEl.scrollLeft = active.offsetLeft - (thumbsEl.clientWidth - active.clientWidth) / 2;
+    }
+    // Precarga anterior/siguiente para que el cambio se sienta instantáneo.
+    if (!single) {
+      [-1, 1].forEach((delta) => {
+        const preload = new Image();
+        preload.src = window.AppConfig.resolveUrl(photos[(index + delta + photos.length) % photos.length]);
+      });
+    }
+  }
+
+  function go(delta) {
+    index = (index + delta + photos.length) % photos.length;
+    render();
+  }
+
+  // Miniaturas: navegación directa a cualquier foto sin abrir otra pestaña.
+  if (photos.length > 1) {
+    thumbsEl.innerHTML = photos
+      .map((p, i) => `<button type="button" class="lightbox-thumb" data-lb-index="${i}" title="Foto ${i + 1}"><img src="${window.AppConfig.resolveUrl(p)}" alt="" loading="lazy"></button>`)
+      .join('');
+    thumbsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-lb-index]');
+      if (!btn) return;
+      index = Number(btn.dataset.lbIndex);
+      render();
+    });
+  } else {
+    thumbsEl.remove();
+  }
+
+  // Cualquier clic que NO sea un control cierra el visor (incluido pulsar la
+  // foto). Antes solo cerraban la "×", "Esc" o el fondo vacío: al tocar la
+  // imagen el asesor se quedaba atrapado y tenía que cerrar la pestaña.
+  box.addEventListener('click', (e) => {
+    if (swiped) { swiped = false; return; }
+    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index], [data-lb-download], [data-lb-download-all]')) return;
+    closeLightbox();
+  });
+  box.querySelector('[data-lb-close]').addEventListener('click', closeLightbox);
+  box.querySelector('[data-lb-prev]').addEventListener('click', () => go(-1));
+  box.querySelector('[data-lb-next]').addEventListener('click', () => go(1));
+
+  const downloadBtn = box.querySelector('[data-lb-download]');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+      downloadImage(
+        photos[index],
+        imageFileName(photos[index], index, title.replace(/^Fotos? — /, ''))
+      );
+    });
+  }
+  const downloadAllBtn = box.querySelector('[data-lb-download-all]');
+  if (downloadAllBtn) {
+    downloadAllBtn.addEventListener('click', () => {
+      downloadImages(photos, title.replace(/^Fotos? — /, ''));
+    });
+  }
+
+  // Gestos táctiles: deslizar a izquierda/derecha cambia de foto en el celular.
+  let touchX = null;
+  let touchY = null;
+  stageEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }, { passive: true });
+  stageEl.addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const touch = e.changedTouches && e.changedTouches[0];
+    const dx = touch ? touch.clientX - touchX : 0;
+    const dy = touch ? touch.clientY - touchY : 0;
+    touchX = null;
+    touchY = null;
+    if (photos.length > 1 && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+      swiped = true;
+      go(dx < 0 ? 1 : -1);
+      // Evita que el mismo gesto se interprete como toque y cierre el visor.
+      if (e.cancelable) e.preventDefault();
+      setTimeout(() => { swiped = false; }, 700);
+    }
+  }, { passive: false });
+  stageEl.addEventListener('touchcancel', () => { touchX = null; touchY = null; }, { passive: true });
+
+  // Navegación con teclado: no se usa el diálogo modal general para no
+  // provocar scrolls ni recargas al cambiar de imagen.
+  function onKey(e) {
+    if (!document.getElementById('image-lightbox')) {
+      document.removeEventListener('keydown', onKey);
+      return;
+    }
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') go(-1);
+    else if (e.key === 'ArrowRight') go(1);
+  }
+  box._onKey = onKey;
+  document.addEventListener('keydown', onKey);
+  render();
+  return { close: closeLightbox };
+}
+
+  async function showActivityHistory(entityType, entityId, title = 'Centro de actividad') {
+    openModal({ title, body: '<div class="loading">Cargando historial...</div>' });
+    try {
+      const result = await window.API.activity.list({ entityType, entityId, limit: 50 });
+      const items = result.data || [];
+      const body = document.querySelector('#modal-overlay [data-body]');
+      if (!body) return;
+      if (!items.length) {
+        body.innerHTML = '<p class="text-muted">Sin actividad registrada.</p>';
+        return;
+      }
+      body.innerHTML = `
+        <ul class="timeline">
+          ${items.map((a) => `
+            <li>
+              <strong>${escapeHtml(String(a.action || '').replace(/_/g, ' '))}</strong>
+              <div class="text-muted" style="font-size:12px;">${Format.dateTime(a.createdAt)} · ${a.user ? escapeHtml(a.user.name) : ''}</div>
+              <div style="font-size:13px;">${escapeHtml(a.message || '')}</div>
+            </li>`).join('')}
+        </ul>
+      `;
+    } catch (error) {
+      const body = document.querySelector('#modal-overlay [data-body]');
+      if (body) body.innerHTML = errorAlert(error.message);
+    }
+  }
+
+  // Impresión / exportación a PDF SIN salir de la aplicación. Antes se abría
+  // una pestaña con window.open('', '_blank'): en la PWA móvil eso dejaba al
+  // usuario atrapado en un visor sin botón "atrás". Ahora el documento se
+  // renderiza en un iframe oculto de la MISMA página y se lanza print() ahí,
+  // de modo que el teléfono ofrece "Guardar como PDF" sin abandonar la app.
+  function printHtmlDocument(html, onDone) {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+      document.body.appendChild(iframe);
+
+      let printed = false;
+      const cleanup = () => {
+        try { iframe.remove(); } catch (e) { /* ignore */ }
+        if (typeof onDone === 'function') onDone();
+      };
+      const trigger = () => {
+        if (printed) return;
+        printed = true;
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (e) { /* ignore */ }
+        // El diálogo es bloqueante en la mayoría de navegadores; se limpia con
+        // margen por si el usuario tarda en elegir destino (Guardar como PDF).
+        setTimeout(cleanup, 1500);
+      };
+
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      // Espera a que carguen las imágenes (p.ej. la firma) antes de imprimir.
+      const images = Array.from(doc.images || []);
+      if (!images.length) {
+        setTimeout(trigger, 200);
+        return iframe;
+      }
+      let pending = images.length;
+      const oneDone = () => {
+        pending -= 1;
+        if (pending <= 0) setTimeout(trigger, 100);
+      };
+      images.forEach((img) => {
+        if (img.complete) oneDone();
+        else {
+          img.addEventListener('load', oneDone);
+          img.addEventListener('error', oneDone);
+        }
+      });
+      // Red de seguridad: no esperar más de 2.5s aunque falte alguna imagen.
+      setTimeout(trigger, 2500);
+      return iframe;
+    } catch (e) {
+      toast('No se pudo generar la vista previa para imprimir.', 'error');
+      return null;
+    }
+  }
+
+  // Delegación global (debe registrarse ANTES del return para ejecutarse):
+  // muestra/oculta el campo "especificar" de CUALQUIER select —tenga o no
+  // data-ui-otros— sin depender de atributos onchange inline. Escucha change
+  // e input para cubrir también navegadores/selects móviles.
+  const delegateOtros = (event) => {
+    const target = event.target;
+    if (target && target.tagName === 'SELECT') toggleOtros(target);
+  };
+  document.addEventListener('change', delegateOtros);
+  document.addEventListener('input', delegateOtros);
+
+  // Select con BUSCADOR (autocompletado) para listas largas de registros
+  // (clientes, propiedades…). Es un <select> real (compatible con
+  // UI.collectForm y con el envío de formularios) precedido por un buscador que
+  // filtra las opciones por texto, sin tener que desplazarse por todo el listado.
+  //
+  // Dos modos:
+  //  · LOCAL (por defecto): filtra las <option> ya cargadas.
+  //  · REMOTO (`source`): NO se carga la lista al abrir. El asesor ESCRIBE y se
+  //    consulta al servidor (p. ej. /clients/options?q=…), mostrando solo las
+  //    coincidencias. Ideal para carteras grandes: la lista nunca se despliega
+  //    completa y siempre aparece la leyenda que indica cómo filtrar.
+  //
+  // Uso:
+  //   ${UI.searchSelect('owner', 'Propietario', { options, value, placeholder })}
+  //   ${UI.searchSelect('owner', 'Propietario', { source: { url: '/clients/options', label: … } })}
+  //   UI.wireSearchSelects(form);   // una sola vez tras montar el modal
+  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false, source = null } = {}) {
+    const id = `fld-${name}`;
+    const searchId = `search-${id}`;
+    const valStr = String(value == null ? '' : value);
+    const remote = source && typeof source === 'object';
+    const opts = options.map((o) => {
+      const optValue = typeof o === 'object' ? o.value : o;
+      const optLabel = typeof o === 'object' ? o.label : o;
+      const selected = valStr === String(optValue) ? ' selected' : '';
+      return `<option value="${escapeHtml(optValue)}"${selected} data-search-text="${escapeHtml(String(optLabel).toLowerCase())}">${escapeHtml(optLabel)}</option>`;
+    }).join('');
+    // Leyenda clara de cómo filtrar (se muestra siempre, para que el asesor
+    // sepa que puede escribir y no que "no hay clientes").
+    const legendText = remote
+      ? (source.legend || 'Escribe un nombre, teléfono o correo para buscar y filtrar.')
+      : 'Escribe para filtrar la lista.';
+    const searchPlaceholder = placeholder && placeholder !== 'Buscar…'
+      ? placeholder
+      : 'Escribe para buscar…';
+    return `
+      <div class="form-field${full ? ' form-field-full' : ''}" data-search-select${remote ? ' data-search-remote' : ''}${remote ? ` data-search-url="${escapeHtml(source.url || '')}"` : ''}${remote ? ` data-search-param="${escapeHtml(source.param || 'q')}"` : ''}${remote ? ` data-search-limit="${escapeHtml(String(source.limit || 30))}"` : ''}${remote ? ` data-search-value-field="${escapeHtml(source.valueField || '_id')}"` : ''}${remote ? ` data-search-label-field="${escapeHtml(source.labelField || 'nombre')}"` : ''}${remote ? ` data-search-subtitle-field="${escapeHtml(source.subtitleField || 'telefono')}"` : ''}>
+        <label class="form-label" for="${id}">${escapeHtml(label)}${required ? ' *' : ''}</label>
+        <input class="form-control form-control-search" id="${searchId}" type="search" placeholder="${escapeHtml(searchPlaceholder)}" autocomplete="off">
+        <div class="form-legend" data-search-legend>${escapeHtml(legendText)}</div>
+        <select class="form-control" id="${id}" name="${name}" ${required ? 'required' : ''}>${opts}</select>
+        ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
+      </div>`;
+  }
+
+  // Conecta los buscadores de los searchSelect presentes en `root`. En modo
+  // local filtra las <option> por texto; en modo remoto consulta al servidor
+  // conforme se escribe (con debounce) y reemplaza las opciones con las
+  // coincidencias. Siempre conserva la selección actual.
+  function wireSearchSelects(root) {
+    const scope = root || document;
+    scope.querySelectorAll('[data-search-select]').forEach((wrap) => {
+      const searchEl = wrap.querySelector('input[type="search"]');
+      const select = wrap.querySelector('select');
+      const legendEl = wrap.querySelector('[data-search-legend]');
+      if (!searchEl || !select || searchEl.dataset.wired) return;
+      searchEl.dataset.wired = '1';
+
+      // Modo REMOTO: consulta al servidor mientras se escribe.
+      if (wrap.dataset.searchRemote === '1' || wrap.hasAttribute('data-search-remote')) {
+        const url = wrap.dataset.searchUrl;
+        const param = wrap.dataset.searchParam || 'q';
+        const limit = Number(wrap.dataset.searchLimit) || 30;
+        const valueField = wrap.dataset.searchValueField || '_id';
+        const labelField = wrap.dataset.searchLabelField || 'nombre';
+        const subtitleField = wrap.dataset.searchSubtitleField || 'telefono';
+        const emptyLabel = select.dataset.emptyLabel || (select.options[0] ? select.options[0].textContent : '—');
+        const emptyValue = select.dataset.emptyValue != null ? select.dataset.emptyValue : (select.options[0] ? select.options[0].value : '');
+
+        const setLegend = (text, isError) => {
+          if (!legendEl) return;
+          legendEl.textContent = text;
+          // El texto completo también queda en el title: en la barra de
+          // filtros la leyenda se recorta y así el asesor puede leerla entera.
+          legendEl.title = text;
+          legendEl.style.color = isError ? '#b91c1c' : '';
+        };
+
+        // Conserva el valor elegido antes de reemplazar las opciones: si el
+        // asesor ya había seleccionado un cliente (o al EDITAR, el cliente
+        // guardado), no debe perderse al refrescar los resultados.
+        const stashCurrent = () => {
+          const cur = select.value;
+          if (!cur) return null;
+          const opt = Array.from(select.options).find((o) => o.value === cur);
+          return opt ? { value: opt.value, text: opt.textContent } : { value: cur, text: cur };
+        };
+
+        let timer = null;
+        let lastQuery = null;
+        let seq = 0;
+
+        const renderOptions = (items) => {
+          const keep = stashCurrent();
+          const keepIsSpecial = keep && (keep.value === '__externo__' || keep.value === emptyValue);
+          // Se conserva la opción vacía ("— Sin propietario —") al inicio.
+          const head = `<option value="${escapeHtml(emptyValue)}">${escapeHtml(emptyLabel)}</option>`;
+          // La opción especial (p. ej. "Otro (propietario externo)") viaja
+          // siempre, para que siga disponible al buscar.
+          const special = Array.from(select.options)
+            .filter((o) => o.value === '__externo__')
+            .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</option>`)
+            .join('');
+          const body = items.map((it) => {
+            const v = it && typeof it === 'object' ? (it[valueField] || it._id || '') : it;
+            const l = it && typeof it === 'object'
+              ? (it[labelField] || it.nombre || it.name || it.label || '')
+              : String(it);
+            const sub = it && typeof it === 'object' ? (it[subtitleField] || it.telefono || it.phone || '') : '';
+            const text = sub ? `${l} — ${sub}` : String(l);
+            return `<option value="${escapeHtml(v)}" data-search-text="${escapeHtml(text.toLowerCase())}">${escapeHtml(text)}</option>`;
+          }).join('');
+          let extra = '';
+          // Si el valor actual no viene en los resultados, se reinyecta para
+          // no perderlo al buscar otra cosa.
+          if (keep && !keepIsSpecial) {
+            const inResults = items.some((it) => {
+              const v = it && typeof it === 'object' ? (it[valueField] || it._id || '') : it;
+              return String(v) === String(keep.value);
+            });
+            if (!inResults) {
+              extra = `<option value="${escapeHtml(keep.value)}" selected>${escapeHtml(keep.text)}</option>`;
+            }
+          }
+          select.innerHTML = head + extra + special + body;
+          select.value = keep ? keep.value : emptyValue;
+        };
+
+        const runSearch = async () => {
+          const term = searchEl.value.trim();
+          if (term === lastQuery) return;
+          lastQuery = term;
+          const mySeq = ++seq;
+          setLegend('Buscando…');
+          try {
+            const res = await ApiClient.get(url, { [param]: term, limit });
+            if (mySeq !== seq) return; // llegó una respuesta vieja: se ignora
+            // `ApiClient` ya "desenvuelve" la respuesta: normalmente llega el
+            // arreglo directo; se toleran también las formas {data:[…]}.
+            const items = Array.isArray(res)
+              ? res
+              : ((res && (res.data || res.items)) || []);
+            renderOptions(items);
+            setLegend(
+              items.length
+                ? `${items.length} ${items.length === 1 ? 'resultado' : 'resultados'} para "${term || 'todos'}". Sigue escribiendo para afinar.`
+                : `Sin resultados para "${term}". Escribe otro nombre, teléfono o correo.`
+            );
+          } catch (error) {
+            if (mySeq !== seq) return;
+            setLegend('No se pudo buscar. Revisa tu conexión e intenta de nuevo.', true);
+          }
+        };
+
+        searchEl.addEventListener('input', () => {
+          clearTimeout(timer);
+          timer = setTimeout(runSearch, 300);
+        });
+        // Si ya venía un valor seleccionado (edición), se respeta tal cual: no
+        // se dispara búsqueda hasta que el asesor escriba.
+        return;
+      }
+
+      // Modo LOCAL: filtra las opciones ya cargadas.
+      searchEl.addEventListener('input', () => {
+        const term = searchEl.value.trim().toLowerCase();
+        Array.from(select.options).forEach((opt) => {
+          // La opción vacía ("— Sin propietario —") siempre visible.
+          const show = !term || opt.value === '' || (opt.dataset.searchText || opt.textContent.toLowerCase()).includes(term);
+          opt.hidden = !show;
+          opt.style.display = show ? '' : 'none';
+        });
+      });
+    });
+  }
+
+  // Fuentes de búsqueda remota estándar para los selectores de clientes,
+  // propiedades y negocios. Centralizarlas evita repetir la misma configuración
+  // (URL + campos + leyenda) en cada módulo y garantiza que TODOS los selectores
+  // del CRM se comporten igual: se escribe y se filtra contra el servidor.
+  const remoteSources = {
+    client: {
+      url: '/clients/options',
+      valueField: '_id',
+      labelField: 'nombre',
+      subtitleField: 'telefono',
+      limit: 30,
+      legend: 'Escribe un nombre o teléfono y la lista se filtra.',
+    },
+    property: {
+      url: '/properties/options',
+      valueField: '_id',
+      labelField: 'label',
+      subtitleField: 'subtitle',
+      limit: 30,
+      legend: 'Escribe calle, colonia, ciudad, folio o el nombre completo y la lista se filtra.',
+    },
+    business: {
+      url: '/businesses/options',
+      valueField: '_id',
+      labelField: 'label',
+      subtitleField: 'subtitle',
+      limit: 30,
+      legend: 'Escribe el nombre del negocio y la lista se filtra.',
+    },
+  };
+
+  return {
+    escapeHtml,
+    propertyOptionLabel,
+    toast,
+    openModal,
+    closeModal,
+    confirm,
+    badge,
+    statusBadge,
+    pagination,
+    errorAlert,
+    field,
+    searchSelect,
+    wireSearchSelects,
+    remoteSources,
+    collectForm,
+    toggleOtros,
+    syncOtros,
+    otrosText,
+    progressBar,
+    showImages,
+    downloadImage,
+    downloadImages,
+    imageFileName,
+    closeLightbox,
+    showActivityHistory,
+    printHtmlDocument,
+  };
+})();
+
+// Expone el objeto UI en window también para manejadores legacy y código que
+// lee window.UI (public-common, etc.).
+window.UI = UI;

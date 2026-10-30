@@ -1,0 +1,570 @@
+'use strict';
+
+// Envoltura segura de la caché: si por alguna razón la página no cargó
+// js/utils/cache.js, se ejecuta la petición directamente sin cachear (mejor
+// pecar de más peticiones que romper la pantalla por un ReferenceError).
+const Cache = window.AppCache || {
+  wrap: (key, ttl, factory) => Promise.resolve().then(factory),
+  invalidate: () => {},
+  clear: () => {},
+};
+
+window.API = {
+  // Descarga un CSV desde el backend y dispara la descarga en el navegador.
+  downloadCsv: async (path, filename, params) => {
+    const blob = await ApiClient.getBlob(path, params);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
+  auth: {
+    login: (body) => ApiClient.post('/auth/login', body),
+    me: () => ApiClient.get('/auth/me'),
+    updateMe: (body) => ApiClient.put('/auth/me', body),
+    logout: () => ApiClient.post('/auth/logout'),
+    checkRegisterKey: (body) => ApiClient.post('/auth/check-register-key', body),
+    google: (body) => ApiClient.post('/auth/google', body),
+    completeOnboarding: () => ApiClient.patch('/auth/onboarding-complete'),
+    changePassword: (body) => ApiClient.post('/auth/change-password', body),
+    forgotPassword: (body) => ApiClient.post('/auth/forgot-password', body),
+  },
+
+  userRequests: {
+    create: (body) => ApiClient.post('/user-requests', body),
+    list: (params) => ApiClient.get('/user-requests', params),
+    handle: (id, body) => ApiClient.patch(`/user-requests/${id}`, body),
+    remove: (id) => ApiClient.remove(`/user-requests/${id}`),
+  },
+
+  sessions: {
+    list: (params) => ApiClient.get('/sessions', params),
+    revoke: (id) => ApiClient.remove(`/sessions/${id}`),
+    logoutAll: () => ApiClient.post('/sessions/logout-all'),
+    revokeUser: (userId) => ApiClient.remove(`/sessions/user/${userId}`),
+  },
+
+  settings: {
+    // Catálogos de configuración: cambian poco, se cachean 2 min en memoria.
+    public: () => Cache.wrap('settings:public', 120000, () => ApiClient.get('/settings/public')),
+    getRoleKey: () => ApiClient.get('/settings/role-key'),
+    setRoleKey: (body) => ApiClient.put('/settings/role-key', body),
+    setGoogleClientId: (body) => ApiClient.put('/settings/google-client-id', body),
+    setWhatsappNumber: (body) => ApiClient.put('/settings/whatsapp-number', body),
+    landing: (body) => ApiClient.put('/settings/landing', body),
+  },
+
+  users: {
+    list: (params) => ApiClient.get('/users', params),
+    create: (body) => ApiClient.post('/users', body),
+    update: (id, body) => ApiClient.put(`/users/${id}`, body),
+    remove: (id) => ApiClient.remove(`/users/${id}`),
+  },
+
+  roles: {
+    list: () => ApiClient.get('/users/roles'),
+    create: (body) => ApiClient.post('/users/roles', body),
+    update: (id, body) => ApiClient.put(`/users/roles/${id}`, body),
+    remove: (id) => ApiClient.remove(`/users/roles/${id}`),
+  },
+
+  permissions: {
+    list: () => ApiClient.get('/users/permissions'),
+  },
+
+  clients: {
+    list: (params) => ApiClient.get('/clients', params),
+    // Catálogo ligero (id + nombre) para selects con búsqueda, cacheado 60s.
+    options: (params) => Cache.wrap(
+      `clients:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/clients/options', params)
+    ),
+    create: (body) => { Cache.invalidate('clients'); return ApiClient.post('/clients', body); },
+    update: (id, body) => { Cache.invalidate('clients'); return ApiClient.put(`/clients/${id}`, body); },
+    remove: (id) => { Cache.invalidate('clients'); return ApiClient.remove(`/clients/${id}`); },
+    changeEtapa: (id, body) => ApiClient.post(`/clients/${id}/cambiar-etapa`, body),
+    registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
+    historial: (id) => ApiClient.get(`/clients/${id}/historial`),
+    historialCambios: (id) => ApiClient.get(`/clients/${id}/historial-cambios`),
+    conteoEtapas: () => ApiClient.get('/clients/conteo-etapas'),
+    exportCsv: () => API.downloadCsv('/clients/export', 'clientes.csv'),
+  },
+
+  properties: {
+    list: (params) => ApiClient.get('/properties', params),
+    // Catálogo ligero (id + folio/ubicación) para selects con búsqueda remota,
+    // cacheado 60s. Evita desplegar toda la cartera en cada selector.
+    options: (params) => Cache.wrap(
+      `properties:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/properties/options', params)
+    ),
+    get: (id) => ApiClient.get(`/properties/${id}`),
+    create: (body) => ApiClient.post('/properties', body),
+    update: (id, body) => ApiClient.put(`/properties/${id}`, body),
+    remove: (id) => ApiClient.remove(`/properties/${id}`),
+    publish: (id, body) => ApiClient.patch(`/properties/${id}/publish`, body),
+    market: (id) => ApiClient.get(`/properties/${id}/market`),
+    normalizeFolios: () => ApiClient.post('/properties/normalize-folios'),
+    // Sube una o varias fotos a una propiedad (multipart, campo "photos").
+    uploadPhotos: (id, files) => {
+      const form = new FormData();
+      Array.from(files || []).forEach((file) => form.append('photos', file));
+      return ApiClient.postMultipart(`/properties/${id}/photos`, form);
+    },
+    // Sube fotos en LOTES (por defecto 4 por petición) con reporte de progreso.
+    // Enviar 12 fotos de golpe rebasa el límite de multer (10 archivos) y hacer
+    // una petición por foto tarda demasiado y se "cuelga" en el celular. Los
+    // lotes pequeños mantienen cada petición corta y permiten reintentar solo
+    // el lote que falló, sin perder las fotos que ya entraron.
+    //   onProgress(subidos, total)
+    // Devuelve { added, failed, photos }.
+    uploadPhotosBatch: async (id, files, opts = {}) => {
+      const list = Array.from(files || []);
+      const chunkSize = Math.max(1, Math.min(8, Number(opts.chunkSize) || 4));
+      const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+      const retries = Number(opts.retries == null ? 1 : opts.retries);
+      let added = 0;
+      let failed = 0;
+      let photos = null;
+      const total = list.length;
+      onProgress(0, total);
+      for (let i = 0; i < total; i += chunkSize) {
+        const chunk = list.slice(i, i + chunkSize);
+        let attempt = 0;
+        let ok = false;
+        while (attempt <= retries && !ok) {
+          try {
+            const res = await window.API.properties.uploadPhotos(id, chunk);
+            photos = (res && res.data && res.data.photos) || photos;
+            added += chunk.length;
+            ok = true;
+          } catch (error) {
+            attempt += 1;
+            if (attempt > retries) {
+              failed += chunk.length;
+              console.error('[Fotos] Lote rechazado:', error && error.message);
+            } else {
+              // Pequeña pausa antes de reintentar (red móvil inestable).
+              await new Promise((r) => setTimeout(r, 600 * attempt));
+            }
+          }
+        }
+        onProgress(added, total);
+      }
+      return { added, failed, photos };
+    },
+  },
+
+  inventory: {
+    list: (params) => ApiClient.get('/inventory', params),
+    general: (params) => ApiClient.get('/inventory/general', params),
+    create: (body) => ApiClient.post('/inventory', body),
+    uploadProperty: (body) => ApiClient.post('/inventory/upload', body),
+    update: (id, body) => ApiClient.put(`/inventory/${id}`, body),
+    remove: (id) => ApiClient.remove(`/inventory/${id}`),
+    publish: (id, body) => ApiClient.patch(`/inventory/${id}/publish`, body),
+    public: (params) => ApiClient.get('/inventory/public', params),
+  },
+
+  businesses: {
+    list: (params) => ApiClient.get('/businesses', params),
+    // Catálogo ligero (id + nombre/etapa) para selects con búsqueda remota.
+    options: (params) => Cache.wrap(
+      `businesses:options:${JSON.stringify(params || {})}`,
+      60000,
+      () => ApiClient.get('/businesses/options', params)
+    ),
+    stages: () => ApiClient.get('/businesses/stages'),
+    byProperty: (propertyId) => ApiClient.get(`/businesses/property/${propertyId}`),
+    create: (body) => ApiClient.post('/businesses', body),
+    update: (id, body) => ApiClient.put(`/businesses/${id}`, body),
+    remove: (id) => ApiClient.remove(`/businesses/${id}`),
+    stage: (id, body) => ApiClient.patch(`/businesses/${id}/stage`, body),
+    history: (id) => ApiClient.get(`/businesses/${id}/history`),
+
+    // Bitácora / notas visibles del negocio.
+    notes: {
+      list: (id) => ApiClient.get(`/businesses/${id}/notes`),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+      remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+    },
+    addNote: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+    removeNote: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+
+    // Checklist operativo del negocio.
+    checklist: {
+      list: (id) => ApiClient.get(`/businesses/${id}`).then((res) => (
+        (res && res.checklist)
+        || (res && res.data && res.data.checklist)
+        || []
+      )),
+      create: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
+      update: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
+      remove: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
+    },
+    addChecklistItem: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
+    updateChecklistItem: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
+    removeChecklistItem: (id, itemId) => ApiClient.remove(`/businesses/${id}/checklist/${itemId}`),
+
+    // Documentos y fotos ligeras del negocio (multipart, campo "file").
+    documents: {
+      list: (id) => ApiClient.get(`/businesses/${id}/documents`),
+      create: (id, fileOrForm, name) => {
+        let form = fileOrForm;
+        if (!(form instanceof FormData)) {
+          form = new FormData();
+          if (fileOrForm) form.append('file', fileOrForm);
+          if (name) form.append('name', name);
+        }
+        return ApiClient.postMultipart(`/businesses/${id}/documents`, form);
+      },
+      remove: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
+    },
+    uploadDocument: (id, file, name) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (name) form.append('name', name);
+      return ApiClient.postMultipart(`/businesses/${id}/documents`, form);
+    },
+    removeDocument: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
+  },
+
+  appointments: {
+    list: (params) => ApiClient.get('/appointments', params),
+    create: (body) => ApiClient.post('/appointments', body),
+    update: (id, body) => ApiClient.put(`/appointments/${id}`, body),
+    remove: (id) => ApiClient.remove(`/appointments/${id}`),
+  },
+
+  tasks: {
+    list: (params) => ApiClient.get('/tasks', params),
+    create: (body) => ApiClient.post('/tasks', body),
+    update: (id, body) => ApiClient.put(`/tasks/${id}`, body),
+    remove: (id) => ApiClient.remove(`/tasks/${id}`),
+    status: (id, body) => ApiClient.patch(`/tasks/${id}/status`, body),
+  },
+
+  goals: {
+    list: (params) => ApiClient.get('/goals', params),
+    create: (body) => ApiClient.post('/goals', body),
+    update: (id, body) => ApiClient.put(`/goals/${id}`, body),
+    remove: (id) => ApiClient.remove(`/goals/${id}`),
+  },
+
+  expenses: {
+    list: (params) => ApiClient.get('/expenses', params),
+    create: (body) => ApiClient.post('/expenses', body),
+    update: (id, body) => ApiClient.put(`/expenses/${id}`, body),
+    remove: (id) => ApiClient.remove(`/expenses/${id}`),
+    exportCsv: () => API.downloadCsv('/expenses/export', 'gastos.csv'),
+  },
+
+  dashboard: {
+    summary: () => ApiClient.get('/dashboard/summary'),
+    userReport: (userId) => ApiClient.get(`/dashboard/user/${userId}`),
+    executive: () => ApiClient.get('/dashboard/executive'),
+  },
+
+  reminders: {
+    upcoming: () => ApiClient.get('/reminders'),
+  },
+
+  public: {
+    properties: (params) => ApiClient.get('/public/properties', params),
+    property: (id) => ApiClient.get(`/public/properties/${id}`),
+    asesores: (params) => ApiClient.get('/public/asesores', params),
+    asesor: (id) => ApiClient.get(`/public/asesores/${id}`),
+    asesorProperties: (params) => ApiClient.get('/public/propiedades', params),
+    newsletterSubscribe: (body) => ApiClient.post('/public/newsletter', body),
+    assistant: (body) => ApiClient.post('/public/assistant', body),
+    // Cualquier visitante puede agendar una cita sobre una propiedad (sin login).
+    createAppointment: (body) => ApiClient.post('/public/appointments', body),
+  },
+
+  prospecting: {
+    list: (params) => ApiClient.get('/prospecting', params),
+    create: (body) => ApiClient.post('/prospecting', body),
+    update: (id, body) => ApiClient.put(`/prospecting/${id}`, body),
+    remove: (id) => ApiClient.remove(`/prospecting/${id}`),
+    summary: (params) => ApiClient.get('/prospecting/summary', params),
+  },
+
+  calendar: {
+    // Eventos agregados (citas+tareas+negocios+metas+prospección) en un rango.
+    events: (params) => ApiClient.get('/calendar/events', params),
+    // Estado de la integración con Google Calendar.
+    status: () => ApiClient.get('/calendar/status'),
+    // URL de autorización OAuth de Google.
+    authUrl: () => ApiClient.get('/calendar/google/auth-url'),
+    disconnect: () => ApiClient.post('/calendar/google/disconnect'),
+    toggle: (body) => ApiClient.post('/calendar/google/toggle', body),
+    sync: (body) => ApiClient.post('/calendar/google/sync', body),
+  },
+
+  // Reuniones de equipo publicadas por administración (visibles para todos).
+  meetings: {
+    list: (params) => ApiClient.get('/meetings', params),
+    get: (id) => ApiClient.get(`/meetings/${id}`),
+    create: (body) => ApiClient.post('/meetings', body),
+    update: (id, body) => ApiClient.put(`/meetings/${id}`, body),
+    remove: (id) => ApiClient.remove(`/meetings/${id}`),
+  },
+
+  documents: {
+    list: (params) => ApiClient.get('/documents', params),
+    create: (body) => ApiClient.post('/documents', body),
+    update: (id, body) => ApiClient.put(`/documents/${id}`, body),
+    remove: (id) => ApiClient.remove(`/documents/${id}`),
+
+    // Sube un archivo y (opcionalmente) crea el registro del documento en un
+    // solo paso. `meta` = { name, type, status, client, property, business, observations }.
+    upload: (file, meta = {}) => {
+      const form = new FormData();
+      form.append('file', file);
+      Object.entries(meta).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          form.append(key, value);
+        }
+      });
+      return ApiClient.postMultipart('/documents/upload', form);
+    },
+  },
+
+  formatos: {
+    listarPlantillas: () => ApiClient.get('/formatos/plantillas'),
+    obtenerCampos: (id) => ApiClient.get(`/formatos/plantillas/${encodeURIComponent(id)}/campos`),
+    generar: (plantillaId, data) => ApiClient.postBlob(`/formatos/generar/${encodeURIComponent(plantillaId)}`, data),
+    descargar: (id) => {
+      const token = localStorage.getItem('crm_token');
+      return fetch(`${window.AppConfig.API_URL}/formatos/plantillas/${encodeURIComponent(id)}/descargar`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then((r) => {
+        if (!r.ok) throw new Error('Error al descargar');
+        return r.blob();
+      });
+    },
+  },
+
+  notifications: {
+    list: (params) => ApiClient.get('/notifications', params),
+    unreadCount: () => ApiClient.get('/notifications/unread-count'),
+    markRead: (id) => ApiClient.patch(`/notifications/${id}/read`),
+    // Marca varias como leídas en una sola petición (al abrir el módulo).
+    markReadMany: (ids) => ApiClient.post('/notifications/mark-read', { ids }),
+    markAllRead: () => ApiClient.post('/notifications/mark-all-read'),
+    generate: () => ApiClient.post('/notifications/generate'),
+    // Borra todo el historial de avisos de mi cuenta.
+    clearAll: () => ApiClient.remove('/notifications/all'),
+  },
+
+  activity: {
+    list: (params) => ApiClient.get('/activity', params),
+    // Borra todo el historial de actividad de mi cuenta.
+    clearAll: () => ApiClient.remove('/activity/all'),
+    exportCsv: (params) => API.downloadCsv('/activity/export', 'actividad.csv', params),
+  },
+
+  interactions: {
+    list: (params) => ApiClient.get('/interactions', params),
+    create: (body) => ApiClient.post('/interactions', body),
+    remove: (id) => ApiClient.remove(`/interactions/${id}`),
+  },
+
+  reports: {
+    management: (params) => ApiClient.get('/reports/management', params),
+    managementCsv: (params) => API.downloadCsv('/reports/management/export', 'reporte-gerencia.csv', params),
+  },
+
+  assistant: {
+    ask: (payload) => ApiClient.post('/assistant', payload),
+  },
+
+  chats: {
+    list: (params) => ApiClient.get('/chats', params),
+    general: () => ApiClient.get('/chats/general'),
+    soporte: () => ApiClient.get('/chats/soporte'),
+    get: (id) => ApiClient.get(`/chats/${id}`),
+    create: (body) => ApiClient.post('/chats', body),
+    sendMessage: (id, body) => ApiClient.post(`/chats/${id}/messages`, body),
+    // Borra TODO el historial de mensajes del chat.
+    clearMessages: (id) => ApiClient.remove(`/chats/${id}/messages`),
+    markRead: (id) => ApiClient.patch(`/chats/${id}/read`),
+    unreadCount: () => ApiClient.get('/chats/unread-count'),
+  },
+
+  announcements: {
+    list: () => ApiClient.get('/announcements'),
+    create: (body) => ApiClient.post('/announcements', body),
+    markRead: (id) => ApiClient.patch(`/announcements/${id}/read`),
+    remove: (id) => ApiClient.remove(`/announcements/${id}`),
+    // Borra TODOS los avisos del equipo (solo admin/gerencia).
+    clearAll: () => ApiClient.remove('/announcements/all'),
+  },
+
+  config: {
+    // Estado del mantenimiento (público) y configuración programada.
+    mantenimiento: () => ApiClient.get('/config/mantenimiento'),
+    setMantenimiento: (body) => ApiClient.post('/config/mantenimiento', body),
+    // Versión actual de la app + changelog (público). La usa el módulo de
+    // Actualizaciones y el aviso de "nueva versión disponible".
+    version: () => ApiClient.get('/config/version'),
+  },
+
+  soporte: {
+    // El panel de soporte usa su PROPIA sesión (soporte_token), independiente
+    // de la sesión normal del CRM (crm_token). Todas las llamadas se hacen
+    // con fetch directo + el token de soporte.
+    login: (body) =>
+      fetch(`${window.AppConfig.API_URL}/soporte/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'Error de soporte');
+        return data;
+      }),
+    logout: () => soporteJson('/soporte/auth/logout', { method: 'POST' }),
+    me: () => soporteJson('/soporte/auth/me'),
+
+    usuarios: (params) => soporteJson(`/soporte/usuarios${qs(params)}`),
+    roles: () => soporteJson('/soporte/roles'),
+    actualizarUsuario: (id, body) => soporteJson(`/soporte/usuarios/${id}`, { method: 'PUT', body }),
+    restablecerPassword: (id, body) => soporteJson(`/soporte/usuarios/${id}/restablecer-password`, { method: 'POST', body }),
+    eliminarUsuario: (id) => soporteJson(`/soporte/usuarios/${id}`, { method: 'DELETE' }),
+    actividadEquipo: (params) => soporteJson(`/soporte/actividad${qs(params)}`),
+    limpiarPush: () => soporteJson('/soporte/push/limpiar', { method: 'POST' }),
+
+    config: () => soporteJson('/soporte/config'),
+    guardarConfig: (body) => soporteJson('/soporte/config', { method: 'PUT', body }),
+
+    soporteConfig: () => soporteJson('/soporte/soporte-config'),
+    guardarSoporteConfig: (body) => soporteJson('/soporte/soporte-config', { method: 'PUT', body }),
+
+    mantenimiento: () => soporteJson('/soporte/mantenimiento'),
+    cambiarMantenimiento: (body) => soporteJson('/soporte/mantenimiento', { method: 'PUT', body }),
+
+    resumen: () => soporteJson('/soporte/resumen'),
+
+    sesiones: (params) => soporteJson(`/soporte/sesiones${qs(params)}`),
+    revocarSesion: (id) => soporteJson(`/soporte/sesiones/${id}`, { method: 'DELETE' }),
+    revocarSesionesUsuario: (id) => soporteJson(`/soporte/sesiones/usuario/${id}`, { method: 'DELETE' }),
+
+    anuncios: () => soporteJson('/soporte/anuncios'),
+    crearAnuncio: (body) => soporteJson('/soporte/anuncios', { method: 'POST', body }),
+    eliminarAnuncio: (id) => soporteJson(`/soporte/anuncios/${id}`, { method: 'DELETE' }),
+    solicitudesPassword: () => soporteJson('/soporte/anuncios/solicitudes-password'),
+
+    rolesPermisos: () => soporteJson('/soporte/roles-permisos'),
+
+    logs: (params) => soporteJson(`/soporte/logs${qs(params)}`),
+    logsErrores: (params) => soporteJson(`/soporte/logs/errors${qs(params)}`),
+
+    // Visor de logs en tiempo real (buffer de sistema/servidor).
+    logsSistema: (params) => soporteJson(`/soporte/logs/sistema${qs(params)}`),
+    limpiarLogsSistema: () => soporteJson('/soporte/logs/sistema', { method: 'DELETE' }),
+
+    respaldo: () => {
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/respaldo`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then(async (r) => {
+        if (r.status === 401) { localStorage.removeItem('soporte_token'); window.location.replace('index.html'); throw new Error('Sesión de soporte expirada.'); }
+        if (!r.ok) throw new Error('Error al generar el respaldo');
+        const blob = await r.blob();
+        return {
+          blob,
+          filename: (r.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/)?.[1] || 'respaldo.json',
+        };
+      });
+    },
+
+    plantillas: () => soporteJson('/soporte/plantillas'),
+    subirPlantilla: (file) => {
+      const form = new FormData();
+      form.append('plantilla', file);
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'Error al subir');
+        return data;
+      });
+    },
+    eliminarPlantilla: (archivo) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'DELETE' }),
+    renombrarPlantilla: (archivo, nuevoNombre) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'PATCH', body: { nuevoNombre } }),
+    descargarPlantilla: (archivo) => {
+      const token = localStorage.getItem('soporte_token');
+      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas/${encodeURIComponent(archivo)}/descargar`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).then((r) => {
+        if (!r.ok) throw new Error('Error al descargar');
+        return r.blob();
+      });
+    },
+
+    // Chat interno: el soporte ve y responde los mensajes del equipo.
+    chats: () => soporteJson('/soporte/chat'),
+    chatGeneral: () => soporteJson('/soporte/chat/general'),
+    crearChat: (body) => soporteJson('/soporte/chat', { method: 'POST', body }),
+    verChat: (id) => soporteJson(`/soporte/chat/${id}`),
+    enviarMensajeChat: (id, body) => soporteJson(`/soporte/chat/${id}/messages`, { method: 'POST', body }),
+    marcarLeidoChat: (id) => soporteJson(`/soporte/chat/${id}/leido`, { method: 'POST' }),
+
+    // Herramientas avanzadas del panel de soporte.
+    monitoreo: () => soporteJson('/soporte/monitoreo'),
+    diagnostico: () => soporteJson('/soporte/diagnostico'),
+    notificarMasivo: (body) => soporteJson('/soporte/notificaciones-masivas', { method: 'POST', body }),
+    auditoriaUsuario: (id, params) => soporteJson(`/soporte/usuarios/${id}/auditoria${qs(params)}`),
+    accionMasiva: (body) => soporteJson('/soporte/acciones-masivas', { method: 'POST', body }),
+    newsletter: (params) => soporteJson(`/soporte/newsletter${qs(params)}`),
+    eliminarSuscriptor: (id) => soporteJson(`/soporte/newsletter/${id}`, { method: 'DELETE' }),
+
+    // Solicitudes de creación de usuario que llegan desde el login público.
+    // Se usan los mismos endpoints del CRM (el token de soporte es SUPERADMIN).
+    solicitudesUsuario: (params) => soporteJson(`/user-requests${qs(params)}`),
+    atenderSolicitud: (id, body) => soporteJson(`/user-requests/${id}`, { method: 'PATCH', body }),
+    eliminarSolicitud: (id) => soporteJson(`/user-requests/${id}`, { method: 'DELETE' }),
+    crearUsuarioSoporte: (body) => soporteJson('/users', { method: 'POST', body }),
+  },
+};
+
+function qs(params) {
+  const q = Object.entries(params || {})
+    .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  return q ? `?${q}` : '';
+}
+
+function soporteJson(path, options = {}) {
+  const token = localStorage.getItem('soporte_token');
+  const config = {
+    method: options.method || 'GET',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  };
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (options.body !== undefined) config.body = JSON.stringify(options.body);
+  return fetch(`${window.AppConfig.API_URL}${path}`, config).then(async (r) => {
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* ignore */ }
+    if (r.status === 401) {
+      localStorage.removeItem('soporte_token');
+      localStorage.removeItem('soporte_user');
+      window.location.replace('index.html');
+      throw new Error('Tu sesión de soporte expiró. Inicia sesión nuevamente.');
+    }
+    if (!r.ok) throw new Error((data && data.message) || `Error ${r.status}`);
+    return data && data.data !== undefined ? data.data : data;
+  });
+}

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Chat · INMOBLES</title>
+  <meta name="theme-color" content="#2d1048">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/base.css">
+  <style>
+    /* El chat ocupa exactamente lo que queda bajo el topnav sin depender de
+       cálculos con vh: la página no hace scroll propio y el alto lo da el
+       flex. Se usa 100dvh (alto dinámico) para que en el móvil el teclado no
+       "empuje" la barra de escritura fuera de la pantalla. */
+    body.page-chat { overflow: hidden; }
+    body.page-chat .app,
+    body.page-chat .app.has-sidebar { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+    /* El layout con menú lateral es una rejilla y trae `align-items: start`
+       (para que el menú no se estire). Con esa alineación la columna de
+       contenido (.main) queda con la ALTURA DE SU CONTENIDO en vez de ocupar
+       la fila, y el chat se salía de la ventana: la barra de escritura
+       quedaba cortada abajo y los mensajes no se veían. Con `stretch` la
+       columna ocupa exactamente el alto disponible y el chat se ajusta. */
+    body.page-chat .app.has-sidebar { align-items: stretch; }
+    body.page-chat .app.has-sidebar > .main { min-height: 0; overflow: hidden; height: 100%; }
+    body.page-chat .main { min-height: 0; overflow: hidden; }
+    body.page-chat .content { display: flex; flex-direction: column; min-height: 0; flex: 1; padding: 12px; }
+
+    /* Modo embebido (chat dentro del panel flotante): sin cabecera ni bordes. */
+    body.is-embed .topnav { display: none !important; }
+    body.is-embed .content { padding: 0 !important; }
+    body.is-embed .chat-wrap { border-radius: 0; border: none; }
+
+    /* ---- Panel flotante (burbuja de chat) ----
+       El chat embebido vive en un iframe de ~400 px de ancho, así que las
+       reglas de móvil (max-width: 768px) se le aplican igual y dejaban solo
+       la LISTA de participantes tapando la conversación (el chat no se veía).
+       Aquí la lista se convierte en un cajón que se desliza y el chat ocupa
+       TODO el ancho del panel; el cajón solo aparece cuando se pide. */
+    body.is-embed .chat-wrap { position: relative; }
+    body.is-embed .chat-sidebar {
+      position: absolute; inset: 0 auto 0 0; width: 100%;
+      z-index: 3; border-right: none;
+      transform: translateX(-100%);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: none;
+    }
+    body.is-embed.chat-drawer-open .chat-sidebar {
+      transform: translateX(0);
+      box-shadow: 0 0 28px rgba(0, 0, 0, 0.22);
+    }
+    body.is-embed .chat-main {
+      display: flex !important;
+      position: absolute; inset: 0;
+      z-index: 2;
+    }
+    body.is-embed .chat-main.active {
+      position: absolute; inset: 0;
+      width: auto; height: auto;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 2;
+      box-shadow: none;
+    }
+    /* Botón para abrir el cajón de conversaciones (solo en el panel flotante).
+       El botón nace oculto con estilo en línea, así que hace falta !important
+       para que la regla del modo embebido lo pueda mostrar. */
+    body.is-embed #btn-chat-list { display: inline-flex !important; }
+    body.is-embed #btn-exit-modules,
+    body.is-embed #btn-exit-header { display: none !important; }
+    .chat-wrap { display: flex; flex: 1; min-height: 0; gap: 0; background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+    .chat-sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); flex-shrink: 0; min-height: 0; overflow: hidden; }
+    .chat-sidebar-head { padding: 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+    .chat-sidebar-head .btn { flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px; }
+    .chat-sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .chat-sidebar-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.15s; }
+    .chat-sidebar-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
+    .chat-sidebar-list { flex: 1; overflow-y: auto; min-height: 0; }
+    .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg); min-width: 0; min-height: 0; }
+    .chat-header { padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .chat-header-titles { flex: 1; min-width: 0; }
+    .chat-header-titles #chat-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-header .icon-btn { width: 38px; height: 38px; flex-shrink: 0; }
+    .chat-sidebar-head .chat-exit { flex: 1 1 100%; }
+    /* `min-height: 0` es imprescindible: en una columna flex, un elemento con
+       scroll conserva por defecto su altura mínima igual a la del contenido.
+       Sin eso la lista de mensajes crecía sin límite, empujaba la barra de
+       escritura fuera de la ventana y el chat quedaba cortado por abajo. */
+    .chat-messages { flex: 1; overflow-y: auto; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .chat-input-bar { padding: 12px 16px; background: var(--white); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
+    .chat-input-bar input { flex: 1; font-size: 16px; }
+    .chat-input-bar textarea { flex: 1; font-size: 16px; resize: none; max-height: 140px; overflow-y: auto; line-height: 1.4; min-height: 40px; }
+    .chat-input-bar .btn { flex-shrink: 0; }
+    .chat-item { padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    .chat-item:hover { background: var(--icon-bg); }
+    .chat-item.active { background: var(--primary-light); border-left: 3px solid var(--primary); }
+    .chat-item.general-item { background: var(--primary-light); }
+    .chat-item-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .chat-item-name { font-weight: 600; font-size: 14px; }
+    .chat-item-preview { font-size: 12px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+    .chat-item-time { font-size: 11px; color: var(--text-muted); }
+    .chat-title-line { font-weight: 600; }
+    .chat-subline { font-size: 12px; color: var(--text-muted); }
+    .msg-bubble { max-width: 70%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; }
+    .msg-sent { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+    .msg-received { align-self: flex-start; background: var(--white); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    /* Mensajes del Soporte Técnico: resaltados para distinguirlos del equipo. */
+    .msg-support { border-left: 3px solid var(--primary); background: var(--primary-light); }
+    .msg-support .msg-sender { color: var(--primary); opacity: 1; }
+    .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; opacity: 0.8; }
+    .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
+    /* Enlaces compartidos en un mensaje: clicables y con salto de línea. */
+    .msg-bubble a { color: var(--primary); text-decoration: underline; word-break: break-all; }
+    .msg-sent a { color: #ffe9a8; }
+    .unread-badge { background: var(--danger); color: #fff; border-radius: 50%; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+    .chat-badge-inline { min-width: auto; height: auto; padding: 2px 6px; border-radius: 8px; }
+    .chat-empty { text-align: center; color: var(--text-muted); margin: auto; padding: 40px; }
+
+    /* ---- Estado de la conexión ---- */
+    .chat-conn { font-size: 13px; line-height: 1; flex-shrink: 0; }
+    .chat-conn[data-state="online"] { color: #22c55e; }
+    .chat-conn[data-state="offline"] { color: #ef4444; }
+    .chat-conn[data-state="connecting"] { color: #f59e0b; }
+    .chat-conn[data-state="idle"] { color: var(--text-muted); }
+    .chat-banner {
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 8px 16px;
+      text-align: center;
+      border-bottom: 1px solid #fde68a;
+      flex-shrink: 0;
+    }
+    .chat-banner[hidden] { display: none; }
+
+    /* ---- Separadores de día y de "mensajes nuevos" ---- */
+    .chat-day { display: flex; justify-content: center; margin: 12px 0 4px; }
+    .chat-day span {
+      background: rgba(91, 45, 142, 0.08);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 12px;
+      border-radius: 20px;
+    }
+    .chat-day-unread span { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+
+    /* ---- Estados de envío ---- */
+    .msg-pending { opacity: 0.6; }
+    .msg-failed { border-color: #ef4444 !important; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35); }
+    .msg-state { font-size: 10px; opacity: 0.85; margin-left: 6px; }
+    .msg-retry {
+      margin-left: 6px;
+      background: rgba(255, 255, 255, 0.28);
+      border: none;
+      color: inherit;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    .msg-received .msg-retry { background: #fee2e2; color: #b91c1c; }
+
+    /* ---- Mensajes rápidos (disponibles para todo el equipo) ---- */
+    .chat-quick {
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      padding: 8px 12px 2px;
+      flex-shrink: 0;
+    }
+    .chat-quick-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .chat-quick-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      flex: 1;
+    }
+    .chat-quick-btn { width: 26px; height: 26px; font-size: 15px; }
+    .chat-quick-list {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .chat-quick-list.is-hidden { display: none; }
+    .chat-quick-chip {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg);
+      flex-shrink: 0;
+      max-width: 260px;
+    }
+    .chat-quick-chip.is-custom { border-color: var(--primary-light); background: var(--primary-light); }
+    .chat-quick-text {
+      background: none;
+      border: none;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text);
+      padding: 6px 4px 6px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-quick-text:hover { color: var(--primary); }
+    .chat-quick-del {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 16px;
+      line-height: 1;
+      padding: 4px 10px 6px 4px;
+    }
+    .chat-quick-del:hover { color: var(--danger); }
+    .announcement-card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; border-left: 4px solid var(--primary); }
+    .announcement-card.urgente { border-left-color: var(--danger); }
+    .announcement-card.importante { border-left-color: #f59e0b; }
+    .announcement-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .announcement-title { font-weight: 700; font-size: 14px; }
+    .announcement-priority { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+    .announcement-priority.normal { background: var(--primary-light); color: var(--primary); }
+    .announcement-priority.importante { background: #fef3c7; color: #d97706; }
+    .announcement-priority.urgente { background: #fee2e2; color: #dc2626; }
+    .announcement-body { font-size: 13px; color: var(--text); margin-bottom: 6px; }
+    .announcement-meta { font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .announcement-actions { margin-top: 8px; display: flex; gap: 6px; }
+    .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 4px; }
+    @media (max-width: 768px) {
+      body.page-chat .topnav { position: sticky; }
+      body.page-chat .topnav-credit { display: none; }
+      body.page-chat .content { padding: 0; }
+      .chat-wrap { border-radius: 0; border-left: none; border-right: none; }
+      .chat-sidebar { width: 100%; }
+      .chat-main { display: none; }
+      /* La conversación abierta ocupa la ventana VISIBLE real (visualViewport),
+         de modo que al abrir el teclado del móvil la barra de escritura sigue
+         pegada al borde inferior y la lista de mensajes se desplaza arriba. */
+      .chat-main.active {
+        display: flex; position: fixed; left: 0; right: 0; bottom: auto;
+        top: var(--chat-top, 0px);
+        height: var(--chat-vh, 100dvh);
+        z-index: 320;
+        box-shadow: 0 0 40px rgba(0,0,0,0.3);
+      }
+      .chat-header { position: sticky; top: 0; z-index: 5; background: var(--white); flex-shrink: 0; }
+      /* La conversación a pantalla completa llega al borde superior del
+         dispositivo: se respeta la safe area (notch / Dynamic Island). */
+      .chat-main.active .chat-header { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+      .chat-messages { flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
+      .chat-input-bar { flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+      .chat-quick { padding: 6px 10px 0; }
+      .chat-quick-chip { max-width: 210px; }
+      .chat-quick-text { font-size: 12px; padding: 6px 4px 6px 10px; }
+      .chat-sidebar-head { flex-wrap: wrap; }
+      .chat-item-preview { max-width: 100%; }
+      .unread-badge { min-width: 20px; height: 20px; font-size: 11px; }
+    }
+    @media (max-width: 480px) {
+      .chat-sidebar-head { padding: 10px; }
+      .chat-sidebar-tab { padding: 8px 4px; font-size: 12px; }
+      .chat-messages { padding: 10px; }
+      .msg-bubble { max-width: 92%; font-size: 13px; padding: 8px 12px; }
+      .chat-header { padding: 10px 12px; }
+      .chat-input-bar { padding: 10px; }
+      .chat-empty { padding: 24px; }
+      .chat-title-line { font-size: 15px; }
+      .chat-sidebar-head .btn { font-size: 11px; padding: 6px 6px; }
+      #msg-input { font-size: 16px; }
+      textarea#msg-input { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topnav">
+      <div class="topnav-inner">
+        <a href="home.html" class="topnav-brand">
+          <img src="logoinmobles.png" alt="INMOBLES" class="topnav-logo">
+          <span class="topnav-brand-name">INMOBLES</span>
+        </a>
+        <button class="topnav-hamburger" id="topnav-hamburger" type="button" aria-label="Menú">&#9776;</button>
+        <nav class="topnav-nav" id="topnav-nav"></nav>
+        <div class="topnav-right">
+          <button class="icon-btn" id="btn-notifications" type="button" aria-label="Notificaciones">&#128276;</button>
+          <div class="topnav-user" id="topnav-user">Usuario</div>
+          <button class="link-danger" id="btn-logout" type="button" style="font-size:12px;padding:4px 8px;">Salir</button>
+        </div>
+      </div>
+      <div class="topnav-credit">&copy; INMOBLES · Desarrollado por <strong>FV DIGITAL</strong></div>
+    </header>
+
+    <main class="main">
+      <section class="content" id="app-content" style="padding:16px;">
+        <div class="loading">Cargando chat...</div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/utils/cache.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/crudPage.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/install.js"></script>
+  <script src="js/multipage.js"></script>
+  <script src="pages/chat/chat.js"></script>
+</body>
+</html>

@@ -1,0 +1,577 @@
+'use strict';
+
+window.Pages = window.Pages || {};
+
+// Calendario interno: muestra en una sola vista mes/semana/día los eventos de
+// citas, tareas, negocios, metas y prospección.
+// (La integración con Google Calendar quedó como opción futura/pendiente.)
+window.Pages.calendar = (() => {
+  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const WEEK_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const WEEK_NAMES_FULL = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  const TYPES = {
+    appointment: { label: 'Citas', color: '#2563eb' },
+    task: { label: 'Tareas', color: '#d97706' },
+    business: { label: 'Negocios', color: '#7c3aed' },
+    goal: { label: 'Metas', color: '#059669' },
+    prospecting: { label: 'Prospección', color: '#db2777' },
+    meeting: { label: 'Reuniones', color: '#d97706' },
+  };
+
+  let state = {
+    view: 'month', // month | week | day
+    anchor: new Date(), // fecha ancla (año/mes o día según vista)
+    events: [],
+    typesMeta: {},
+    loaded: false,
+    filters: { appointment: true, task: true, business: true, goal: true, prospecting: true, meeting: true },
+    // Admin/gerencia: '' = todo el equipo; si no, el id del asesor a mostrar.
+    scopeUser: '',
+    users: [],
+    scopeAll: false,
+  };
+
+  let rootEl = null;
+
+  function dateKey(d) {
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  }
+
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  // Rango de fechas a consultar según la vista actual. Se envían instantes ISO
+  // completos calculados en la zona del navegador (inicio y fin del día local),
+  // para que el servidor no tenga que adivinar la zona y no se pierdan eventos
+  // del borde del rango.
+  function rangeForView() {
+    const anchor = state.anchor;
+    let from;
+    let to;
+    if (state.view === 'month') {
+      from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      to = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    } else if (state.view === 'week') {
+      const dow = (anchor.getDay() + 6) % 7; // 0 = lunes
+      from = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - dow);
+      to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6);
+    } else {
+      from = startOfDay(anchor);
+      to = startOfDay(anchor);
+    }
+    return { start: from.toISOString(), end: endOfDay(to).toISOString() };
+  }
+
+  function keyToDate(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function endOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+
+  async function loadEvents() {
+    const range = rangeForView();
+    const params = { start: range.start, end: range.end };
+    // Solo admin/gerencia pueden pedir el calendario de un asesor concreto.
+    if (state.scopeAll && state.scopeUser) params.user = state.scopeUser;
+    try {
+      const data = await window.API.calendar.events(params);
+      const payload = data && typeof data === 'object' ? data : {};
+      const list = Array.isArray(payload.events) ? payload.events : [];
+      state.events = list;
+      if (payload.types && typeof payload.types === 'object') state.typesMeta = payload.types;
+      if (payload.scope && typeof payload.scope === 'object') state.scopeAll = Boolean(payload.scope.all);
+    } catch (error) {
+      state.events = [];
+      state.typesMeta = {};
+      throw error;
+    } finally {
+      state.loaded = true;
+    }
+    // Garantiza color por tipo aunque el servidor no envíe metadatos.
+    Object.keys(TYPES).forEach((k) => {
+      if (!state.typesMeta[k] && TYPES[k]) state.typesMeta[k] = TYPES[k];
+    });
+  }
+
+  // ---- Toolbar / controles ----
+  function renderToolbar() {
+    const range = rangeForView();
+    let label = '';
+    if (state.view === 'month') {
+      label = `${MONTH_NAMES[state.anchor.getMonth()]} ${state.anchor.getFullYear()}`;
+    } else if (state.view === 'week') {
+      const start = keyToDate(range.start);
+      const end = keyToDate(range.end);
+      if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+        label = `${start.getDate()} – ${end.getDate()} ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+      } else {
+        label = `${start.getDate()} ${MONTH_NAMES[start.getMonth()]} – ${end.getDate()} ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
+      }
+    } else {
+      const d = state.anchor;
+      label = `${WEEK_NAMES_FULL[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+    }
+
+    const filterChips = Object.keys(TYPES).map((k) => {
+      const active = state.filters[k] !== false;
+      const meta = state.typesMeta[k] || {};
+      return `<button class="cal-chip ${active ? 'cal-chip-active' : ''}" data-toggle-type="${k}" style="--chip-color:${meta.color || TYPES[k].color};" type="button">${TYPES[k].label}</button>`;
+    }).join('');
+
+    // Selector "ver calendario de" solo para admin/gerencia: permite ver todo el
+    // equipo o el calendario de un asesor concreto.
+    const scopeSelect = state.scopeAll
+      ? `<select class="form-control" data-scope-user style="max-width:240px;">
+          <option value="">&#128101;&nbsp; Todo el equipo</option>
+          ${state.users.map((u) => `<option value="${UI.escapeHtml(u._id)}" ${state.scopeUser === u._id ? 'selected' : ''}>${UI.escapeHtml(u.name)}</option>`).join('')}
+        </select>`
+      : '';
+
+    rootEl.innerHTML = `
+      <div class="cal-page">
+        <div class="cal-header">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <h2 style="margin:0;font-size:20px;">&#128467;&nbsp; Calendario</h2>
+            ${isBossUser() ? `<button class="btn btn-primary btn-sm" type="button" data-new-meeting>&#128197;&nbsp; Nueva reunión</button>` : ''}
+          </div>
+          <div class="cal-toolbar">
+            <button class="btn btn-secondary btn-sm" type="button" data-nav="today">Hoy</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-nav="prev">&#9664;</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-nav="next">&#9654;</button>
+            <strong class="cal-label">${label}</strong>
+            <div class="cal-view-toggle">
+              <button class="btn btn-sm ${state.view === 'month' ? 'btn-primary' : 'btn-secondary'}" type="button" data-view="month">Mes</button>
+              <button class="btn btn-sm ${state.view === 'week' ? 'btn-primary' : 'btn-secondary'}" type="button" data-view="week">Semana</button>
+              <button class="btn btn-sm ${state.view === 'day' ? 'btn-primary' : 'btn-secondary'}" type="button" data-view="day">Día</button>
+            </div>
+            ${scopeSelect}
+          </div>
+        </div>
+        <div class="cal-filter-bar">${filterChips}</div>
+        <div class="cal-view" data-cal-view>${renderView()}</div>
+        ${renderDaySummary()}
+        <div class="cal-setup-note">&#128467;&nbsp; Integración con Google Calendar próximamente.</div>
+      </div>
+    `;
+
+    const scopeEl = rootEl.querySelector('[data-scope-user]');
+    if (scopeEl) {
+      scopeEl.addEventListener('change', async () => {
+        state.scopeUser = scopeEl.value;
+        try { await loadEvents(); } catch (error) { /* se mantiene la vista */ }
+        renderToolbar();
+      });
+    }
+
+    rootEl.querySelectorAll('[data-toggle-type]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const k = btn.getAttribute('data-toggle-type');
+        state.filters[k] = state.filters[k] === false;
+        renderToolbar();
+      });
+    });
+
+    rootEl.querySelector('[data-nav="today"]').addEventListener('click', () => {
+      state.anchor = new Date();
+      refreshView();
+    });
+    rootEl.querySelector('[data-nav="prev"]').addEventListener('click', () => navigate(-1));
+    rootEl.querySelector('[data-nav="next"]').addEventListener('click', () => navigate(1));
+    rootEl.querySelectorAll('[data-view]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.view = btn.getAttribute('data-view');
+        refreshView();
+      });
+    });
+
+    const newMeetingBtn = rootEl.querySelector('[data-new-meeting]');
+    if (newMeetingBtn) newMeetingBtn.addEventListener('click', openNewMeeting);
+  }
+
+  // ¿El usuario actual puede publicar reuniones de equipo (admin/gerencia)?
+  function isBossUser() {
+    try {
+      const u = window.ApiClient ? window.ApiClient.getStoredUser() : null;
+      if (!u || !u.role) return false;
+      const code = typeof u.role === 'string' ? u.role : (u.role && u.role.code);
+      return ['admin', 'direccion', 'gerencia', 'superadmin'].includes(code);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Modal para crear una reunión de equipo (visible para todos los asesores).
+  function openNewMeeting() {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const fmt = (d) => {
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
+    const body = `
+      <form id="meeting-form" autocomplete="off">
+        <div class="form-field">
+          <label>Título *</label>
+          <input class="form-control" name="title" required placeholder="Ej. Reunión de ventas semanal">
+        </div>
+        <div class="form-field">
+          <label>Descripción</label>
+          <textarea class="form-control" name="description" rows="3" placeholder="Detalles u orden del día"></textarea>
+        </div>
+        <div class="form-field">
+          <label>Ubicación</label>
+          <input class="form-control" name="location" placeholder="Ej. Sala de juntas / Video llamada / Oficina central">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-field">
+            <label>Inicio *</label>
+            <input class="form-control" type="datetime-local" name="start" value="${fmt(start)}" required>
+          </div>
+          <div class="form-field">
+            <label>Fin *</label>
+            <input class="form-control" type="datetime-local" name="end" value="${fmt(end)}" required>
+          </div>
+        </div>
+      </form>
+    `;
+    const footer = `
+      <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+      <button class="btn btn-primary" type="button" data-save>Publicar reunión</button>
+    `;
+
+    const modal = UI.openModal({ title: '&#128197;&nbsp; Nueva reunión de equipo', body, footer, size: 540 });
+    const overlay = modal.bodyEl.closest('#modal-overlay');
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+    const saveBtn = overlay.querySelector('[data-save]');
+    saveBtn.addEventListener('click', async () => {
+      const form = overlay.querySelector('#meeting-form');
+      const title = (form.querySelector('[name="title"]').value || '').trim();
+      const start = form.querySelector('[name="start"]').value;
+      const end = form.querySelector('[name="end"]').value;
+      if (!title || !start || !end) {
+        UI.toast('Completa el título y el rango de fechas.', 'error');
+        return;
+      }
+      saveBtn.disabled = true;
+      try {
+        await window.API.meetings.create({
+          title,
+          description: (form.querySelector('[name="description"]').value || '').trim(),
+          location: (form.querySelector('[name="location"]').value || '').trim(),
+          start: new Date(start).toISOString(),
+          end: new Date(end).toISOString(),
+        });
+        UI.closeModal();
+        UI.toast('Reunión publicada. Todos los asesores la verán en el calendario.', 'success');
+        await loadEvents();
+        renderToolbar();
+      } catch (error) {
+        saveBtn.disabled = false;
+        UI.toast(error && error.message ? error.message : 'No se pudo publicar la reunión.', 'error');
+      }
+    });
+  }
+
+  function navigate(delta) {
+    if (state.view === 'month') {
+      state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + delta, 1);
+    } else if (state.view === 'week') {
+      state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate() + delta * 7);
+    } else {
+      state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate() + delta);
+    }
+    refreshView();
+  }
+
+  function visibleEvents() {
+    return state.events.filter((e) => state.filters[e.type] !== false);
+  }
+
+  // ---- Vistas ----
+  function renderDaySummary() {
+    let targetDate = null;
+    if (state.view === 'day') {
+      targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
+    } else if (state.view === 'week') {
+      const range = rangeForView();
+      targetDate = keyToDate(range.start);
+    } else {
+      targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
+    }
+    const events = eventsOnDay(targetDate).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+    if (!events.length) {
+      return `
+        <div class="card" style="margin-top:16px;">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:16px;">Resumen del día — ${WEEK_NAMES_FULL[targetDate.getDay()]}, ${targetDate.getDate()} ${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}</h3>
+          </div>
+          <div class="card-body"><p class="text-muted" style="margin:0;">Sin eventos para este día.</p></div>
+        </div>
+      `;
+    }
+    const items = events.map((e) => {
+      const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+      const color = meta.color || '#64748b';
+      const clientName = e.client && (e.client.nombre || e.client.name) ? (e.client.nombre || e.client.name) : null;
+      const advisor = e.advisor || (e.creator && e.creator.name) || null;
+      return `
+        <button class="cal-summary-item" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="border-left:3px solid ${color};">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:600;">${UI.escapeHtml(e.title)}</div>
+              <div class="text-muted" style="font-size:12px;margin-top:2px;">${(meta.label || e.type).toUpperCase()}${e.location ? ` · ${UI.escapeHtml(e.location)}` : ''}${clientName ? ` · Cliente: ${UI.escapeHtml(clientName)}` : ''}${advisor ? ` · Asesor: ${UI.escapeHtml(advisor)}` : ''}</div>
+              ${e.description ? `<div class="text-muted" style="font-size:12px;margin-top:4px;">${UI.escapeHtml(e.description)}</div>` : ''}
+            </div>
+            <div class="text-muted" style="font-size:12px;text-align:right;">${Format.time(e.start)}${e.end && e.type !== 'goal' ? ` – ${Format.time(e.end)}` : ''}</div>
+          </div>
+        </button>
+      `;
+    }).join('');
+    return `
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+          <h3 style="margin:0;font-size:16px;">Resumen del día — ${WEEK_NAMES_FULL[targetDate.getDay()]}, ${targetDate.getDate()} ${MONTH_NAMES[targetDate.getMonth()]} ${targetDate.getFullYear()}</h3>
+          <span class="text-muted" style="font-size:12px;">${events.length} ${events.length === 1 ? 'evento' : 'eventos'}</span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">${items}</div>
+      </div>
+    `;
+  }
+
+  function renderView() {
+    if (state.view === 'month') return renderMonth();
+    if (state.view === 'week') return renderWeek();
+    return renderDay();
+  }
+
+  function eventChip(e, small) {
+    const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+    const color = meta.color || TYPES[e.type].color || '#64748b';
+    return `<button class="cal-event ${small ? 'cal-event-sm' : ''}" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">${UI.escapeHtml(e.title)}</button>`;
+  }
+
+  function eventsOnDay(date) {
+    const key = dateKey(date);
+    const day = startOfDay(date);
+    return visibleEvents().filter((e) => {
+      if (e.type === 'goal') {
+        const s = new Date(e.start);
+        const end = new Date(e.end);
+        return day >= startOfDay(s) && day <= endOfDay(end);
+      }
+      return dateKey(e.start) === key || dateKey(e.end) === key;
+    });
+  }
+
+  function renderMonth() {
+    const year = state.anchor.getFullYear();
+    const month = state.anchor.getMonth();
+    const first = new Date(year, month, 1);
+    const startDow = first.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const todayKey = dateKey(today);
+
+    const cells = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const grid = cells
+      .map((d, i) => {
+        if (!d) return `<div class="cal-cell cal-cell-empty"></div>`;
+        const key = dateKey(d);
+        const events = eventsOnDay(d);
+        const isToday = key === todayKey;
+        const isOtherMonth = d.getMonth() !== month;
+        const chips = events.slice(0, 4).map((e) => eventChip(e, true)).join('');
+        const more = events.length > 4 ? `<div class="cal-more">+${events.length - 4} más</div>` : '';
+        return `
+          <div class="cal-cell ${isOtherMonth ? 'cal-other-month' : ''}" data-date="${key}">
+            <div class="cal-cell-head ${isToday ? 'cal-today' : ''}">${d.getDate()}</div>
+            <div class="cal-cell-events">${chips}</div>
+            ${more}
+          </div>
+        `;
+      })
+      .join('');
+
+    const weekHeader = WEEK_NAMES.map((w) => `<div class="cal-weekhead">${w}</div>`).join('');
+
+    return `
+      <div class="cal-grid cal-grid-month" data-view-body="month">
+        ${weekHeader}
+        ${grid}
+      </div>
+    `;
+  }
+
+  function renderWeek() {
+    const range = rangeForView();
+    const start = keyToDate(range.start);
+    const today = new Date();
+    const todayKey = dateKey(today);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+    }
+    const colWidth = 100 / 7;
+
+    const weekHeader = days
+      .map((d) => {
+        const isToday = dateKey(d) === todayKey;
+        return `<div class="cal-weekcol-head" style="width:${colWidth}%"><span class="cal-weekday">${WEEK_NAMES[d.getDay()]}</span><span class="cal-daynum ${isToday ? 'cal-today' : ''}" data-date="${dateKey(d)}">${d.getDate()}</span></div>`;
+      })
+      .join('');
+
+    const colBody = days
+      .map((d) => {
+        const events = eventsOnDay(d);
+        return `<div class="cal-weekcol" style="width:${colWidth}%" data-date="${dateKey(d)}">${events.map((e) => eventChip(e)).join('')}</div>`;
+      })
+      .join('');
+
+    return `
+      <div class="cal-grid cal-grid-week" data-view-body="week">
+        <div class="cal-weekrow">${weekHeader}</div>
+        <div class="cal-weekdayrow">${colBody}</div>
+      </div>
+    `;
+  }
+
+  function renderDay() {
+    const d = state.anchor;
+    const events = eventsOnDay(d);
+    const list = events.length
+      ? events.map((e) => {
+          const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+          const color = meta.color || TYPES[e.type].color || '#64748b';
+          return `
+            <button class="cal-day-item" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">
+              <span class="cal-day-time">${Format.time(e.start)}</span>
+              <span class="cal-day-title">${UI.escapeHtml(e.title)}</span>
+              <span class="cal-day-type">${(meta.label || e.type).toUpperCase()}</span>
+            </button>`;
+        }).join('')
+      : `<div class="empty-state"><p>No hay eventos este día.</p></div>`;
+
+    return `
+      <div class="cal-grid cal-grid-day" data-view-body="day">
+        <div class="cal-day-head">${WEEK_NAMES_FULL[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}</div>
+        <div class="cal-day-list">${list}</div>
+      </div>
+    `;
+  }
+
+  function refreshView() {
+    if (!rootEl) return;
+    renderToolbar();
+  }
+
+  // ---- Detalle de evento ----
+  function showEventDetails(eventId) {
+    const e = state.events.find((x) => x.id === eventId);
+    if (!e) return;
+    const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+    const color = meta.color || '#5B2D8E';
+    const clientName = e.client && (e.client.nombre || e.client.name) ? (e.client.nombre || e.client.name) : null;
+    const propertyLine =
+      e.property && (e.property.zone || e.property.city || e.property.type)
+        ? [e.property.type, e.property.city, e.property.zone].filter(Boolean).join(' · ')
+        : null;
+
+    const rows = [];
+    rows.push(`<tr><th>Fecha</th><td>${Format.dateTime(e.start)}${e.end ? ` – ${Format.time(e.end)}` : ''}</td></tr>`);
+    if (e.type !== 'goal') rows.push(`<tr><th>Tipo</th><td>${UI.escapeHtml((meta.label || e.type).toUpperCase())}</td></tr>`);
+    if (e.status) rows.push(`<tr><th>Estado</th><td>${UI.escapeHtml(String(e.status).replace(/_/g, ' '))}</td></tr>`);
+    if (e.stage) rows.push(`<tr><th>Etapa</th><td>${UI.escapeHtml(String(e.stage).replace(/_/g, ' '))}</td></tr>`);
+    if (e.creator && e.creator.name) rows.push(`<tr><th>Reunión de equipo</th><td>${UI.escapeHtml('Publicada por ' + e.creator.name)}</td></tr>`);
+    if (e.advisor) rows.push(`<tr><th>Asesor</th><td>${UI.escapeHtml(e.advisor)}</td></tr>`);
+    if (clientName) rows.push(`<tr><th>Cliente</th><td>${UI.escapeHtml(clientName)}</td></tr>`);
+    if (propertyLine) rows.push(`<tr><th>Propiedad</th><td>${UI.escapeHtml(propertyLine)}</td></tr>`);
+    if (e.location) rows.push(`<tr><th>Lugar</th><td>${UI.escapeHtml(e.location)}</td></tr>`);
+    if (e.priority) rows.push(`<tr><th>Prioridad</th><td>${UI.escapeHtml(e.priority)}</td></tr>`);
+    if (e.description) rows.push(`<tr><th>Detalles</th><td>${UI.escapeHtml(e.description)}</td></tr>`);
+
+    const footer = `
+      <a class="btn btn-secondary" href="${sourceHref(e)}">Abrir módulo</a>
+      <button class="btn btn-primary" data-close-detail type="button">Cerrar</button>
+    `;
+
+    UI.openModal({
+      title: `<span style="color:${color};">●</span> ${UI.escapeHtml(e.title)}`,
+      body: `<table class="cal-detail-table">${rows.join('')}</table>`,
+      footer,
+      size: 520,
+    });
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      const close = overlay.querySelector('[data-close-detail]');
+      if (close) close.addEventListener('click', () => UI.closeModal());
+    }
+  }
+
+  function sourceHref(e) {
+    if (e.type === 'appointment') return 'appointments.html';
+    if (e.type === 'task') return 'tasks.html';
+    if (e.type === 'business') return 'businesses.html';
+    if (e.type === 'goal') return 'goals.html';
+    if (e.type === 'prospecting') return 'prospecting.html';
+    return 'calendar.html';
+  }
+
+  // Delegación de eventos dentro del contenedor de vista.
+  function bindViewDelegation() {
+    if (!rootEl) return;
+    rootEl.addEventListener('click', (e) => {
+      const eventBtn = e.target.closest('[data-event-id]');
+      if (eventBtn) {
+        e.stopPropagation();
+        showEventDetails(eventBtn.getAttribute('data-event-id'));
+        return;
+      }
+      const dateEl = e.target.closest('[data-date]');
+      if (dateEl && (state.view === 'month' || state.view === 'week')) {
+        e.stopPropagation();
+        const key = dateEl.getAttribute('data-date');
+        const [y, m, d] = key.split('-').map(Number);
+        state.anchor = new Date(y, m - 1, d);
+        state.view = 'day';
+        renderToolbar();
+      }
+    });
+  }
+
+  async function render(container) {
+    rootEl = container;
+    rootEl.innerHTML = '<div class="loading">Cargando calendario...</div>';
+    // Carga inicial de usuarios (para el selector "ver calendario de" de los
+    // jefes) y de eventos. Ninguna de las dos debe impedir la vista.
+    if (isBossUser()) {
+      try {
+        const res = await window.API.users.list({ limit: 200 });
+        state.users = (res && res.data) || [];
+      } catch (error) {
+        state.users = [];
+      }
+    }
+    try {
+      await loadEvents();
+    } catch (error) {
+      // El calendario sigue siendo utilizable aunque falle la carga.
+    }
+    renderToolbar();
+    bindViewDelegation();
+  }
+
+  return { render };
+})();

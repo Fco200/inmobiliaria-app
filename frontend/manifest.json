@@ -1,0 +1,50 @@
+{
+  "name": "INMOBLES",
+  "short_name": "INMOBLES",
+  "id": "inmobiles-crm",
+  "description": "Profesionales en Negocios Inmobiliarios: clientes, propiedades, negocios, citas, metas y reportes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a1a",
+  "theme_color": "#2d1048",
+  "lang": "es",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "description": "Cartera de clientes y acciones rápidas de contacto",
+      "url": "clients.html",
+      "icons": [{ "src": "icons/ICONOINMOBLES_BLANCO.jfif", "sizes": "192x192" }]
+    },
+    {
+      "name": "Propiedades",
+      "short_name": "Propiedades",
+      "description": "Inventario general de propiedades del equipo",
+      "url": "inventory.html",
+      "icons": [{ "src": "icons/ICONOINMOBLES_BLANCO.jfif", "sizes": "192x192" }]
+    },
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "description": "Mensajería del equipo",
+      "url": "chat.html",
+      "icons": [{ "src": "icons/ICONOINMOBLES_BLANCO.jfif", "sizes": "192x192" }]
+    },
+    {
+      "name": "Contacto",
+      "short_name": "Contacto",
+      "description": "Página pública de contacto",
+      "url": "contacto.html",
+      "icons": [{ "src": "icons/ICONOINMOBLES_BLANCO.jfif", "sizes": "192x192" }]
+    }
+  ]
+}

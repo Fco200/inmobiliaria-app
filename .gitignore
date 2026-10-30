@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Entorno
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Producción
+dist/
+build/
+
+# Archivos subidos en tiempo de ejecución (fotos, documentos). Se guardan en la
+# nube (R2) cuando está configurado; no deben entrar al repositorio.
+backend/uploads/

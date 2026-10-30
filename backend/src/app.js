@@ -1,0 +1,257 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
+
+const apiRoutes = require('./routes');
+const notFound = require('./middlewares/notFound');
+const errorHandler = require('./middlewares/errorHandler');
+const { compression } = require('./middlewares/compression');
+const { maintenance, maintenancePage } = require('./middlewares/maintenance');
+const { clientUrl, isProduction, jwtSecret } = require('./config/env');
+const { User } = require('./models');
+
+const app = express();
+
+// Detrás de proxies (Render, Nginx, etc.) se respeta la IP real del cliente
+// para el límite de peticiones.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // Permitir llamadas a la API del backend local aunque la página se sirva
+        // desde 127.0.0.1 (evita bloqueos de "connect-src" del navegador).
+        // Se agrega el CDN de Socket.IO (source map/script) y el esquema wss:
+        // para que el WebSocket de chat funcione en cualquier dominio de
+        // producción (Render cambia el hostname entre deploys).
+        'connect-src': ["'self'", 'http://localhost:5000', 'http://127.0.0.1:5000', 'ws://localhost:5000', 'wss://localhost:5000', 'https://accounts.google.com', 'https://cdn.socket.io', 'wss:', 'ws:'],
+        // Las imágenes permiten: 'self' (uploads en producción, mismo origen),
+        // data:/blob: (QR local y avatares), el backend local en desarrollo
+        // (Live Server sirve la página en otro origen → hay que permitir
+        // localhost:5000 o las fotos de perfil/propiedades no se muestran) y el
+        // respaldo externo del QR (api.qrserver.com).
+        'img-src': ["'self'", 'data:', 'blob:', 'http://localhost:5000', 'http://127.0.0.1:5000', 'http://localhost:5500', 'http://127.0.0.1:5500', 'https://api.qrserver.com'],
+        // SDK de Google Identity Services para el botón "Registrarse con Google"
+        // (script + iframe de One Tap).
+        'script-src': ["'self'", 'https://accounts.google.com', 'https://cdn.socket.io'],
+        'frame-src': ["'self'", 'https://accounts.google.com'],
+      },
+    },
+  })
+);
+// CORS restringido: el frontend servido por el propio backend no necesita
+// orígenes extra. CLIENT_URL admite una lista separada por comas para casos
+// como Live Server (p. ej. http://localhost:5500,http://127.0.0.1:5500).
+const allowedOrigins = String(clientUrl || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Sin Origin (mismo origen / curl / apps nativas) → permitido.
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Compresión gzip de las respuestas de texto (JSON/HTML/CSS/JS). Reduce el
+// tráfico de red entre 4 y 6 veces en los listados del CRM: con 50+ usuarios
+// concurrentes es la palanca más barata para que la app no se "trave".
+app.use(compression());
+
+if (!isProduction) {
+  app.use(morgan('dev'));
+}
+
+// Límite de peticiones para una operación de oficina corporativa. El equipo
+// navega rápido entre módulos (listados, filtros, detalle) y cada pantalla
+// dispara varias peticiones, por lo que 300/15min era insuficiente y producía
+// bloqueos del tipo "Demasiadas peticiones, intenta más tarde".
+//  - La clave es POR USUARIO (id del JWT), no por IP. Antes se limitaba por
+//    IP y toda la oficina comparte la misma salida a Internet (NAT): con 30
+//    personas a la vez el cubo se agotaba entre todos y bloqueaba a usuarios
+//    que no habían hecho nada. Si la petición no trae token válido (login,
+//    recursos públicos) se recurre a la IP.
+//  - Cada usuario tiene SU PROPIO cubo: 50 personas conectadas no se estorban
+//    entre sí, así que el límite se puede subir sin castigar a nadie.
+//  - 20000 por usuario cada 15 min (~1300/min sostenidos): el CRM soporta
+//    operaciones masivas (cargas de fotos, actualizaciones de inventario y
+//    varios módulos abiertos) sin que el equipo vea "Demasiadas peticiones".
+//    Sigue siendo configurable con API_RATE_MAX.
+//  - Para lo que NO lleva token (catálogo público, consultas sin sesión) se
+//    usa un tope de 2000 POR IP, porque ahí sí pueden coincidir muchas
+//    personas detrás de la misma salida. Se ajusta con API_RATE_MAX_ANON.
+//  - `skipSuccessfulRequests` NO se usa (queremos contar todo), pero se
+//    excluyen del conteo los preflight CORS (OPTIONS), que no son peticiones
+//    de datos reales.
+//  - Se usa el store en memoria por defecto; con `trust proxy` la IP real del
+//    cliente se respeta detrás de Render/Nginx.
+const API_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 15 * 60 * 1000);
+const API_RATE_MAX = Number(process.env.API_RATE_MAX || 20000);
+const API_RATE_MAX_ANON = Number(process.env.API_RATE_MAX_ANON || 2000);
+
+// Extrae el id del usuario del token Bearer (verificando la firma con el
+// mismo secreto que usa la autenticación) para poder limitar por usuario.
+// Si el token falta o es inválido se devuelve null y se usa la IP.
+function rateLimitKey(req) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(header.slice(7).trim(), jwtSecret);
+      if (decoded && decoded.id) return `u:${decoded.id}`;
+    } catch (error) {
+      // Token inválido o caducado: se cae a la clave por IP.
+    }
+  }
+  return `ip:${req.ip}`;
+}
+
+app.use(
+  '/api',
+  rateLimit({
+    windowMs: API_WINDOW_MS,
+    // El tope depende de si la petición viene de un usuario identificado:
+    // cada usuario autenticado tiene su propio cubo, así que 50 usuarios
+    // simultáneos NUNCA se bloquean entre sí.
+    max: (req) => (rateLimitKey(req).startsWith('u:') ? API_RATE_MAX : API_RATE_MAX_ANON),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    skip: (req) => req.method === 'OPTIONS',
+    message: { success: false, message: 'Demasiadas peticiones, intenta más tarde' },
+  })
+);
+
+const frontendDir = path.join(__dirname, '../../frontend');
+
+// Vista previa ("card") al compartir en WhatsApp/Facebook: las meta tags OG de
+// una página estática no pueden cambiar por asesor, así que servimos las
+// páginas públicas del catálogo inyectando og:image con la foto del asesor
+// indicado por ?asesorId= (foto pública de /uploads). Si no hay asesor, se usa
+// el logo del sitio. Los browsers ignoran estas metas; el scraper ya las lee.
+const PAGE_OG_SPLIT = '</head>';
+const PREVIEW_PAGES = ['propiedades.html', 'landing.html'];
+
+function injectOgTags(html, meta) {
+  const tags = [
+    '<!-- OG público -->',
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:title" content="${meta.title}">`,
+    `<meta property="og:description" content="${meta.description}">`,
+    `<meta property="og:image" content="${meta.image}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:image" content="${meta.image}">`,
+  ].join('\n    ');
+  return html.replace(PAGE_OG_SPLIT, `\n    ${tags}\n  ${PAGE_OG_SPLIT}`);
+}
+
+PREVIEW_PAGES.forEach((page) => {
+  app.get(`/${page}`, async (req, res, next) => {
+    try {
+      const asesorId = String(req.query.asesorId || '').trim();
+      const photoPath = asesorId
+        ? await (async () => {
+            const user = await User.findById(asesorId).select('photo name').lean();
+            return (user && user.photo) ? user.photo : '';
+          })()
+        : '';
+      const base = `${req.protocol}://${req.get('host')}`;
+      const image = photoPath
+        ? base + String(photoPath).replace(/^\//, '')
+        : base + '/logoinmobles.png';
+
+      const filePath = path.join(frontendDir, page);
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const html = injectOgTags(raw, {
+        title: photoPath ? 'Carta de presentación · INMOBLES' : 'INMOBLES · Catálogo inmobiliario',
+        description: photoPath
+          ? 'Conoce el catálogo de propiedades de este asesor INMOBLES.'
+          : 'Profesionales en negocios inmobiliarios.',
+        image,
+      });
+      res.status(200).set('Content-Type', 'text/html; charset=utf-8').send(html);
+    } catch (error) {
+      // No se pudo generar la vista previa: deja que el estático la sirva.
+      next();
+    }
+  });
+});
+
+// En modo mantenimiento se muestra la pantalla amigable para las navegaciones
+// de páginas (no bloquear recursos estáticos ni las páginas públicas/panel de
+// soporte). Se registra antes del estático para interceptar el contenido HTML.
+app.use(maintenancePage);
+
+// Caché de los archivos estáticos. Antes TODO se servía con `no-store`, lo que
+// obligaba al navegador a descargar de nuevo cada CSS/JS/logo en cada
+// navegación (y cada navegación es una página completa). Con 50+ usuarios
+// concurrentes eso saturaba el ancho de banda de la instancia de Render.
+// Ahora:
+//  - HTML → `no-cache`: se revalida con ETag (respuesta 304, sin cuerpo), así
+//    el HTML nuevo (aviso de versión, rutas nuevas) llega de inmediato.
+//  - JS/CSS/JSON → `no-cache` con ETag: igual de seguro y evita recargar el
+//    bundle entero.
+//  - Imágenes/fuentes → `public, max-age=1 día`: pesan mucho, casi no cambian
+//    y el Service Worker ya las sirve cache-first.
+const STATIC_IMAGE_RE = /\.(?:png|jpe?g|gif|webp|svg|ico|bmp|avif|woff2?|ttf|eot|mp4|webm)$/i;
+
+app.use(
+  express.static(frontendDir, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      if (STATIC_IMAGE_RE.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      } else {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  })
+);
+
+const { fileAuth } = require('./middlewares/fileAuth');
+const storage = require('./services/storage.service');
+
+// Archivos subidos (INE, contratos, fotos): requieren sesión salvo las fotos
+// de propiedades publicadas (catálogo público). Se sirve con nosniff y sin
+// caché para que las fotos de perfil/propiedades SIEMPRE reflejen el archivo
+// actualizado (si el asesor cambia su foto, la nueva se muestra al instante).
+// Cuando el almacenamiento en la nube (R2) está configurado, los archivos se
+// sirven desde el bucket en streaming; si no, desde el disco local.
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  },
+  fileAuth,
+  storage.serveStatic()
+);
+
+app.use('/api', maintenance, apiRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
+
+module.exports = app;

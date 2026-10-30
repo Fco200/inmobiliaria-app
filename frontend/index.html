@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>INMOBLES · Iniciar sesión</title>
+  <meta name="theme-color" content="#2d1048">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="INMOBLES">
+  <meta name="description" content="Plataforma corporativa de gestión inmobiliaria">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/jpeg" sizes="32x32" href="icons/ICONOINMOBLES_BLANCO.jfif">
+  <link rel="icon" type="image/jpeg" sizes="192x192" href="icons/ICONOINMOBLES_BLANCO.jfif">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/ICONOINMOBLES_BLANCO.jfif">
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body class="login-body">
+  <div class="login-bg" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="tech-grid"></div>
+  </div>
+
+  <main class="login-card">
+    <!-- Logo -->
+    <div class="login-logo-wrap">
+      <img src="logoinmobles.png" alt="INMOBLES" class="login-logo-img">
+      <div class="login-logo-collab">
+        <span class="login-collab-line"></span>
+        <span class="login-logo-sub">CRM INMOBLES</span>
+        <span class="login-collab-line"></span>
+      </div>
+    </div>
+
+    <!-- Estado -->
+    <div class="login-status-pill">
+      <span class="status-dot"></span>
+      En línea
+    </div>
+
+    <!-- Formulario -->
+    <form id="login-form" class="login-form" novalidate>
+      <div class="form-group">
+        <label for="identifier">Usuario o correo</label>
+        <input class="form-control" id="identifier" name="identifier" type="text"
+               placeholder="Ingresa tu usuario" autocomplete="username" autofocus required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <div class="password-wrap">
+          <input class="form-control" id="password" name="password" type="password"
+                 placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="password-toggle" id="btn-toggle-password"
+                  aria-label="Mostrar contraseña">&#128065;</button>
+        </div>
+      </div>
+
+      <div class="login-row">
+        <label class="login-check">
+          <input type="checkbox" name="remember" id="remember-me">
+          Recordar
+        </label>
+        <button type="button" class="link-btn login-forgot-btn" id="btn-forgot-password">
+          &#128274;&nbsp; ¿Olvidaste tu contraseña?
+        </button>
+      </div>
+
+      <div id="login-error" class="alert alert-error hide" role="alert"></div>
+
+      <button class="btn btn-primary btn-block" id="btn-login" type="submit">
+        <span id="login-spinner" class="spinner hide"></span>
+        <span>Entrar</span>
+      </button>
+    </form>
+
+    <div class="login-links">
+      <a href="landing.html">Catálogo público</a>
+      <span>·</span>
+      <button class="link-btn" data-install type="button">Instalar app</button>
+    </div>
+
+    <!-- Solicitud de nuevo usuario -->
+    <div class="login-request">
+      <span class="login-request-sep">¿Aún no tienes cuenta?</span>
+      <button class="btn btn-secondary btn-block" id="btn-solicitar-usuario" type="button">
+        &#128100;&nbsp; Solicitar acceso
+      </button>
+    </div>
+
+    <div class="login-netline">
+      <span class="login-version" id="login-version">Versión</span>
+      <button class="soporte-badge" id="btn-soporte" type="button" title="Acceso de soporte técnico">
+        &#128736;&#65039; Acceso Soporte Técnico
+      </button>
+    </div>
+    <div class="login-reset-line">
+      <button class="link-btn" id="btn-reset-app" type="button" title="Borra la caché local y vuelve a cargar la aplicación">
+        &#128260;&nbsp; Actualizar Nueva Version Aplicación
+      </button>
+    </div>
+
+    <!-- Marca de agua -->
+    <div class="login-watermark">
+      <div class="login-watermark-brands">
+        <img src="fv_digital_logo.png.webp" alt="FV DIGITAL" class="login-wm-dev">
+      </div>
+      <span>INMOBLES &times; <strong>FV DIGITAL</strong></span>
+      <small>Soluciones Digitales y Desarrollo</small>
+    </div>
+  </main>
+
+  <!-- Modal de inicio de sesión de Soporte Técnico -->
+  <div class="soporte-modal" id="soporte-modal" hidden>
+    <div class="soporte-modal-backdrop" data-soporte-close></div>
+    <div class="soporte-modal-card">
+      <button class="soporte-modal-close" type="button" data-soporte-close aria-label="Cerrar">&times;</button>
+      <div class="soporte-modal-head">
+        <span class="soporte-modal-icon">&#128736;&#65039;</span>
+        <h3>Soporte Técnico</h3>
+        <p>Acceso exclusivo FV DIGITAL</p>
+      </div>
+      <form id="soporte-form" class="soporte-form" novalidate>
+        <div class="form-group">
+          <label for="soporte-identifier">Usuario o correo de soporte</label>
+          <input class="form-control" id="soporte-identifier" name="identifier" type="text"
+                 placeholder="soporte" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="soporte-password">Contraseña</label>
+          <div class="password-wrap">
+            <input class="form-control" id="soporte-password" name="password" type="password"
+                   placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="password-toggle" id="btn-toggle-soporte-password"
+                    aria-label="Mostrar contraseña">&#128065;</button>
+          </div>
+        </div>
+        <div id="soporte-error" class="alert alert-error hide" role="alert"></div>
+        <button class="btn btn-primary btn-block" id="btn-soporte-login" type="submit">
+          <span id="soporte-spinner" class="spinner hide"></span>
+          <span>Entrar a Soporte</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <button id="btn-theme-login" type="button" title="Cambiar tema" aria-label="Cambiar tema">&#9788;</button>
+
+  <script src="js/config.js"></script>
+  <script src="js/utils/cache.js"></script>
+  <script src="js/api/client.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/utils/sounds.js"></script>
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/crudPage.js"></script>
+  <script src="js/services/index.js"></script>
+  <script src="js/install.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

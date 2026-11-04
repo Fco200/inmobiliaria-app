@@ -1,0 +1,69 @@
+'use strict';
+
+const { body, param } = require('express-validator');
+const validate = require('../middlewares/validate');
+
+// Etapas del embudo, en el mismo orden que las ofrece la interfaz.
+const ETAPAS = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA', 'DESCARTADO'];
+const MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
+// Cinco opciones exactas del formulario de operación + la variante "Otro".
+const SERVICIOS = ['Vender', 'Comprar', 'Rentar', 'Alquilar', 'Otro'];
+const TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro', ''];
+
+// Creación de clientes: el nombre es obligatorio.
+// `optional({ values: 'falsy' })`: el formulario envía `null`/'' en los campos
+// vacíos; sin esto, express-validator los trataría como presentes y el correo
+// vacío (o cualquier otro campo sin llenar) bloquearía el guardado.
+const clientRules = [
+  body('nombre').trim().notEmpty().withMessage('El nombre del cliente es obligatorio'),
+  body('telefono').optional({ values: 'falsy' }).isLength({ min: 7, max: 20 }).withMessage('El teléfono no es válido'),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('El correo no es válido'),
+  body('medio').optional({ values: 'falsy' }).isIn(MEDIOS).withMessage('Medio de contacto no válido'),
+  body('medioOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('El medio de contacto "otro" es demasiado largo'),
+  body('servicio').optional({ values: 'falsy' }).isIn(SERVICIOS).withMessage('Operación no válida'),
+  body('servicioOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('La operación "otro" es demasiado larga'),
+  body('tipoPropiedad').optional({ values: 'falsy' }).isIn(TIPOS_PROPIEDAD).withMessage('Tipo de propiedad no válido'),
+  body('tipoPropiedadOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('El tipo de propiedad "otro" es demasiado largo'),
+  body('etapaActual').optional({ values: 'falsy' }).isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('formaPago').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('Forma de pago no válida'),
+  body('formaPagoOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('La forma de pago "otro" es demasiado larga'),
+  body('asesorAsignado').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor no válido'),
+  body('capacidad').optional({ values: 'falsy' }).isNumeric().withMessage('Presupuesto no válido'),
+];
+
+// Actualización desde "Editar perfil": permite edición parcial sin nombre.
+// Todos los campos son opcionales de verdad: un campo vacío no debe bloquear
+// el guardado (el correo no es obligatorio).
+const clientUpdateRules = [
+  body('nombre').optional({ values: 'falsy' }).trim().notEmpty().withMessage('El nombre del cliente es obligatorio'),
+  body('telefono').optional({ values: 'falsy' }).isLength({ min: 7, max: 20 }).withMessage('El teléfono no es válido'),
+  body('email').optional({ values: 'falsy' }).isEmail().withMessage('El correo no es válido'),
+  body('medio').optional({ values: 'falsy' }).isIn(MEDIOS).withMessage('Medio de contacto no válido'),
+  body('medioOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('El medio de contacto "otro" es demasiado largo'),
+  body('servicio').optional({ values: 'falsy' }).isIn(SERVICIOS).withMessage('Operación no válida'),
+  body('servicioOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('La operación "otro" es demasiado larga'),
+  body('tipoPropiedad').optional({ values: 'falsy' }).isIn(TIPOS_PROPIEDAD).withMessage('Tipo de propiedad no válido'),
+  body('tipoPropiedadOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('El tipo de propiedad "otro" es demasiado largo'),
+  body('etapaActual').optional({ values: 'falsy' }).isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('formaPago').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('Forma de pago no válida'),
+  body('formaPagoOtro').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('La forma de pago "otro" es demasiado larga'),
+  body('asesorAsignado').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor no válido'),
+  body('capacidad').optional({ values: 'falsy' }).isNumeric().withMessage('Presupuesto no válido'),
+];
+
+// Cambio de etapa: etapa válida (etapaNueva o etapa) + nota obligatoria + datos del perfil opcionales.
+const stageRules = [
+  body('etapaNueva').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('etapa').optional().isIn(ETAPAS).withMessage('Etapa no válida'),
+  body('nota').trim().notEmpty().withMessage('La nota es obligatoria'),
+  body('datosEtapa').optional().isObject().withMessage('datosEtapa debe ser un objeto'),
+];
+
+const clientIdParam = [param('id').isMongoId().withMessage('Identificador no válido')];
+
+module.exports = {
+  clientRules: [...clientRules, validate],
+  clientUpdateRules: [...clientUpdateRules, validate],
+  stageRules: [...stageRules, validate],
+  clientIdParam: [...clientIdParam, validate],
+};

@@ -1,0 +1,13 @@
+{
+  "version": "2.26",
+  "channel": "estable",
+  "title": "Actualización 2.26",
+  "date": "2026-10-30",
+  "notes": [
+    "Negocios: los botones Ver bitácora, Checklist y Documentos vuelven a abrir y guardar correctamente, incluso si el navegador conserva una copia anterior de los servicios.",
+    "Citas: al agendar desde el inventario o desde cualquier propiedad, el asesor se asigna automáticamente con el usuario de la sesión; ya no aparece el error \"El usuario es obligatorio\".",
+    "Clientes: al elegir el medio \"Recomendación\" aparece el campo para escribir quién recomendó al cliente y el cursor se coloca ahí si falta llenarlo.",
+    "Selectores: clientes, asesores, propiedades, negocios y demás catálogos aparecen ordenados alfabéticamente para localizarlos más rápido.",
+    "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos."
+  ]
+}

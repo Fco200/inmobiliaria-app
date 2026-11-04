@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Guía del Usuario · INMOBLES</title>
+  <meta name="description" content="Guía ilustrada de INMOBLES para los usuarios del sistema: qué puedes hacer en cada módulo, paso a paso.">
+  <meta name="theme-color" content="#2d1048">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --p1: #2d1048;
+      --p2: #5B2D8E;
+      --p3: #7B3FA0;
+      --p-soft: #f3eafa;
+      --ink: #1a1a2e;
+      --muted: #64748b;
+      --line: #e7e1f1;
+      --bg: #f7f4fb;
+      --card: #ffffff;
+      --ok: #1f9d55;
+      --warn: #d97706;
+      --bad: #dc2626;
+      --blue: #2563eb;
+      --shadow: 0 10px 30px rgba(45, 16, 72, .10);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 140px; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--p2); }
+
+    img { max-width: 100%; }
+
+    .wrap { width: min(1040px, 100% - 32px); margin: 0 auto; }
+
+    /* ---------- HERO ---------- */
+    .hero {
+      background:
+        radial-gradient(1000px 300px at 85% -10%, rgba(255, 255, 255, .18), transparent 60%),
+        linear-gradient(135deg, var(--p1) 0%, var(--p2) 55%, var(--p3) 100%);
+      color: #fff;
+      padding: 34px 0 30px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: #fff; }
+
+    .brand img {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: #fff;
+      padding: 5px;
+      object-fit: contain;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+    }
+
+    .brand b { font-size: 20px; letter-spacing: .5px; display: block; line-height: 1.1; }
+    .brand small { opacity: .8; font-size: 12px; }
+
+    .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .hbtn {
+      border: 1px solid rgba(255, 255, 255, .45);
+      background: rgba(255, 255, 255, .12);
+      color: #fff;
+      padding: 9px 15px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      backdrop-filter: blur(4px);
+      transition: .18s;
+    }
+
+    .hbtn:hover { background: #fff; color: var(--p1); border-color: #fff; }
+    .hbtn.solid { background: #fff; color: var(--p1); }
+    .hbtn.solid:hover { background: #ffe9a8; border-color: #ffe9a8; }
+
+    .hero h1 {
+      margin: 26px 0 6px;
+      font-size: clamp(26px, 5vw, 40px);
+      line-height: 1.15;
+    }
+
+    .hero p.sub { margin: 0; opacity: .9; max-width: 640px; font-size: 15px; }
+
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+    .badge {
+      background: rgba(255, 255, 255, .15);
+      border: 1px solid rgba(255, 255, 255, .3);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    /* ---------- TABS ---------- */
+    .tabbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(247, 244, 251, .92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 0;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 11px 12px;
+      border-radius: 14px;
+      border: 1.5px solid var(--line);
+      background: var(--card);
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .18s;
+      text-align: center;
+      line-height: 1.25;
+    }
+
+    .tab:hover { border-color: var(--p3); color: var(--p2); }
+
+    .tab.on {
+      background: linear-gradient(135deg, var(--p1), var(--p2));
+      border-color: transparent;
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .tab small { display: block; font-weight: 500; font-size: 11.5px; opacity: .85; }
+
+    /* ---------- LAYOUT ---------- */
+    main { padding: 26px 0 40px; }
+
+    .guide[hidden] { display: none; }
+
+    .intro {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .intro .ico {
+      font-size: 30px;
+      background: var(--p-soft);
+      border-radius: 14px;
+      width: 60px; height: 60px;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+    }
+
+    .intro h2 { margin: 0 0 6px; font-size: 21px; }
+    .intro p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+    .index {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .index a {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      color: var(--p2);
+      transition: .15s;
+    }
+
+    .index a:hover { background: var(--p-soft); border-color: var(--p3); }
+
+    .chapter {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 18px rgba(45, 16, 72, .06);
+    }
+
+    .chap-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 6px; }
+
+    .chap-num {
+      width: 44px; height: 44px;
+      flex-shrink: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--p1), var(--p3));
+      color: #fff;
+      font-weight: 800;
+      font-size: 19px;
+      display: grid; place-items: center;
+      box-shadow: 0 6px 14px rgba(91, 45, 142, .35);
+    }
+
+    .chap-head h3 { margin: 2px 0 3px; font-size: 19px; }
+    .chap-head p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* ---------- STEPS ---------- */
+    .steps { list-style: none; margin: 18px 0 0; padding: 0; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 14px;
+      position: relative;
+      padding-bottom: 18px;
+    }
+
+    .step:last-child { padding-bottom: 0; }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      left: 18px;
+      top: 38px;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(var(--p-soft), var(--line));
+    }
+
+    .step:last-child::before { display: none; }
+
+    .step .dot {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid var(--p2);
+      color: var(--p2);
+      font-weight: 800;
+      font-size: 15px;
+      display: grid; place-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-body h4 { margin: 6px 0 4px; font-size: 15.5px; }
+    .step-body p { margin: 0; font-size: 14.5px; color: #3f4657; }
+
+    /* Botón tal como se ve en la app */
+    .ui {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--p2), var(--p3));
+      color: #fff;
+      border-radius: 8px;
+      padding: 1px 9px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(91, 45, 142, .3);
+      white-space: nowrap;
+    }
+
+    .ui.ghost { background: #fff; color: var(--p2); border: 1.5px solid var(--p2); box-shadow: none; }
+    .ui.green { background: var(--ok); box-shadow: 0 2px 6px rgba(31, 157, 85, .35); }
+    .ui.red { background: var(--bad); box-shadow: 0 2px 6px rgba(220, 38, 38, .3); }
+    .ui.amber { background: var(--warn); box-shadow: 0 2px 6px rgba(217, 119, 6, .35); }
+
+    code, .code {
+      background: #f1ecf7;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 13px;
+      font-family: Consolas, "Courier New", monospace;
+      word-break: break-all;
+    }
+
+    /* ---------- MOCKS (ilustraciones) ---------- */
+    .mock {
+      margin: 18px 0 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fbf9fe;
+      box-shadow: 0 8px 22px rgba(45, 16, 72, .08);
+    }
+
+    .mock-bar {
+      background: linear-gradient(135deg, var(--p1), var(--p2));
+      color: #fff;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .mock-bar span {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .45);
+    }
+
+    .mock-bar em { font-style: normal; margin-left: 8px; opacity: .9; font-weight: 600; }
+
+    .mock-body { padding: 14px; }
+
+    .mock-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
+    .mock-tabs i {
+      font-style: normal;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .mock-tabs i.on { background: var(--p2); border-color: var(--p2); color: #fff; }
+
+    .mock-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: #fff;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .mock-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mock-field {
+      background: #fff;
+      border: 1.5px solid var(--line);
+      border-radius: 9px;
+      padding: 7px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mock-field b { display: block; color: var(--ink); font-size: 12.5px; }
+    .mock-field.hl { border-color: var(--p3); box-shadow: 0 0 0 3px rgba(123, 63, 160, .15); }
+
+    .mock-nav { display: grid; gap: 6px; }
+
+    .mock-nav div {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 7px 11px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mock-nav div.hl {
+      background: var(--p-soft);
+      border-color: var(--p3);
+      font-weight: 700;
+      color: var(--p1);
+    }
+
+    .mock-chat { display: grid; gap: 8px; }
+
+    .bub {
+      max-width: 85%;
+      padding: 9px 12px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      background: #fff;
+      border: 1px solid var(--line);
+      position: relative;
+    }
+
+    .bub.me {
+      margin-left: auto;
+      background: linear-gradient(135deg, var(--p2), var(--p3));
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .bub.me a { color: #ffe9a8; word-break: break-all; }
+
+    .bub .who { display: block; font-size: 11px; font-weight: 700; opacity: .75; margin-bottom: 2px; }
+
+    figcaption {
+      font-size: 12.5px;
+      color: var(--muted);
+      padding: 10px 14px 14px;
+      border-top: 1px dashed var(--line);
+      background: #fff;
+    }
+
+    /* ---------- NOTAS ---------- */
+    .note {
+      display: flex;
+      gap: 11px;
+      align-items: flex-start;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      margin-top: 16px;
+      border: 1px solid;
+    }
+
+    .note b:first-child { font-size: 17px; line-height: 1.3; }
+    .note p { margin: 0; }
+
+    .note.tip { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+    .note.info { background: var(--p-soft); border-color: #d8c7ee; color: var(--p1); }
+    .note.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+    .note.danger { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+
+    /* ---------- MODULE GRID ---------- */
+    .modgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .mod {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      gap: 11px;
+      align-items: flex-start;
+      transition: .16s;
+    }
+
+    .mod:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--p3); }
+
+    .mod .mi {
+      width: 42px; height: 42px;
+      flex-shrink: 0;
+      border-radius: 12px;
+      background: var(--p-soft);
+      display: grid; place-items: center;
+      font-size: 20px;
+    }
+
+    .mod b { display: block; font-size: 14.5px; }
+    .mod small { color: var(--muted); font-size: 12.5px; line-height: 1.45; display: block; margin-top: 2px; }
+
+    /* ---------- CHECKLIST ---------- */
+    .check { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 9px; }
+
+    .check li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 13px;
+      font-size: 14.5px;
+    }
+
+    .check li::before {
+      content: "✓";
+      width: 24px; height: 24px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--ok);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      display: grid; place-items: center;
+      margin-top: 1px;
+    }
+
+    /* ---------- FAQ ---------- */
+    .faq { display: grid; gap: 10px; margin-top: 14px; }
+
+    .faq details {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+
+    .faq summary { font-weight: 700; font-size: 14.5px; cursor: pointer; }
+    .faq p { margin: 8px 0 0; font-size: 14px; color: #3f4657; }
+
+    /* ---------- SHARE BOX ---------- */
+    .sharebox {
+      background: linear-gradient(135deg, var(--p1), var(--p2));
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-top: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .sharebox h3 { margin: 0 0 6px; font-size: 18px; }
+    .sharebox p { margin: 0 0 14px; font-size: 14px; opacity: .9; }
+
+    .sharebox .url {
+      background: rgba(255, 255, 255, .14);
+      border: 1px dashed rgba(255, 255, 255, .5);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: Consolas, monospace;
+      font-size: 13.5px;
+      word-break: break-all;
+      margin-bottom: 14px;
+    }
+
+    .share-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+
+    /* ---------- FOOTER ---------- */
+    footer {
+      background: var(--p1);
+      color: rgba(255, 255, 255, .85);
+      padding: 24px 0;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    footer a { color: #ffe9a8; }
+    footer .flinks { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--ink);
+      color: #fff;
+      padding: 11px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: .25s;
+      z-index: 99;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .3);
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 640px) {
+      .tabs { grid-template-columns: 1fr; }
+      .chapter { padding: 17px 15px; }
+      .intro { flex-direction: column; }
+      .hero { padding: 24px 0; }
+      html { scroll-padding-top: 210px; }
+    }
+
+    @media print {
+      .tabbar, .hero-actions, .share-actions, .toast { display: none !important; }
+      .guide[hidden] { display: block !important; }
+      body { background: #fff; }
+      .chapter { break-inside: avoid; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-top">
+        <a class="brand" href="home.html">
+          <img src="logoinmobles.png" alt="INMOBLES">
+          <span>
+            <b>INMOBLES</b>
+            <small>Profesionales en Negocios Inmobiliarios</small>
+          </span>
+        </a>
+        <div class="hero-actions">
+          <button class="hbtn" type="button" data-copy>&#128279;&nbsp; Copiar enlace</button>
+          <button class="hbtn" type="button" data-wa>&#128172;&nbsp; Enviar por WhatsApp</button>
+          <a class="hbtn solid" href="home.html">&#8592;&nbsp; Volver a la app</a>
+        </div>
+      </div>
+
+      <h1>&#128100;&nbsp; Guía del Usuario</h1>
+      <p class="sub">Todo lo que puedes hacer dentro del sistema, explicado paso a paso y con ejemplos visuales. Guárdala o compártela con tu equipo.</p>
+
+      <div class="badges">
+        <span class="badge">&#128100;&nbsp; Guía del Usuario</span>
+        <span class="badge">&#128172;&nbsp; Paso a paso por módulo</span>
+        <span class="badge">&#128295;&nbsp; 100% ilustrada</span>
+        <span class="badge">&#128197;&nbsp; Actualizada</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <section class="guide" id="guia-usuario" role="tabpanel">
+
+      <div class="intro">
+        <div class="ico">&#128100;</div>
+        <div>
+          <h2>Guía del Usuario</h2>
+          <p>Para asesores y todo el equipo: aquí ves <strong>qué puedes hacer</strong> dentro del sistema, módulo por
+             módulo, con ejemplos paso a paso. Todo lo que registres es tuyo: cada asesor ve su propia cartera de
+             clientes y propiedades (el equipo de jefatura ve todo).</p>
+        </div>
+      </div>
+
+      <nav class="index">
+        <a href="#u1">1. Primeros pasos</a>
+        <a href="#u2">2. Qué puedes hacer</a>
+        <a href="#u3">3. Clientes</a>
+        <a href="#u4">4. Prospección</a>
+        <a href="#u5">5. Negocios</a>
+        <a href="#u6">6. Citas y calendario</a>
+        <a href="#u7">7. Tareas y metas</a>
+        <a href="#u8">8. Propiedades</a>
+        <a href="#u9">9. Gastos y reportes</a>
+        <a href="#u10">10. Chat y avisos</a>
+        <a href="#u11">11. Perfil y ayuda</a>
+        <a href="#u12">12. Tu primer día</a>
+      </nav>
+
+      <article class="chapter" id="u1">
+        <div class="chap-head">
+          <span class="chap-num">1</span>
+          <div>
+            <h3>Primeros pasos</h3>
+            <p>Tres cosas antes de empezar a trabajar.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Entra con tu usuario y contraseña</h4>
+              <p>Te los da el administrador. Si es tu primera vez, lo primero que debes hacer es cambiar la contraseña
+                 desde <span class="ui">&#128100; Mi perfil</span> &rarr; <em>Seguridad</em>.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Instala la app (opcional, muy recomendable)</h4>
+              <p>En Android aparece el botón <em>Instalar aplicación</em>; en iPhone usa <em>Compartir &rarr; Agregar a
+                 pantalla de inicio</em>. Así entras con un toque y recibes notificaciones.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Revisa los avisos del día</h4>
+              <p>La campanita &#128276; arriba muestra lo nuevo: citas de hoy, tareas vencidas y mensajes del equipo.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="note info">
+          <b>&#128214;</b>
+          <p>Esta página <strong>es tu guía</strong>: guárdala en favoritos o pídele al administrador que te envíe el
+             enlace por el chat. Puedes volver a consultarla cuando quieras.</p>
+        </div>
+      </article>
+
+      <article class="chapter" id="u2">
+        <div class="chap-head">
+          <span class="chap-num">2</span>
+          <div>
+            <h3>Qué puedes hacer en cada módulo</h3>
+            <p>Mapa rápido de todo el sistema.</p>
+          </div>
+        </div>
+
+        <div class="modgrid">
+          <div class="mod"><span class="mi">&#127969;</span><div><b>Inicio</b><small>Resumen del día: citas, tareas, indicadores y accesos rápidos.</small></div></div>
+          <div class="mod"><span class="mi">&#9638;</span><div><b>Dashboard</b><small>Gráficas de tu embudo de ventas e indicadores del mes.</small></div></div>
+          <div class="mod"><span class="mi">&#128269;</span><div><b>Prospección</b><small>Registra llamadas, visitas y anuncios con lo que inviertes en cada uno.</small></div></div>
+          <div class="mod"><span class="mi">&#128101;</span><div><b>Clientes</b><small>Tu cartera: crear, buscar, llamar, WhatsApp y expediente.</small></div></div>
+          <div class="mod"><span class="mi">&#128179;</span><div><b>Negocios</b><small>Operaciones por etapa, con historial y seguimiento.</small></div></div>
+          <div class="mod"><span class="mi">&#129309;</span><div><b>Negociaciones</b><small>Ofertas y contraofertas en tablero (kanban).</small></div></div>
+          <div class="mod"><span class="mi">&#128197;</span><div><b>Citas</b><small>Agenda de visitas y recordatorios.</small></div></div>
+          <div class="mod"><span class="mi">&#128467;</span><div><b>Calendario</b><small>Vista de mes, semana y día con todos tus eventos.</small></div></div>
+          <div class="mod"><span class="mi">&#9745;</span><div><b>Tareas</b><small> Pendientes con fecha, estado y cliente vinculado.</small></div></div>
+          <div class="mod"><span class="mi">&#127919;</span><div><b>Metas</b><small>Objetivos de ventas con avance automático.</small></div></div>
+          <div class="mod"><span class="mi">&#127968;</span><div><b>Captar Propiedades</b><small>Alta de inmuebles con fotos, precio y características.</small></div></div>
+          <div class="mod"><span class="mi">&#128230;</span><div><b>Propiedades</b><small>Inventario general del equipo; consulta, agenda, crea negocios y comparte.</small></div></div>
+          <div class="mod"><span class="mi">&#128184;</span><div><b>Gastos</b><small>Registra egresos e inversiones con comprobante.</small></div></div>
+          <div class="mod"><span class="mi">&#128202;</span><div><b>Reportes</b><small>Tu actividad y resultados, listos para exportar.</small></div></div>
+          <div class="mod"><span class="mi">&#128196;</span><div><b>Formatos</b><small>Documentos base para descargar y imprimir.</small></div></div>
+          <div class="mod"><span class="mi">&#128276;</span><div><b>Avisos</b><small>Notificaciones del sistema y del equipo.</small></div></div>
+          <div class="mod"><span class="mi">&#128101;</span><div><b>Directorio</b><small>Contactos de tus compañeros de equipo.</small></div></div>
+          <div class="mod"><span class="mi">&#128172;</span><div><b>Chat</b><small>Canal general, soporte y conversaciones 1 a 1.</small></div></div>
+          <div class="mod"><span class="mi">&#128260;</span><div><b>Actualizaciones</b><small>Novedades y mejoras recientes del sistema.</small></div></div>
+          <div class="mod"><span class="mi">&#128100;</span><div><b>Mi perfil</b><small>Tus datos, foto, contraseña y cerrar sesión.</small></div></div>
+          <div class="mod"><span class="mi">&#128172;</span><div><b>Ayuda</b><small>Soporte por teléfono, WhatsApp o correo.</small></div></div>
+          <div class="mod"><span class="mi">&#9881;</span><div><b>Configuración</b><small>Solo administradores: usuarios, roles y ajustes.</small></div></div>
+        </div>
+
+        <figure class="mock">
+          <div class="mock-bar"><span></span><span></span><span></span><em>Menú lateral</em></div>
+          <div class="mock-body">
+            <div class="mock-nav">
+              <div class="hl">&#127969; Inicio</div>
+              <div>&#128101; Comercial: Prospección · Clientes · Negocios · Citas · Calendario · Tareas · Metas</div>
+              <div>&#127968; Propiedades: Captar · Propiedades (inventario general)</div>
+              <div>&#128184; Finanzas: Gastos · Reportes</div>
+              <div>&#128196; Recursos: Formatos · Avisos · Directorio · Actualizaciones</div>
+              <div>&#128100; Sistema: Perfil · Ayuda</div>
+            </div>
+          </div>
+          <figcaption>Las secciones están agrupadas en el menú: todo lo comercial primero, después propiedades, finanzas y recursos.</figcaption>
+        </figure>
+      </article>
+
+      <article class="chapter" id="u3">
+        <div class="chap-head">
+          <span class="chap-num">3</span>
+          <div>
+            <h3>Clientes: tu cartera</h3>
+            <p>El módulo que usarás todos los días.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Crea un cliente</h4>
+              <p>Menú &rarr; <span class="ui">&#128101; Clientes</span> &rarr; <span class="ui">+ Nuevo cliente</span>.
+                 Nombre, teléfono y tipo de interés son lo esencial; el resto puedes completarlo después.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Búscalo y filtra</h4>
+              <p>Usa el buscador por nombre o teléfono, y los filtros por etapa, interés o asesor para encontrar
+                 cualquiera en segundos.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Contacta con un toque</h4>
+              <p>En cada fila verás dos botones: <span class="ui green">&#128172; WhatsApp</span> abre la conversación
+                 (y guarda la nota en el historial) y <span class="ui">&#128222; Llamar</span> marca el número y te deja
+                 registrar el resultado con notas.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">4</span>
+            <div class="step-body">
+              <h4>Guarda el contacto en tu teléfono</h4>
+              <p>Desde la tarjeta del cliente puedes descargar un archivo <code>.vcf</code> listo para agregarlo a la
+                 agenda de tu celular.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">5</span>
+            <div class="step-body">
+              <h4>Sube su expediente</h4>
+              <p>En la ficha del cliente carga INE, escrituras o comprobantes
+                 (<span class="ui">&#128196; Documentos</span>). El jefe valida o rechaza cada archivo.</p>
+            </div>
+          </li>
+        </ol>
+
+        <figure class="mock">
+          <div class="mock-bar"><span></span><span></span><span></span><em>Clientes &rsaquo; Tarjeta de contacto</em></div>
+          <div class="mock-body">
+            <div class="mock-row">
+              <div>
+                <b>María Fernández</b><br>
+                <small style="color:var(--muted)">Interés: Casa · Etapa: Prospecto · Tel. 662 111 2233</small>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <span class="ui green">&#128172; WhatsApp</span>
+                <span class="ui">&#128222; Llamar</span>
+                <span class="ui ghost">&#128196; Expediente</span>
+                <span class="ui ghost">Guardar contacto</span>
+              </div>
+            </div>
+          </div>
+          <figcaption>Cada cliente trae sus acciones a la vista: contactar, llamar, guardar el contacto y subir documentos.</figcaption>
+        </figure>
+
+        <div class="note tip">
+          <b>&#128161;</b>
+          <p><strong>Tip:</strong> registra <em>cada</em> conversación como interacción (llamada o WhatsApp con notas).
+             Así el historial cuenta tu seguimiento y no repites llamadas.</p>
+        </div>
+      </article>
+
+      <article class="chapter" id="u4">
+        <div class="chap-head">
+          <span class="chap-num">4</span>
+          <div>
+            <h3>Prospección: invierte y capta</h3>
+            <p>Lleva la cuenta de en qué gastas para conseguir clientes.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Registra tu actividad</h4>
+              <p><span class="ui">&#128269; Prospección</span> &rarr; <span class="ui">+ Nueva actividad</span>: tipo
+                 (llamada, visita, anuncio, redes…), fecha, costo/inversión y cuántos prospectos obtuviste.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Consulta tu resumen</h4>
+              <p>La página muestra la inversión total por tipo de actividad y los prospectos generados, para saber qué
+                 canal te conviene más.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="u5">
+        <div class="chap-head">
+          <span class="chap-num">5</span>
+          <div>
+            <h3>Negocios: mueve tus operaciones</h3>
+            <p>Cada oportunidad avanza por etapas, como en una línea de producción.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Crea el negocio</h4>
+              <p><span class="ui">&#128179; Negocios</span> &rarr; <span class="ui">+ Nuevo negocio</span>: vincúlalo a
+                 un cliente, asigna propiedad, monto y etapa inicial.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Avanza de etapa</h4>
+              <p>Cada cambio queda registrado en el historial (quién lo movió y cuándo). También puedes verlo en tablero
+                 desde <span class="ui">&#129309; Negociaciones</span>.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Cierra y registra el resultado</h4>
+              <p>Cuando se concreta la venta, marca la etapa final: el negocio aparece en tus reportes y en el
+                 indicador de ventas del mes.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="u6">
+        <div class="chap-head">
+          <span class="chap-num">6</span>
+          <div>
+            <h3>Citas y calendario</h3>
+            <p>Nunca más se te olvide una visita.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Agenda la cita</h4>
+              <p><span class="ui">&#128197; Citas</span> &rarr; <span class="ui">+ Nueva cita</span>: cliente, fecha,
+                 hora, lugar y notas. Puedes vincularla a un cliente o a un negocio.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Revísala en el calendario</h4>
+              <p><span class="ui">&#128467; Calendario</span> muestra el mes, la semana o el día con todos tus eventos;
+                 da clic en cualquiera para ver el detalle o abrir el módulo.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Activa los recordatorios</h4>
+              <p>Pídele a la app que te avise: la campanita &#128276; te avisa de lo que está por comenzar y, si activas
+                 las notificaciones push, llega aunque la app esté cerrada.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="u7">
+        <div class="chap-head">
+          <span class="chap-num">7</span>
+          <div>
+            <h3>Tareas y metas</h3>
+            <p>Tu to-do list y tus objetivos del mes.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Crea una tarea</h4>
+              <p><span class="ui">&#9745; Tareas</span> &rarr; <span class="ui">+ Nueva tarea</span>: título, fecha,
+                 prioridad y (opcional) el cliente relacionado. Márkala como <em>completada</em> al terminarla.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Define tus metas</h4>
+              <p><span class="ui">&#127919; Metas</span>: crea metas de ventas o de captación con periodo (semana o
+                 mes) y monto objetivo. El avance se calcula solo con tus negocios.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Revisa el avance</h4>
+              <p>Las tareas vencidas y las metas por cumplir aparecen como avisos en la campanita y en el Inicio.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="u8">
+        <div class="chap-head">
+          <span class="chap-num">8</span>
+          <div>
+            <h3>Propiedades: capta y publica</h3>
+            <p>Dar de alta un inmueble y sacarlo al catálogo público.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Captura la propiedad</h4>
+              <p><span class="ui">&#127968; Captar Propiedades</span> &rarr; <span class="ui">+ Nueva propiedad</span>:
+                 tipo, operación (venta/renta), precio, zona, descripción y características.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Sube las fotos</h4>
+              <p>En la ficha de la propiedad agrega fotos claras del inmueble (hasta varias). Si alguna no carga, vuelve
+                 a subirla desde el módulo.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Revísala en tu inventario</h4>
+              <p><span class="ui">&#128230; Propiedades</span> es el inventario general del equipo: consulta el detalle, agenda citas, crea negocios y comparte.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">4</span>
+            <div class="step-body">
+              <h4>Públcala al catálogo</h4>
+              <p>Con el botón de <em>publicar</em> la propiedad aparece en la página pública de la inmobiliaria; con
+                 <em>despublicar</em> se retira. Solo se publican las que tengan fotos y datos completos.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="note warn">
+          <b>&#9888;</b>
+          <p>Revisa bien el precio y la dirección <strong>antes</strong> de publicar: es la información que verá
+             cualquier persona en internet.</p>
+        </div>
+      </article>
+
+      <article class="chapter" id="u9">
+        <div class="chap-head">
+          <span class="chap-num">9</span>
+          <div>
+            <h3>Gastos y reportes</h3>
+            <p>Controla en qué gastas y revisa tus resultados.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Registra un gasto</h4>
+              <p><span class="ui">&#128184; Gastos</span> &rarr; <span class="ui">+ Nuevo gasto</span>: concepto,
+                 monto, fecha, categoría y (opcional) el negocio relacionado.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Consulta tus reportes</h4>
+              <p><span class="ui">&#128202; Reportes</span> muestra tu actividad, clientes atendidos y resultados;
+                 puedes exportarlos para llevarlos a una reunión.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="u10">
+        <div class="chap-head">
+          <span class="chap-num">10</span>
+          <div>
+            <h3>Chat y avisos del equipo</h3>
+            <p>Comunicación interna en tres canales.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Canal general</h4>
+              <p><span class="ui">&#128172; Canal general</span>: conversación de todo el equipo. Ideal para avisos,
+                 dudas rápidas y compartir enlaces (como esta guía).</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Soporte técnico</h4>
+              <p><span class="ui">&#128736;&#65039; Soporte</span>: canal directo con el equipo de soporte del sistema
+                 para reportar fallas o pedir ayuda.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Chat 1 a 1</h4>
+              <p>Con <span class="ui ghost">+ Chat 1:1</span> eliges a un compañero y conversan en privado. Los enlaces
+                 que llegan se abren con un toque.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">4</span>
+            <div class="step-body">
+              <h4>Avisos</h4>
+              <p>En la pestaña <em>Avisos</em> del chat (y en el módulo <span class="ui">&#128276; Avisos</span>) llegan
+                 los comunicados oficiales del equipo; los de prioridad alta aparecen destacados.</p>
+            </div>
+          </li>
+        </ol>
+
+        <figure class="mock">
+          <div class="mock-bar"><span></span><span></span><span></span><em>Chat &rsaquo; Canales</em></div>
+          <div class="mock-body">
+            <div class="mock-tabs">
+              <i class="on">&#128172; Canal general</i><i>&#128736;&#65039; Soporte</i><i>+ Chat 1:1</i><i>+ Aviso</i>
+            </div>
+            <div class="mock-chat">
+              <div class="bub"><span class="who">Jefe</span>Recordatorio: meta de captación el viernes 📌</div>
+              <div class="bub me"><span class="who">Tú</span>¡Entendido! Ya voy en 3 propiedades ✅</div>
+            </div>
+          </div>
+          <figcaption>El chat se abre en el canal general; desde ahí cambias de canal con los botones de arriba.</figcaption>
+        </figure>
+      </article>
+
+      <article class="chapter" id="u11">
+        <div class="chap-head">
+          <span class="chap-num">11</span>
+          <div>
+            <h3>Perfil, formatos y ayuda</h3>
+            <p>Los detalles que hacen tuyo al sistema.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Completa tu perfil</h4>
+              <p><span class="ui">&#128100; Mi perfil</span>: sube tu foto, revisa tu teléfono y cambia tu contraseña
+                 (mínimo 8 caracteres, con mayúscula, minúscula y número).</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Usa los formatos</h4>
+              <p><span class="ui">&#128196; Formatos</span> reúne documentos base (contratos, solicitudes, cartas) para
+                 descargar e imprimir cuando los necesites.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Pide ayuda</h4>
+              <p><span class="ui">&#128172; Ayuda</span> tiene el teléfono, WhatsApp, correo y página del soporte; un
+                 clic y te contestan. También puedes escribir por el canal de Soporte dentro del chat.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">4</span>
+            <div class="step-body">
+              <h4>Cierra sesión en equipos compartidos</h4>
+              <p>Botón <span class="ui red">Salir</span> (o <em>Mi perfil &rarr; Cerrar sesión</em>) cuando termines en
+                 una computadora que no sea tuya.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="note info">
+          <b>&#128274;</b>
+          <p><strong>Recuerda:</strong> cada asesor ve su propia información (clientes, propiedades, metas y gastos).
+             El equipo de jefatura ve todo para poder apoyarte.</p>
+        </div>
+      </article>
+
+      <article class="chapter" id="u12">
+        <div class="chap-head">
+          <span class="chap-num">12</span>
+          <div>
+            <h3>Tu primer día: checklist</h3>
+            <p>Marca cada punto y estarás listo para trabajar.</p>
+          </div>
+        </div>
+
+        <ul class="check">
+          <li>Cambié mi contraseña desde <strong>Mi perfil</strong>.</li>
+          <li>Subí mi foto de perfil.</li>
+          <li>Registré al menos 3 clientes nuevos.</li>
+          <li>Agendé mi primera cita y revisé el calendario.</li>
+          <li>Cree una tarea para mañana y una meta del mes.</li>
+          <li>Capté una propiedad con fotos y revisé su ficha.</li>
+          <li>Entré al <strong>Canal general</strong> del chat y saludé al equipo.</li>
+          <li>Revisé la campanita de avisos &#128276;.</li>
+        </ul>
+
+        <div class="note tip">
+          <b>&#128161;</b>
+          <p><strong>¿Algo no funciona?</strong> Escribe al canal de Soporte o entra a <em>Ayuda</em>: nunca dejes un
+             problema sin reportar.</p>
+        </div>
+      </article>
+
+      <div class="sharebox">
+        <h3>&#128238; Comparte esta guía</h3>
+        <p>Envíasela a tu equipo: se abre en cualquier celular o computadora, sin necesidad de iniciar sesión.</p>
+        <div class="url" id="url-usuario">GUIAUSUARIO.HTML</div>
+        <div class="share-actions">
+          <button class="hbtn solid" type="button" data-copy>&#128279;&nbsp; Copiar enlace</button>
+          <button class="hbtn" type="button" data-wa>&#128172;&nbsp; WhatsApp</button>
+          <a class="hbtn" href="chat.html">&#128172;&nbsp; Ir al chat</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="flinks">
+        <a href="home.html">Inicio de la app</a>
+        <a href="ayuda.html">Ayuda y soporte</a>
+        <a href="actualizaciones.html">Actualizaciones</a>
+      </div>
+      <div>&copy; INMOBLES · Guía de uso · Desarrollado por <strong>FV DIGITAL</strong></div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/guia.js"></script>
+</body>
+</html>

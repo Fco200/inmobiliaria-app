@@ -1,0 +1,14 @@
+Actualiza la plataforma CRM Inmuebles aplicando los siguientes cambios prioritarios:
+
+1. MÓDULO DE CLIENTES:
+- Asegurar campos esenciales en el alta rápida: Fecha (automática), Nombre completo, Teléfono, Qué busca (Comprar/Vender/Rentar), Forma de compra (con opciones obligatorias: Contado, Infonavit, Banco, Foviste, Otros), Capacidad de pago (flexible/pendiente), Tipo de propiedad, Zona, Medio de recomendación y Notas.
+
+2. MÓDULO DE PROPIEDADES E INVENTARIO:
+- Separar en dos secciones claras: "Mis propiedades" (inventario personal del asesor, donde se capturan fotos, datos y se incluye un interruptor/switch para decidir si se publica o no en el general) y "Propiedades" (inventario general de equipo y externos visibles para todos).
+- En la edición de propiedades, agregar opción para ordenar o seleccionar cuál será la foto de portada principal.
+- Corrección visual: Asegurar que al visualizar las descripciones de las propiedades se respeten los saltos de línea y viñetas (que no se amontonen de corrido).
+- Al compartir propiedad por WhatsApp: En lugar de texto plano con "valor ticket", generar y enviar un PDF limpio que contenga las imágenes (con la portada destacada), la descripción completa con sus saltos de línea y los datos de contacto del asesor activo que realiza el envío.
+
+3. MÓDULO DE NEGOCIOS:
+- Habilitar opción "Otro / Externo" para compradores, vendedores y asesores compartidos para poder escribir nombres libres de personas externas a la plataforma.
+- Simplificar campos de montos redundantes en las etapas de cierre.

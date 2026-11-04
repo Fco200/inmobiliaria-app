@@ -82,6 +82,18 @@ window.Welcome = (() => {
     }
   }
 
+  // Carga el componente de suscripción a noticias si todavía no está en la página.
+  function ensureOptIn() {
+    if (window.NewsletterOptIn) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'js/components/newsletterOptIn.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
   function open(opts) {
     if (active) return;
     active = true;
@@ -121,12 +133,16 @@ window.Welcome = (() => {
           <img class="welcome-brand-dev" src="fv_digital_logo.png.webp" alt="FV DIGITAL">
         </div>
         <p class="welcome-note">INMOBLES &times; FV DIGITAL</p>
+        <div id="welcome-news"></div>
         <button class="btn btn-primary welcome-btn" type="button" id="welcome-continue">&#128075;&nbsp; Continuar</button>
       </div>
     `;
 
     document.body.appendChild(overlay);
     createParticles(overlay.querySelector('#welcome-particles'));
+    ensureOptIn()
+      .then(() => window.NewsletterOptIn.mountWelcome(overlay.querySelector('#welcome-news')))
+      .catch(() => {});
 
     const close = () => {
       overlay.classList.add('closing');

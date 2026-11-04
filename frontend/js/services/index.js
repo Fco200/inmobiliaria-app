@@ -295,6 +295,10 @@ window.API = {
     removeSubscriber: (id) => ApiClient.remove(`/newsletter/subscribers/${id}`),
     campaigns: (params) => ApiClient.get('/newsletter/campaigns', params),
     sendCampaign: (body) => ApiClient.post('/newsletter/campaign', body),
+    // Suscripción propia del usuario (Bienvenida y Mi perfil).
+    me: () => ApiClient.get('/newsletter/me'),
+    subscribeMe: (body) => ApiClient.post('/newsletter/me/subscribe', body),
+    unsubscribeMe: () => ApiClient.post('/newsletter/me/unsubscribe'),
     exportCsv: (params) => API.downloadCsv('/newsletter/subscribers/export', 'suscriptores.csv', params),
   },
 

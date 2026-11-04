@@ -33,6 +33,22 @@ function resetTransporter() {
   failedPermanent = false;
 }
 
+// Gmail solo acepta como remitente la cuenta autenticada (o un alias verificado).
+// Si MAIL_FROM usa otro dominio, se envía desde la cuenta SMTP y la dirección
+// configurada queda como "responder a".
+function resolveSender() {
+  const from = String(env.mailFrom || '');
+  const addr = (from.match(/<([^>]+)>/) || [null, from])[1].trim();
+  const fromDomain = (addr.split('@')[1] || '').toLowerCase();
+  const smtpDomain = (String(env.smtpUser || '').split('@')[1] || '').toLowerCase();
+  const isGmail = smtpDomain === 'gmail.com' || smtpDomain === 'googlemail.com';
+  if (isGmail && fromDomain && fromDomain !== smtpDomain) {
+    const name = from.includes('<') ? from.split('<')[0].trim() : 'INMOBLES';
+    return { from: `${name || 'INMOBLES'} <${env.smtpUser}>`, replyTo: addr };
+  }
+  return { from, replyTo: undefined };
+}
+
 /**
  * Envía un correo de texto simple.
  * @param {Object} opts { to, subject, html, text }
@@ -42,8 +58,10 @@ async function sendMail(opts = {}) {
   const to = String(opts.to || '').trim();
   if (!to) return false;
 
+  const sender = resolveSender();
   const message = {
-    from: env.mailFrom,
+    from: sender.from,
+    replyTo: sender.replyTo,
     to,
     subject: opts.subject || '(sin asunto)',
     text: opts.text || '',
@@ -59,7 +77,12 @@ async function sendMail(opts = {}) {
   }
 
   try {
-    await getTransporter().sendMail(message);
+    const info = await getTransporter().sendMail(message);
+    // Gmail puede aceptar la conexión y rechazar al destinatario sin lanzar error.
+    if (info && Array.isArray(info.rejected) && info.rejected.length) {
+      console.error('[MAIL] Destinatario rechazado por el servidor:', to);
+      return false;
+    }
     return true;
   } catch (error) {
     // Si la credencial falla de forma permanente, deja de intentar para no

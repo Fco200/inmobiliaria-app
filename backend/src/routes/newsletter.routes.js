@@ -8,6 +8,11 @@ const router = Router();
 
 // Administración del boletín y envío de campañas. El panel de soporte usa las
 // mismas rutas con su sesión de SUPERADMIN.
+// Autoservicio: cualquier usuario autenticado administra su propia suscripción.
+router.get('/me', protect, controller.getMySubscription);
+router.post('/me/subscribe', protect, controller.subscribeMe);
+router.post('/me/unsubscribe', protect, controller.unsubscribeMe);
+
 router.use(protect, authorize('admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'));
 
 router.get('/subscribers', controller.listSubscribers);

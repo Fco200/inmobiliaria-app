@@ -179,9 +179,20 @@ const listCampaigns = asyncHandler(async (req, res) => {
 
 async function collectRecipients(audience, roleCode) {
   const recipients = new Map();
+
+  // Correos suscritos y correos que dieron de baja. Quien pidió la baja nunca
+  // recibe campañas, salvo que vuelva a suscribirse después.
+  const [suscritosRows, bajasRows] = await Promise.all([
+    Newsletter.find({ status: 'suscrito' }).select('email').lean(),
+    Newsletter.find({ status: 'dado_baja' }).select('email').lean(),
+  ]);
+  const suscritos = new Set(suscritosRows.map((r) => cleanEmail(r.email)).filter(Boolean));
+  const bajas = new Set(bajasRows.map((r) => cleanEmail(r.email)).filter(Boolean));
+  const optedOut = (email) => bajas.has(email) && !suscritos.has(email);
+
   const add = (emailValue, name, source) => {
     const email = cleanEmail(emailValue);
-    if (!email) return;
+    if (!email || optedOut(email)) return;
     if (!recipients.has(email)) recipients.set(email, { email, name: String(name || '').trim(), source });
   };
 
@@ -206,7 +217,11 @@ async function collectRecipients(audience, roleCode) {
       query.role = role._id;
     }
     const rows = await User.find(query).select('email name').lean();
-    rows.forEach((row) => add(row.email, row.name, 'usuario'));
+    // Solo reciben campañas los usuarios que activaron las noticias (opt-in).
+    rows.forEach((row) => {
+      const email = cleanEmail(row.email);
+      if (email && suscritos.has(email)) add(row.email, row.name, 'usuario');
+    });
   }
 
   if (wantsClients) {
@@ -218,6 +233,112 @@ async function collectRecipients(audience, roleCode) {
 
   return Array.from(recipients.values());
 }
+
+// ── Autoservicio: suscripción propia desde Bienvenida o Mi perfil ───────────
+
+// GET /api/newsletter/me
+const getMySubscription = asyncHandler(async (req, res) => {
+  const [user, sub] = await Promise.all([
+    User.findById(req.user._id).select('email newsletterPrompted').lean(),
+    Newsletter.findOne({ user: req.user._id, status: 'suscrito' }).sort({ updatedAt: -1 }).lean(),
+  ]);
+  res.json({
+    success: true,
+    data: {
+      subscribed: Boolean(sub),
+      email: sub ? sub.email : (user && user.email) || '',
+      prompted: Boolean(user && user.newsletterPrompted),
+    },
+  });
+});
+
+// POST /api/newsletter/me/subscribe  body: { email, accept? }
+// accept: false solo registra que la pregunta fue contestada ("Después").
+const subscribeMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+
+  if (req.body && req.body.accept === false) {
+    user.newsletterPrompted = true;
+    await user.save();
+    return res.json({
+      success: true,
+      message: 'Puedes activar las noticias cuando quieras desde Mi perfil.',
+      data: { subscribed: false, prompted: true },
+    });
+  }
+
+  const email = cleanEmail(req.body && req.body.email);
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Ingresa un correo electrónico válido.' });
+  }
+
+  // Una cuenta tiene una sola suscripción activa: el correo nuevo reemplaza al anterior.
+  await Newsletter.updateMany(
+    { user: user._id, email: { $ne: email }, status: 'suscrito' },
+    { $set: { status: 'dado_baja' } }
+  );
+
+  let sub = await Newsletter.findOne({ email });
+  if (sub) {
+    sub.status = 'suscrito';
+    sub.user = user._id;
+    if (!sub.name && user.name) sub.name = user.name;
+    await sub.save();
+  } else {
+    sub = await Newsletter.create({
+      email,
+      name: user.name || '',
+      source: 'crm',
+      user: user._id,
+      status: 'suscrito',
+    });
+  }
+
+  user.newsletterPrompted = true;
+  await user.save();
+
+  await logActivity({
+    entityType: 'Newsletter',
+    entityId: sub._id,
+    user: user._id,
+    action: 'suscripcion_newsletter',
+    message: `${user.name || user.username} se suscribió a las noticias del CRM (${email})`,
+  });
+
+  res.json({
+    success: true,
+    message: `Listo. Recibirás noticias del CRM en ${email}.`,
+    data: { subscribed: true, email, prompted: true },
+  });
+});
+
+// POST /api/newsletter/me/unsubscribe — deja de recibir correos del boletín.
+const unsubscribeMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+
+  const orFilter = [{ user: user._id }];
+  if (user.email) orFilter.push({ email: cleanEmail(user.email) });
+  await Newsletter.updateMany({ $or: orFilter, status: 'suscrito' }, { $set: { status: 'dado_baja' } });
+
+  user.newsletterPrompted = true;
+  await user.save();
+
+  await logActivity({
+    entityType: 'Newsletter',
+    entityId: user._id,
+    user: user._id,
+    action: 'baja_newsletter',
+    message: `${user.name || user.username} canceló las noticias del CRM`,
+  });
+
+  res.json({
+    success: true,
+    message: 'Cancelaste las noticias. Ya no recibirás correos del boletín.',
+    data: { subscribed: false, prompted: true },
+  });
+});
 
 // POST /api/newsletter/campaign
 // body: { subject, message, intro?, audience: 'suscriptores'|'usuarios'|'clientes'|'todos', role? }
@@ -301,4 +422,7 @@ module.exports = {
   getStats,
   listCampaigns,
   sendCampaign,
+  getMySubscription,
+  subscribeMe,
+  unsubscribeMe,
 };

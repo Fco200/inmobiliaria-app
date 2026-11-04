@@ -242,6 +242,12 @@ window.Pages.profile = {
         </div>
       </div>
 
+      <div class="card" style="margin-top:16px;">
+        <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#128231; Noticias por correo</h3>
+        <p class="text-muted" style="margin:0 0 12px;font-size:13px;">Recibe novedades, promociones y cambios importantes del CRM en tu correo.</p>
+        <div id="profile-newsletter-host"></div>
+      </div>
+
       ${goals.length ? `
       <div class="card profile-goal-card" style="margin-top:16px;">
         <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;">&#127919; Tu meta en curso</h3>
@@ -336,6 +342,18 @@ window.Pages.profile = {
     // Como Configuración es solo para administradores, el Perfil es el lugar
     // donde cualquier usuario (incluido el soporte) gestiona sus avisos.
     initNotificationsCard(container);
+    loadNewsletterCard(container.querySelector('#profile-newsletter-host'));
+
+    function loadNewsletterCard(host) {
+      if (!host) return;
+      const mount = () => window.NewsletterOptIn.mountProfile(host);
+      if (window.NewsletterOptIn) return mount();
+      const script = document.createElement('script');
+      script.src = 'js/components/newsletterOptIn.js';
+      script.onload = mount;
+      script.onerror = () => { host.innerHTML = UI.errorAlert('No se pudo cargar la suscripción a noticias.'); };
+      document.head.appendChild(script);
+    }
 
     async function initNotificationsCard(host) {
       const statusEl = host.querySelector('#profile-push-status');

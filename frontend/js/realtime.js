@@ -306,11 +306,13 @@ window.Realtime = (() => {
   }
 
   // Abre el detalle de la notificación en un modal y marca como leída al confirmar.
+  // Si la notificación es una solicitud de acceso, ofrece ir a Configuración para aprobarla.
   function openNotificationDetail(item) {
     if (typeof UI === 'undefined') return;
     const color = '#2d7d6c';
     const soft = '#e4f5f1';
     const date = typeof Format !== 'undefined' ? Format.dateTime(item.createdAt) : '';
+    const isAccessRequest = Boolean(item.data && item.data.requestId);
 
     const modal = UI.openModal({
       title: 'Notificación',
@@ -326,11 +328,22 @@ window.Realtime = (() => {
         </div>
       `,
       footer: `
+        ${isAccessRequest ? '<button class="btn btn-gold" type="button" data-go-solicitud>&#128994;&nbsp; Ir a aprobar solicitud</button>' : ''}
         <button class="btn btn-primary" type="button" data-confirm>&#10004;&nbsp; Marcar como leída</button>
       `,
     });
 
     const overlay = modal.bodyEl.closest('#modal-overlay');
+    const goBtn = overlay.querySelector('[data-go-solicitud]');
+    if (goBtn) {
+      goBtn.addEventListener('click', async () => {
+        goBtn.disabled = true;
+        try {
+          if (window.API && window.API.notifications) await window.API.notifications.markRead(item._id);
+        } catch (e) { /* si falla, igual se abre la solicitud */ }
+        window.location.href = 'settings.html?solicitudes=1';
+      });
+    }
     const confirmBtn = overlay.querySelector('[data-confirm]');
     if (confirmBtn) {
       confirmBtn.addEventListener('click', async () => {

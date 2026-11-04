@@ -536,6 +536,12 @@ window.Pages.settings = {
         <div id="users-crud"></div>
       `;
       renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
+      if (new URLSearchParams(window.location.search).get('solicitudes') === '1') {
+        setTimeout(() => {
+          const card = document.getElementById('solicitudes-admin-card');
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 400);
+      }
       API.permissions.list().then((perms) => {
         const permissions = Array.isArray(perms) ? perms : (perms && perms.data ? perms.data : []);
         // Los seis roles oficiales, en el orden solicitado. Administración y

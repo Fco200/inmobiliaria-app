@@ -13,6 +13,8 @@ const newsletterSchema = new mongoose.Schema(
       match: [/^[\w.+-]+@[\w-]+\.[\w.-]+$/, 'Correo inválido'],
     },
     name: { type: String, trim: true, default: '' },
+    // Cuenta del CRM que se suscribió desde Bienvenida o Mi perfil (null si fue el sitio público).
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     source: { type: String, trim: true, default: 'landing' },
     // Cómo fue atendida la promoción (lo escribe administrador/soporte).
     status: {

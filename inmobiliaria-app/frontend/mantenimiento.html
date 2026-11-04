@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Mantenimiento programado · INMOBILIARIA × FV DIGITAL</title>
+  <meta name="theme-color" content="#171310">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-192.png">
+  <style>
+    :root {
+      --gold: #d4af37;
+      --gold-light: #f0d98c;
+      --gold-dark: #a8832a;
+      --bg: #120f0c;
+      --bg-2: #1c1712;
+      --panel: #241e17;
+      --border: #3a322a;
+      --text: #f2ead9;
+      --text-muted: #a89f8f;
+      --danger: #f0685a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: radial-gradient(1200px 600px at 50% -10%, #2a2118, var(--bg) 60%);
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; min-height: 100vh;
+    }
+    .mt-box {
+      max-width: 480px; width: 100%; text-align: center;
+      background: linear-gradient(180deg, var(--panel), var(--bg-2));
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 40px 28px 28px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.5);
+      position: relative; overflow: hidden;
+    }
+    .mt-box::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    /* Branding FV DIGITAL con imagen y respaldo tipográfico dorado */
+    .mt-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
+    .mt-brand img.mt-logo { height: 46px; width: auto; border-radius: 10px; }
+    .mt-brand .mt-logo-text {
+      display: inline-flex; align-items: center;
+      font-weight: 800; letter-spacing: 1.5px; font-size: 18px; color: var(--gold-light);
+      text-shadow: 0 2px 10px rgba(212,175,55,0.25);
+    }
+    .gear {
+      width: 66px; height: 66px; margin: 0 auto 20px;
+      border: 3px solid var(--gold); border-top-color: transparent;
+      border-radius: 50%; border-right-color: transparent;
+      animation: spin 1.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 23px; margin: 0 0 10px; color: var(--gold-light); letter-spacing: .3px; }
+    p { font-size: 14px; line-height: 1.7; color: var(--text-muted); margin: 0 0 8px; }
+    .mt-status {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 18px; padding: 7px 16px; border-radius: 999px;
+      background: rgba(212,175,55,0.12); color: var(--gold); font-size: 12px; font-weight: 600;
+    }
+    .mt-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .mt-msg { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+    .mt-fin {
+      display: none; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 14px; padding: 10px 16px; border-radius: 12px;
+      background: var(--bg-2); border: 1px solid var(--border); font-size: 13px; color: var(--gold-light);
+    }
+    .mt-fin.show { display: inline-flex; }
+    .mt-fin .ico { font-size: 15px; }
+    .mt-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .btn {
+      flex: 1 1 150px; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;
+      border: 1px solid transparent; transition: transform .1s ease, opacity .15s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-gold {
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #14100c;
+      box-shadow: 0 8px 20px rgba(212,175,55,0.25);
+    }
+    .btn-gold:hover { opacity: .92; }
+    .btn-outline {
+      background: transparent; color: var(--gold); border-color: var(--gold-dark);
+    }
+    .btn-outline:hover { background: rgba(212,175,55,0.08); }
+    .mt-small {
+      margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-muted);
+    }
+    .mt-small strong { color: var(--gold); }
+    .mt-check-note {
+      margin-top: 16px; font-size: 11px; color: var(--text-muted); opacity: .8;
+    }
+    @media (max-width: 420px) {
+      .mt-box { padding: 32px 20px 24px; }
+      h1 { font-size: 20px; }
+      .mt-actions { flex-direction: column; }
+      .btn { flex: 1 1 auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="mt-box">
+    <div class="mt-brand">
+      <img class="mt-logo" id="mt-logo-img" src="fv_digital_logo.png.webp" alt="FV DIGITAL">
+      <span class="mt-logo-text" id="mt-logo-text" style="display:none;">FV DIGITAL</span>
+    </div>
+    <div class="gear"></div>
+    <h1>Sistema en mantenimiento programado</h1>
+    <p>La plataforma se encuentra temporalmente en mantenimiento técnico.</p>
+    <p>Estamos realizando mejoras para brindarte una mejor experiencia.</p>
+    <div class="mt-status"><span class="dot"></span> Mantenimiento programado</div>
+    <div class="mt-msg" id="mt-msg"></div>
+    <div class="mt-msg" id="mensajeMantenimiento" style="display:none;"></div>
+    <div class="mt-fin" id="mt-fin"><span class="ico">&#128336;&#65039;</span> <span id="mt-fin-txt">Volveremos muy pronto</span></div>
+
+    <div class="mt-actions">
+      <button class="btn btn-gold" id="btn-retry" type="button">&#8635;&nbsp; Reintentar</button>
+      <a class="btn btn-outline" href="index.html" id="btn-admin">&#128274;&nbsp; Acceso Administrativo</a>
+    </div>
+
+    <div class="mt-small">INMOBILIARIA &times; <strong>FV DIGITAL</strong></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/utils/cache.js"></script>
+  <script src="js/mantenimiento-page.js"></script>
+</body>
+</html>

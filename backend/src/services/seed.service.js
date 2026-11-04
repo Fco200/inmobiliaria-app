@@ -22,6 +22,10 @@ const PERMISSIONS = [
   { code: 'audit_view', name: 'Consultar auditoría', module: 'audit' },
   { code: 'settings_manage', name: 'Configurar sistema', module: 'settings' },
   { code: 'prospecting_manage', name: 'Administrar prospectación', module: 'prospecting' },
+  { code: 'announcements_manage', name: 'Publicar avisos del equipo', module: 'announcements' },
+  { code: 'newsletter_manage', name: 'Gestionar boletín y envíos', module: 'newsletter' },
+  { code: 'meetings_manage', name: 'Publicar reuniones del equipo', module: 'meetings' },
+  { code: 'system_admin', name: 'Acceso total al sistema', module: 'system' },
 ];
 
 // Roles del sistema y módulos que habilita cada uno. Se crean/actualizan en
@@ -29,7 +33,7 @@ const PERMISSIONS = [
 // existente reciba los roles nuevos sin perder usuarios ni datos.
 const ROLE_DEFINITIONS = [
   {
-    name: 'Administrador',
+    name: 'Administración',
     code: 'admin',
     description: 'Control total del sistema',
     permissions: '*',
@@ -53,6 +57,8 @@ const ROLE_DEFINITIONS = [
       'documents_manage',
       'prospecting_manage',
       'settings_manage',
+      'announcements_manage',
+      'newsletter_manage',
     ],
   },
   {
@@ -69,6 +75,9 @@ const ROLE_DEFINITIONS = [
       'reports_gerencia',
       'audit_view',
       'prospecting_manage',
+      'announcements_manage',
+      'newsletter_manage',
+      'meetings_manage',
     ],
   },
   {

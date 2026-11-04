@@ -11,6 +11,9 @@ const STAGES = [...new Set([...STAGE_ORDER, ...Object.keys(STAGE_ALIASES)])];
 const businessRules = [
   body('name').notEmpty().withMessage('El nombre del negocio es obligatorio'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
+  body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),
+  body('asesor_cliente_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor de cliente no válido'),
+  body('cliente_id').optional({ values: 'falsy' }).isMongoId().withMessage('Cliente no válido'),
   body('buyerClient').optional({ values: 'falsy' }).isMongoId().withMessage('Comprador no válido'),
   body('buyerExternalName').optional({ values: 'falsy' }).isString().isLength({ max: 140 }).withMessage('El nombre del comprador externo es demasiado largo'),
   body('sellerClient').optional({ values: 'falsy' }).isMongoId().withMessage('Vendedor no válido'),
@@ -20,11 +23,15 @@ const businessRules = [
   body('processType').optional().isIn(['comprador', 'vendedor']).withMessage('Tipo de proceso no válido'),
   body('valueOperation').optional().isFloat({ min: 0 }).withMessage('El valor de la operación no puede ser negativo'),
   body('currentStage').optional({ values: 'falsy' }).isIn(STAGES).withMessage('Etapa no válida'),
+  body('fecha_cierre').optional({ values: 'falsy' }).custom((v) => !v || !isNaN(Date.parse(v))).withMessage('Fecha de cierre estimada no válida'),
 ];
 
 const businessUpdateRules = [
   body('name').optional().notEmpty().withMessage('El nombre del negocio no puede estar vacío'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
+  body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),
+  body('asesor_cliente_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor de cliente no válido'),
+  body('cliente_id').optional({ values: 'falsy' }).isMongoId().withMessage('Cliente no válido'),
   body('buyerClient').optional({ values: 'falsy' }).isMongoId().withMessage('Comprador no válido'),
   body('buyerExternalName').optional({ values: 'falsy' }).isString().isLength({ max: 140 }).withMessage('El nombre del comprador externo es demasiado largo'),
   body('sellerClient').optional({ values: 'falsy' }).isMongoId().withMessage('Vendedor no válido'),
@@ -36,6 +43,7 @@ const businessUpdateRules = [
   body('valueOperation').optional().isFloat({ min: 0 }).withMessage('El valor de la operación no puede ser negativo'),
   body('currentStage').optional({ values: 'falsy' }).isIn(STAGES).withMessage('Etapa no válida'),
   body('status').optional().isIn(['activo', 'concluido', 'cancelado']).withMessage('Estado no válido'),
+  body('fecha_cierre').optional({ values: 'falsy' }).custom((v) => !v || !isNaN(Date.parse(v))).withMessage('Fecha de cierre estimada no válida'),
   body('negotiation.offer').optional().isFloat({ min: 0 }).withMessage('La propuesta no puede ser negativa'),
   body('negotiation.counterOffer').optional().isFloat({ min: 0 }).withMessage('La contraoferta no puede ser negativa'),
   body('closing.promiseAmount').optional().isFloat({ min: 0 }).withMessage('El monto de promesa no puede ser negativo'),

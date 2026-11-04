@@ -28,6 +28,7 @@ const {
   Session,
   Chat,
   PushSubscription,
+  Newsletter,
 } = require('../models');
 const { persistAndBroadcast, getOrCreateGeneralChat, markChatAsRead } = require('./chat.controller');
 const { jwtSecret, jwtExpiresIn } = require('../config/env');
@@ -847,13 +848,11 @@ const generarRespaldo = asyncHandler(async (req, res) => {
   });
 });
 
-// ── Gestor de plantillas PDF ────────────────────────────────────────────────
-if (!fs.existsSync(PLANTILLAS_DIR)) {
-  fs.mkdirSync(PLANTILLAS_DIR, { recursive: true });
-}
+// ── Gestor de plantillas PDF (mismo almacenamiento que Formatos) ────────────
+const plantillas = require('../services/plantillas.service');
 
 const plantillaStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, PLANTILLAS_DIR),
+  destination: (req, file, cb) => cb(null, plantillas.PLANTILLAS_DIR),
   filename: (req, file, cb) => {
     const base = path.basename(file.originalname || 'plantilla.pdf', path.extname(file.originalname || ''));
     const safe = String(base).replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim();
@@ -871,44 +870,40 @@ const plantillaUpload = multer({
 });
 
 const listarPlantillas = asyncHandler(async (req, res) => {
-  if (!fs.existsSync(PLANTILLAS_DIR)) return res.json({ success: true, data: [] });
-  const files = fs
-    .readdirSync(PLANTILLAS_DIR)
-    .filter((f) => f.toLowerCase().endsWith('.pdf'))
-    .map((f) => {
-      const stat = fs.statSync(path.join(PLANTILLAS_DIR, f));
-      return { archivo: f, tamaño: stat.size, modificado: stat.mtime };
-    });
-  res.json({ success: true, data: files });
+  res.json({ success: true, data: await plantillas.listAll() });
 });
 
 const subirPlantilla = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'Debes seleccionar un archivo PDF' });
   }
+  let archivo;
+  try {
+    archivo = await plantillas.saveUpload(req.file);
+  } catch (error) {
+    if (error.statusCode === 409) return res.status(409).json({ success: false, message: error.message });
+    throw error;
+  }
   await logActivity({
     entityType: 'Plantilla',
     entityId: req.user._id,
     user: req.user._id,
     action: 'subir_plantilla',
-    message: `Soporte subió la plantilla ${req.file.filename}`,
+    message: `Soporte subió la plantilla ${archivo}`,
   });
-  res.json({ success: true, message: 'Plantilla subida', data: { archivo: req.file.filename } });
+  res.json({ success: true, message: 'Plantilla subida', data: { archivo } });
 });
 
 const eliminarPlantilla = asyncHandler(async (req, res) => {
-  const { archivo } = req.params;
-  const safe = path.basename(archivo);
-  const filePath = path.join(PLANTILLAS_DIR, safe);
-
+  const safe = path.basename(req.params.archivo || '');
   if (!safe.toLowerCase().endsWith('.pdf')) {
     return res.status(400).json({ success: false, message: 'Solo se permiten archivos PDF' });
   }
-  if (!fs.existsSync(filePath)) {
+  const found = await plantillas.findByArchivo(safe);
+  if (!found) {
     return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
   }
-
-  fs.unlinkSync(filePath);
+  await plantillas.remove(found);
   await logActivity({
     entityType: 'Plantilla',
     entityId: req.user._id,
@@ -920,18 +915,15 @@ const eliminarPlantilla = asyncHandler(async (req, res) => {
 });
 
 const descargarPlantillaSoporte = asyncHandler(async (req, res) => {
-  const { archivo } = req.params;
-  const safe = path.basename(archivo);
-  const filePath = path.join(PLANTILLAS_DIR, safe);
-  if (!fs.existsSync(filePath)) {
+  const safe = path.basename(req.params.archivo || '');
+  const found = await plantillas.findByArchivo(safe);
+  if (!found) {
     return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
   }
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safe)}"`);
-  res.sendFile(filePath);
+  return plantillas.send(req, res, found, safe);
 });
 
-// Renombra una plantilla PDF existente en ./plantillas desde la interfaz.
+// Renombra una plantilla PDF desde la interfaz (disco y/o nube).
 // PATCH /soporte/plantillas/:archivo  body: { nuevoNombre }
 const renombrarPlantilla = asyncHandler(async (req, res) => {
   const original = path.basename(String(req.params.archivo || ''));
@@ -952,17 +944,15 @@ const renombrarPlantilla = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'El nuevo nombre es igual al actual' });
   }
 
-  const filePath = path.join(PLANTILLAS_DIR, original);
-  if (!fs.existsSync(filePath)) {
+  const found = await plantillas.findByArchivo(original);
+  if (!found) {
     return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
   }
-
-  const newPath = path.join(PLANTILLAS_DIR, nuevoNombre);
-  if (fs.existsSync(newPath)) {
+  if (!(await plantillas.nameIsFree(nuevoNombre))) {
     return res.status(409).json({ success: false, message: 'Ya existe una plantilla con ese nombre' });
   }
 
-  fs.renameSync(filePath, newPath);
+  await plantillas.rename(found, nuevoNombre);
 
   await logActivity({
     entityType: 'Plantilla',

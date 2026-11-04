@@ -25,7 +25,7 @@ const STAGE_TO_FUNNEL = {
 
 // Campos que el cliente puede editar desde "Editar perfil". `vigencia`
 // se retiró del formulario, por eso ya no se acepta desde la API.
-const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio', 'medioOtro'];
+const PROFILE_FIELDS = ['servicio', 'servicioOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'queBusca', 'zona', 'formaPago', 'formaPagoOtro', 'email', 'medio', 'medioOtro', 'recomendadoPor'];
 
 // Etiquetas legibles de los campos rastreados en el historial de cambios.
 const CAMPO_LABELS = {
@@ -34,6 +34,7 @@ const CAMPO_LABELS = {
   email: 'Correo',
   medio: 'Medio de contacto',
   medioOtro: 'Medio (detalle)',
+  recomendadoPor: 'Recomendado por',
   servicio: 'Operación',
   servicioOtro: 'Operación (detalle)',
   tipoPropiedad: 'Tipo de propiedad',
@@ -104,6 +105,25 @@ function sinNulos(obj) {
   return out;
 }
 
+// Cuando el medio de contacto es "Recomendación", la persona que recomendó se
+// guarda en `recomendadoPor` y se replica en `medioOtro` para las vistas que ya
+// mostraban ese detalle. Si el medio cambia a otro, se limpia el campo para no
+// dejar datos fuera de contexto.
+function sincronizarRecomendacion(body, medioActual = '') {
+  if (!body || typeof body !== 'object') return body;
+  const medio = body.medio !== undefined ? body.medio : medioActual;
+  if (medio === 'Recomendación') {
+    const quien = String(body.recomendadoPor || body.medioOtro || '').trim();
+    if (quien) {
+      body.recomendadoPor = quien;
+      body.medioOtro = quien;
+    }
+  } else if (body.medio !== undefined) {
+    body.recomendadoPor = '';
+  }
+  return body;
+}
+
 const clientCrud = buildCrud(Client, {
   populate: ['asesorAsignado'],
   searchFields: ['nombre', 'telefono', 'email'],
@@ -119,6 +139,7 @@ const clientCrud = buildCrud(Client, {
   extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad', formaPago: 'formaPago' },
   textFilters: { zona: 'zona' },
   rangeFilters: { minCapacity: 'capacidad', maxCapacity: 'capacidad' },
+  widePermission: 'clients_manage',
 });
 
 const list = clientCrud.list;
@@ -145,14 +166,26 @@ const options = asyncHandler(async (req, res) => {
   }
 
   const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const total = await Client.countDocuments(filter);
   const items = await Client.find(filter)
     .select('nombre telefono email servicio tipoPropiedad asesorAsignado')
     .populate('asesorAsignado', 'name')
     .sort({ nombre: 1 })
+    .skip((page - 1) * limit)
     .limit(limit)
     .lean();
 
-  res.json({ success: true, data: items });
+  res.json({
+    success: true,
+    data: items,
+    meta: {
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    },
+  });
 });
 
 function assertOwnership(req, client) {
@@ -242,7 +275,7 @@ const conteoEtapas = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const body = sinNulos(req.body);
+  const body = sincronizarRecomendacion(sinNulos(req.body));
   // Un asesor siempre es el dueño de sus clientes; el jefe puede asignar a cualquiera.
   if (!isClientStaff(req) || !body.asesorAsignado) body.asesorAsignado = req.user._id;
 
@@ -297,7 +330,7 @@ const update = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
   }
 
-  const body = sinNulos(req.body);
+  const body = sincronizarRecomendacion(sinNulos(req.body), client.medio);
   // Un asesor no puede reasignar el cliente; solo el jefe.
   if (!isClientStaff(req)) body.asesorAsignado = client.asesorAsignado || req.user._id;
 
@@ -370,6 +403,7 @@ const cambiarEtapa = asyncHandler(async (req, res) => {
   // Datos complementarios del destino: perfil, cita o cierre.
   // `vigencia` ya no forma parte del formulario, por eso no se acepta.
   const datosEtapa = (body.datosEtapa && typeof body.datosEtapa === 'object') ? body.datosEtapa : {};
+  sincronizarRecomendacion(datosEtapa, client.medio);
   const snapshotEtapa = Object.fromEntries(Object.keys(CAMPO_LABELS).map((k) => [k, client[k]]));
   PROFILE_FIELDS.forEach((field) => {
     if (datosEtapa[field] !== undefined && datosEtapa[field] !== null && String(datosEtapa[field]).trim() !== '') {

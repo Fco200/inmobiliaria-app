@@ -33,6 +33,7 @@ router.post('/:id/notes', businessIdParam, businessController.addNote);
 router.delete('/:id/notes/:noteId', businessIdParam, businessController.removeNote);
 
 // Checklist operativo
+router.get('/:id/checklist', businessIdParam, businessController.getChecklist);
 router.post('/:id/checklist', businessIdParam, businessController.addChecklistItem);
 router.patch('/:id/checklist/:itemId', businessIdParam, businessController.updateChecklistItem);
 router.delete('/:id/checklist/:itemId', businessIdParam, businessController.removeChecklistItem);

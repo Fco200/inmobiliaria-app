@@ -1,6 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
+const { isCustomRole, hasPermission } = require('../utils/scope');
 const { Inventory, Property } = require('../models');
 const { logActivity } = require('../services/log.service');
 const { notifyInterestedClients } = require('./property.controller');
@@ -9,10 +10,14 @@ function isBoss(user) {
   return ['admin', 'direccion', 'gerencia', 'superadmin'].includes(user.role && user.role.code);
 }
 
+function hasFullInventory(req) {
+  return isBoss(req.user) || (isCustomRole(req) && hasPermission(req, 'inventory_manage'));
+}
+
 const list = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, parseInt(req.query.limit, 10) || 25);
-  const boss = isBoss(req.user);
+  const boss = hasFullInventory(req);
 
   const filter = {};
   if (boss) {
@@ -212,7 +217,7 @@ const uploadProperty = asyncHandler(async (req, res) => {
     });
   }
 
-  const boss = isBoss(req.user);
+  const boss = hasFullInventory(req);
   let isPublished = req.body.isPublished === true;
   let assignedAgent = req.body.assignedAgent || null;
 
@@ -273,7 +278,7 @@ const get = asyncHandler(async (req, res) => {
   if (!inventory) {
     return res.status(404).json({ success: false, message: 'Registro no encontrado' });
   }
-  if (!isBoss(req.user)) {
+  if (!hasFullInventory(req)) {
     const isMine = String(inventory.assignedAgent && inventory.assignedAgent._id) === String(req.user._id);
     if (!isMine && !inventory.isPublished) {
       return res.status(403).json({ success: false, message: 'No tienes acceso a este registro' });
@@ -283,7 +288,7 @@ const get = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  if (!isBoss(req.user)) {
+  if (!hasFullInventory(req)) {
     return res.status(403).json({ success: false, message: 'Solo administración y gerencia agregan al inventario' });
   }
 
@@ -323,7 +328,7 @@ const update = asyncHandler(async (req, res) => {
   const inventory = await Inventory.findById(req.params.id);
   if (!inventory) return res.status(404).json({ success: false, message: 'Registro no encontrado' });
 
-  if (!isBoss(req.user)) {
+  if (!hasFullInventory(req)) {
     const isMine = String(inventory.assignedAgent) === String(req.user._id);
     if (!isMine) {
       return res.status(403).json({ success: false, message: 'Solo puedes editar propiedades que te fueron asignadas' });
@@ -352,7 +357,7 @@ const update = asyncHandler(async (req, res) => {
 });
 
 const remove = asyncHandler(async (req, res) => {
-  if (!isBoss(req.user)) {
+  if (!hasFullInventory(req)) {
     return res.status(403).json({ success: false, message: 'Solo administración y gerencia pueden quitar del inventario' });
   }
 
@@ -380,7 +385,7 @@ const togglePublish = asyncHandler(async (req, res) => {
   // Publicar/despublicar: administración/gerencia siempre; el asesor asignado
   // y el responsable de la propiedad también (el botón "Despublicar" se muestra
   // a todos, así que la API debe acompañarlo).
-  if (!isPublished && !isBoss(req.user)) {
+  if (!isPublished && !hasFullInventory(req)) {
     const assigned = String(inventory.assignedAgent || '') === String(req.user._id);
     const responsible = String((inventory.property && inventory.property.responsibleUser) || '') === String(req.user._id);
     if (!assigned && !responsible) {

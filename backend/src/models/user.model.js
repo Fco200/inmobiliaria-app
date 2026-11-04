@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { roleLabelUpper } = require('../constants/roles');
 
 const userSchema = new mongoose.Schema(
   {
@@ -81,6 +82,16 @@ userSchema.pre('save', async function hashPassword(next) {
 userSchema.methods.comparePassword = function comparePassword(candidate) {
   return bcrypt.compare(candidate, this.password);
 };
+
+// `rol` expone el nombre oficial en mayúsculas (DIRECCION, ADMINISTRACION,
+// GERENCIA, ASISTENCIA, ESCRITURACION, ASESOR) sin cambiar la fuente de verdad
+// `role` (ObjectId → Role.code). Si el rol no está poblado, devuelve ''.
+// Se usa solo para lectura/serialización; nunca se persiste.
+userSchema.virtual('rol').get(function getRol() {
+  const role = this.role;
+  const code = role && typeof role === 'object' ? role.code : '';
+  return code ? roleLabelUpper(code) : '';
+});
 
 userSchema.index({ name: 1 });
 userSchema.index({ role: 1 });

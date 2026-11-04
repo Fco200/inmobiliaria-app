@@ -6,6 +6,9 @@ const {
   isBoss,
   isBusinessStaff,
   hasRole,
+  roleCode,
+  isCustomRole,
+  hasPermission,
 } = require('../utils/scope');
 const {
   Business,
@@ -26,6 +29,7 @@ const {
   stageLabel,
   stageOrder,
 } = require('../constants/business-stages');
+const { BUSINESS_CREATOR_ROLES } = require('../constants/roles');
 
 // Etapas del embudo "en curso". Las terminales (concluido/cancelado/pausa)
 // se agregan aparte en el tablero y en los selectores.
@@ -52,17 +56,23 @@ const VALID_STAGE_CODES = new Set([
 ]);
 
 function canManageBusiness(req) {
-  return isBoss(req) || hasRole(req, ['asistencia']);
+  return isBoss(req)
+    || BUSINESS_CREATOR_ROLES.includes(roleCode(req))
+    || (isCustomRole(req) && hasPermission(req, 'businesses_manage'));
 }
 
 // Escrituración cambia etapas, concluye negocios, agrega notas/checklist y
 // sube documentos. Gerencia (jefe) también puede cancelar/concluir.
 function canChangeStage(req) {
-  return isBoss(req) || hasRole(req, ['escrituracion']);
+  return isBoss(req)
+    || hasRole(req, ['escrituracion'])
+    || (isCustomRole(req) && hasPermission(req, 'businesses_manage'));
 }
 
 function canManageChecklist(req) {
-  return isBoss(req) || hasRole(req, ['escrituracion']);
+  return isBoss(req)
+    || hasRole(req, ['escrituracion', 'asistencia'])
+    || (isCustomRole(req) && hasPermission(req, 'businesses_manage'));
 }
 
 // Cuando se abre un negocio con una propiedad, el resto del equipo debe saberlo
@@ -102,14 +112,24 @@ const stages = asyncHandler(async (req, res) => {
 });
 
 const businessCrud = buildCrud(Business, {
-  populate: ['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'ticket'],
+  populate: ['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'cliente_id', 'ticket'],
   searchFields: ['name'],
   // Filtros por etapa, tipo de proceso, cliente y propiedad.
   extraFilters: { currentStage: 'currentStage', processType: 'processType', buyerClient: 'buyerClient', sellerClient: 'sellerClient', property: 'property' },
-  // Un negocio pertenece al asesor principal o al socio que participa.
-  ownerMatch: (userId) => ({ $or: [{ mainAdvisor: userId }, { partnerAdvisor: userId }] }),
+  // Un negocio pertenece al asesor principal o al socio que participa (se
+  // incluyen los alias explícitos por compatibilidad con datos históricos).
+  ownerMatch: (userId) => ({
+    $or: [
+      { mainAdvisor: userId },
+      { partnerAdvisor: userId },
+      { asesor_captador_id: userId },
+      { asesor_cliente_id: userId },
+    ],
+  }),
   // Asistencia y escrituración operan todos los negocios sin ser jefes.
   wideRoles: ['asistencia', 'escrituracion'],
+  // Los roles personalizados con el módulo Negocios ven todos los negocios.
+  widePermission: 'businesses_manage',
 });
 
 const list = businessCrud.list;
@@ -118,9 +138,11 @@ const get = businessCrud.get;
 function assertOwnership(req, business) {
   if (isBusinessStaff(req)) return true;
   const uid = String(req.user._id);
-  const main = String((business.mainAdvisor && business.mainAdvisor._id) || business.mainAdvisor || '');
-  const partner = String((business.partnerAdvisor && business.partnerAdvisor._id) || business.partnerAdvisor || '');
-  return main === uid || partner === uid;
+  return ['mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id'].some((field) => {
+    const value = business[field];
+    const id = String((value && value._id) || value || '');
+    return id === uid;
+  });
 }
 
 // Los negocios se crean SIEMPRE a mano desde este módulo (ya no hay ningún
@@ -128,6 +150,46 @@ function assertOwnership(req, business) {
 // Cliente.negocioId al día para que la tarjeta del cliente muestre la insignia
 // "Negocio vinculado" y el botón para abrirlo.
 const idOf = (v) => (v && typeof v === 'object' ? v._id : v) || null;
+
+// Sincroniza los alias solicitados por la inmobiliaria con los campos
+// canónicos. El formulario puede enviar cualquiera de los dos nombres; la base
+// guarda ambos para no romper listados, permisos ni datos históricos:
+//   asesor_captador_id → mainAdvisor
+//   asesor_cliente_id  → partnerAdvisor
+//   cliente_id         → buyerClient
+function syncBusinessAliases(body) {
+  if (!body || typeof body !== 'object') return body;
+
+  if (body.asesor_captador_id !== undefined) {
+    body.mainAdvisor = body.asesor_captador_id || undefined;
+  }
+  if (body.asesor_cliente_id !== undefined) {
+    body.partnerAdvisor = body.asesor_cliente_id || null;
+  }
+  if (body.cliente_id !== undefined) {
+    body.buyerClient = body.cliente_id || null;
+  }
+
+  if (body.mainAdvisor !== undefined) body.asesor_captador_id = body.mainAdvisor || null;
+  if (body.partnerAdvisor !== undefined) body.asesor_cliente_id = body.partnerAdvisor || null;
+  if (body.buyerClient !== undefined) body.cliente_id = body.buyerClient || null;
+
+  return body;
+}
+
+// `fecha_cierre` es la fecha estimada/proyectada de conclusión (firma de
+// escrituras o contratos). Se mapea a `closing.closingDate` para no duplicar
+// datos y conservar los reportes existentes.
+function applyFechaCierre(body) {
+  if (!body || body.fecha_cierre === undefined) return body;
+  const value = body.fecha_cierre;
+  body.closing = {
+    ...(body.closing && typeof body.closing === 'object' ? body.closing : {}),
+    closingDate: value ? new Date(value) : null,
+  };
+  delete body.fecha_cierre;
+  return body;
+}
 
 // Punto los clientes indicados hacia este negocio y libero los que dejaron de
 // estar en él (para no dejar insignias apuntando a un negocio equivocado).
@@ -291,25 +353,29 @@ const create = asyncHandler(async (req, res) => {
   if (!canManageBusiness(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o asistencia pueden crear negocios.',
+      message: 'Solo Dirección, Administración, Gerencia o Asistencia pueden crear negocios.',
     });
   }
 
   const body = { ...req.body };
+  applyFechaCierre(body);
+  syncBusinessAliases(body);
+
   if (body.currentStage) body.currentStage = normalizeStage(body.currentStage);
-  // Asistencia puede asignar a cualquier asesor; el resto de quien crea queda
-  // como asesor principal por defecto.
-  if (!canManageBusiness(req) && !isBoss(req)) {
-    body.mainAdvisor = req.user._id;
+
+  // Nunca se asigna automáticamente al usuario que crea (p. ej. la cuenta de
+  // Administración) como asesor del negocio: el captador debe elegirse de forma
+  // explícita en el formulario. El esquema exige asesor principal.
+  if (!body.mainAdvisor) {
+    return res.status(400).json({
+      success: false,
+      message: 'Selecciona el asesor captador (asesor_captador_id) del negocio.',
+    });
   }
   if (body.partnerAdvisor && String(body.partnerAdvisor) === String(req.user._id)) {
-    body.partnerAdvisor = undefined;
+    body.partnerAdvisor = null;
   }
-  // Los jefes/asistencia pueden crear negocios sin elegir asesor: se asigna por
-  // defecto el usuario que los creó (el esquema exige mainAdvisor).
-  if (!body.mainAdvisor) {
-    body.mainAdvisor = req.user._id;
-  }
+  syncBusinessAliases(body);
 
   // El vendedor sale del propietario de la propiedad si no se eligió uno.
   await completarVendedorDesdePropiedad(body);
@@ -376,7 +442,7 @@ const create = asyncHandler(async (req, res) => {
     }).catch(() => {});
   }
 
-  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor']);
+  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'cliente_id']);
 
   // Nota en el chat interno + aviso al resto del equipo (solo si el negocio va
   // ligado a una propiedad). No bloquea ni condiciona la respuesta.
@@ -396,13 +462,20 @@ const update = asyncHandler(async (req, res) => {
   if (!canManageBusiness(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o asistencia pueden editar los datos del negocio.',
+      message: 'Solo Dirección, Administración, Gerencia o Asistencia pueden editar los datos del negocio.',
     });
   }
 
   const previousStatus = business.status;
   const previousStage = normalizeStage(business.currentStage);
   const body = { ...req.body };
+  applyFechaCierre(body);
+  syncBusinessAliases(body);
+
+  if (body.partnerAdvisor && String(body.partnerAdvisor) === String(req.user._id)) {
+    body.partnerAdvisor = null;
+  }
+  syncBusinessAliases(body);
 
   if (body.currentStage !== undefined) {
     body.currentStage = normalizeStage(body.currentStage);
@@ -519,7 +592,7 @@ const update = asyncHandler(async (req, res) => {
     message: `Se actualizó el negocio ${business.name}`,
   });
 
-  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'ticket']);
+  await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'cliente_id', 'ticket']);
 
   res.json({ success: true, data: business });
 });
@@ -536,7 +609,7 @@ const remove = asyncHandler(async (req, res) => {
   if (!canManageBusiness(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o asistencia pueden eliminar negocios.',
+      message: 'Solo Dirección, Administración, Gerencia o Asistencia pueden eliminar negocios.',
     });
   }
 
@@ -749,13 +822,22 @@ async function findBusinessForChecklist(req, res) {
   return business;
 }
 
+// Lectura del checklist: disponible para cualquier usuario con acceso al
+// negocio, incluido el asesor (solo lectura). Las mutaciones siguen reservadas
+// a dirección/gerencia/asistencia/escrituración.
+const getChecklist = asyncHandler(async (req, res) => {
+  const business = await findBusinessForChecklist(req, res);
+  if (!business) return undefined;
+  res.json({ success: true, data: business.checklist || [] });
+});
+
 const addChecklistItem = asyncHandler(async (req, res) => {
   const business = await findBusinessForChecklist(req, res);
   if (!business) return undefined;
   if (!canManageChecklist(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+      message: 'Solo dirección, gerencia, asistencia o escrituración pueden editar el checklist.',
     });
   }
   const text = String(req.body.text || req.body.otro || '').trim();
@@ -780,7 +862,7 @@ const updateChecklistItem = asyncHandler(async (req, res) => {
   if (!canManageChecklist(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+      message: 'Solo dirección, gerencia, asistencia o escrituración pueden editar el checklist.',
     });
   }
   const item = business.checklist.id(req.params.itemId);
@@ -806,7 +888,7 @@ const removeChecklistItem = asyncHandler(async (req, res) => {
   if (!canManageChecklist(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo dirección, gerencia o escrituración pueden editar el checklist.',
+      message: 'Solo dirección, gerencia, asistencia o escrituración pueden editar el checklist.',
     });
   }
   const item = business.checklist.id(req.params.itemId);
@@ -971,6 +1053,7 @@ module.exports = {
   listNotes,
   addNote,
   removeNote,
+  getChecklist,
   addChecklistItem,
   updateChecklistItem,
   removeChecklistItem,

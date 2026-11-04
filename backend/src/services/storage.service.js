@@ -86,6 +86,9 @@ function isConfigured() {
 
 // ── GridFS (MongoDB) ─────────────────────────────────────────────────────────
 const GRIDFS_BUCKET = 'uploads';
+// Prefijo de los PDFs compartidos (formatos). No los referencia ningún registro,
+// así que la limpieza de huérfanos debe ignorarlos.
+const SHARED_PREFIX = 'plantillas/';
 
 function gridfsBucket() {
   const db = mongoose.connection && mongoose.connection.db;
@@ -391,6 +394,7 @@ async function cleanupOrphans({ minAgeMs = 6 * 60 * 60 * 1000 } = {}) {
     const files = await db.collection('uploads.files').find({ uploadDate: { $lt: cutoff } }).toArray();
     for (const file of files) {
       if (refs.has(file.filename)) continue;
+      if (String(file.filename || '').startsWith(SHARED_PREFIX)) continue;
       await db.collection('uploads.files').deleteOne({ _id: file._id });
       await db.collection('uploads.chunks').deleteMany({ files_id: file._id });
       result.deleted += 1;
@@ -737,8 +741,125 @@ async function serveFromGridFS(req, res, key) {
   download.pipe(res);
 }
 
+// Parseo mínimo de la respuesta XML de ListObjectsV2 (R2 / S3).
+function xmlText(block, tag) {
+  const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(block);
+  if (!m) return '';
+  return m[1]
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// Lista objetos de R2 que empiezan por un prefijo (con paginación).
+async function listR2(prefix) {
+  const out = [];
+  let token = null;
+  do {
+    const query = { 'list-type': '2', prefix };
+    if (token) query['continuation-token'] = token;
+    // eslint-disable-next-line no-await-in-loop
+    const res = await request('GET', '', { query });
+    // eslint-disable-next-line no-await-in-loop
+    const body = (await readAll(res.stream, 20 * 1024 * 1024)).toString('utf8');
+    if (res.statusCode > 299) {
+      throw new Error(`No se pudo listar el almacenamiento (${res.statusCode}): ${body.slice(0, 200)}`);
+    }
+    const blocks = body.match(/<Contents>[\s\S]*?<\/Contents>/g) || [];
+    blocks.forEach((block) => {
+      const key = xmlText(block, 'Key');
+      if (!key) return;
+      out.push({
+        filename: key,
+        length: Number(xmlText(block, 'Size')) || 0,
+        uploadDate: new Date(xmlText(block, 'LastModified') || Date.now()),
+      });
+    });
+    const truncated = /<IsTruncated>true<\/IsTruncated>/.test(body);
+    token = truncated ? xmlText(body, 'NextContinuationToken') || null : null;
+  } while (token);
+  return out;
+}
+
+// Nombres de archivo guardados bajo un prefijo (GridFS o R2).
+async function listByPrefix(prefix) {
+  return (await listFilesByPrefix(prefix)).map((file) => file.filename);
+}
+
+// Metadatos (nombre, tamaño, fecha) de los archivos bajo un prefijo.
+async function listFilesByPrefix(prefix) {
+  const cleanPrefix = String(prefix).replace(/^\/+/, '');
+  if (mode === 'r2') {
+    const files = await listR2(cleanPrefix);
+    const seen = new Set();
+    return files.filter((f) => (seen.has(f.filename) ? false : seen.add(f.filename)));
+  }
+  if (mode !== 'mongodb') return [];
+  const escaped = cleanPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const files = await gridfsBucket()
+    .find({ filename: { $regex: `^${escaped}` } })
+    .sort({ uploadDate: -1 })
+    .toArray();
+  const seen = new Set();
+  return files.filter((file) => {
+    if (seen.has(file.filename)) return false;
+    seen.add(file.filename);
+    return true;
+  }).map((file) => ({
+    filename: file.filename,
+    length: file.length,
+    uploadDate: file.uploadDate,
+  }));
+}
+
+// Lee un archivo completo a memoria (para copiar o renombrar).
+async function readFileBuffer(key) {
+  const cleanKey = String(key).replace(/^\/+/, '');
+  if (mode === 'r2') {
+    const res = await request('GET', cleanKey);
+    if (res.statusCode === 404) { res.stream.resume(); return null; }
+    if (res.statusCode > 299) {
+      const body = await readAll(res.stream);
+      throw new Error(`No se pudo leer del almacenamiento (${res.statusCode}): ${body.toString('utf8').slice(0, 200)}`);
+    }
+    return readAll(res.stream, 50 * 1024 * 1024);
+  }
+  if (mode !== 'mongodb') throw new Error('Lectura directa no disponible en este modo de almacenamiento.');
+  const gfs = gridfsBucket();
+  const file = await gfs.find({ filename: cleanKey }).sort({ uploadDate: -1 }).limit(1).next();
+  if (!file) return null;
+  const chunks = [];
+  await new Promise((resolve, reject) => {
+    gfs.openDownloadStream(file._id)
+      .on('data', (chunk) => chunks.push(chunk))
+      .on('error', reject)
+      .on('end', resolve);
+  });
+  return Buffer.concat(chunks);
+}
+
+// Entrega un archivo guardado por clave (GridFS o R2).
+async function serveKey(req, res, key) {
+  if (mode === 'mongodb') return serveFromGridFS(req, res, key);
+  if (mode === 'r2') {
+    const buffer = await readFileBuffer(key);
+    if (!buffer) return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(buffer);
+  }
+  return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+}
+
 module.exports = {
   getMode,
+  SHARED_PREFIX,
+  listByPrefix,
+  listFilesByPrefix,
+  readFileBuffer,
+  serveKey,
   isConfigured,
   uploadsDir,
   persistFile,

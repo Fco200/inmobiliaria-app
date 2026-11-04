@@ -2,12 +2,19 @@
 
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { Document } = require('../models');
 const { POSICIONES, DEFAULT_LAYOUT } = require('../config/formatoPosiciones');
 const logger = require('../services/logger.service');
+const { logActivity } = require('../services/log.service');
+const plantillas = require('../services/plantillas.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../../plantillas');
+
+if (!fs.existsSync(PLANTILLAS_DIR)) {
+  fs.mkdirSync(PLANTILLAS_DIR, { recursive: true });
+}
 
 // Normaliza a NFC el nombre de plantilla recibido (URL) o leído del disco.
 // En git/Linux los nombres vienen descompuestos (NFD: "Prestacio\u0301n"); los
@@ -436,29 +443,55 @@ const PLANTILLAS_CONFIG = {
   },
 };
 
+// Almacenamiento de plantillas compartidas. Administración y personal
+// autorizado suben PDFs que todo el equipo puede ver y descargar desde
+// Formatos. El nombre se sanea y se conserva (con marca de tiempo si ya existe
+// otro archivo con el mismo nombre) para no sobrescribir plantillas en uso.
+const plantillaStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, PLANTILLAS_DIR),
+  filename: (req, file, cb) => {
+    const base = path.basename(file.originalname || 'plantilla', path.extname(file.originalname || ''));
+    const safe = String(base).replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim() || 'plantilla';
+    let candidate = `${safe}.pdf`;
+    if (fs.existsSync(path.join(PLANTILLAS_DIR, candidate))) {
+      candidate = `${safe}_${Date.now()}.pdf`;
+    }
+    cb(null, candidate);
+  },
+});
+
+const plantillaUpload = multer({
+  storage: plantillaStorage,
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
+    cb(null, ext === 'pdf');
+  },
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+});
+
 /**
  * Lista las plantillas disponibles.
  * GET /api/formatos/plantillas
  */
+/**
+ * Lista las plantillas disponibles (las del repositorio y las compartidas).
+ * GET /api/formatos/plantillas
+ */
 const listarPlantillas = async (req, res) => {
   try {
-    if (!fs.existsSync(PLANTILLAS_DIR)) {
-      return res.json({ success: true, plantillas: [] });
-    }
-
-    const files = fs.readdirSync(PLANTILLAS_DIR).filter(f => f.endsWith('.pdf'));
-    const plantillas = files.map((file) => {
-      const nombre = norm(file.replace('.pdf', ''));
+    const items = await plantillas.listAll();
+    const lista = items.map(({ archivo }) => {
+      const nombre = norm(archivo.replace('.pdf', ''));
       const config = PLANTILLAS_CONFIG[nombre];
       return {
         id: nombre,
         nombre: config ? config.nombre : nombre,
-        archivo: file,
+        archivo,
         tieneFormulario: Boolean(config),
       };
     });
 
-    res.json({ success: true, plantillas });
+    res.json({ success: true, plantillas: lista });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error al listar plantillas' });
   }
@@ -716,23 +749,87 @@ const descargarPlantilla = async (req, res) => {
     const { id } = req.params;
     const config = PLANTILLAS_CONFIG[norm(id)];
 
-    if (!config) {
-      return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
-    }
-
-    const plantillaPath = findPlantillaFile(id);
-
-    if (!plantillaPath || !fs.existsSync(plantillaPath)) {
+    // Sirve la plantilla en blanco desde el repositorio o desde la nube.
+    const found = await plantillas.findById(id, norm);
+    if (!found) {
       return res.status(404).json({ success: false, message: 'Archivo de plantilla no encontrado' });
     }
 
-    const fileName = `${config.nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.sendFile(plantillaPath);
+    const displayName = config ? config.nombre : path.basename(found.archivo, path.extname(found.archivo));
+    const fileName = `${String(displayName).replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑüÜ ]/g, '_')}.pdf`;
+    return plantillas.send(req, res, found, fileName);
   } catch (error) {
     console.error('Error al descargar plantilla:', error);
     res.status(500).json({ success: false, message: 'Error al descargar la plantilla' });
+  }
+};
+
+/**
+ * Sube una plantilla PDF compartida.
+ * POST /api/formatos/plantillas  (multipart, campo "plantilla")
+ */
+/**
+ * Sube una plantilla PDF compartida.
+ * POST /api/formatos/plantillas  (multipart, campo "plantilla")
+ */
+const subirPlantilla = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Selecciona un archivo PDF válido.' });
+    }
+
+    let archivo;
+    try {
+      archivo = await plantillas.saveUpload(req.file);
+    } catch (error) {
+      if (error.statusCode === 409) return res.status(409).json({ success: false, message: error.message });
+      throw error;
+    }
+
+    await logActivity({
+      entityType: 'Plantilla',
+      entityId: req.user ? req.user._id : null,
+      user: req.user ? req.user._id : null,
+      action: 'subir_plantilla_compartida',
+      message: `Se subió la plantilla compartida ${archivo}`,
+    });
+
+    res.json({
+      success: true,
+      message: 'Plantilla PDF subida. Ya está disponible para todo el equipo.',
+      data: { archivo },
+    });
+  } catch (error) {
+    console.error('Error al subir plantilla:', error);
+    res.status(500).json({ success: false, message: 'No se pudo guardar la plantilla.' });
+  }
+};
+
+/**
+ * Elimina una plantilla PDF compartida.
+ * DELETE /api/formatos/plantillas/:id
+ */
+const eliminarPlantilla = async (req, res) => {
+  try {
+    const found = await plantillas.findById(req.params.id, norm);
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'Plantilla no encontrada.' });
+    }
+
+    await plantillas.remove(found);
+
+    await logActivity({
+      entityType: 'Plantilla',
+      entityId: req.user ? req.user._id : null,
+      user: req.user ? req.user._id : null,
+      action: 'eliminar_plantilla_compartida',
+      message: `Se eliminó la plantilla compartida ${found.archivo}`,
+    });
+
+    res.json({ success: true, message: 'Plantilla eliminada.' });
+  } catch (error) {
+    console.error('Error al eliminar plantilla:', error);
+    res.status(500).json({ success: false, message: 'No se pudo eliminar la plantilla.' });
   }
 };
 
@@ -741,4 +838,7 @@ module.exports = {
   obtenerCamposPlantilla,
   generarPDF,
   descargarPlantilla,
+  subirPlantilla,
+  eliminarPlantilla,
+  plantillaUpload,
 };

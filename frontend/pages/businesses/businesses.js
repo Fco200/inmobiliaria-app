@@ -87,7 +87,7 @@ window.Pages.businesses = {
     const roleCode = String((me && me.role && (me.role.code || me.role)) || '');
     const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
     const canChangeStage = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
-    const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
+    const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
     const canWriteNotes = true;
 
     const allStages = stageMeta.order && stageMeta.order.length
@@ -143,6 +143,208 @@ window.Pages.businesses = {
 
     const state = { view: 'table', processType: 'comprador' };
 
+    // ── Utilidades del formulario de negocios ──────────────────────────────
+    // El formulario usa los alias solicitados por la inmobiliaria
+    // (`asesor_captador_id`, `asesor_cliente_id`, `cliente_id`) y el backend
+    // los sincroniza con mainAdvisor/partnerAdvisor/buyerClient. Aquí se arma
+    // el cuerpo una sola vez para que crear y editar se comporten igual.
+    function ensureSelectOption(select, value, label) {
+      if (!select || value == null || value === '') return;
+      const id = String(value);
+      if (!Array.from(select.options).some((o) => String(o.value) === id)) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = label || id;
+        select.appendChild(opt);
+      }
+      select.value = id;
+    }
+
+    function syncExternalField(form, selName, wrapName) {
+      const sel = form.querySelector(`#fld-${selName}`);
+      const wrap = form.querySelector(`#fld-${wrapName}`);
+      if (!sel || !wrap) return;
+      const parent = wrap.closest('.form-field') || wrap.parentElement || wrap;
+      const run = () => { parent.style.display = sel.value === '__externo__' ? '' : 'none'; };
+      sel.addEventListener('change', run);
+      run();
+    }
+
+    // Al elegir una propiedad se muestra quién es el propietario y el asesor
+    // responsable, y se completan el vendedor y (si está vacío) el captador.
+    async function syncPropertyInfo(form) {
+      const propSel = form.querySelector('#fld-property');
+      if (!propSel) return;
+      let info = form.querySelector('[data-property-info]');
+      if (!info) {
+        info = document.createElement('div');
+        info.setAttribute('data-property-info', '');
+        info.className = 'form-field form-field-full';
+        info.style.display = 'none';
+        const wrap = propSel.closest('.form-field') || propSel.parentElement;
+        if (wrap && wrap.parentElement) wrap.parentElement.insertBefore(info, wrap.nextSibling);
+        else form.appendChild(info);
+      }
+      const propertyId = propSel.value;
+      if (!propertyId) {
+        info.style.display = 'none';
+        info.innerHTML = '';
+        return;
+      }
+      info.style.display = '';
+      info.innerHTML = '<small class="text-muted">Cargando datos de la propiedad…</small>';
+      try {
+        const prop = await API.properties.get(propertyId);
+        if (!prop) {
+          info.style.display = 'none';
+          return;
+        }
+        const owner = prop.owner && typeof prop.owner === 'object' ? prop.owner : null;
+        const ownerName = (owner && (owner.nombre || owner.name)) || prop.ownerName || '';
+        const ownerId = owner ? (owner._id || owner) : (typeof prop.owner === 'string' ? prop.owner : '');
+        const responsible = prop.responsibleUser && typeof prop.responsibleUser === 'object'
+          ? prop.responsibleUser
+          : null;
+        const responsibleId = responsible
+          ? (responsible._id || responsible)
+          : (typeof prop.responsibleUser === 'string' ? prop.responsibleUser : '');
+        const responsibleName = responsible ? (responsible.name || responsible.username || '') : '';
+
+        // Vendedor = propietario de la propiedad (si no se había elegido uno).
+        const sellerSel = form.querySelector('#fld-sellerClient');
+        const sellerExt = form.querySelector('#fld-sellerExternalName');
+        if (ownerId) {
+          ensureSelectOption(sellerSel, ownerId, `Propietario: ${ownerName || 'propiedad'}`);
+          if (sellerExt) sellerExt.value = '';
+          syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
+        } else if (ownerName && sellerSel && !sellerSel.value && sellerExt) {
+          sellerExt.value = ownerName;
+          syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
+        }
+
+        // Captador = asesor responsable de la propiedad, solo si aún no se eligió.
+        const captadorSel = form.querySelector('#fld-asesor_captador_id');
+        if (captadorSel && responsibleId && !captadorSel.value) {
+          ensureSelectOption(captadorSel, responsibleId, responsibleName || 'Asesor responsable');
+        }
+
+        info.innerHTML = `
+          <div class="alert alert-info" style="margin:0;">
+            <strong>Propiedad:</strong> ${UI.escapeHtml(UI.propertyOptionLabel(prop))}<br>
+            <span class="text-muted">Propietario / vendedor:</span> ${UI.escapeHtml(ownerName || 'No registrado')}<br>
+            <span class="text-muted">Asesor responsable:</span> ${UI.escapeHtml(responsibleName || 'No registrado')}
+          </div>
+        `;
+      } catch (error) {
+        info.innerHTML = `<small class="text-muted">No se pudieron cargar los datos de la propiedad.</small>`;
+      }
+    }
+
+    function syncExternalFieldDisplay(form, selName, wrapName) {
+      const sel = form.querySelector(`#fld-${selName}`);
+      const wrap = form.querySelector(`#fld-${wrapName}`);
+      if (!sel || !wrap) return;
+      const parent = wrap.closest('.form-field') || wrap.parentElement || wrap;
+      parent.style.display = sel.value === '__externo__' ? '' : 'none';
+    }
+
+    function wireBusinessForm(form) {
+      if (!form) return;
+      if (UI.wireSearchSelects) UI.wireSearchSelects(form);
+      syncExternalField(form, 'cliente_id', 'buyerExternalName');
+      syncExternalField(form, 'sellerClient', 'sellerExternalName');
+      syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorName');
+      const propSel = form.querySelector('#fld-property');
+      if (propSel) {
+        propSel.addEventListener('change', () => { syncPropertyInfo(form); });
+        if (propSel.value) syncPropertyInfo(form);
+      }
+    }
+
+    // Construye el payload canónico + alias. Lanza errores legibles cuando
+    // falta un dato obligatorio (p. ej. el asesor captador).
+    function buildBusinessPayload(values, record) {
+      const data = { ...values };
+      const {
+        negotiation_offer,
+        negotiation_notes,
+        buyerExternalName,
+        sellerExternalName,
+        partnerAdvisorName,
+        closing_promiseDate,
+        closing_commission,
+        fecha_cierre,
+        ...rest
+      } = data;
+
+      const externo = (valor, nombre) => {
+        if (valor === '__externo__') return { id: null, nombre: String(nombre || '').trim() };
+        return { id: valor || null, nombre: '' };
+      };
+
+      const clienteRaw = rest.cliente_id;
+      const clienteExterno = clienteRaw === '__externo__';
+      const clienteNombre = String(buyerExternalName || '').trim();
+      if (clienteExterno && !clienteNombre) {
+        throw new Error('Escribe el nombre del cliente externo.');
+      }
+      const seller = externo(rest.sellerClient, sellerExternalName);
+      if (rest.sellerClient === '__externo__' && !seller.nombre) {
+        throw new Error('Escribe el nombre del vendedor externo.');
+      }
+      const asesorCliente = externo(rest.asesor_cliente_id, partnerAdvisorName);
+      if (rest.asesor_cliente_id === '__externo__' && !asesorCliente.nombre) {
+        throw new Error('Escribe el nombre del asesor externo.');
+      }
+      const captador = rest.asesor_captador_id || rest.mainAdvisor || '';
+      if (!captador) {
+        throw new Error('Selecciona el asesor captador del negocio.');
+      }
+
+      rest.asesor_captador_id = captador;
+      rest.mainAdvisor = captador;
+      rest.cliente_id = clienteExterno ? null : (clienteRaw || null);
+      rest.buyerClient = rest.cliente_id;
+      rest.buyerExternalName = clienteExterno ? clienteNombre : '';
+      rest.sellerClient = seller.id;
+      rest.sellerExternalName = seller.nombre;
+      rest.asesor_cliente_id = asesorCliente.id;
+      rest.partnerAdvisor = asesorCliente.id;
+      rest.partnerAdvisorName = asesorCliente.nombre;
+
+      const negPrevio = (record && record.negotiation) || {};
+      const closePrevio = (record && record.closing) || {};
+      const closeParticipants = (Array.isArray(closePrevio.participants) ? closePrevio.participants : [])
+        .map((p) => ({
+          user: (p && p.user && (p.user._id || p.user)) || null,
+          share: Number((p && p.share) || 0),
+        }))
+        .filter((p) => p.user);
+      const tienePromise = Object.prototype.hasOwnProperty.call(values, 'closing_promiseDate');
+      const tieneCommission = Object.prototype.hasOwnProperty.call(values, 'closing_commission');
+      const closingDate = fecha_cierre ? new Date(fecha_cierre).toISOString() : null;
+
+      return {
+        ...rest,
+        negotiation: {
+          offer: negotiation_offer || 0,
+          counterOffer: negPrevio.counterOffer || 0,
+          notes: negotiation_notes || '',
+        },
+        closing: {
+          promiseAmount: closePrevio.promiseAmount || 0,
+          promiseDate: tienePromise
+            ? (closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null)
+            : (closePrevio.promiseDate || null),
+          closingAmount: closePrevio.closingAmount || 0,
+          closingDate,
+          commission: tieneCommission ? (closing_commission || 0) : (closePrevio.commission || 0),
+          participants: closeParticipants,
+        },
+        fecha_cierre: closingDate,
+      };
+    }
+
     container.innerHTML = `
       <div class="page-header">
         <h2>Negocios</h2>
@@ -151,7 +353,11 @@ window.Pages.businesses = {
             <button class="process-tab active" type="button" data-view="table">&#128203; Lista</button>
             <button class="process-tab" type="button" data-view="kanban">&#128200; Kanban</button>
           </div>
-          ${canManage ? '<button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>' : ''}
+          ${canManage ? `
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+              <button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>
+              <small class="text-muted" style="max-width:320px;text-align:right;font-size:11px;">Abre el formulario completo: comprador o vendedor, propiedad, asesor captador y asesor que atiende al cliente. Para cambiar un negocio existente usa <em>Editar</em> en la lista.</small>
+            </div>` : ''}
         </div>
       </div>
       <div id="biz-content"></div>
@@ -254,6 +460,7 @@ window.Pages.businesses = {
       crudPage(listEl, {
         title: 'Negocios',
         newLabel: 'Nuevo negocio',
+        hideNew: true,
         service: {
           list: (params) => API.businesses.list(params),
           create: (body) => API.businesses.create(body),
@@ -289,78 +496,32 @@ window.Pages.businesses = {
         fields: [
           { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
           { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-          { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, value: (r) => (r.buyerClient ? (r.buyerClient._id || r.buyerClient) : (r.buyerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(buyers, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-          { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
-          { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-          { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
-          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
-          { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
-          { name: 'partnerAdvisor', label: 'Asesor compartido', type: 'select', sinOtros: true, value: (r) => (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : '')), options: [{ value: '', label: '— Sin partner —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+          { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, value: (r) => (r.asesor_captador_id ? (r.asesor_captador_id._id || r.asesor_captador_id) : (r.mainAdvisor ? (r.mainAdvisor._id || r.mainAdvisor) : '')), options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+          { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, value: (r) => (r.asesor_cliente_id ? (r.asesor_cliente_id._id || r.asesor_cliente_id) : (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, value: (r) => (r.cliente_id ? (r.cliente_id._id || r.cliente_id) : (r.buyerClient ? (r.buyerClient._id || r.buyerClient) : (r.buyerExternalName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(buyers, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+          { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+          { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
+          { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
-          { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate) },
+          { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate), hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
           { name: 'closing_commission', label: 'Comisión', type: 'number', value: (r) => (r.closing || {}).commission || 0 },
         ],
         formData(values, record) {
-          const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = values;
-
-          const externo = (valor, nombre) => {
-            if (valor === '__externo__') return { id: null, nombre: String(nombre || '').trim() };
-            return { id: valor || null, nombre: '' };
-          };
-          const buyer = externo(rest.buyerClient, buyerExternalName);
-          const seller = externo(rest.sellerClient, sellerExternalName);
-          const partner = externo(rest.partnerAdvisor, partnerAdvisorName);
-          if (rest.buyerClient === '__externo__' && !buyer.nombre) throw new Error('Escribe el nombre del comprador externo.');
-          if (rest.sellerClient === '__externo__' && !seller.nombre) throw new Error('Escribe el nombre del vendedor externo.');
-          if (rest.partnerAdvisor === '__externo__' && !partner.nombre) throw new Error('Escribe el nombre del asesor externo.');
-          rest.buyerClient = buyer.id;
-          rest.buyerExternalName = buyer.nombre;
-          rest.sellerClient = seller.id;
-          rest.sellerExternalName = seller.nombre;
-          rest.partnerAdvisor = partner.id;
-          rest.partnerAdvisorName = partner.nombre;
-
-          const negPrevio = (record && record.negotiation) || {};
-          const closePrevio = (record && record.closing) || {};
-
-          return {
-            ...rest,
-            negotiation: {
-              offer: negotiation_offer || 0,
-              counterOffer: negPrevio.counterOffer || 0,
-              notes: negotiation_notes || '',
-            },
-            closing: {
-              promiseAmount: closePrevio.promiseAmount || 0,
-              promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
-              closingAmount: closePrevio.closingAmount || 0,
-              closingDate: closing_closingDate ? new Date(closing_closingDate).toISOString() : null,
-              commission: closing_commission || 0,
-            },
-          };
+          return buildBusinessPayload(values, record);
         },
         onFormMount(form) {
-          const sync = (selName, wrapName) => {
-            const sel = form.querySelector(`#fld-${selName}`);
-            const wrap = form.querySelector(`#fld-${wrapName}`);
-            if (!sel || !wrap) return;
-            const parent = wrap.parentElement || wrap;
-            const run = () => { parent.style.display = sel.value === '__externo__' ? '' : 'none'; };
-            sel.addEventListener('change', run);
-            run();
-          };
-          sync('buyerClient', 'buyerExternalName');
-          sync('sellerClient', 'sellerExternalName');
-          sync('partnerAdvisor', 'partnerAdvisorName');
+          wireBusinessForm(form);
         },
         extraActions(record) {
           return `
             ${canChangeStage ? '<button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Etapa</button>' : ''}
             <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Ver bitácora</button>
-            ${canChecklist ? '<button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>' : ''}
+            <button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
             <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
           `;
@@ -623,6 +784,15 @@ window.Pages.businesses = {
         try {
           const res = await documentsApi.list(record._id).catch(() => []);
           const docs = (res && res.data) || res || [];
+          // Los archivos viven en /uploads y el backend exige sesión: se resuelve
+          // la URL absoluta y se agrega el token para que "Ver"/"Descargar" no
+          // terminen en 401.
+          const resolveDocUrl = (doc) => {
+            const raw = doc.fileUrl || doc.url || '';
+            if (!raw) return '';
+            const config = window.AppConfig;
+            return (config && typeof config.resolveUrl === 'function') ? config.resolveUrl(raw) : raw;
+          };
           containerEl.innerHTML = `
             <form id="upload-doc-form" style="margin-bottom:16px;padding:12px;background:var(--bg-subtle,#f8fafc);border-radius:6px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
@@ -632,18 +802,24 @@ window.Pages.businesses = {
               <button class="btn btn-primary btn-sm" type="submit">Subir documento (máx. 8 MB)</button>
             </form>
             <div style="max-height:300px;overflow-y:auto;">
-              ${docs.length ? docs.map((doc) => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color,#e2e8f0);">
+              ${docs.length ? docs.map((doc) => {
+                const url = resolveDocUrl(doc);
+                const uploaderId = String((doc.uploadedBy && (doc.uploadedBy._id || doc.uploadedBy)) || '');
+                const canDelete = canChecklist || (uploaderId && uploaderId === String(currentUserId));
+                const uploaderName = doc.uploadedBy && doc.uploadedBy.name ? doc.uploadedBy.name : '';
+                return `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color,#e2e8f0);gap:10px;">
                   <div>
                     <strong>${UI.escapeHtml(doc.name || doc.originalName || 'Documento')}</strong>
-                    <br><small class="text-muted">${Format.dateTime(doc.createdAt)}</small>
+                    <br><small class="text-muted">${Format.dateTime(doc.createdAt)}${uploaderName ? ` · ${UI.escapeHtml(uploaderName)}` : ''}</small>
                   </div>
-                  <div style="display:flex;gap:8px;">
-                    ${(doc.fileUrl || doc.url) ? `<a href="${doc.fileUrl || doc.url}" target="_blank" class="btn btn-secondary btn-sm">Ver</a>` : ''}
-                    <button class="btn btn-danger btn-sm" data-delete-doc="${doc._id}">Eliminar</button>
+                  <div style="display:flex;gap:8px;flex-shrink:0;">
+                    ${url ? `<a href="${UI.escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Ver</a>` : ''}
+                    ${url ? `<a href="${UI.escapeHtml(url)}" download class="btn btn-secondary btn-sm">Descargar</a>` : ''}
+                    ${canDelete ? `<button class="btn btn-danger btn-sm" data-delete-doc="${doc._id}">Eliminar</button>` : ''}
                   </div>
-                </div>
-              `).join('') : '<p class="text-muted">No hay documentos adjuntos a este negocio.</p>'}
+                </div>`;
+              }).join('') : '<p class="text-muted">No hay documentos adjuntos a este negocio.</p>'}
             </div>
           `;
 
@@ -837,7 +1013,7 @@ window.Pages.businesses = {
         { name: 'valueOperation', label: 'Valor de operación', type: 'number', value: business.valueOperation || 0 },
         { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: neg.offer || 0 },
         { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: Format.toLocalInput(closing.promiseDate) },
-        { name: 'closing_closingDate', label: 'Fecha de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate) },
+        { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate), hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
         { name: 'closing_commission', label: 'Comisión', type: 'number', value: closing.commission || 0 },
         { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : (business.partnerAdvisorName ? '__externo__' : '') },
         { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', value: business.partnerAdvisorName || '' },
@@ -858,9 +1034,13 @@ window.Pages.businesses = {
             </div>
           </form>
         `,
-        footer: `
+        footer: canManage
+          ? `
           <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
           <button class="btn btn-primary" type="submit" form="neg-form">Guardar</button>
+        `
+          : `
+          <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
         `,
         size: 820,
       });
@@ -880,10 +1060,15 @@ window.Pages.businesses = {
           partnerSel.addEventListener('change', syncPartner);
           syncPartner();
         }
+        if (!canManage) {
+          // Asesor / escrituración: consulta del avance en modo solo lectura.
+          form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = true; });
+          return;
+        }
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const v = UI.collectForm(e.target);
-          const { negotiation_offer, negotiation_notes, closing_promiseDate, closing_closingDate, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
+          const { negotiation_offer, negotiation_notes, closing_promiseDate, fecha_cierre, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
           if (rest.partnerAdvisor === '__externo__') {
             if (!String(partnerAdvisorName || '').trim()) return UI.toast('Escribe el nombre del asesor externo', 'warning');
             rest.partnerAdvisor = null;
@@ -903,9 +1088,16 @@ window.Pages.businesses = {
               promiseAmount: closing.promiseAmount || 0,
               promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
               closingAmount: closing.closingAmount || 0,
-              closingDate: closing_closingDate ? new Date(closing_closingDate).toISOString() : null,
+              closingDate: fecha_cierre ? new Date(fecha_cierre).toISOString() : null,
               commission: closing_commission || 0,
+              participants: (Array.isArray(closing.participants) ? closing.participants : [])
+                .map((p) => ({
+                  user: (p && p.user && (p.user._id || p.user)) || null,
+                  share: Number((p && p.share) || 0),
+                }))
+                .filter((p) => p.user),
             },
+            fecha_cierre: fecha_cierre ? new Date(fecha_cierre).toISOString() : null,
           };
           try {
             const hasProcessChange = Boolean(processType && processType !== business.processType);
@@ -933,16 +1125,18 @@ window.Pages.businesses = {
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }], value: 'comprador' },
         { name: 'currentStage', label: 'Etapa inicial', type: 'select', options: stageOptionsForNew('comprador') },
-        { name: 'buyerClient', label: 'Comprador', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin comprador —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-        { name: 'buyerExternalName', label: 'Nombre del comprador externo', type: 'text', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
-        { name: 'sellerClient', label: 'Vendedor', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin vendedor —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+        { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions] },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
         { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'number' },
-        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
-        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
+        { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
       ];
       const modal = UI.openModal({
         title: 'Nuevo negocio',
@@ -969,7 +1163,7 @@ window.Pages.businesses = {
       }
       const form = bodyEl ? bodyEl.querySelector('#new-neg-form') : null;
       if (form) {
-        if (UI.wireSearchSelects) UI.wireSearchSelects(form);
+        wireBusinessForm(form);
         const procSel = form.querySelector('#fld-processType');
         const stageSel = form.querySelector('#fld-currentStage');
         if (procSel && stageSel) {
@@ -983,47 +1177,13 @@ window.Pages.businesses = {
           procSel.addEventListener('change', syncStages);
           syncStages();
         }
-        const syncExt = (selName, wrapName) => {
-          const sel = form.querySelector(`#fld-${selName}`);
-          const wrap = form.querySelector(`#fld-${wrapName}`);
-          if (!sel || !wrap) return;
-          const parent = wrap.parentElement || wrap;
-          const run = () => { parent.style.display = sel.value === '__externo__' ? '' : 'none'; };
-          sel.addEventListener('change', run);
-          run();
-        };
-        syncExt('buyerClient', 'buyerExternalName');
-        syncExt('sellerClient', 'sellerExternalName');
-        syncExt('partnerAdvisor', 'partnerAdvisorName');
 
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const v = UI.collectForm(e.target);
-          const { negotiation_offer, negotiation_notes, buyerExternalName, sellerExternalName, partnerAdvisorName, ...rest } = v;
-          const externo = (valor, nombre) => {
-            if (valor === '__externo__') return { id: null, nombre: String(nombre || '').trim() };
-            return { id: valor || null, nombre: '' };
-          };
-          const buyer = externo(rest.buyerClient, buyerExternalName);
-          const seller = externo(rest.sellerClient, sellerExternalName);
-          const partner = externo(rest.partnerAdvisor, partnerAdvisorName);
-          if (rest.buyerClient === '__externo__' && !buyer.nombre) return UI.toast('Escribe el nombre del comprador externo', 'warning');
-          if (rest.sellerClient === '__externo__' && !seller.nombre) return UI.toast('Escribe el nombre del vendedor externo', 'warning');
-          if (rest.partnerAdvisor === '__externo__' && !partner.nombre) return UI.toast('Escribe el nombre del asesor externo', 'warning');
-          rest.buyerClient = buyer.id;
-          rest.buyerExternalName = buyer.nombre;
-          rest.sellerClient = seller.id;
-          rest.sellerExternalName = seller.nombre;
-          rest.partnerAdvisor = partner.id;
-          rest.partnerAdvisorName = partner.nombre;
           try {
-            await API.businesses.create({
-              ...rest,
-              negotiation: {
-                offer: negotiation_offer || 0,
-                notes: negotiation_notes || '',
-              },
-            });
+            const values = UI.collectForm(e.target);
+            const body = buildBusinessPayload(values, null);
+            await API.businesses.create(body);
             UI.toast('Negocio creado', 'success');
             UI.closeModal();
             renderView();

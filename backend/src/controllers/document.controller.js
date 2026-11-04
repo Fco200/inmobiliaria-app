@@ -1,16 +1,9 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const buildCrud = require('../utils/crud');
-const { isBoss, hasRole } = require('../utils/scope');
-const { Document } = require('../models');
+const { isBoss, hasRole, isCustomRole, hasPermission } = require('../utils/scope');
+const { Document, Business } = require('../models');
 const { logActivity } = require('../services/log.service');
-
-const documentCrud = buildCrud(Document, {
-  populate: ['uploadedBy', 'client', 'property', 'business'],
-  ownerField: 'uploadedBy',
-  wideRoles: ['asistencia', 'escrituracion'],
-});
 
 const populate = ['uploadedBy', 'client', 'property', 'business'];
 
@@ -19,9 +12,35 @@ const populate = ['uploadedBy', 'client', 'property', 'business'];
 const DOCUMENT_STAFF_ROLES = ['asistencia', 'escrituracion'];
 
 function isDocumentStaff(req) {
-  return isBoss(req) || hasRole(req, DOCUMENT_STAFF_ROLES);
+  return isBoss(req)
+    || hasRole(req, DOCUMENT_STAFF_ROLES)
+    || (isCustomRole(req) && hasPermission(req, 'documents_manage'));
 }
 
+// Negocios en los que el usuario figura como asesor (captador o de cliente).
+async function linkedBusinessIds(userId) {
+  const rows = await Business.find({
+    $or: [
+      { mainAdvisor: userId },
+      { partnerAdvisor: userId },
+      { asesor_captador_id: userId },
+      { asesor_cliente_id: userId },
+    ],
+  }).select('_id').lean();
+  return rows.map((row) => row._id);
+}
+
+// Lectura: el personal de staff ve todo; el asesor ve sus propios documentos y
+// los adjuntos de los negocios en los que está registrado.
+async function canViewDocument(req, doc, businessIds) {
+  if (isDocumentStaff(req)) return true;
+  const ownerId = String((doc.uploadedBy && doc.uploadedBy._id) || doc.uploadedBy || '');
+  if (ownerId === String(req.user._id)) return true;
+  const businessId = String((doc.business && doc.business._id) || doc.business || '');
+  return Boolean(businessId) && businessIds.some((id) => String(id) === businessId);
+}
+
+// Modificar y eliminar sigue siendo exclusivo del autor (o del personal de staff).
 function assertOwnership(req, doc) {
   if (isDocumentStaff(req)) return true;
   const ownerId = String((doc.uploadedBy && doc.uploadedBy._id) || doc.uploadedBy || '');
@@ -46,9 +65,10 @@ const list = asyncHandler(async (req, res) => {
   if (req.query.business) filter.business = req.query.business;
 
   // Los jefes, asistencia y escrituración ven todos los documentos; cada asesor
-  // solo los suyos.
+  // ve los suyos y los de los negocios en los que está registrado.
   if (!isDocumentStaff(req)) {
-    filter.uploadedBy = req.user._id;
+    const businessIds = await linkedBusinessIds(req.user._id);
+    filter.$and = [{ $or: [{ uploadedBy: req.user._id }, { business: { $in: businessIds } }] }];
   } else if (req.query.mine === 'true' || req.query.uploadedBy) {
     filter.uploadedBy = req.query.mine === 'true' ? req.user._id : req.query.uploadedBy;
   }
@@ -66,7 +86,15 @@ const list = asyncHandler(async (req, res) => {
   });
 });
 
-const get = documentCrud.get;
+const get = asyncHandler(async (req, res) => {
+  const doc = await Document.findById(req.params.id).populate(populate);
+  if (!doc) return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+  const businessIds = isDocumentStaff(req) ? [] : await linkedBusinessIds(req.user._id);
+  if (!(await canViewDocument(req, doc, businessIds))) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este registro.' });
+  }
+  res.json({ success: true, data: doc });
+});
 
 async function trace(doc, user, action, message) {
   logActivity({ entityType: 'Document', entityId: doc._id, user, action, message });

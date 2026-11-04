@@ -199,20 +199,75 @@ function mailPropertyProcessNotice(property, opts = {}) {
   };
 }
 
-// Correo de confirmación de solicitud de acceso al CRM.
-function mailAccessRequestApproved({ name, email }) {
+function frontendUrl() {
+  return String(process.env.FRONTEND_URL || 'https://crm.inmobles.com').replace(/\/+$/, '');
+}
+
+// Correo de confirmación de solicitud de acceso al CRM. Incluye las credenciales
+// temporales generadas al aprobar la solicitud para que la persona pueda entrar
+// sin depender de que un administrador se las envíe por otro canal.
+function mailAccessRequestApproved({ name, email, username, password }) {
   const subject = 'Tu acceso al CRM ha sido habilitado';
+  const loginUrl = `${frontendUrl()}/index.html`;
+  const hasCredentials = Boolean(username && password);
+  const credentials = hasCredentials
+    ? `
+    <div style="background:#faf7ee;border:1px solid #eadfc0;border-radius:8px;padding:16px 18px;font-size:14px;color:#2d1048;margin:0 0 14px;">
+      <div style="font-weight:700;margin-bottom:8px;">Tus datos de acceso</div>
+      <div style="margin-bottom:4px;"><strong>Usuario:</strong> ${escapeHtml(username)}</div>
+      <div style="margin-bottom:4px;"><strong>Contraseña temporal:</strong> ${escapeHtml(password)}</div>
+      <div style="color:#555;font-size:12px;margin-top:8px;">Por seguridad, cambia esta contraseña en tu primer inicio de sesión.</div>
+    </div>`
+    : `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Tu cuenta ya existía en el sistema. Usa tu usuario y contraseña habituales para ingresar.</p>`;
+
   const inner = `
     <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Hola ${escapeHtml(name || '')},</p>
     <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Tu solicitud de acceso al CRM INMOBLES ha sido aprobada y tu cuenta ya está habilitada.</p>
-    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Puedes ingresar desde: <a href="${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html">${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html</a></p>
-    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Te recomendamos cambiar tu contraseña al primer inicio de sesión.</p>
+    ${credentials}
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Puedes ingresar desde: <a href="${loginUrl}">${loginUrl}</a></p>
+    ${hasCredentials ? '<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Al entrar, ve a <strong>Mi perfil &rarr; Seguridad</strong> y cambia tu contraseña temporal.</p>' : ''}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;font-size:13px;color:#9a3412;">
+      Si no solicitaste este acceso, ignora este correo y avisa al administrador del sistema.
+    </div>
   `;
+  const text = hasCredentials
+    ? `Hola ${name || ''}, tu acceso al CRM INMOBLES fue aprobado.\n\nUsuario: ${username}\nContraseña temporal: ${password}\n\nIngresa en ${loginUrl} y cambia tu contraseña en Mi perfil > Seguridad.`
+    : `Hola ${name || ''}, tu solicitud de acceso fue aprobada. Tu cuenta ya existía; ingresa en ${loginUrl} con tu usuario y contraseña habituales.`;
   return {
     to: email,
     subject,
     html: wrapLayout(subject, inner),
-    text: `Hola ${name || ''}, tu acceso ha sido habilitado. Ingresa a ${(process.env.FRONTEND_URL || 'https://crm.inmobles.com')}/index.html. Cambia tu contraseña al primer ingreso.`,
+    text,
+  };
+}
+
+// Correo de campaña del boletín. El mensaje se recibe como texto plano y se
+// convierte a HTML seguro: se escapan etiquetas y se respetan los saltos de
+// línea. Se envía uno por destinatario (no con copia oculta masiva) para no
+// exponer las direcciones del resto de suscriptores.
+function mailNewsletterCampaign({ email, name, subject, message, intro }) {
+  const safeSubject = String(subject || 'Novedades de INMOBLES').trim();
+  const safeMessage = String(message || '').trim();
+  const paragraphs = safeMessage
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">${name ? `Hola, ${escapeHtml(name)}. ` : 'Hola. '}${escapeHtml(intro || 'Compartimos contigo estas novedades de INMOBLES:')}</p>
+    ${paragraphs || '<p style="margin:0 0 14px;font-size:14px;color:#333;">(Sin contenido adicional)</p>'}
+    <p style="margin:18px 0 0;font-size:13px;color:#333;"><a href="${frontendUrl()}/propiedades.html" style="background:#b9912f;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;">Ver catálogo de propiedades</a></p>
+    <p style="margin:18px 0 0;font-size:11px;color:#8a8a8a;">Recibes este correo porque estás suscrito al boletín de INMOBLES. Si deseas darte de baja, responde a este correo con la palabra BAJA.</p>
+  `;
+
+  return {
+    to: email,
+    subject: safeSubject,
+    html: wrapLayout(safeSubject, inner),
+    text: `${name ? `Hola, ${name}. ` : 'Hola. '}${intro || 'Compartimos contigo estas novedades de INMOBLES:'}\n\n${safeMessage}\n\nVer propiedades: ${frontendUrl()}/propiedades.html\n\nPara darte de baja responde a este correo con la palabra BAJA.`,
   };
 }
 
@@ -224,5 +279,6 @@ module.exports = {
   mailPropertyPublishedToAdvisor,
   mailPropertyProcessNotice,
   mailAccessRequestApproved,
+  mailNewsletterCampaign,
   hasSmtp,
 };

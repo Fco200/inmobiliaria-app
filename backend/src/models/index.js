@@ -28,6 +28,8 @@ const Announcement = require('./announcement.model');
 const Meeting = require('./meeting.model');
 const UserRequest = require('./userRequest.model');
 const Newsletter = require('./newsletter.model');
+const Campaign = require('./campaign.model');
+const CampaignRecipient = require('./campaignRecipient.model');
 const PushSubscription = require('./pushSubscription.model');
 
 module.exports = {
@@ -59,5 +61,7 @@ module.exports = {
   Meeting,
   UserRequest,
   Newsletter,
+  Campaign,
+  CampaignRecipient,
   PushSubscription,
 };

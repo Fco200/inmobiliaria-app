@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const { PUBLIC_ROLE_CODES } = require('../constants/roles');
 
 const userRequestSchema = new mongoose.Schema(
   {
@@ -19,7 +20,9 @@ const userRequestSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['asesor', 'admin', 'gerencia'],
+      // Los seis roles oficiales. Se guarda el código interno (`admin` para
+      // Administración) y se muestra la etiqueta oficial en la interfaz.
+      enum: [...PUBLIC_ROLE_CODES],
       default: 'asesor',
     },
     message: { type: String, trim: true, default: '' },

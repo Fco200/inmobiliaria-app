@@ -36,6 +36,9 @@ const clientSchema = new Schema(
     // Texto libre escrito cuando el medio es "Otro" (o cuando se detalla una
     // "Recomendación"). Nunca rompe el enum de `medio`.
     medioOtro: { type: String, trim: true, default: '' },
+    // Persona que recomendó al cliente. Se guarda explícitamente (además de
+    // reflejarse en `medioOtro`) cuando el medio es "Recomendación".
+    recomendadoPor: { type: String, trim: true, default: '' },
     fechaRegistro: { type: Date, default: Date.now },
     // ── Operación que origina al cliente (captación) ────────────────────
     // Las cinco opciones reales del formulario: Vender, Comprar, Rentar,

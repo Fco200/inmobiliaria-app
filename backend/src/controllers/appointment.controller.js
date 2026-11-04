@@ -2,7 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { Appointment, Task, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { ensure } = require('../services/notification.service');
@@ -35,6 +35,7 @@ const appointmentCrud = buildCrud(Appointment, {
   populate: ['client', 'user', 'business', 'property'],
   searchFields: ['place', 'notes'],
   ownerField: 'user',
+  widePermission: 'appointments_manage',
   // Permite filtrar el listado por cliente, propiedad o negocio desde la barra
   // de filtros (los selects con búsqueda remota envían ?client=…).
   extraFilters: { client: 'client', property: 'property', business: 'business', type: 'type' },
@@ -64,6 +65,7 @@ const taskCrud = buildCrud(Task, {
   populate: ['assignedTo', 'client', 'business', 'property'],
   searchFields: ['title', 'description'],
   ownerField: 'assignedTo',
+  widePermission: 'tasks_manage',
   // Filtro por cliente/propiedad/negocio desde la barra de filtros.
   extraFilters: { client: 'client', property: 'property', business: 'business' },
   afterCreate: async (doc, req) => {
@@ -85,7 +87,8 @@ const changeTaskStatus = asyncHandler(async (req, res) => {
   const task = await Task.findById(req.params.id);
   if (!task) return res.status(404).json({ success: false, message: 'Tarea no encontrada' });
 
-  if (!isBoss(req) && String(task.assignedTo) !== String(req.user._id)) {
+  if (!isBoss(req) && !(isCustomRole(req) && hasPermission(req, 'tasks_manage'))
+    && String(task.assignedTo) !== String(req.user._id)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a esta tarea.' });
   }
 

@@ -62,6 +62,7 @@ window.Pages.documents = {
         <h2>Formatos</h2>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-primary" type="button" data-open-formatos>&#128196; Generar Formato PDF</button>
+          ${boss ? '<button class="btn btn-secondary" type="button" data-upload-shared>&#128228; Subir PDF compartido</button>' : ''}
           ${boss ? '<button class="btn btn-secondary" type="button" data-new-template>+ Crear plantilla</button>' : ''}
           ${canUpload ? '<button class="btn btn-secondary" type="button" data-new>+ Subir formato</button>' : ''}
         </div>
@@ -346,6 +347,13 @@ window.Pages.documents = {
       newTemplateBtn.addEventListener('click', () => openTemplateForm(null));
     }
 
+    // Subida de un PDF compartido: queda en ./plantillas y lo puede ver y
+    // descargar todo el equipo desde el selector de formatos.
+    const uploadSharedBtn = container.querySelector('[data-upload-shared]');
+    if (uploadSharedBtn) {
+      uploadSharedBtn.addEventListener('click', () => openSharedPdfUpload());
+    }
+
     // Botón para abrir selector de formatos PDF
     const openFormatosBtn = container.querySelector('[data-open-formatos]');
     if (openFormatosBtn) {
@@ -595,6 +603,33 @@ window.Pages.documents = {
     load();
 
     // ============ FUNCIONES PARA PLANTILLAS PDF ============
+
+    // Permite a administración/gerencia/asistencia subir un PDF que quedará
+    // disponible para todos los asesores en el selector de plantillas.
+    function openSharedPdfUpload() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/pdf,.pdf';
+      input.addEventListener('change', async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+          UI.toast('Selecciona un archivo PDF válido.', 'error');
+          return;
+        }
+        try {
+          UI.toast('Subiendo PDF compartido...', 'info');
+          const result = await API.formatos.subirPlantilla(file);
+          const refreshed = await API.formatos.listarPlantillas().catch(() => null);
+          if (refreshed && Array.isArray(refreshed.plantillas)) plantillas = refreshed.plantillas;
+          UI.toast((result && result.message) || 'PDF compartido subido. Ya está disponible para todo el equipo.', 'success');
+          if (window.Sounds) window.Sounds.confirmation().catch(() => {});
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
+      });
+      input.click();
+    }
 
     // Selector de plantillas PDF. Con `keyword` opcional filtra la vista a las
     // plantillas que coinciden (los formatos rápidos lo usan para preseleccionar).

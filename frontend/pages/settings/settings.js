@@ -18,6 +18,33 @@ window.Pages.settings = {
 
     const roleCode = me.role ? (me.role.code || me.role) : '';
     const permissions = me.role && Array.isArray(me.role.permissions) ? me.role.permissions : [];
+    // Los seis roles oficiales del CRM. El nombre visible se normaliza aquí
+    // (la cuenta histórica "admin" se muestra como "Administración").
+    const OFFICIAL_ROLE_LABELS = {
+      direccion: 'Dirección',
+      admin: 'Administración',
+      gerencia: 'Gerencia',
+      asistencia: 'Asistencia',
+      escrituracion: 'Escrituración',
+      asesor: 'Asesor',
+    };
+    const OFFICIAL_ROLE_CODES = ['direccion', 'admin', 'gerencia', 'asistencia', 'escrituracion', 'asesor'];
+    const officialRoleLabel = (code, fallback) => OFFICIAL_ROLE_LABELS[code] || fallback || code || '—';
+    // Los roles cargados desde el backend, ordenados como los pide la
+    // inmobiliaria. Se usa tanto en el alta/edición de usuarios como en la
+    // aprobación de solicitudes para que ambos formularios ofrezcan SIEMPRE
+    // los seis roles oficiales (nunca `superadmin`, que es soporte técnico).
+    const rolesByCode = {};
+    roles.forEach((r) => {
+      const code = String((r && r.code) || '');
+      if (code) rolesByCode[code] = r;
+    });
+    const officialRoleOptions = () => OFFICIAL_ROLE_CODES
+      .map((code) => {
+        const role = rolesByCode[code];
+        return role ? { value: role._id, label: officialRoleLabel(code, role.name) } : null;
+      })
+      .filter(Boolean);
     const isAdmin = ['admin', 'direccion', 'superadmin'].includes(roleCode);
     const canManageUsers = isAdmin || roleCode === 'asistencia';
     const canViewActivity = isAdmin || permissions.includes('audit_view');
@@ -25,6 +52,7 @@ window.Pages.settings = {
       || roleCode === 'gerencia'
       || roleCode === 'asistencia'
       || permissions.includes('settings_manage');
+    const canManageNewsletter = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'].includes(roleCode);
     if (!isBoss) {
       container.innerHTML = `
         <div class="card">
@@ -46,6 +74,7 @@ window.Pages.settings = {
         ${isAdmin ? '<button class="btn btn-secondary" data-tab="roles" type="button">Roles y permisos</button>' : ''}
         <button class="btn btn-secondary" data-tab="register" type="button">&#128274;&nbsp; Registro</button>
         <button class="btn btn-secondary" data-tab="alerts" type="button">&#128276;&nbsp; Avisos</button>
+        ${canManageNewsletter ? '<button class="btn btn-secondary" data-tab="newsletter" type="button">&#128231;&nbsp; Boletín y campañas</button>' : ''}
         <button class="btn btn-secondary" data-tab="sessions" type="button">&#128275;&nbsp; Sesiones</button>
         <button class="btn btn-secondary" data-tab="catalog" type="button">&#127760;&nbsp; Catálogo público</button>
         <button class="btn btn-secondary" data-tab="guide" type="button">&#128214;&nbsp; Guía del sistema</button>
@@ -92,6 +121,7 @@ window.Pages.settings = {
         else if (btn.dataset.tab === 'roles') renderRoles();
         else if (btn.dataset.tab === 'register') renderRegister();
         else if (btn.dataset.tab === 'alerts') renderAlerts();
+        else if (btn.dataset.tab === 'newsletter') renderNewsletter();
         else if (btn.dataset.tab === 'sessions') renderSessions();
         else if (btn.dataset.tab === 'catalog') renderCatalog();
         else if (btn.dataset.tab === 'guide') renderGuide();
@@ -508,10 +538,16 @@ window.Pages.settings = {
       renderAdminSolicitudes(tabContent.querySelector('#solicitudes-admin-card'));
       API.permissions.list().then((perms) => {
         const permissions = Array.isArray(perms) ? perms : (perms && perms.data ? perms.data : []);
-        const assignableCodes = ['asesor', 'asistencia', 'escrituracion'];
-        const allowedRoles = isAdmin ? roles : roles.filter((r) => assignableCodes.includes(r.code));
+        // Los seis roles oficiales, en el orden solicitado. Administración y
+        // Dirección también pueden asignar roles personalizados; Asistencia
+        // solo los seis oficiales (el backend valida lo mismo).
         const roleOptions = [
-          ...UI.sortByLabel(allowedRoles, (x) => x.name).map((x) => ({ value: x._id, label: x.name })),
+          ...(isAdmin
+            ? UI.sortByLabel(roles, (x) => officialRoleLabel(x.code, x.name)).map((x) => ({
+              value: x._id,
+              label: officialRoleLabel(x.code, x.name),
+            }))
+            : officialRoleOptions()),
           ...(isAdmin ? [{ value: '__custom__', label: 'Personalizado (elegir permisos)' }] : []),
         ];
 
@@ -528,7 +564,7 @@ window.Pages.settings = {
           columns: [
             { key: 'name', label: 'Nombre', render: (r) => `${UI.escapeHtml(r.name)}<br><small class="text-muted">@${UI.escapeHtml(r.username)}</small>` },
             { key: 'email', label: 'Correo', render: (r) => UI.escapeHtml(r.email) },
-            { key: 'role', label: 'Rol', render: (r) => UI.badge(r.role ? r.role.name : '—', 'info') },
+            { key: 'role', label: 'Rol', render: (r) => UI.badge(r.role ? officialRoleLabel(r.role.code, r.role.name) : '—', 'info') },
             { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
             { key: 'joinedAt', label: 'Alta', render: (r) => Format.date(r.joinedAt) },
           ],
@@ -690,7 +726,7 @@ window.Pages.settings = {
           box.innerHTML = '';
           return;
         }
-        const rolLabel = { asesor: 'Asesor', admin: 'Administrador', gerencia: 'Gerencia' };
+        const rolLabel = OFFICIAL_ROLE_LABELS;
         box.innerHTML = `
           <div class="card" style="border-left:4px solid var(--warning);">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -705,7 +741,7 @@ window.Pages.settings = {
                   <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
                     <div>
                       <strong>${UI.escapeHtml(s.name)}</strong>
-                      <div class="text-muted" style="font-size:12px;margin-top:2px;">${UI.escapeHtml(s.email)} &middot; Rol: ${rolLabel[s.role] || s.role} &middot; ${Format.date(s.createdAt)}</div>
+                      <div class="text-muted" style="font-size:12px;margin-top:2px;">${UI.escapeHtml(s.email)} &middot; Rol: ${UI.escapeHtml(rolLabel[s.role] || s.role || '—')} &middot; ${Format.date(s.createdAt)}</div>
                       ${s.phone ? `<div class="text-muted" style="font-size:11px;">Tel: ${UI.escapeHtml(s.phone)}</div>` : ''}
                       ${s.message ? `<div class="text-muted" style="font-size:12px;margin-top:4px;font-style:italic;">"${UI.escapeHtml(s.message)}"</div>` : ''}
                     </div>
@@ -745,28 +781,52 @@ window.Pages.settings = {
       }
     }
 
+    function mostrarResultadoAprobacion(result) {
+      const account = (result && result.account) || {};
+      if (account.temporaryPassword) {
+        const modal = UI.openModal({
+          title: 'Cuenta creada: entrega la contraseña',
+          size: 480,
+          body: `
+            <p class="text-muted" style="margin-top:0;">${UI.escapeHtml(result.message || '')}</p>
+            <div class="card" style="padding:12px;">
+              <div><strong>Usuario:</strong> ${UI.escapeHtml(account.username || '')}</div>
+              <div><strong>Contraseña temporal:</strong> <code>${UI.escapeHtml(account.temporaryPassword)}</code></div>
+              <div class="text-muted" style="font-size:12px;margin-top:6px;">Se muestra una sola vez. La persona debe cambiarla al entrar por primera vez.</div>
+            </div>
+          `,
+          footer: '<button class="btn btn-primary" data-cancel type="button">Entendido</button>',
+        });
+        const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+        const doneBtn = overlay ? overlay.querySelector('[data-cancel]') : null;
+        if (doneBtn) doneBtn.addEventListener('click', () => UI.closeModal());
+        return;
+      }
+      UI.toast((result && result.message) || 'Solicitud aprobada.', account.created && !account.emailSent ? 'warning' : 'success');
+    }
+
     async function aprobarSolicitudAdmin(request) {
-      const options = roles.map((r) => `<option value="${r._id}" ${r.code === request.role ? 'selected' : ''}>${UI.escapeHtml(r.name)}</option>`).join('');
+      const requestCode = String(request.role || 'asesor');
+      const options = OFFICIAL_ROLE_CODES.map((code) => {
+        const role = rolesByCode[code];
+        if (!role) return '';
+        return `<option value="${code}" ${code === requestCode ? 'selected' : ''}>${UI.escapeHtml(officialRoleLabel(code, role.name))}</option>`;
+      }).join('');
       const modal = UI.openModal({
-        title: '&#128994;&nbsp; Aprobar solicitud',
-        size: 540,
+        title: 'Aprobar solicitud',
+        size: 520,
         body: `
-          <p class="text-muted" style="margin-top:0;">Se creará una cuenta para <strong>${UI.escapeHtml(request.name)}</strong>. Completa los datos.</p>
-          <div class="form-group"><label>Nombre *</label><input id="adm-srq-name" type="text" value="${UI.escapeHtml(request.name)}"></div>
-          <div class="form-grid">
-            <div class="form-group"><label>Usuario *</label><input id="adm-srq-username" type="text" value="${UI.escapeHtml(defaultUsernameFromEmailAdmin(request.email))}"></div>
-            <div class="form-group"><label>Correo *</label><input id="adm-srq-email" type="email" value="${UI.escapeHtml(request.email)}"></div>
-          </div>
-          <div class="form-grid">
-            <div class="form-group"><label>Teléfono</label><input id="adm-srq-phone" type="tel" value="${UI.escapeHtml(request.phone || '')}"></div>
-            <div class="form-group"><label>Rol *</label><select id="adm-srq-role">${options}</select></div>
-          </div>
-          <div class="form-group"><label>Contraseña * (mín. 8 caracteres)</label><input id="adm-srq-password" type="password" autocomplete="new-password"></div>
+          <p class="text-muted" style="margin-top:0;">
+            Se creará la cuenta de <strong>${UI.escapeHtml(request.name)}</strong> (${UI.escapeHtml(request.email)}).
+            El sistema genera el usuario y una contraseña temporal, y los envía por correo junto con el enlace de acceso.
+          </p>
+          <div class="form-group"><label>Rol *</label><select id="adm-srq-role">${options}</select></div>
+          <p class="text-muted" style="font-size:12px;">Si el correo ya tiene una cuenta, no se cambia su rol ni su estado: solo recibe un aviso.</p>
           <div id="adm-srq-error" class="alert alert-error" style="display:none;"></div>
         `,
         footer: `
           <button class="btn btn-secondary" data-cancel type="button">Cancelar</button>
-          <button class="btn btn-primary" data-ok type="button">Crear usuario</button>
+          <button class="btn btn-primary" data-ok type="button">Aprobar y enviar credenciales</button>
         `,
       });
 
@@ -776,38 +836,25 @@ window.Pages.settings = {
       const errBox = bodyEl.querySelector('#adm-srq-error');
       const okBtn = overlay.querySelector('[data-ok]');
       const cancelBtn = overlay.querySelector('[data-cancel]');
-      const close = () => UI.closeModal();
-      if (cancelBtn) cancelBtn.addEventListener('click', close);
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
 
       if (okBtn) {
         okBtn.addEventListener('click', async () => {
-          const name = bodyEl.querySelector('#adm-srq-name').value.trim();
-          const username = bodyEl.querySelector('#adm-srq-username').value.trim().toLowerCase();
-          const email = bodyEl.querySelector('#adm-srq-email').value.trim().toLowerCase();
-          const phone = bodyEl.querySelector('#adm-srq-phone').value.trim();
           const role = bodyEl.querySelector('#adm-srq-role').value;
-          const password = bodyEl.querySelector('#adm-srq-password').value;
-          if (!name || username.length < 3 || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email) || !password || password.length < 8) {
-            errBox.style.display = 'block';
-            errBox.textContent = 'Completa nombre, usuario (3+), correo válido y contraseña (8+).';
-            return;
-          }
           errBox.style.display = 'none';
           okBtn.disabled = true;
           try {
-            await API.users.create({ name, username, email, phone, role, password, status: 'activo' });
-            await API.userRequests.handle(request._id, { action: 'aprobada', comment: 'Cuenta creada desde panel admin' });
+            const result = await API.userRequests.handle(request._id, { action: 'aprobada', role });
             UI.closeModal();
             renderUsers();
-            UI.toast('Usuario creado y solicitud aprobada.', 'success');
+            mostrarResultadoAprobacion(result);
           } catch (error) {
             okBtn.disabled = false;
             errBox.style.display = 'block';
-            errBox.textContent = error.message || 'No se pudo crear el usuario.';
+            errBox.textContent = error.message || 'No se pudo aprobar la solicitud.';
           }
         });
       }
-      setTimeout(() => bodyEl.querySelector('#adm-srq-name').focus(), 120);
     }
 
     async function rechazarSolicitudAdmin(request) {
@@ -894,9 +941,9 @@ window.Pages.settings = {
           tabContent.innerHTML = `
             <div class="grid grid-2">
               <div class="card">
-                <h3 style="margin-top:0;">&#128273;&nbsp; Clave de registro para administrador / gerencia</h3>
+                <h3 style="margin-top:0;">&#128273;&nbsp; Clave de registro para administración / gerencia</h3>
                 <p class="text-muted" style="font-size:13px;">
-                  Cualquier persona que se registre con Google y elija <strong>Administrador</strong> o
+                  Cualquier persona que se registre con Google y elija <strong>Administración</strong> o
                   <strong>Gerencia</strong> deberá escribir esta clave. Los asesores no la necesitan.
                 </p>
                 <p>
@@ -1254,6 +1301,344 @@ window.Pages.settings = {
 
       loadAlerts();
       initPushCard();
+    }
+
+    let nlPage = 1;
+    const nlFilters = { q: '', status: '' };
+
+    function renderNewsletter() {
+      const campaignRoleOptions = OFFICIAL_ROLE_CODES
+        .map((code) => rolesByCode[code])
+        .filter(Boolean)
+        .map((r) => `<option value="${UI.escapeHtml(r.code)}">${UI.escapeHtml(officialRoleLabel(r.code, r.name))}</option>`)
+        .join('');
+
+      tabContent.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <h3 style="margin:0 0 6px;">&#128231;&nbsp; Boletín y campañas de correo</h3>
+          <p class="text-muted" style="font-size:12px;margin:0;">
+            Consulta a los suscriptores del sitio, administra altas/bajas y envía correos a suscriptores,
+            usuarios del CRM y clientes. Cada correo se envía por separado para proteger la privacidad de la lista.
+          </p>
+        </div>
+        <div id="nl-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;"></div>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="form-group" style="flex:1 1 220px;margin:0;">
+              <label for="nl-search">Buscar</label>
+              <input class="form-control" id="nl-search" type="text" placeholder="Correo, nombre u origen…" value="${UI.escapeHtml(nlFilters.q)}">
+            </div>
+            <div class="form-group" style="min-width:150px;margin:0;">
+              <label for="nl-status">Estado</label>
+              <select class="form-control" id="nl-status">
+                <option value="">Todos</option>
+                <option value="suscrito" ${nlFilters.status === 'suscrito' ? 'selected' : ''}>Suscritos</option>
+                <option value="dado_baja" ${nlFilters.status === 'dado_baja' ? 'selected' : ''}>Dados de baja</option>
+              </select>
+            </div>
+            <button class="btn btn-secondary" type="button" id="nl-refresh">&#8635;&nbsp; Actualizar</button>
+            <button class="btn btn-secondary" type="button" id="nl-export">&#128229;&nbsp; Exportar CSV</button>
+          </div>
+          <div id="nl-alert" class="alert" style="margin:12px 0 0;display:none;"></div>
+        </div>
+        <div id="nl-list"><div class="loading">Cargando suscriptores...</div></div>
+
+        <div class="card" style="margin:16px 0;">
+          <h3 style="margin:0 0 6px;">&#128231;&nbsp; Enviar campaña</h3>
+          <p class="text-muted" style="font-size:12px;margin:0 0 14px;">
+            Elige la audiencia y redacta el mensaje. En modo desarrollo (sin SMTP) el envío se simula y queda registrado en el historial.
+          </p>
+          <form id="nl-form">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="nl-subject">Asunto *</label>
+                <input class="form-control" id="nl-subject" name="subject" type="text" maxlength="160" required placeholder="Nuevas propiedades disponibles">
+              </div>
+              <div class="form-group">
+                <label for="nl-audience">Destinatarios *</label>
+                <select class="form-control" id="nl-audience" name="audience" required>
+                  <option value="suscriptores">Suscriptores del boletín</option>
+                  <option value="usuarios">Usuarios activos del CRM</option>
+                  <option value="clientes">Clientes con correo registrado</option>
+                  <option value="todos">Todos (sin duplicados)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="nl-role">Filtrar usuarios por rol (opcional)</label>
+                <select class="form-control" id="nl-role" name="role">
+                  <option value="">Todos los roles</option>
+                  ${campaignRoleOptions}
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="nl-intro">Saludo / introducción (opcional)</label>
+                <input class="form-control" id="nl-intro" name="intro" type="text" maxlength="300" placeholder="Compartimos contigo estas novedades:">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label for="nl-message">Contenido del correo *</label>
+              <textarea class="form-control" id="nl-message" name="message" rows="7" maxlength="12000" required placeholder="Escribe aquí las novedades, propiedades o promociones que quieres compartir…"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+              <button class="btn btn-primary" id="nl-send" type="submit">&#128231;&nbsp; Enviar campaña</button>
+              <span class="text-muted" style="font-size:12px;">Revisa el contenido antes de enviarlo: la acción no se puede deshacer.</span>
+            </div>
+            <div id="nl-form-alert" class="alert" style="margin:12px 0 0;display:none;"></div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 12px;">Historial de campañas</h3>
+          <div id="nl-history"><div class="loading">Cargando historial...</div></div>
+        </div>
+      `;
+
+      const statsEl = tabContent.querySelector('#nl-stats');
+      const listEl = tabContent.querySelector('#nl-list');
+      const alertEl = tabContent.querySelector('#nl-alert');
+      const formAlert = tabContent.querySelector('#nl-form-alert');
+
+      const showBox = (el, message, type) => {
+        if (!el) return;
+        el.className = `alert alert-${type || 'info'}`;
+        el.textContent = message;
+        el.style.display = message ? '' : 'none';
+      };
+
+      const audienceLabel = (value) => ({
+        suscriptores: 'Suscriptores',
+        usuarios: 'Usuarios del CRM',
+        clientes: 'Clientes',
+        todos: 'Todos (sin duplicados)',
+      }[value] || value || '—');
+
+      function renderStats(stats) {
+        const s = stats || {};
+        statsEl.innerHTML = `
+          <div class="card" style="text-align:center;padding:14px;">
+            <b style="display:block;font-size:22px;">${s.total || 0}</b>
+            <span class="text-muted" style="font-size:12px;">Registros</span>
+          </div>
+          <div class="card" style="text-align:center;padding:14px;">
+            <b style="display:block;font-size:22px;">${s.suscritos || 0}</b>
+            <span class="text-muted" style="font-size:12px;">Suscritos</span>
+          </div>
+          <div class="card" style="text-align:center;padding:14px;">
+            <b style="display:block;font-size:22px;">${s.bajas || 0}</b>
+            <span class="text-muted" style="font-size:12px;">Dados de baja</span>
+          </div>
+          <div class="card" style="text-align:center;padding:14px;">
+            <b style="display:block;font-size:22px;">${s.usuarios || 0}</b>
+            <span class="text-muted" style="font-size:12px;">Usuarios activos</span>
+          </div>
+          <div class="card" style="text-align:center;padding:14px;">
+            <b style="display:block;font-size:22px;">${s.clientes || 0}</b>
+            <span class="text-muted" style="font-size:12px;">Clientes con correo</span>
+          </div>
+        `;
+      }
+
+      async function loadSubscribers() {
+        listEl.innerHTML = '<div class="loading">Cargando suscriptores...</div>';
+        try {
+          const d = await API.newsletter.subscribers({
+            q: nlFilters.q,
+            status: nlFilters.status,
+            page: nlPage,
+            limit: 50,
+          });
+          renderStats(d && d.stats);
+          const subs = (d && d.subscribers) || [];
+          const total = (d && d.total) || 0;
+          const pages = (d && d.pages) || 1;
+          nlPage = (d && d.page) || nlPage;
+
+          if (!subs.length) {
+            listEl.innerHTML = '<div class="card"><div class="empty-state"><p>No hay suscriptores que coincidan con el filtro.</p></div></div>';
+            return;
+          }
+
+          listEl.innerHTML = `
+            <div class="table-wrapper card">
+              <table class="table">
+                <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr></thead>
+                <tbody>
+                  ${subs.map((s) => {
+                    const activo = s.status === 'suscrito';
+                    return `
+                    <tr>
+                      <td>${UI.escapeHtml(s.email || '')}</td>
+                      <td>${UI.escapeHtml(s.name || '—')}</td>
+                      <td>${UI.escapeHtml(s.source || '—')}</td>
+                      <td>${UI.badge(activo ? 'Suscrito' : 'Dado de baja', activo ? 'success' : 'muted')}</td>
+                      <td>${Format.dateTime(s.createdAt)}</td>
+                      <td style="white-space:nowrap;">
+                        <button class="btn btn-secondary btn-sm" type="button" data-nl-toggle="${UI.escapeHtml(s._id)}" data-next="${activo ? 'dado_baja' : 'suscrito'}">${activo ? 'Dar de baja' : 'Reactivar'}</button>
+                        <button class="btn btn-danger btn-sm" type="button" data-nl-del="${UI.escapeHtml(s._id)}">Eliminar</button>
+                      </td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 4px 0;">
+                <span class="text-muted" style="font-size:12px;">${total} registro${total === 1 ? '' : 's'} · Página ${nlPage} de ${pages}</span>
+                <span style="display:flex;gap:8px;">
+                  <button class="btn btn-secondary btn-sm" type="button" data-nl-prev ${nlPage <= 1 ? 'disabled' : ''}>← Anterior</button>
+                  <button class="btn btn-secondary btn-sm" type="button" data-nl-next ${nlPage >= pages ? 'disabled' : ''}>Siguiente →</button>
+                </span>
+              </div>
+            </div>
+          `;
+
+          listEl.querySelectorAll('[data-nl-toggle]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              btn.disabled = true;
+              try {
+                await API.newsletter.updateSubscriber(btn.dataset.nlToggle, { status: btn.dataset.next });
+                showBox(alertEl, btn.dataset.next === 'suscrito' ? 'Suscriptor reactivado.' : 'Suscriptor dado de baja.', 'success');
+                loadSubscribers();
+              } catch (error) {
+                btn.disabled = false;
+                showBox(alertEl, error.message, 'error');
+              }
+            });
+          });
+
+          listEl.querySelectorAll('[data-nl-del]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const ok = await UI.confirm('¿Eliminar este suscriptor del boletín? Esta acción no se puede deshacer.');
+              if (!ok) return;
+              btn.disabled = true;
+              try {
+                await API.newsletter.removeSubscriber(btn.dataset.nlDel);
+                showBox(alertEl, 'Suscriptor eliminado.', 'success');
+                loadSubscribers();
+              } catch (error) {
+                btn.disabled = false;
+                showBox(alertEl, error.message, 'error');
+              }
+            });
+          });
+
+          const prev = listEl.querySelector('[data-nl-prev]');
+          if (prev) prev.addEventListener('click', () => { nlPage -= 1; loadSubscribers(); });
+          const next = listEl.querySelector('[data-nl-next]');
+          if (next) next.addEventListener('click', () => { nlPage += 1; loadSubscribers(); });
+        } catch (error) {
+          listEl.innerHTML = UI.errorAlert(error.message);
+        }
+      }
+
+      const CAMPAIGN_STATUS_LABELS = { en_cola: 'En cola', en_proceso: 'Enviando…', interrumpida: 'Interrumpida', fallida: 'Fallida' };
+
+      async function loadHistory() {
+        const box = tabContent.querySelector('#nl-history');
+        if (!box) return;
+        box.innerHTML = '<div class="loading">Cargando historial...</div>';
+        try {
+          const logs = await API.newsletter.campaigns({ limit: 15 });
+          const rows = Array.isArray(logs) ? logs : [];
+          const pending = rows.some((l) => ['en_cola', 'en_proceso'].includes((l.data || {}).status));
+          if (pending) setTimeout(loadHistory, 4000);
+          if (!rows.length) {
+            box.innerHTML = '<div class="empty-state"><p>Todavía no se han enviado campañas.</p></div>';
+            return;
+          }
+          box.innerHTML = `
+            <div class="table-wrapper">
+              <table class="table">
+                <thead><tr><th>Asunto</th><th>Destinatarios</th><th>Entregados</th><th>Fallidos</th><th>Enviada por</th><th>Fecha</th></tr></thead>
+                <tbody>
+                  ${rows.map((l) => {
+                    const d = l.data || {};
+                    const autor = l.user ? (l.user.name || l.user.username || l.user.email) : '—';
+                    return `
+                    <tr>
+                      <td>${UI.escapeHtml(d.subject || l.message || '—')}${CAMPAIGN_STATUS_LABELS[d.status] ? ` ${UI.badge(CAMPAIGN_STATUS_LABELS[d.status], 'info')}` : ''}</td>
+                      <td>${UI.escapeHtml(audienceLabel(d.audience))} · ${d.total || 0}</td>
+                      <td>${UI.badge(String(d.enviados || 0), 'success')}</td>
+                      <td>${d.fallidos ? UI.badge(String(d.fallidos), 'danger') : '0'}</td>
+                      <td>${UI.escapeHtml(autor || '—')}</td>
+                      <td>${Format.dateTime(l.createdAt)}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        } catch (error) {
+          box.innerHTML = UI.errorAlert(error.message);
+        }
+      }
+
+      const search = tabContent.querySelector('#nl-search');
+      let searchTimer = null;
+      search.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          nlFilters.q = search.value.trim();
+          nlPage = 1;
+          loadSubscribers();
+        }, 350);
+      });
+
+      const statusSel = tabContent.querySelector('#nl-status');
+      statusSel.addEventListener('change', () => {
+        nlFilters.status = statusSel.value;
+        nlPage = 1;
+        loadSubscribers();
+      });
+
+      tabContent.querySelector('#nl-refresh').addEventListener('click', () => loadSubscribers());
+
+      const exportBtn = tabContent.querySelector('#nl-export');
+      exportBtn.addEventListener('click', async () => {
+        exportBtn.disabled = true;
+        try {
+          await API.newsletter.exportCsv({ status: nlFilters.status });
+          showBox(alertEl, 'Listado exportado en CSV.', 'success');
+        } catch (error) {
+          showBox(alertEl, error.message, 'error');
+        } finally {
+          exportBtn.disabled = false;
+        }
+      });
+
+      const form = tabContent.querySelector('#nl-form');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submit = tabContent.querySelector('#nl-send');
+        const data = new FormData(form);
+        const subject = String(data.get('subject') || '').trim();
+        const message = String(data.get('message') || '').trim();
+        const audience = String(data.get('audience') || 'suscriptores');
+        const role = String(data.get('role') || '');
+        const intro = String(data.get('intro') || '').trim();
+
+        if (!subject || !message) {
+          showBox(formAlert, 'Escribe el asunto y el contenido del correo.', 'error');
+          return;
+        }
+
+        const ok = await UI.confirm(`¿Enviar la campaña "${subject}" a ${audienceLabel(audience).toLowerCase()}?\n\nRevisa el contenido: esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        submit.disabled = true;
+        showBox(formAlert, '', 'info');
+        try {
+          const r = await API.newsletter.sendCampaign({ subject, audience, role, intro, message });
+          showBox(formAlert, (r && r.message) || 'Campaña en cola.', 'success');
+          form.reset();
+          loadHistory();
+        } catch (error) {
+          showBox(formAlert, error.message, 'error');
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      loadSubscribers();
+      loadHistory();
     }
 
     function renderActivity() {

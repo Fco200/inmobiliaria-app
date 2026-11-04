@@ -681,7 +681,8 @@
         <a href="#a7">7. Avisos y notificaciones</a>
         <a href="#a8">8. Sesiones y seguridad</a>
         <a href="#a9">9. Compartir esta guía</a>
-        <a href="#a10">10. Errores frecuentes</a>
+        <a href="#a10">10. Boletín, campañas y PDFs</a>
+        <a href="#a11">11. Errores frecuentes</a>
       </nav>
 
       <article class="chapter" id="a1">
@@ -861,8 +862,8 @@
             <span class="dot">3</span>
             <div class="step-body">
               <h4>Toma una decisión</h4>
-              <p><span class="ui green">Aprobar</span> crea la cuenta en un solo paso (se abre un formulario con los
-                 datos ya precargados: solo completa la contraseña y guarda).<br>
+              <p><span class="ui green">Aprobar</span> crea la cuenta automáticamente: el sistema genera un
+                 usuario único y una contraseña temporal segura, y envía esos datos al correo de la persona.<br>
                  <span class="ui red">Rechazar</span> responde con un motivo opcional.<br>
                  <span class="ui amber">Eliminar</span> borra la solicitud sin responder.</p>
             </div>
@@ -889,8 +890,11 @@
 
         <div class="note warn">
           <b>&#9888;</b>
-          <p><strong>Ojo:</strong> al aprobar, el sistema <em>no</em> usa la contraseña que la persona escribió al
-             registrarse: tú defines la contraseña definitiva en el formulario de aprobación.</p>
+          <p><strong>Importante:</strong> ya no defines la contraseña manualmente. Al aprobar, el sistema genera
+             una contraseña temporal segura y envía por correo el <strong>usuario</strong>, la
+             <strong>contraseña temporal</strong> y el <strong>enlace de acceso</strong>. La persona debe cambiarla
+             al entrar por primera vez. Si el correo ya pertenece a una cuenta existente, el sistema no la duplica:
+             envía un aviso para recuperar el acceso.</p>
         </div>
       </article>
 
@@ -1185,6 +1189,113 @@
       <article class="chapter" id="a10">
         <div class="chap-head">
           <span class="chap-num">10</span>
+          <div>
+            <h3>Boletín, campañas y PDFs compartidos</h3>
+            <p>Cómo comunicarte con suscriptores, usuarios y clientes, y cómo compartir formatos con todo el equipo.</p>
+          </div>
+        </div>
+
+        <h4 style="margin:0 0 10px;">Suscriptores del boletín</h4>
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Consulta quién se suscribió</h4>
+              <p>Abre <span class="ui">&#9881; Configuración</span> &rarr; <span class="ui">&#128231; Boletín y campañas</span>.
+                 También está disponible en el panel de soporte, en la pestaña <span class="ui">Suscriptores</span>.
+                 Verás el total de registros, suscritos, bajas, usuarios activos y clientes con correo.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Administra la lista</h4>
+              <p>Usa la búsqueda y el filtro por estado. Puedes <span class="ui">Dar de baja</span> o
+                 <span class="ui green">Reactivar</span> a una persona, <span class="ui red">Eliminar</span> su registro
+                 o descargar todo con <span class="ui">&#128229; Exportar CSV</span>.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>De dónde llegan los suscriptores</h4>
+              <p>La tarjeta <strong>«Recibe nuestras novedades»</strong> aparece en la pantalla de Inicio del sistema y
+                 en la página pública del catálogo. Cualquier visitante puede dejar su correo sin iniciar sesión; el
+                 registro entra directo a esta lista.</p>
+            </div>
+          </li>
+        </ol>
+
+        <h4 style="margin:24px 0 10px;">Enviar una campaña de correo</h4>
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Elige la audiencia</h4>
+              <p><strong>Suscriptores del boletín</strong>, <strong>usuarios activos del CRM</strong>,
+                 <strong>clientes con correo registrado</strong> o <strong>todos</strong> (sin duplicados).
+                 Si eliges usuarios, puedes filtrar por rol.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Redacta el mensaje</h4>
+              <p>Escribe el <strong>asunto</strong>, una <strong>introducción</strong> opcional y el
+                 <strong>contenido</strong>. Cada persona recibe su correo por separado, así que nadie ve las
+                 direcciones de los demás.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Envía y revisa el historial</h4>
+              <p>Al confirmar, el sistema envía la campaña y registra cuántos correos se entregaron y cuántos fallaron.
+                 El <strong>Historial de campañas</strong> guarda el asunto, la audiencia, el autor y la fecha.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="note warn">
+          <b>&#9888;</b>
+          <p><strong>Antes de enviar:</strong> la acción no se puede deshacer. Revisa el asunto, el contenido y la
+             audiencia. En modo desarrollo (sin servidor de correo configurado) el envío se simula y queda registrado
+             en el historial.</p>
+        </div>
+
+        <h4 style="margin:24px 0 10px;">PDFs compartidos para todo el equipo</h4>
+        <ol class="steps">
+          <li class="step">
+            <span class="dot">1</span>
+            <div class="step-body">
+              <h4>Sube el archivo</h4>
+              <p>Entra a <span class="ui">&#128196; Formatos</span> y pulsa
+                 <span class="ui">&#128228; Subir PDF compartido</span>. Selecciona un archivo PDF (máximo 15 MB).</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">2</span>
+            <div class="step-body">
+              <h4>Todo el equipo lo puede descargar</h4>
+              <p>El PDF aparece en <span class="ui">Generar Formato PDF</span> dentro de
+                 <strong>Plantillas disponibles (solo descarga)</strong>. Los asesores lo ven sin necesidad de permisos
+                 especiales y pueden descargarlo en blanco.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="dot">3</span>
+            <div class="step-body">
+              <h4>Quién puede subir o eliminar</h4>
+              <p>Administración, Dirección, Gerencia, Asistencia y el panel de soporte. Los asesores y escrituración
+                 solo consultan y descargan los formatos.</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+
+      <article class="chapter" id="a11">
+        <div class="chap-head">
+          <span class="chap-num">11</span>
           <div>
             <h3>Errores frecuentes y soluciones</h3>
             <p>Lo que más nos preguntan.</p>

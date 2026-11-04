@@ -1,7 +1,7 @@
 'use strict';
 
 const asyncHandler = require('../middlewares/asyncHandler');
-const { isBoss, hasRole, scopeCondition } = require('./scope');
+const { isBoss, hasRole, hasPermission, isCustomRole, scopeCondition } = require('./scope');
 
 function ownerIdOf(doc, ownerField) {
   if (!ownerField) return null;
@@ -67,9 +67,14 @@ function buildCrud(model, {
   // Roles adicionales (además de los jefes) que ven/administran todos los
   // registros de este CRUD. Se usa en Negocios para asistencia/escrituración.
   wideRoles = [],
+  // Permiso que, en roles personalizados, otorga el mismo alcance global que
+  // un jefe dentro de ESTE módulo (p. ej. clients_manage).
+  widePermission = null,
 } = {}) {
   function hasWideAccess(req) {
-    return isBoss(req) || hasRole(req, wideRoles);
+    return isBoss(req)
+      || hasRole(req, wideRoles)
+      || Boolean(widePermission && isCustomRole(req) && hasPermission(req, widePermission));
   }
 
   function assertOwnership(req, doc) {

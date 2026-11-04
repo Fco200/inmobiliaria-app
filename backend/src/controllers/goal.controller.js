@@ -2,7 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { Goal } = require('../models');
 const { updateGoalsAuto } = require('../services/goal-auto.service');
 
@@ -10,7 +10,12 @@ const goalCrud = buildCrud(Goal, {
   populate: ['user'],
   searchFields: ['name', 'description'],
   ownerField: 'user',
+  widePermission: 'goals_manage',
 });
+
+function seesAllGoals(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'goals_manage'));
+}
 
 const list = asyncHandler(async (req, res) => {
   await updateGoalsAuto();
@@ -29,7 +34,7 @@ const list = asyncHandler(async (req, res) => {
 
   // admin/gerencia ven todas las metas (filtro opcional ?user=);
   // cada asesor solo ve las suyas.
-  if (!isBoss(req)) {
+  if (!seesAllGoals(req)) {
     filter.user = req.user._id;
   } else if (req.query.user) {
     filter.user = req.query.user;

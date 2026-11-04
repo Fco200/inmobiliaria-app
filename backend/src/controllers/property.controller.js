@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss } = require('../utils/scope');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
@@ -63,13 +63,18 @@ const propertyCrud = buildCrud(Property, {
   ownerField: 'responsibleUser',
   extraFilters: { operationType: 'operationType', type: 'type', owner: 'owner' },
   priceField: 'price',
+  widePermission: 'properties_manage',
 });
 
 const list = propertyCrud.list;
 const get = propertyCrud.get;
 
+function seesAllProperties(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'properties_manage'));
+}
+
 function assertOwnership(req, property) {
-  if (isBoss(req)) return true;
+  if (seesAllProperties(req)) return true;
   const ownerId = String((property.responsibleUser && property.responsibleUser._id) || property.responsibleUser || '');
   return ownerId === String(req.user._id);
 }
@@ -109,7 +114,7 @@ const options = asyncHandler(async (req, res) => {
   // Un asesor ve sus propiedades y también las publicadas en el inventario
   // general (que es la misma lista que alimenta el selector de negocios). Un
   // jefe ve todas y puede acotar con ?asesor=.
-  if (!isBoss(req)) {
+  if (!seesAllProperties(req)) {
     and.push({ $or: [{ responsibleUser: req.user._id }, { isPublished: true }] });
   } else if (req.query.asesor) {
     filter.responsibleUser = req.query.asesor;
@@ -406,10 +411,16 @@ const update = asyncHandler(async (req, res) => {
   const previousPhotos = Array.isArray(property.photos) ? [...property.photos] : [];
 
   const body = req.body ? { ...req.body } : {};
-  if (body.responsibleUser === undefined) {
-    // No cambiar el responsable si no viene explícito; pero para asegurar
-    // consistencia con la solicitud, si es el propio usuario se mantiene
-  }
+
+  // Protección de relaciones: si el formulario envía el propietario o el
+  // responsable vacíos (null, ''), NO se borra el vínculo ya guardado. Solo se
+  // limpia cuando el cliente manda explícitamente un ObjectId válido distinto.
+  ['owner', 'responsibleUser'].forEach((field) => {
+    if (body[field] === undefined) return;
+    if (body[field] === null || String(body[field]).trim() === '') {
+      delete body[field];
+    }
+  });
 
   // El folio es inmutable: aunque un cliente lo envíe, se ignora.
   delete body.folio;
@@ -458,6 +469,10 @@ const update = asyncHandler(async (req, res) => {
     action: 'actualizacion',
     message: 'Se actualizó la propiedad',
   });
+
+  // Se devuelve con propietario y responsable poblados para que el frontend
+  // actualice la ficha sin perder los datos relacionales.
+  await property.populate(['owner', 'responsibleUser']);
 
   res.json({ success: true, data: property });
 

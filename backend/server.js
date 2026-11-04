@@ -19,6 +19,7 @@ const { runDataMigrations } = require('./src/services/migration.service');
 const { port, nodeEnv, jwtSecret } = require('./src/config/env');
 const { hasSmtp, resetTransporter } = require('./src/services/mail.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
+const campaignWorker = require('./src/services/campaign.worker');
 const maintenanceJob = require('./src/jobs/maintenance.job');
 const storageJob = require('./src/jobs/storage.job');
 const { Server } = require('socket.io');
@@ -59,6 +60,8 @@ async function start() {
       console.warn('[Migración] No se pudieron normalizar los datos:', error.message);
     }
     startJobs();
+    // Retoma las campañas de correo pendientes (también tras un reinicio).
+    campaignWorker.startCampaignWorker();
     // Los avisos internos de tipo "nueva_propiedad" ("Se publicó una casa…
     // coincide con los intereses de X") ya no se generan por defecto. Aquí se
     // eliminan los que quedaron de versiones anteriores para que la campana
@@ -243,10 +246,17 @@ async function start() {
   maintenanceJob.setIo(io);
   maintenanceJob.startMaintenanceJob();
 
-  const shutdown = (signal) => {
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`\n${signal} recibido, cerrando servidor...`);
+    // Por si el cierre se atora, forzamos la salida tras 30 s.
+    setTimeout(() => process.exit(1), 30000).unref();
     stopJobs();
     maintenanceJob.stopMaintenanceJob();
+    // Termina el lote de correos en curso y libera la campaña para retomarla.
+    await campaignWorker.stopCampaignWorker().catch(() => {});
     io.close();
     server.close(() => {
       console.log('Servidor cerrado.');

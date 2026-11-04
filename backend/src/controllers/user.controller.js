@@ -5,8 +5,16 @@ const buildCrud = require('../utils/crud');
 const { User, Role, Permission } = require('../models');
 const { logActivity } = require('../services/log.service');
 const sessionService = require('../services/session.service');
+const { isAssignableRoleCode } = require('../constants/roles');
 
-const ASSISTANCE_ASSIGNABLE_ROLES = ['asesor', 'asistencia', 'escrituracion'];
+// Quién puede administrar usuarios desde Configuración > Usuarios.
+// Los tres roles administrativos pueden asignar cualquier rol; Asistencia
+// también puede crear/aprobar cuentas con los seis roles oficiales, pero no
+// puede editar cuentas de jerarquía superior (admin, dirección, gerencia o
+// soporte técnico).
+const USER_MANAGER_ROLES = ['admin', 'direccion', 'superadmin', 'asistencia'];
+const ROLE_ADMIN_ROLES = ['admin', 'direccion', 'superadmin'];
+const HIGHER_ROLES = ['admin', 'direccion', 'gerencia', 'superadmin'];
 
 function requesterRoleCode(req) {
   const role = req.user && req.user.role;
@@ -14,23 +22,32 @@ function requesterRoleCode(req) {
 }
 
 async function assertCanAssignRole(req, roleValue, targetUserId) {
-  if (['admin', 'direccion', 'superadmin'].includes(requesterRoleCode(req))) return;
+  const requester = requesterRoleCode(req);
 
-  if (roleValue === '__custom__') {
-    throw Object.assign(new Error('Solo dirección o administración pueden crear roles personalizados.'), { statusCode: 403 });
+  if (!USER_MANAGER_ROLES.includes(requester)) {
+    throw Object.assign(new Error('No tienes permiso para administrar usuarios.'), { statusCode: 403 });
   }
 
-  if (roleValue) {
+  if (roleValue === '__custom__') {
+    if (!ROLE_ADMIN_ROLES.includes(requester)) {
+      throw Object.assign(new Error('Solo dirección o administración pueden crear roles personalizados.'), { statusCode: 403 });
+    }
+    return;
+  }
+
+  // Asistencia solo puede asignar los seis roles oficiales; dirección y
+  // administración conservan la capacidad de asignar roles personalizados.
+  if (roleValue && !ROLE_ADMIN_ROLES.includes(requester)) {
     const nextRole = await Role.findById(roleValue).select('code');
-    if (nextRole && !ASSISTANCE_ASSIGNABLE_ROLES.includes(nextRole.code)) {
-      throw Object.assign(new Error('Solo puedes asignar roles de asesor, asistencia o escrituración.'), { statusCode: 403 });
+    if (nextRole && nextRole.code && !isAssignableRoleCode(nextRole.code)) {
+      throw Object.assign(new Error('Solo puedes asignar uno de los seis roles oficiales del CRM.'), { statusCode: 403 });
     }
   }
 
-  if (targetUserId) {
+  if (targetUserId && !ROLE_ADMIN_ROLES.includes(requester)) {
     const target = await User.findById(targetUserId).populate('role');
     const targetCode = target && target.role ? target.role.code : '';
-    if (targetCode && !ASSISTANCE_ASSIGNABLE_ROLES.includes(targetCode)) {
+    if (targetCode && HIGHER_ROLES.includes(targetCode)) {
       throw Object.assign(new Error('No puedes editar cuentas con un rol superior al tuyo.'), { statusCode: 403 });
     }
   }

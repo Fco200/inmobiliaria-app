@@ -19,6 +19,11 @@ const {
 } = require('../services/session.service');
 const { ensure } = require('../services/notification.service');
 const maintenanceService = require('../services/maintenance.service');
+const {
+  KEY_PROTECTED_ROLE_CODES,
+  normalizeRoleCode,
+  isAssignableRoleCode,
+} = require('../constants/roles');
 
 const PRIVILEGED_MAINTENANCE_ROLES = ['admin', 'superadmin'];
 
@@ -37,7 +42,7 @@ async function getConfiguredRoleKey() {
 }
 
 function roleNeedsKey(roleCode) {
-  return ['admin', 'gerencia'].includes(roleCode);
+  return KEY_PROTECTED_ROLE_CODES.includes(normalizeRoleCode(roleCode));
 }
 
 function buildUserResponse(user) {
@@ -262,7 +267,7 @@ const checkRegisterKey = asyncHandler(async (req, res) => {
     return res.status(400).json({
       success: false,
       valid: false,
-      message: 'Seleccionaste administrador o gerencia: la clave secreta es obligatoria.',
+      message: 'Seleccionaste Dirección, Administración o Gerencia: la clave secreta es obligatoria.',
     });
   }
 
@@ -341,7 +346,11 @@ const registerGoogle = asyncHandler(async (req, res) => {
 
   const profile = await verifyGoogleCredential(credential);
 
-  const roleDoc = await Role.findOne({ code: ['admin', 'gerencia', 'asesor'].includes(role) ? role : 'asesor' });
+  // Se aceptan los seis roles oficiales (incluida Dirección). Si llega un rol
+  // desconocido o vacío se usa Asesor para no bloquear el registro.
+  const requestedRole = normalizeRoleCode(role);
+  const roleCode = isAssignableRoleCode(requestedRole) ? requestedRole : 'asesor';
+  const roleDoc = await Role.findOne({ code: roleCode });
   if (!roleDoc) {
     return res.status(400).json({ success: false, message: 'El rol seleccionado no existe.' });
   }

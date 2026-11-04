@@ -71,6 +71,10 @@ window.SoportePanel = (() => {
     if (tab === 'anuncios') renderAnuncios();
     if (tab === 'herramientas') renderHerramientas();
     if (tab === 'actividad') renderActividad();
+    if (tab === 'suscriptores') {
+      cargarSuscriptores(subsFiltros.page);
+      cargarHistorialCampanas();
+    }
   }
 
   // ── Pestaña Usuarios ──────────────────────────────────────────────────────
@@ -1262,50 +1266,55 @@ window.SoportePanel = (() => {
     return result.length >= 3 ? result : result + (result.length === 1 ? 'ux' : 'x');
   }
 
+  function mostrarResultadoAprobacion(result) {
+    const account = (result && result.account) || {};
+    if (account.temporaryPassword) {
+      const modal = UI.openModal({
+        title: 'Cuenta creada: entrega la contraseña',
+        size: 480,
+        body: `
+          <p class="text-muted" style="margin-top:0;">${escapeHtml((result && result.message) || '')}</p>
+          <div class="sp-card" style="padding:12px;">
+            <div><strong>Usuario:</strong> ${escapeHtml(account.username || '')}</div>
+            <div><strong>Contraseña temporal:</strong> <code>${escapeHtml(account.temporaryPassword)}</code></div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:6px;">Se muestra una sola vez. La persona debe cambiarla al entrar por primera vez.</div>
+          </div>
+        `,
+        footer: '<button class="btn btn-gold" type="button" data-cancel>Entendido</button>',
+      });
+      const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+      const doneBtn = overlay ? overlay.querySelector('[data-cancel]') : null;
+      if (doneBtn) doneBtn.addEventListener('click', () => UI.closeModal());
+      return;
+    }
+    alert((result && result.message) || 'Solicitud aprobada.');
+  }
+
   async function aprobarSolicitud(request, roles) {
-    const grid = (items) => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">${items.join('')}</div>`;
-    const defaultRoleId = (roles.find((r) => r.code === request.role) || roles[0] || {})._id || '';
-    const options = roles.map((r) => `<option value="${r._id}" ${String(r._id) === String(defaultRoleId) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
+    const roleList = (roles || []).filter((r) => r && r.code && r.code !== 'superadmin');
+    const options = roleList.map((r) => `<option value="${escapeHtml(r.code)}" ${r.code === request.role ? 'selected' : ''}>${escapeHtml(r.name || r.code)}</option>`).join('');
 
     const modal = UI.openModal({
-      title: '&#128994;&nbsp; Aprobar solicitud y crear usuario',
-      size: 560,
+      title: '&#128994;&nbsp; Aprobar solicitud',
+      size: 520,
       body: `
-        <p class="text-muted" style="margin-top:0;">Se creará una cuenta de <strong>${escapeHtml(request.name)}</strong> con el rol seleccionado. Al terminar, la solicitud quedará marcada como aprobada.</p>
+        <p class="text-muted" style="margin-top:0;">Se creará la cuenta de <strong>${escapeHtml(request.name)}</strong> (${escapeHtml(request.email)}). El sistema genera el usuario y una contraseña temporal, y los envía por correo junto con el enlace de acceso.</p>
         <div class="fgroup fgroup-full">
-          <label for="srq-name">Nombre completo *</label>
-          <input id="srq-name" type="text" value="${escapeHtml(request.name)}">
+          <label for="srq-role">Rol *</label>
+          <select id="srq-role">${options}</select>
         </div>
-        ${grid([
-          `<div class="fgroup"><label for="srq-username">Usuario *</label><input id="srq-username" type="text" value="${escapeHtml(defaultUsernameFromEmail(request.email))}" autocomplete="off"></div>`,
-          `<div class="fgroup"><label for="srq-email">Correo *</label><input id="srq-email" type="email" value="${escapeHtml(request.email)}"></div>`,
-        ])}
-        ${grid([
-          `<div class="fgroup"><label for="srq-phone">Teléfono</label><input id="srq-phone" type="tel" value="${escapeHtml(request.phone || '')}"></div>`,
-          `<div class="fgroup"><label for="srq-role">Rol *</label><select id="srq-role">${options}</select></div>`,
-        ])}
-        <div class="fgroup fgroup-full">
-          <label for="srq-password">Contraseña * (mín. 8 caracteres)</label>
-          <input id="srq-password" type="text" autocomplete="off">
-        </div>
+        <p style="color:var(--text-muted);font-size:12px;">Si el correo ya tiene una cuenta, no se cambia su rol ni su estado: solo recibe un aviso.</p>
         <div id="srq-error" class="alert alert-error"></div>
       `,
       footer: `
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button>
-        <button class="btn btn-gold" type="button" data-ok>&#128994;&nbsp; Crear usuario</button>
+        <button class="btn btn-gold" type="button" data-ok>&#128994;&nbsp; Aprobar y enviar credenciales</button>
       `,
     });
 
     const bodyEl = modal.bodyEl;
     const overlay = bodyEl.closest('#modal-overlay');
     if (!overlay) return;
-
-    const getName = () => bodyEl.querySelector('#srq-name').value.trim();
-    const getUsername = () => bodyEl.querySelector('#srq-username').value.trim();
-    const getEmail = () => bodyEl.querySelector('#srq-email').value.trim();
-    const getPhone = () => bodyEl.querySelector('#srq-phone').value.trim();
-    const getRole = () => bodyEl.querySelector('#srq-role').value;
-    const getPassword = () => bodyEl.querySelector('#srq-password').value;
     const errBox = bodyEl.querySelector('#srq-error');
     const okBtn = overlay.querySelector('[data-ok]');
     const cancelBtn = overlay.querySelector('[data-cancel]');
@@ -1314,38 +1323,21 @@ window.SoportePanel = (() => {
 
     if (okBtn) {
       okBtn.addEventListener('click', async () => {
-        const name = getName();
-        const username = getUsername();
-        const email = getEmail();
-        const password = getPassword();
-        if (!name) return showModalError(errBox, 'El nombre es obligatorio.');
-        if (!username || username.length < 3) return showModalError(errBox, 'El usuario debe tener al menos 3 caracteres.');
-        if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) return showModalError(errBox, 'Ingresa un correo válido.');
-        if (password && password.length < 8) return showModalError(errBox, 'La contraseña debe tener al menos 8 caracteres.');
+        const role = bodyEl.querySelector('#srq-role').value;
         errBox.className = 'alert alert-error';
         errBox.textContent = '';
         okBtn.disabled = true;
         try {
-          await window.API.soporte.crearUsuarioSoporte({
-            name,
-            username: username.toLowerCase(),
-            email: email.toLowerCase(),
-            phone: getPhone(),
-            role: getRole(),
-            password,
-            status: 'activo',
-          });
-          await window.API.soporte.atenderSolicitud(request._id, { action: 'aprobada', comment: 'Usuario creado' });
+          const result = await window.API.soporte.atenderSolicitud(request._id, { action: 'aprobada', role });
           UI.closeModal();
-          alert('Usuario creado y solicitud aprobada.');
           renderSolicitudes();
+          mostrarResultadoAprobacion(result);
         } catch (error) {
           okBtn.disabled = false;
-          showModalError(errBox, error.message || 'No se pudo crear el usuario.');
+          showModalError(errBox, error.message || 'No se pudo aprobar la solicitud.');
         }
       });
     }
-    setTimeout(() => bodyEl.querySelector('#srq-name').focus(), 120);
   }
 
   function showModalError(box, message) {
@@ -2087,14 +2079,23 @@ window.SoportePanel = (() => {
 
     const pdfs = guiaCard('&#128196;', 'Plantillas PDF', [
       { title: 'Subir formato', text: 'Selecciona un archivo .pdf y pulsa «Subir PDF». Se guarda en ./plantillas sin tocar el servidor.' },
+      { title: 'Visible para todo el equipo', text: 'Los PDFs que subes aquí también aparecen en Formatos, dentro de «Plantillas disponibles (solo descarga)», para que cualquier asesor los descargue.' },
       { title: 'Renombrar', text: 'Pulsa «Renombrar», escribe el nuevo nombre (debe terminar en .pdf) y confirma.' },
       { title: 'Descargar / Eliminar', text: 'Descarga el PDF en blanco o elimínalo del gestor de plantillas directamente.' },
+    ]);
+
+    const boletin = guiaCard('&#128231;', 'Suscriptores y campañas', [
+      { title: 'Ver suscriptores', text: 'La pestaña Suscriptores muestra quién se dio de alta desde la página pública o desde Inicio, con búsqueda, filtro por estado y exportación a CSV.' },
+      { title: 'Administrar la lista', text: 'Puedes dar de baja, reactivar o eliminar un registro. Las bajas dejan de recibir campañas del boletín.' },
+      { title: 'Enviar campaña', text: 'Elige audiencia (suscriptores, usuarios, clientes o todos sin duplicados), asunto, introducción y contenido. Los correos se envían uno por destinatario.' },
+      { title: 'Historial', text: 'Cada envío queda registrado con asunto, audiencia, autor, entregados y fallidos. En modo desarrollo el envío se simula.' },
     ]);
 
     const soporte = guiaCard('&#128172;', 'Atención al equipo (Chat)', [
       { title: 'Ver y responder chats', text: 'La pestaña Chat Interno lista todas las conversaciones; el soporte puede responder en cualquiera.' },
       { title: 'Avisos', text: 'Publica anuncios (normal/importante/urgente) que aparecerán como banners para todos los usuarios.' },
       { title: 'Solicitudes de contraseña', text: 'Desde la pestaña Avisos atiende los pedidos de «Olvidé mi contraseña» y restablece el acceso.' },
+      { title: 'Aprobar solicitudes de acceso', text: 'Al aprobar, el sistema crea la cuenta con un usuario único y una contraseña temporal, y envía esos datos junto con el enlace de acceso al correo de la persona.' },
     ]);
 
     const respaldo = guiaCard('&#128190;', 'Respaldos', [
@@ -2109,6 +2110,7 @@ window.SoportePanel = (() => {
         ${actividad}
         ${logs}
         ${pdfs}
+        ${boletin}
         ${soporte}
         ${respaldo}
       </div>
@@ -2227,52 +2229,271 @@ window.SoportePanel = (() => {
     }
   }
 
-  async function renderSuscriptores() {
-    const box = document.getElementById('ht-subs');
+  // ── Pestaña Suscriptores / Boletín ──────────────────────────────────────
+  const subsFiltros = { q: '', status: '', page: 1 };
+  let subsReady = false;
+
+  function setSubsAlert(message, type) {
+    const box = document.getElementById('subs-alert');
     if (!box) return;
+    if (!message) { hideAlert(box); return; }
+    showAlert(box, message, type || 'info');
+  }
+
+  function renderSubsStats(stats) {
+    const box = document.getElementById('subs-stats');
+    if (!box) return;
+    const s = stats || {};
+    box.innerHTML = `
+      <div class="stat-card"><b>${s.total || 0}</b><span>Registros</span></div>
+      <div class="stat-card"><b>${s.suscritos || 0}</b><span>Suscritos</span></div>
+      <div class="stat-card"><b>${s.bajas || 0}</b><span>Dados de baja</span></div>
+      <div class="stat-card"><b>${s.usuarios || 0}</b><span>Usuarios activos</span></div>
+      <div class="stat-card"><b>${s.clientes || 0}</b><span>Clientes con correo</span></div>
+    `;
+  }
+
+  async function cargarSuscriptores(page) {
+    const box = document.getElementById('subs-container');
+    if (!box) return;
+    subsFiltros.page = Math.max(1, Number(page) || 1);
     box.className = 'sp-loading';
-    box.innerHTML = '<span class="spinner"></span> Cargando…';
+    box.innerHTML = '<span class="spinner"></span> Cargando suscriptores…';
     try {
-      const subs = await window.API.soporte.newsletter();
+      const d = await window.API.soporte.newsletterList({
+        q: subsFiltros.q,
+        status: subsFiltros.status,
+        page: subsFiltros.page,
+        limit: 50,
+      });
+      renderSubsStats(d && d.stats);
+      const subs = (d && d.subscribers) || [];
+      const total = (d && d.total) || 0;
+      const pages = (d && d.pages) || 1;
+      subsFiltros.page = (d && d.page) || subsFiltros.page;
+
       box.className = '';
       box.innerHTML = subs.length ? `
-        <div class="sp-table-wrap">
-          <table>
-            <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Alta</th><th></th></tr></thead>
-            <tbody>
-              ${subs.map((s) => `
-                <tr>
-                  <td>${escapeHtml(s.email || '')}</td>
-                  <td>${escapeHtml(s.name || '—')}</td>
-                  <td>${escapeHtml(s.source || '—')}</td>
-                  <td><span class="badge ${s.status === 'suscrito' ? 'badge-on' : 'badge-off'}">${escapeHtml(s.status || '')}</span></td>
-                  <td>${fmtDate(s.createdAt)}</td>
-                  <td><button class="btn btn-danger btn-sm" data-sub-del="${s._id}" type="button">Eliminar</button></td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>` : '<div class="sp-empty">No hay suscriptores todavía.</div>';
+        <div class="sp-card">
+          <div class="sp-table-wrap">
+            <table>
+              <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr></thead>
+              <tbody>
+                ${subs.map((s) => {
+                  const activo = s.status === 'suscrito';
+                  return `
+                  <tr>
+                    <td>${escapeHtml(s.email || '')}</td>
+                    <td>${escapeHtml(s.name || '—')}</td>
+                    <td>${escapeHtml(s.source || '—')}</td>
+                    <td><span class="badge ${activo ? 'badge-on' : 'badge-off'}">${activo ? 'Suscrito' : 'Dado de baja'}</span></td>
+                    <td>${fmtDate(s.createdAt)}</td>
+                    <td style="white-space:nowrap;">
+                      <button class="btn btn-ghost btn-sm" data-sub-toggle="${escapeHtml(s._id)}" data-next="${activo ? 'dado_baja' : 'suscrito'}" type="button">${activo ? 'Dar de baja' : 'Reactivar'}</button>
+                      <button class="btn btn-danger btn-sm" data-sub-del="${escapeHtml(s._id)}" type="button">Eliminar</button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;">
+            <span style="color:var(--text-muted);font-size:12px;">${total} registro${total === 1 ? '' : 's'} · Página ${subsFiltros.page} de ${pages}</span>
+            <span style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" type="button" data-subs-prev ${subsFiltros.page <= 1 ? 'disabled' : ''}>← Anterior</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-subs-next ${subsFiltros.page >= pages ? 'disabled' : ''}>Siguiente →</button>
+            </span>
+          </div>
+        </div>` : '<div class="sp-card"><div class="sp-empty">No hay suscriptores que coincidan con el filtro.</div></div>';
+
+      box.querySelectorAll('[data-sub-toggle]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const next = btn.dataset.next;
+          btn.disabled = true;
+          try {
+            await window.API.soporte.newsletterUpdate(btn.dataset.subToggle, { status: next });
+            setSubsAlert(next === 'suscrito' ? 'Suscriptor reactivado.' : 'Suscriptor dado de baja.', 'success');
+            cargarSuscriptores(subsFiltros.page);
+          } catch (error) {
+            btn.disabled = false;
+            setSubsAlert(error.message, 'error');
+          }
+        });
+      });
 
       box.querySelectorAll('[data-sub-del]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          if (!window.confirm('¿Eliminar este suscriptor del boletín?')) return;
+          if (!window.confirm('¿Eliminar este suscriptor del boletín? Esta acción no se puede deshacer.')) return;
+          btn.disabled = true;
           try {
-            await window.API.soporte.eliminarSuscriptor(btn.dataset.subDel);
-            renderSuscriptores();
-          } catch (error) { alert(error.message); }
+            await window.API.soporte.newsletterRemove(btn.dataset.subDel);
+            setSubsAlert('Suscriptor eliminado.', 'success');
+            cargarSuscriptores(subsFiltros.page);
+          } catch (error) {
+            btn.disabled = false;
+            setSubsAlert(error.message, 'error');
+          }
         });
       });
+
+      const prev = box.querySelector('[data-subs-prev]');
+      if (prev) prev.addEventListener('click', () => cargarSuscriptores(subsFiltros.page - 1));
+      const next = box.querySelector('[data-subs-next]');
+      if (next) next.addEventListener('click', () => cargarSuscriptores(subsFiltros.page + 1));
     } catch (error) {
       box.className = 'sp-empty';
       box.innerHTML = escapeHtml(error.message);
     }
   }
 
+  function audienceLabel(value) {
+    return {
+      suscriptores: 'Suscriptores',
+      usuarios: 'Usuarios del CRM',
+      clientes: 'Clientes',
+      todos: 'Todos (sin duplicados)',
+    }[value] || value || '—';
+  }
+
+  const CAMPAIGN_STATUS_LABELS = { en_cola: 'En cola', en_proceso: 'Enviando…', interrumpida: 'Interrumpida', fallida: 'Fallida' };
+
+  async function cargarHistorialCampanas() {
+    const box = document.getElementById('subs-history');
+    if (!box) return;
+    box.className = 'sp-loading';
+    box.innerHTML = '<span class="spinner"></span> Cargando historial…';
+    try {
+      const logs = await window.API.soporte.newsletterCampaigns({ limit: 15 });
+      const rows = Array.isArray(logs) ? logs : [];
+      const pending = rows.some((l) => ['en_cola', 'en_proceso'].includes((l.data || {}).status));
+      if (pending) setTimeout(cargarHistorialCampanas, 4000);
+      box.className = '';
+      box.innerHTML = rows.length ? `
+        <div class="sp-table-wrap">
+          <table>
+            <thead><tr><th>Asunto</th><th>Destinatarios</th><th>Entregados</th><th>Fallidos</th><th>Enviada por</th><th>Fecha</th></tr></thead>
+            <tbody>
+              ${rows.map((l) => {
+                const d = l.data || {};
+                const autor = l.user ? (l.user.name || l.user.username || l.user.email) : '—';
+                return `
+                <tr>
+                  <td>${escapeHtml(d.subject || l.message || '—')}${CAMPAIGN_STATUS_LABELS[d.status] ? ` <span class="badge badge-role">${CAMPAIGN_STATUS_LABELS[d.status]}</span>` : ''}</td>
+                  <td>${escapeHtml(audienceLabel(d.audience))} · ${d.total || 0}</td>
+                  <td><span class="badge badge-on">${d.enviados || 0}</span></td>
+                  <td>${d.fallidos ? `<span class="badge badge-off">${d.fallidos}</span>` : '0'}</td>
+                  <td>${escapeHtml(autor || '—')}</td>
+                  <td>${fmtDate(l.createdAt)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>` : '<div class="sp-empty">Todavía no se han enviado campañas.</div>';
+    } catch (error) {
+      box.className = 'sp-empty';
+      box.innerHTML = escapeHtml(error.message);
+    }
+  }
+
+  async function cargarRolesCampana() {
+    const sel = document.getElementById('camp-role');
+    if (!sel) return;
+    try {
+      if (!rolesCache.length) rolesCache = await window.API.soporte.roles();
+      const roles = (rolesCache || []).filter((r) => r && r.code !== 'superadmin');
+      sel.innerHTML = '<option value="">Todos los roles</option>' + roles.map((r) =>
+        `<option value="${escapeHtml(r.code)}">${escapeHtml(r.name || r.code)}</option>`
+      ).join('');
+    } catch (error) {
+      // Si falla, se conserva la opción "Todos los roles".
+    }
+  }
+
+  function initSuscriptores() {
+    if (subsReady) return;
+    subsReady = true;
+
+    const search = document.getElementById('subs-search');
+    if (search) {
+      let timer = null;
+      search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          subsFiltros.q = search.value.trim();
+          cargarSuscriptores(1);
+        }, 350);
+      });
+    }
+
+    const status = document.getElementById('subs-status');
+    if (status) {
+      status.addEventListener('change', () => {
+        subsFiltros.status = status.value;
+        cargarSuscriptores(1);
+      });
+    }
+
+    const refresh = document.getElementById('subs-refresh');
+    if (refresh) refresh.addEventListener('click', () => cargarSuscriptores(subsFiltros.page));
+
+    const exportBtn = document.getElementById('subs-export');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async () => {
+        exportBtn.disabled = true;
+        try {
+          const blob = await window.API.soporte.newsletterExport({ status: subsFiltros.status });
+          downloadBlob(blob, `suscriptores_${new Date().toISOString().slice(0, 10)}.csv`);
+          setSubsAlert('Listado exportado en CSV.', 'success');
+        } catch (error) {
+          setSubsAlert(error.message, 'error');
+        } finally {
+          exportBtn.disabled = false;
+        }
+      });
+    }
+
+    const form = document.getElementById('subs-campaign-form');
+    if (form) {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const alertBox = document.getElementById('subs-campaign-alert');
+        const submit = document.getElementById('camp-send');
+        const subject = document.getElementById('camp-subject').value.trim();
+        const audience = document.getElementById('camp-audience').value;
+        const role = document.getElementById('camp-role').value;
+        const intro = document.getElementById('camp-intro').value.trim();
+        const message = document.getElementById('camp-message').value.trim();
+
+        if (!subject || !message) {
+          showAlert(alertBox, 'Escribe el asunto y el contenido del correo.', 'error');
+          return;
+        }
+
+        const audienceText = audienceLabel(audience).toLowerCase();
+        if (!window.confirm(`¿Enviar la campaña "${subject}" a ${audienceText}?\n\nRevisa el contenido: esta acción no se puede deshacer.`)) return;
+
+        if (submit) submit.disabled = true;
+        hideAlert(alertBox);
+        try {
+          const r = await window.API.soporte.newsletterSend({ subject, audience, role, intro, message });
+          showAlert(alertBox, (r && r.message) || 'Campaña en cola.', 'success');
+          form.reset();
+          cargarHistorialCampanas();
+        } catch (error) {
+          showAlert(alertBox, error.message, 'error');
+        } finally {
+          if (submit) submit.disabled = false;
+        }
+      });
+    }
+
+    cargarRolesCampana();
+  }
+
   function renderHerramientas() {
     renderMonitoreo();
     renderDiagnostico();
     if (!herramientasUsersLoaded) cargarUsuariosHerramientas();
-    renderSuscriptores();
   }
 
   function initHerramientas() {
@@ -2280,8 +2501,6 @@ window.SoportePanel = (() => {
     if (mon) mon.addEventListener('click', renderMonitoreo);
     const diag = document.getElementById('ht-diag-refresh');
     if (diag) diag.addEventListener('click', renderDiagnostico);
-    const subs = document.getElementById('ht-subs-refresh');
-    if (subs) subs.addEventListener('click', renderSuscriptores);
     const audBtn = document.getElementById('ht-aud-load');
     if (audBtn) audBtn.addEventListener('click', cargarAuditoria);
 
@@ -2399,6 +2618,7 @@ window.SoportePanel = (() => {
     initChat();
     initMantenimiento();
     initHerramientas();
+    initSuscriptores();
     initActividad();
 
     renderResumen();

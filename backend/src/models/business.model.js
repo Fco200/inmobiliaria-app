@@ -38,6 +38,27 @@ const businessSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Alias explícitos solicitados por la inmobiliaria. `asesor_captador_id`
+    // es el asesor que captó la propiedad/negocio (asesor principal) y
+    // `asesor_cliente_id` el que atiende al cliente (asesor compartido).
+    // Se mantienen sincronizados con mainAdvisor/partnerAdvisor.
+    asesor_captador_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    asesor_cliente_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    // Cliente principal del negocio (normalmente el comprador). Se conserva
+    // también en buyerClient para no romper los flujos existentes.
+    cliente_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Client',
+      default: null,
+    },
     // Asor externo (otra inmobiliaria / colaborador sin cuenta en el CRM).
     partnerAdvisorName: { type: String, trim: true, default: '' },
     partnerBusiness: {
@@ -163,6 +184,22 @@ businessSchema.index({ currentStage: 1 });
 businessSchema.index({ property: 1 });
 businessSchema.index({ buyerClient: 1, sellerClient: 1 });
 businessSchema.index({ valueOperation: 1 });
+businessSchema.index({ asesor_captador_id: 1, status: 1 });
+businessSchema.index({ asesor_cliente_id: 1, status: 1 });
+businessSchema.index({ cliente_id: 1 });
+
+// `fecha_cierre` es la fecha ESTIMADA/PROYECTADA de conclusión de la operación
+// (firma de escrituras o contratos). No es un campo nuevo en base de datos:
+// envuelve a `closing.closingDate`, que ya existía, para que la API hable el
+// mismo idioma que el formulario sin duplicar datos.
+businessSchema.virtual('fecha_cierre')
+  .get(function getFechaCierre() {
+    return (this.closing && this.closing.closingDate) || null;
+  })
+  .set(function setFechaCierre(value) {
+    if (!this.closing) this.closing = {};
+    this.closing.closingDate = value ? new Date(value) : null;
+  });
 
 // Un cliente no puede tener dos negociosactivos a la vez, porque
 // `Cliente.negocioId` es una referencia única: si un asesor abriera dos negocios

@@ -26,6 +26,7 @@ const userRequestRoutes = require('./userRequest.routes');
 const calendarRoutes = require('./calendar.routes');
 const meetingRoutes = require('./meeting.routes');
 const pushRoutes = require('./push.routes');
+const newsletterRoutes = require('./newsletter.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -64,6 +65,7 @@ router.get('/', (req, res) => {
       '/api/calendar',
       '/api/meetings',
       '/api/push',
+      '/api/newsletter',
       '/api/health',
     ],
   });
@@ -101,5 +103,6 @@ router.use('/user-requests', userRequestRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/meetings', meetingRoutes);
 router.use('/push', pushRoutes);
+router.use('/newsletter', newsletterRoutes);
 
 module.exports = router;

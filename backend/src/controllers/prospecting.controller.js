@@ -2,17 +2,24 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { ProspectingActivity, Client } = require('../models');
 const { logActivity } = require('../services/log.service');
 
 const prospectingCrud = buildCrud(ProspectingActivity, {
   populate: ['user'],
   searchFields: ['location', 'observations'],
+  ownerField: 'user',
+  widePermission: 'prospecting_manage',
   beforeCreate: (body, req) => {
     if (!body.user) body.user = req.user._id;
     return body;
   },
 });
+
+function seesAllProspecting(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'prospecting_manage'));
+}
 
 const list = asyncHandler(async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -26,7 +33,7 @@ const list = asyncHandler(async (req, res) => {
     if (req.query.to) filter.date.$lte = new Date(req.query.to);
   }
 
-  if (['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(req.user.role.code)) {
+  if (seesAllProspecting(req)) {
     if (req.query.user) filter.user = req.query.user;
   } else {
     filter.user = req.user._id;

@@ -330,6 +330,7 @@
       <button class="sp-tab" data-tab="sesiones"><span class="ico">&#128275;&#65039;</span> Sesiones</button>
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
       <button class="sp-tab" data-tab="solicitudes"><span class="ico">&#128229;</span> Solicitudes</button>
+      <button class="sp-tab" data-tab="suscriptores"><span class="ico">&#128231;</span> Suscriptores</button>
       <button class="sp-tab" data-tab="chat"><span class="ico">&#128172;</span> Chat Interno</button>
       <button class="sp-tab" data-tab="herramientas"><span class="ico">&#129513;</span> Herramientas</button>
       <button class="sp-tab" data-tab="config"><span class="ico">&#9881;&#65039;</span> Ajustes Globales</button>
@@ -609,12 +610,81 @@
           <div id="ht-auditoria"><div class="sp-empty">Selecciona un usuario para ver su actividad.</div></div>
         </div>
 
+      </section>
+
+      <!-- --- Suscriptores / Boletín --- -->
+      <section class="sp-pane" id="pane-suscriptores">
+        <h1 class="sp-pane-title">Suscriptores del boletín</h1>
+        <p class="sp-pane-sub">Consulta quién se suscribió, administra altas/bajas y envía campañas de correo a suscriptores, usuarios y clientes.</p>
+
+        <div id="subs-stats" class="stat-cards"></div>
+
         <div class="sp-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-            <h3>&#128231; Suscriptores del boletín</h3>
-            <button class="btn btn-ghost btn-sm" id="ht-subs-refresh" type="button">&#8635; Actualizar</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="fgroup" style="flex:1 1 240px;">
+              <label for="subs-search">Buscar</label>
+              <input id="subs-search" type="text" placeholder="Correo, nombre u origen…" />
+            </div>
+            <div class="fgroup" style="min-width:150px;">
+              <label for="subs-status">Estado</label>
+              <select id="subs-status">
+                <option value="">Todos</option>
+                <option value="suscrito">Suscritos</option>
+                <option value="dado_baja">Dados de baja</option>
+              </select>
+            </div>
+            <button class="btn btn-gold btn-sm" id="subs-refresh" type="button">&#8635; Actualizar</button>
+            <button class="btn btn-ghost btn-sm" id="subs-export" type="button">&#128229; Exportar CSV</button>
           </div>
-          <div id="ht-subs" class="sp-loading"><span class="spinner"></span> Cargando…</div>
+          <div id="subs-alert" class="alert" style="margin-top:12px;"></div>
+        </div>
+
+        <div id="subs-container" class="sp-loading"><span class="spinner"></span> Cargando suscriptores…</div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:6px;color:var(--gold);">&#128231; Enviar campaña de correo</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">Los correos se envían uno por destinatario para proteger la privacidad de la lista. En modo desarrollo (sin SMTP) el envío se simula y queda registrado.</p>
+          <form id="subs-campaign-form">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="fgroup">
+                <label for="camp-subject">Asunto *</label>
+                <input id="camp-subject" name="subject" type="text" maxlength="160" required placeholder="Nuevas propiedades disponibles" />
+              </div>
+              <div class="fgroup">
+                <label for="camp-audience">Destinatarios *</label>
+                <select id="camp-audience" name="audience" required>
+                  <option value="suscriptores">Suscriptores del boletín</option>
+                  <option value="usuarios">Usuarios activos del CRM</option>
+                  <option value="clientes">Clientes con correo registrado</option>
+                  <option value="todos">Todos (sin duplicados)</option>
+                </select>
+              </div>
+              <div class="fgroup">
+                <label for="camp-role">Filtrar usuarios por rol (opcional)</label>
+                <select id="camp-role" name="role">
+                  <option value="">Todos los roles</option>
+                </select>
+              </div>
+              <div class="fgroup">
+                <label for="camp-intro">Saludo / introducción (opcional)</label>
+                <input id="camp-intro" name="intro" type="text" maxlength="300" placeholder="Compartimos contigo estas novedades:" />
+              </div>
+            </div>
+            <div class="fgroup" style="margin-top:12px;">
+              <label for="camp-message">Contenido del correo *</label>
+              <textarea id="camp-message" name="message" rows="7" maxlength="12000" required placeholder="Escribe aquí las novedades, propiedades o promociones que quieres compartir…"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+              <button class="btn btn-gold" id="camp-send" type="submit">&#128231; Enviar campaña</button>
+              <span style="color:var(--text-muted);font-size:12px;">Revisa el contenido antes de enviarlo: la acción no se puede deshacer.</span>
+            </div>
+            <div id="subs-campaign-alert" class="alert" style="margin-top:12px;"></div>
+          </form>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:12px;">Historial de campañas</h3>
+          <div id="subs-history" class="sp-loading"><span class="spinner"></span> Cargando historial…</div>
         </div>
       </section>
 

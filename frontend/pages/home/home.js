@@ -6,6 +6,7 @@ window.Pages.home = {
   async render(container) {
     const user = window.ApiClient.getStoredUser();
     const name = (user && (user.name || user.username)) || '';
+    const currentEmail = (user && user.email) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';
     const roleCode = user && user.role ? (typeof user.role === 'object' ? (user.role.code || '') : String(user.role)) : '';
     const isBoss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
@@ -128,6 +129,37 @@ window.Pages.home = {
         ${role ? `<span class="home-role-badge">${UI.escapeHtml(role)}</span>` : ''}
       </section>
 
+      <section class="home-newsletter" id="home-newsletter">
+        <div class="home-newsletter-copy">
+          <span class="home-newsletter-kicker">&#128231; Boletín INMOBLES</span>
+          <h2>Recibe las mejores propiedades antes que nadie</h2>
+          <p>Nuevas publicaciones, preventas, cambios de precio y promociones exclusivas directamente en tu correo.</p>
+          <ul class="home-newsletter-benefits">
+            <li>&#10003; Avisos de propiedades recién publicadas</li>
+            <li>&#10003; Ofertas y preventas exclusivas</li>
+            <li>&#10003; Sin spam: solo novedades inmobiliarias</li>
+          </ul>
+        </div>
+        <form class="home-newsletter-form" id="home-newsletter-form" novalidate>
+          <label for="home-newsletter-email">Suscríbete gratis</label>
+          <div class="home-newsletter-row">
+            <input
+              class="form-control"
+              id="home-newsletter-email"
+              name="email"
+              type="email"
+              placeholder="tu@correo.com"
+              value="${UI.escapeHtml(currentEmail)}"
+              autocomplete="email"
+              required
+            />
+            <button class="btn btn-primary" type="submit" id="home-newsletter-btn">&#128276;&nbsp; Suscribirme</button>
+          </div>
+          <p class="home-newsletter-msg" id="home-newsletter-msg" role="status"></p>
+          <small>Puedes darte de baja cuando quieras respondiendo a cualquiera de nuestros correos.</small>
+        </form>
+      </section>
+
       <section class="home-section">
         <h3 class="home-section-title">Resumen ejecutivo</h3>
         <div class="kpi-grid">${kpiCards}</div>
@@ -162,5 +194,56 @@ window.Pages.home = {
         <div class="home-grid">${cards}</div>
       </section>
     `;
+
+    // Alta al boletín desde el Inicio. Reutiliza el endpoint público y muestra
+    // el resultado en el mismo lugar, sin recargar la página.
+    const newsletterForm = container.querySelector('#home-newsletter-form');
+    if (newsletterForm) {
+      newsletterForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = newsletterForm.querySelector('#home-newsletter-email');
+        const button = newsletterForm.querySelector('#home-newsletter-btn');
+        const message = newsletterForm.querySelector('#home-newsletter-msg');
+        const email = String((input && input.value) || '').trim();
+
+        if (!email || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) {
+          if (message) {
+            message.textContent = 'Escribe un correo electrónico válido.';
+            message.className = 'home-newsletter-msg is-error';
+          }
+          if (input) input.focus();
+          return;
+        }
+
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Enviando…';
+        }
+        if (message) {
+          message.textContent = '';
+          message.className = 'home-newsletter-msg';
+        }
+
+        try {
+          const res = await window.API.public.newsletterSubscribe({ email, name });
+          if (message) {
+            message.textContent = (res && res.message) || '¡Suscripción exitosa! Revisa tu correo.';
+            message.className = 'home-newsletter-msg is-success';
+          }
+          if (input) input.value = '';
+          if (window.UI && typeof UI.toast === 'function') UI.toast('¡Ya estás suscrito al boletín!', 'success');
+        } catch (error) {
+          if (message) {
+            message.textContent = (error && error.message) || 'No se pudo completar la suscripción.';
+            message.className = 'home-newsletter-msg is-error';
+          }
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.innerHTML = '&#128276;&nbsp; Suscribirme';
+          }
+        }
+      });
+    }
   },
 };

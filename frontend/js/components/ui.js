@@ -1037,7 +1037,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
       labelField: 'nombre',
       subtitleField: 'telefono',
       limit: 30,
-      legend: 'Escribe un nombre o teléfono y la lista se filtra.',
+      legend: 'Escribe un nombre, teléfono o correo y la lista se filtra.',
     },
     property: {
       url: '/properties/options',

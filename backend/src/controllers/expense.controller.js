@@ -2,7 +2,7 @@
 
 const buildCrud = require('../utils/crud');
 const asyncHandler = require('../middlewares/asyncHandler');
-const { isBoss } = require('../utils/scope');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { toCsv, sendCsv } = require('../utils/csv');
 const { Expense } = require('../models');
 
@@ -10,16 +10,21 @@ const expenseCrud = buildCrud(Expense, {
   populate: ['user', 'business'],
   searchFields: ['concept', 'activity', 'observations'],
   ownerField: 'user',
+  widePermission: 'expenses_manage',
   // La barra de filtros permite acotar por negocio y por categoría.
   extraFilters: { business: 'business', category: 'category' },
 });
+
+function seesAllExpenses(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'expenses_manage'));
+}
 
 // Exporta los gastos a CSV con el mismo alcance del listado.
 const exportCsv = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.business) filter.business = req.query.business;
   if (req.query.category) filter.category = req.query.category;
-  if (!isBoss(req)) {
+  if (!seesAllExpenses(req)) {
     filter.user = req.user._id;
   } else if (req.query.user) {
     filter.user = req.query.user;

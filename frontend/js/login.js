@@ -118,9 +118,12 @@ window.LoginPage = (() => {
           <div class="form-group">
             <label for="ur-role">Rol solicitado</label>
             <select class="form-control" id="ur-role">
-              <option value="asesor">Asesor</option>
-              <option value="admin">Administrador</option>
+              <option value="asesor" selected>Asesor</option>
+              <option value="direccion">Dirección</option>
+              <option value="admin">Administración</option>
               <option value="gerencia">Gerencia</option>
+              <option value="asistencia">Asistencia</option>
+              <option value="escrituracion">Escrituración</option>
             </select>
           </div>
           <div class="form-group">
@@ -196,6 +199,10 @@ window.LoginPage = (() => {
 
   // ---- Registro con Google ----
 
+  // Roles de alto privilegio: requieren la clave de registro configurada por
+  // la administración. Asesor, Asistencia y Escrituración no la necesitan.
+  const GOOGLE_KEY_ROLES = ['direccion', 'admin', 'gerencia'];
+
   let pendingGoogle = null; // { role, roleKey }
 
   function loadGoogleScript(retries = 2) {
@@ -256,19 +263,31 @@ window.LoginPage = (() => {
             <input type="radio" name="google-role" value="asesor" checked>
             <span><strong>Asesor</strong><br><small class="text-muted">Acceso a sus indicadores y módulos de trabajo.</small></span>
           </label>
+          <label class="role-option" data-role="direccion">
+            <input type="radio" name="google-role" value="direccion">
+            <span><strong>Dirección</strong><br><small class="text-muted">Administración total de la inmobiliaria.</small></span>
+          </label>
           <label class="role-option" data-role="admin">
             <input type="radio" name="google-role" value="admin">
-            <span><strong>Administrador</strong><br><small class="text-muted">Control total del sistema.</small></span>
+            <span><strong>Administración</strong><br><small class="text-muted">Control operativo y administrativo del sistema.</small></span>
           </label>
           <label class="role-option" data-role="gerencia">
             <input type="radio" name="google-role" value="gerencia">
             <span><strong>Gerencia</strong><br><small class="text-muted">Reportes y supervisión del equipo.</small></span>
           </label>
+          <label class="role-option" data-role="asistencia">
+            <input type="radio" name="google-role" value="asistencia">
+            <span><strong>Asistencia</strong><br><small class="text-muted">Apoyo operativo, clientes y negocios.</small></span>
+          </label>
+          <label class="role-option" data-role="escrituracion">
+            <input type="radio" name="google-role" value="escrituracion">
+            <span><strong>Escrituración</strong><br><small class="text-muted">Seguimiento de etapas, cierres y documentación.</small></span>
+          </label>
         </div>
         <div class="form-group" id="google-key-wrap" style="display:none;">
           <label for="google-role-key">Clave secreta</label>
           <input class="form-control" id="google-role-key" type="password" placeholder="Ingresa la clave de registro">
-          <small class="text-muted">Esta clave la configura el administrador o la gerencia.</small>
+          <small class="text-muted">Esta clave la configura la administración. Es obligatoria para Dirección, Administración y Gerencia.</small>
         </div>
         <div id="google-role-error" class="alert alert-error hide"></div>
       `,
@@ -288,9 +307,9 @@ window.LoginPage = (() => {
       label.addEventListener('click', () => {
         bodyEl.querySelectorAll('[data-role]').forEach((l) => l.classList.remove('selected'));
         label.classList.add('selected');
-        const isBoss = label.dataset.role === 'admin' || label.dataset.role === 'gerencia';
-        keyWrap.style.display = isBoss ? 'block' : 'none';
-        if (!isBoss) keyInput.value = '';
+        const needsKey = GOOGLE_KEY_ROLES.includes(label.dataset.role);
+        keyWrap.style.display = needsKey ? 'block' : 'none';
+        if (!needsKey) keyInput.value = '';
       });
     });
 
@@ -302,11 +321,12 @@ window.LoginPage = (() => {
         errBox.classList.add('hide');
         const selected = bodyEl.querySelector('[data-role].selected') || bodyEl.querySelector('[data-role]');
         const role = selected ? selected.dataset.role : 'asesor';
-        const roleKey = role === 'admin' || role === 'gerencia' ? keyInput.value.trim() : '';
+        const needsKey = GOOGLE_KEY_ROLES.includes(role);
+        const roleKey = needsKey ? keyInput.value.trim() : '';
         const okBtn = overlay.querySelector('[data-ok]');
         okBtn.disabled = true;
         try {
-          if (role === 'admin' || role === 'gerencia') {
+          if (needsKey) {
             await window.API.auth.checkRegisterKey({ role, roleKey });
           }
           const info = await window.API.settings.public();

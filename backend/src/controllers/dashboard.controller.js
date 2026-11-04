@@ -5,12 +5,17 @@ const {
   Client, Property, Business, Appointment, Task, Ticket, Expense, Goal, ProspectingActivity, Notification, User,
 } = require('../models');
 const { updateGoalsAuto } = require('../services/goal-auto.service');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
+
+function seesAllDashboard(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'reports_gerencia'));
+}
 
 const summary = asyncHandler(async (req, res) => {
   const user = req.user;
   updateGoalsAuto().catch(() => {});
 
-  const isAdminOrGerencia = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(user.role.code);
+  const isAdminOrGerencia = seesAllDashboard(req);
   const myFilter = isAdminOrGerencia ? {} : { mainAdvisor: user._id };
 
   const [clients, properties, businessesActive, businessesConcluded, businessesCancelled, businessesNegotiation, businessesPromesa, appointmentsUpcoming, tasksPending, unread, expensesThisMonth, activeGoals, pipelineAgg, thisMonthAgg] =
@@ -193,8 +198,7 @@ const userReport = asyncHandler(async (req, res) => {
 });
 
 const executive = asyncHandler(async (req, res) => {
-  const isBoss = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code);
-  if (!isBoss) {
+  if (!seesAllDashboard(req)) {
     return res.status(403).json({ success: false, message: 'Reporte solo para gerencia y administración' });
   }
 

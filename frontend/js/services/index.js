@@ -200,10 +200,8 @@ window.API = {
 
     // Checklist operativo del negocio.
     checklist: {
-      list: (id) => ApiClient.get(`/businesses/${id}`).then((res) => (
-        (res && res.checklist)
-        || (res && res.data && res.data.checklist)
-        || []
+      list: (id) => ApiClient.get(`/businesses/${id}/checklist`).then((res) => (
+        (res && res.data) || res || []
       )),
       create: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
       update: (id, itemId, body) => ApiClient.patch(`/businesses/${id}/checklist/${itemId}`, body),
@@ -288,6 +286,18 @@ window.API = {
     createAppointment: (body) => ApiClient.post('/public/appointments', body),
   },
 
+  // Boletín y campañas de correo. Lo usan administración/gerencia y el panel
+  // de soporte (con su propio token, mediante soporteJson).
+  newsletter: {
+    subscribers: (params) => ApiClient.get('/newsletter/subscribers', params),
+    stats: () => ApiClient.get('/newsletter/stats'),
+    updateSubscriber: (id, body) => ApiClient.patch(`/newsletter/subscribers/${id}`, body),
+    removeSubscriber: (id) => ApiClient.remove(`/newsletter/subscribers/${id}`),
+    campaigns: (params) => ApiClient.get('/newsletter/campaigns', params),
+    sendCampaign: (body) => ApiClient.post('/newsletter/campaign', body),
+    exportCsv: (params) => API.downloadCsv('/newsletter/subscribers/export', 'suscriptores.csv', params),
+  },
+
   prospecting: {
     list: (params) => ApiClient.get('/prospecting', params),
     create: (body) => ApiClient.post('/prospecting', body),
@@ -341,6 +351,13 @@ window.API = {
     listarPlantillas: () => ApiClient.get('/formatos/plantillas'),
     obtenerCampos: (id) => ApiClient.get(`/formatos/plantillas/${encodeURIComponent(id)}/campos`),
     generar: (plantillaId, data) => ApiClient.postBlob(`/formatos/generar/${encodeURIComponent(plantillaId)}`, data),
+    // Sube un PDF compartido visible para todos los asesores.
+    subirPlantilla: (file) => {
+      const form = new FormData();
+      form.append('plantilla', file);
+      return ApiClient.postMultipart('/formatos/plantillas', form);
+    },
+    eliminarPlantilla: (id) => ApiClient.remove(`/formatos/plantillas/${encodeURIComponent(id)}`),
     descargar: (id) => {
       const token = localStorage.getItem('crm_token');
       return fetch(`${window.AppConfig.API_URL}/formatos/plantillas/${encodeURIComponent(id)}/descargar`, {
@@ -529,6 +546,13 @@ window.API = {
     accionMasiva: (body) => soporteJson('/soporte/acciones-masivas', { method: 'POST', body }),
     newsletter: (params) => soporteJson(`/soporte/newsletter${qs(params)}`),
     eliminarSuscriptor: (id) => soporteJson(`/soporte/newsletter/${id}`, { method: 'DELETE' }),
+    newsletterList: (params) => soporteJson(`/newsletter/subscribers${qs(params)}`),
+    newsletterStats: () => soporteJson('/newsletter/stats'),
+    newsletterUpdate: (id, body) => soporteJson(`/newsletter/subscribers/${id}`, { method: 'PATCH', body }),
+    newsletterRemove: (id) => soporteJson(`/newsletter/subscribers/${id}`, { method: 'DELETE' }),
+    newsletterCampaigns: (params) => soporteJson(`/newsletter/campaigns${qs(params)}`),
+    newsletterSend: (body) => soporteJson('/newsletter/campaign', { method: 'POST', body }),
+    newsletterExport: (params) => soporteBlob(`/newsletter/subscribers/export${qs(params)}`),
 
     // Solicitudes de creación de usuario que llegan desde el login público.
     // Se usan los mismos endpoints del CRM (el token de soporte es SUPERADMIN).
@@ -545,6 +569,22 @@ function qs(params) {
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join('&');
   return q ? `?${q}` : '';
+}
+
+function soporteBlob(path) {
+  const token = localStorage.getItem('soporte_token');
+  return fetch(`${window.AppConfig.API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }).then(async (r) => {
+    if (r.status === 401) {
+      localStorage.removeItem('soporte_token');
+      localStorage.removeItem('soporte_user');
+      window.location.replace('index.html');
+      throw new Error('Tu sesión de soporte expiró. Inicia sesión nuevamente.');
+    }
+    if (!r.ok) throw new Error('No se pudo descargar el archivo.');
+    return r.blob();
+  });
 }
 
 function soporteJson(path, options = {}) {

@@ -1,13 +1,15 @@
 {
-  "version": "2.26",
+  "version": "2.27",
   "channel": "estable",
-  "title": "Actualización 2.26",
-  "date": "2026-10-30",
+  "title": "Actualización 2.27",
+  "date": "2026-11-05",
   "notes": [
-    "Negocios: los botones Ver bitácora, Checklist y Documentos vuelven a abrir y guardar correctamente, incluso si el navegador conserva una copia anterior de los servicios.",
-    "Citas: al agendar desde el inventario o desde cualquier propiedad, el asesor se asigna automáticamente con el usuario de la sesión; ya no aparece el error \"El usuario es obligatorio\".",
-    "Clientes: al elegir el medio \"Recomendación\" aparece el campo para escribir quién recomendó al cliente y el cursor se coloca ahí si falta llenarlo.",
-    "Selectores: clientes, asesores, propiedades, negocios y demás catálogos aparecen ordenados alfabéticamente para localizarlos más rápido.",
+    "Inventario: todos los roles pueden consultar el inventario general desde el menú Propiedades, sin depender de permisos de administración.",
+    "Asistencia: puede asignar prospectos y clientes a cualquier asesor; el asesor recibe el aviso en la campana de notificaciones. También puede restablecer contraseñas desde Configuración > Usuarios.",
+    "Acceso: nuevo botón \"Restablecer por WhatsApp\" en el inicio de sesión, con usuario/correo, rol y mensaje predeterminado listo para enviar al soporte.",
+    "Contraseñas: además del código por correo, el personal autorizado puede generar una contraseña temporal y enviarla por correo o WhatsApp.",
+    "Formatos compartidos: búsqueda, arrastrar y soltar, validación de tamaño, descarga segura para todo el equipo y mejor visualización en celular.",
+    "Negocios: columnas del tablero redimensionables, filtros por asesor responsable/interno/externo, autocompletado al elegir propiedad y bitácora imprimible.",
     "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos."
   ]
 }

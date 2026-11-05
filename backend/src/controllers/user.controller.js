@@ -3,9 +3,11 @@
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { User, Role, Permission } = require('../models');
-const { logActivity } = require('../services/log.service');
+const { logActivity, logAudit } = require('../services/log.service');
 const sessionService = require('../services/session.service');
 const { isAssignableRoleCode } = require('../constants/roles');
+const { generatePassword } = require('../utils/password');
+const { sendMailWithin, mailPasswordResetByStaff, hasSmtp } = require('../services/mail.service');
 
 // Quién puede administrar usuarios desde Configuración > Usuarios.
 // Los tres roles administrativos pueden asignar cualquier rol; Asistencia
@@ -178,6 +180,73 @@ const createUser = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: populated });
 });
 
+// Restablece la contraseña de un usuario generando una temporal.
+// Lo usan administración, dirección y ASISTENCIA para ayudar a un compañero
+// que olvidó su contraseña. El correo se intenta enviar, pero la contraseña
+// temporal también se devuelve para entregarla por WhatsApp o en persona.
+const resetUserPassword = asyncHandler(async (req, res) => {
+  await assertCanAssignRole(req, null, req.params.id);
+
+  const target = await User.findById(req.params.id).populate('role');
+  if (!target) return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+
+  const tempPassword = generatePassword(12);
+  target.password = tempPassword;
+  // Al cambiar la contraseña se invalidan los códigos de recuperación previos.
+  target.resetCodeHash = null;
+  target.resetCodeExpires = null;
+  target.resetCodeAttempts = 0;
+  await target.save();
+
+  // Cierra las sesiones abiertas del usuario: deberá entrar con la temporal.
+  await sessionService.revokeUserSessions(target._id, 'PASSWORD_RESET_BY_STAFF');
+
+  let emailSent = false;
+  let emailError = '';
+  try {
+    const mail = mailPasswordResetByStaff({
+      name: target.name,
+      email: target.email,
+      username: target.username,
+      password: tempPassword,
+    });
+    const result = await sendMailWithin(mail, 10000);
+    emailSent = Boolean(result.sent);
+    emailError = result.error || '';
+  } catch (error) {
+    emailError = error.message;
+  }
+
+  await logAudit({
+    user: req.user._id,
+    action: 'actualizacion',
+    entity: 'User',
+    entityId: target._id,
+    previousValue: 'contraseña restablecida por personal autorizado',
+    newValue: 'contraseña temporal generada',
+  });
+
+  const roleLabelText = target.role ? (target.role.name || target.role.code) : 'usuario';
+  const message = emailSent
+    ? `Contraseña temporal generada y enviada al correo de ${target.name}.`
+    : `Contraseña temporal generada para ${target.name}. No se pudo enviar el correo${emailError ? ` (${emailError})` : ''}; entrega la contraseña por WhatsApp.`;
+
+  res.json({
+    success: true,
+    message,
+    data: {
+      temporaryPassword: tempPassword,
+      username: target.username,
+      email: target.email,
+      name: target.name,
+      role: roleLabelText,
+      emailSent,
+      emailSimulated: !hasSmtp(),
+      emailError,
+    },
+  });
+});
+
 const removeUser = asyncHandler(async (req, res) => {
   const target = await User.findById(req.params.id).populate('role');
   if (!target) {
@@ -235,6 +304,7 @@ module.exports = {
   getUser,
   createUser,
   updateUser,
+  resetUserPassword,
   removeUser,
   listRoles,
   createRole,

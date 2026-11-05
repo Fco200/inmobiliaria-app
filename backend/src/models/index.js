@@ -28,6 +28,7 @@ const Announcement = require('./announcement.model');
 const Meeting = require('./meeting.model');
 const UserRequest = require('./userRequest.model');
 const Newsletter = require('./newsletter.model');
+const SharedFormat = require('./sharedFormat.model');
 const Campaign = require('./campaign.model');
 const CampaignRecipient = require('./campaignRecipient.model');
 const PushSubscription = require('./pushSubscription.model');
@@ -61,6 +62,7 @@ module.exports = {
   Meeting,
   UserRequest,
   Newsletter,
+  SharedFormat,
   Campaign,
   CampaignRecipient,
   PushSubscription,

@@ -132,7 +132,23 @@ const businessCrud = buildCrud(Business, {
   populate: ['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'cliente_id', 'ticket'],
   searchFields: ['name'],
   // Filtros por etapa, tipo de proceso, cliente y propiedad.
-  extraFilters: { currentStage: 'currentStage', processType: 'processType', buyerClient: 'buyerClient', sellerClient: 'sellerClient', property: 'property' },
+  extraFilters: {
+    currentStage: 'currentStage',
+    processType: 'processType',
+    buyerClient: 'buyerClient',
+    sellerClient: 'sellerClient',
+    property: 'property',
+    // Asesor responsable (captador) y asesor interno que atiende al cliente.
+    asesor: 'mainAdvisor',
+    asesorCliente: 'asesor_cliente_id',
+  },
+  // ?externo=si|no: negocios donde participa un asesor externo (nombre libre).
+  baseFilter: (req) => {
+    const externo = String((req.query && req.query.externo) || '');
+    if (externo === 'si') return { partnerAdvisorName: { $nin: ['', null] } };
+    if (externo === 'no') return { partnerAdvisorName: { $in: ['', null] } };
+    return null;
+  },
   // Un negocio pertenece al asesor principal o al socio que participa (se
   // incluyen los alias explícitos por compatibilidad con datos históricos).
   ownerMatch: (userId) => ({

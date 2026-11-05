@@ -65,6 +65,7 @@ window.API = {
     list: (params) => ApiClient.get('/users', params),
     create: (body) => ApiClient.post('/users', body),
     update: (id, body) => ApiClient.put(`/users/${id}`, body),
+    resetPassword: (id) => ApiClient.post(`/users/${id}/reset-password`, {}),
     remove: (id) => ApiClient.remove(`/users/${id}`),
   },
 
@@ -358,6 +359,16 @@ window.API = {
   },
 
   formatos: {
+    // Formatos compartidos (cualquier archivo): listado, alta y baja.
+    listarCompartidos: () => ApiClient.get('/formatos/compartidos'),
+    subirCompartido: (name, file) => {
+      const form = new FormData();
+      form.append('name', name);
+      form.append('archivo', file);
+      return ApiClient.postMultipart('/formatos/compartidos', form);
+    },
+    descargarCompartido: (id) => ApiClient.getBlob(`/formatos/compartidos/${encodeURIComponent(id)}/descargar`),
+    eliminarCompartido: (id) => ApiClient.remove(`/formatos/compartidos/${encodeURIComponent(id)}`),
     listarPlantillas: () => ApiClient.get('/formatos/plantillas'),
     obtenerCampos: (id) => ApiClient.get(`/formatos/plantillas/${encodeURIComponent(id)}/campos`),
     generar: (plantillaId, data) => ApiClient.postBlob(`/formatos/generar/${encodeURIComponent(plantillaId)}`, data),

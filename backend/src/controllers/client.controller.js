@@ -341,6 +341,7 @@ const update = asyncHandler(async (req, res) => {
   }
 
   const previousEtapa = client.etapaActual;
+  const previousAdvisor = String(client.asesorAsignado || '');
   const snapshot = Object.fromEntries(Object.keys(CAMPO_LABELS).map((k) => [k, client[k]]));
   Object.assign(client, body);
 
@@ -366,6 +367,20 @@ const update = asyncHandler(async (req, res) => {
 
   await client.save();
   await client.populate('asesorAsignado');
+
+  // Reasignación de prospecto/cliente: avisar al nuevo asesor. Así Asistencia
+  // puede repartir prospectos y el asesor recibe el aviso en tiempo real.
+  const nextAdvisor = String((client.asesorAsignado && (client.asesorAsignado._id || client.asesorAsignado)) || '');
+  if (nextAdvisor && nextAdvisor !== previousAdvisor && nextAdvisor !== String(req.user._id)) {
+    ensure({
+      type: 'nuevo_prospecto',
+      key: `prospect-${client._id}-${nextAdvisor}-${Date.now()}`,
+      title: 'Cliente asignado',
+      message: `Se te asignó el cliente ${client.nombre}.`,
+      userId: nextAdvisor,
+      data: { entityId: client._id },
+    }).catch(() => {});
+  }
 
   await logActivity({
     entityType: 'Client',

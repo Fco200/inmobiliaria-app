@@ -12,9 +12,24 @@ const {
   plantillaUpload,
 } = require('../controllers/formato.controller');
 
+const { upload, verifyUpload, uploadErrorHandler } = require('../middlewares/upload');
+const sharedFormat = require('../controllers/sharedFormat.controller');
+
 const router = Router();
 
 router.use(protect);
+
+// Formatos compartidos (cualquier archivo): todo el equipo los consulta y descarga.
+router.get('/compartidos', sharedFormat.listSharedFormats);
+router.post(
+  '/compartidos',
+  upload.single('archivo'),
+  uploadErrorHandler,
+  verifyUpload,
+  sharedFormat.uploadSharedFormat
+);
+router.get('/compartidos/:id/descargar', sharedFormat.downloadSharedFormat);
+router.delete('/compartidos/:id', sharedFormat.removeSharedFormat);
 
 router.get('/plantillas', listarPlantillas);
 router.get('/plantillas/:id/campos', obtenerCamposPlantilla);

@@ -472,6 +472,99 @@ window.LoginPage = (() => {
     }
   }
 
+  // ---- Restablecer contraseña por WhatsApp ----
+  // El usuario escribe su usuario/correo y su rol; se abre WhatsApp con un
+  // mensaje listo para enviar al soporte (número configurado abajo).
+  const WHATSAPP_SUPPORT_NUMBER = '526625374491'; // 662 537 4491 (México)
+
+  function openWhatsAppResetModal(initial) {
+    const currentIdentifier = initial !== undefined
+      ? initial
+      : ((document.getElementById('identifier') || {}).value || '');
+
+    const modal = UI.openModal({
+      title: '&#128172;&nbsp; Restablecer por WhatsApp',
+      size: 520,
+      body: `
+        <p style="margin:0 0 14px;" class="text-muted">Escribe tu usuario o correo y tu rol. Se abrirá WhatsApp con el mensaje listo para enviarlo al soporte y ayudarte a restablecer tu contraseña.</p>
+        <div class="form-group">
+          <label for="wa-identifier">Usuario o correo registrado</label>
+          <input class="form-control" id="wa-identifier" type="text" value="${UI.escapeHtml(currentIdentifier)}" placeholder="usuario o correo@ejemplo.com">
+        </div>
+        <div class="form-group">
+          <label for="wa-role">Rol en el CRM</label>
+          <select class="form-control" id="wa-role">
+            <option value="">Selecciona tu rol</option>
+            <option value="Asesor">Asesor</option>
+            <option value="Asistencia">Asistencia</option>
+            <option value="Escrituración">Escrituración</option>
+            <option value="Gerencia">Gerencia</option>
+            <option value="Dirección">Dirección</option>
+            <option value="Administración">Administración</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="wa-message">Mensaje (puedes editarlo)</label>
+          <textarea class="form-control" id="wa-message" rows="5"></textarea>
+        </div>
+        <div id="wa-error" class="alert alert-error hide" role="alert"></div>
+        <p class="text-muted" style="font-size:12px;margin:8px 0 0;">Si eliges "Otro", escribe tu rol en el mensaje antes de enviarlo.</p>
+      `,
+      footer: `
+        <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+        <button class="btn btn-primary" type="button" data-ok style="background:#128c4a;border-color:#128c4a;">&#128172;&nbsp; Enviar por WhatsApp</button>
+      `,
+    });
+
+    const bodyEl = modal.bodyEl;
+    const overlay = bodyEl.closest('#modal-overlay');
+    if (!overlay) return;
+    const idInput = bodyEl.querySelector('#wa-identifier');
+    const roleSelect = bodyEl.querySelector('#wa-role');
+    const messageBox = bodyEl.querySelector('#wa-message');
+    const errBox = bodyEl.querySelector('#wa-error');
+    const okBtn = overlay.querySelector('[data-ok]');
+    const cancelBtn = overlay.querySelector('[data-cancel]');
+
+    const buildMessage = () => {
+      const identifier = (idInput.value || '').trim() || '(escribe tu usuario o correo)';
+      const role = (roleSelect.value || '').trim() || '(escribe tu rol)';
+      return `Hola, necesito restablecer mi contraseña del CRM INMOBLES.\n\nUsuario o correo: ${identifier}\nRol: ${role}\n\nGracias.`;
+    };
+
+    messageBox.value = buildMessage();
+    idInput.addEventListener('input', () => {
+      if (!messageBox.dataset.edited) messageBox.value = buildMessage();
+    });
+    roleSelect.addEventListener('change', () => {
+      if (!messageBox.dataset.edited) messageBox.value = buildMessage();
+    });
+    messageBox.addEventListener('input', () => { messageBox.dataset.edited = '1'; });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+    if (okBtn) {
+      okBtn.addEventListener('click', () => {
+        const text = String(messageBox.value || '').trim();
+        if (!text) {
+          errBox.textContent = 'Escribe el mensaje que quieres enviar.';
+          errBox.classList.remove('hide');
+          return;
+        }
+        const url = `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank', 'noopener');
+        UI.closeModal();
+        UI.toast('Se abrió WhatsApp con tu mensaje. Envíalo para recibir ayuda.', 'success');
+      });
+    }
+  }
+
+  function whatsappResetFlow() {
+    const btn = document.getElementById('btn-whatsapp-reset');
+    if (!btn) return;
+    btn.addEventListener('click', () => openWhatsAppResetModal());
+  }
+
   // ---- Restablecer contraseña (¿Olvidaste tu contraseña?) ----
 
   function forgotPasswordFlow() {
@@ -494,6 +587,9 @@ window.LoginPage = (() => {
             <label for="fp-identifier">Usuario o correo</label>
             <input class="form-control" id="fp-identifier" type="text" value="${UI.escapeHtml(initial)}" placeholder="usuario o correo@ejemplo.com" autofocus>
           </div>
+          <p style="font-size:12.5px;margin:0 0 10px;">
+            <a href="#" id="fp-whatsapp">¿No puedes entrar a tu correo? Restablece por WhatsApp</a>
+          </p>
           <div id="fp-error" class="alert alert-error hide" role="alert"></div>
         `,
         footer: `
@@ -511,6 +607,16 @@ window.LoginPage = (() => {
       const cancelBtn = overlay.querySelector('[data-cancel]');
 
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+
+      const whatsappLink = bodyEl.querySelector('#fp-whatsapp');
+      if (whatsappLink) {
+        whatsappLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          const identifier = (input.value || '').trim();
+          UI.closeModal();
+          openWhatsAppResetModal(identifier);
+        });
+      }
 
       const send = async () => {
         const identifier = (input.value || '').trim();
@@ -827,6 +933,7 @@ window.LoginPage = (() => {
     } catch (e) { /* sin almacenamiento */ }
 
     forgotPasswordFlow();
+    whatsappResetFlow();
 
     const toggle = document.getElementById('btn-toggle-password');
     const password = document.getElementById('password');

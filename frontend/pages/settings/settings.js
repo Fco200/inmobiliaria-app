@@ -698,6 +698,68 @@ window.Pages.settings = {
             toggle();
             updateCount();
           },
+          // Restablecer contraseña: genera una temporal y la envía por correo.
+          // Asistencia puede usarlo con asesores, asistencia y escrituración.
+          extraActions(record) {
+            const code = record && record.role && record.role.code ? record.role.code : '';
+            const canReset = isAdmin || ['asesor', 'asistencia', 'escrituracion'].includes(code);
+            if (!canReset) return '';
+            return '<button class="btn btn-secondary btn-sm" type="button" data-extra data-reset-pass style="margin-left:6px;">Restablecer contraseña</button>';
+          },
+          async onExtraAction(record, control) {
+            if (control.dataset.resetPass === undefined) return;
+            const ok = await UI.confirm(`¿Generar una contraseña temporal para ${record.name}? Se cerrarán sus sesiones abiertas.`);
+            if (!ok) return;
+            const label = control.textContent;
+            control.disabled = true;
+            control.textContent = 'Generando…';
+            try {
+              const result = (await API.users.resetPassword(record._id)) || {};
+              const temp = result.temporaryPassword || '';
+              const phone = String(record.phone || '').replace(/\D/g, '');
+              const waText = temp
+                ? `Hola ${record.name}, tu contraseña del CRM INMOBLES fue restablecida.\n\nUsuario: ${result.username || record.username}\nContraseña temporal: ${temp}\n\nIngresa y cámbiala desde Mi perfil > Seguridad.`
+                : '';
+              const waPhone = phone.length === 10 ? `52${phone}` : phone;
+              UI.openModal({
+                title: 'Contraseña restablecida',
+                size: 520,
+                body: `
+                  <p style="margin:0 0 10px;">Se generó una contraseña temporal para <strong>${UI.escapeHtml(record.name || '')}</strong>.</p>
+                  ${temp ? `
+                    <div class="alert alert-info" style="margin:0 0 12px;">
+                      <div><strong>Usuario:</strong> <code>${UI.escapeHtml(result.username || record.username || '')}</code></div>
+                      <div><strong>Contraseña temporal:</strong> <code>${UI.escapeHtml(temp)}</code></div>
+                    </div>` : ''}
+                  <p class="text-muted" style="font-size:12.5px;margin:0;">${UI.escapeHtml(result.message || 'Comparte la contraseña temporal con el usuario por un canal seguro.')}</p>
+                `,
+                footer: `
+                  <button class="btn btn-secondary" type="button" data-close>Cerrar</button>
+                  ${temp ? '<button class="btn btn-secondary" type="button" data-copy-temp>Copiar contraseña</button>' : ''}
+                  ${temp && waPhone ? `<a class="btn btn-primary" href="https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}" target="_blank" rel="noopener" style="background:#128c4a;border-color:#128c4a;">Enviar por WhatsApp</a>` : ''}
+                `,
+              });
+              const overlay = document.getElementById('modal-overlay');
+              if (overlay) {
+                const closeBtn = overlay.querySelector('[data-close]');
+                if (closeBtn) closeBtn.addEventListener('click', () => UI.closeModal());
+                const copyBtn = overlay.querySelector('[data-copy-temp]');
+                if (copyBtn) copyBtn.addEventListener('click', async () => {
+                  try {
+                    await navigator.clipboard.writeText(temp);
+                    UI.toast('Contraseña copiada.', 'success');
+                  } catch (error) {
+                    UI.toast('No se pudo copiar. Selecciona la contraseña manualmente.', 'warning');
+                  }
+                });
+              }
+            } catch (error) {
+              UI.toast(error.message || 'No se pudo restablecer la contraseña.', 'error');
+            } finally {
+              control.disabled = false;
+              control.textContent = label;
+            }
+          },
           // Editar SÍ está disponible para las cuentas administrativas (admin,
           // gerencia) y para soporte. Al editar un usuario con rol
           // personalizado se puede ajustar sus datos.

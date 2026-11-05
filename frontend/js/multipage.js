@@ -40,11 +40,12 @@ window.AppShell = (() => {
     tasks: 'tasks_manage',
     goals: 'goals_manage',
     properties: 'properties_manage',
-    inventory: 'inventory_manage',
+    // El inventario general es de consulta para TODO el equipo: no se oculta
+    // por permisos. Administrar/editar sigue reservado a administración.
     expenses: 'expenses_manage',
     reports: 'reports_view',
     management: 'reports_gerencia',
-    documents: 'documents_manage',
+    // Formatos compartidos: todo el equipo debe poder consultarlos y descargarlos.
     guia: 'settings_manage',
     settings: 'settings_manage',
   };

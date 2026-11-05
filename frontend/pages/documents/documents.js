@@ -124,6 +124,36 @@ window.Pages.documents = {
           </div>
         </div>
       </div>
+      <div class="card" id="shared-formats" style="padding:16px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+          <div>
+            <h4 style="margin:0 0 4px;font-size:15px;">Formatos compartidos</h4>
+            <p class="text-muted" style="margin:0 0 12px;font-size:13px;">Sube cualquier archivo (PDF, Word, Excel o imagen, hasta 15 MB). Queda disponible para todo el equipo.</p>
+          </div>
+          <span id="shared-count" class="badge badge-info" style="display:none;"></span>
+        </div>
+        ${canUpload || boss ? `
+          <form id="shared-form" class="shared-form" novalidate style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) auto;gap:10px;align-items:end;margin-bottom:10px;">
+            <div style="min-width:0;">
+              <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;" for="shared-name">Nombre del formato</label>
+              <input class="form-control" id="shared-name" name="name" maxlength="160" placeholder="Ej. Carta de intención" required>
+            </div>
+            <div style="min-width:0;">
+              <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;" for="shared-file">Archivo</label>
+              <label class="shared-drop" id="shared-drop" for="shared-file" style="display:block;border:1.5px dashed var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;background:var(--white);text-align:center;">
+                <input class="shared-file-input" id="shared-file" name="archivo" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp,.gif" style="position:absolute;width:1px;height:1px;opacity:0;">
+                <span id="shared-drop-text" style="font-size:12.5px;color:var(--text-muted);">Arrastra el archivo aquí o haz clic para elegirlo</span>
+                <small id="shared-file-name" style="display:block;font-size:12px;font-weight:600;color:var(--primary);margin-top:2px;"></small>
+              </label>
+            </div>
+            <button class="btn btn-primary" type="submit" id="shared-submit" style="height:42px;">Guardar formato</button>
+          </form>
+          <p id="shared-msg" class="text-muted" style="margin:0 0 12px;font-size:12.5px;"></p>` : ''}
+        <div style="margin:0 0 10px;max-width:340px;">
+          <input class="form-control" id="shared-search" type="search" placeholder="Buscar por nombre, archivo o quién lo subió…">
+        </div>
+        <div id="shared-list"><div class="loading">Cargando formatos compartidos...</div></div>
+      </div>
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <input class="form-control" id="doc-search" placeholder="Buscar formato..." style="max-width:240px;">
         <select class="form-control" id="doc-status" style="max-width:180px;">
@@ -140,6 +170,240 @@ window.Pages.documents = {
       </div>
       <div id="doc-list"><div class="loading">Cargando formatos...</div></div>
     `;
+
+    // ============ FORMATOS COMPARTIDOS (cualquier archivo) ============
+    const sharedListEl = container.querySelector('#shared-list');
+    const sharedForm = container.querySelector('#shared-form');
+    const sharedMsg = container.querySelector('#shared-msg');
+    const sharedSubmit = container.querySelector('#shared-submit');
+    const sharedSearchEl = container.querySelector('#shared-search');
+    const sharedCountEl = container.querySelector('#shared-count');
+    const sharedDrop = container.querySelector('#shared-drop');
+    const sharedFileEl = container.querySelector('#shared-file');
+    const sharedFileName = container.querySelector('#shared-file-name');
+    const sharedDropText = container.querySelector('#shared-drop-text');
+    const currentUserId = String((ApiClient.getStoredUser() || {})._id || (ApiClient.getStoredUser() || {}).id || '');
+    let sharedItems = [];
+    let sharedQuery = '';
+
+    const sharedSize = (bytes) => {
+      const n = Number(bytes) || 0;
+      if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+      if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+      return `${n} B`;
+    };
+    const sharedExt = (item) => String(item.fileName || item.name || '').split('.').pop().toLowerCase();
+    const sharedIcon = (item) => {
+      const ext = sharedExt(item);
+      if (ext === 'pdf') return '&#128196;';
+      if (['doc', 'docx', 'txt'].includes(ext)) return '&#128221;';
+      if (['xls', 'xlsx', 'csv'].includes(ext)) return '&#128202;';
+      if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'].includes(ext)) return '&#128444;&#65039;';
+      return '&#128193;';
+    };
+
+    function renderSharedList() {
+      if (!sharedListEl) return;
+      const q = sharedQuery.trim().toLowerCase();
+      const items = q
+        ? sharedItems.filter((item) => [
+          item.name,
+          item.fileName,
+          item.uploadedBy && (item.uploadedBy.name || item.uploadedBy.username),
+        ].filter(Boolean).join(' ').toLowerCase().includes(q))
+        : sharedItems;
+
+      if (sharedCountEl) {
+        sharedCountEl.style.display = sharedItems.length ? '' : 'none';
+        sharedCountEl.textContent = `${sharedItems.length} formato${sharedItems.length === 1 ? '' : 's'}`;
+      }
+
+      if (!sharedItems.length) {
+        sharedListEl.innerHTML = '<p class="text-muted" style="margin:0;font-size:13px;">Aún no hay formatos compartidos. Sube el primero con el formulario de arriba.</p>';
+        return;
+      }
+      if (!items.length) {
+        sharedListEl.innerHTML = '<p class="text-muted" style="margin:0;font-size:13px;">No hay formatos que coincidan con la búsqueda.</p>';
+        return;
+      }
+
+      sharedListEl.innerHTML = `
+        <div class="table-responsive">
+          <table class="table">
+            <thead><tr><th>Formato</th><th>Archivo</th><th>Subido por</th><th>Fecha</th><th></th></tr></thead>
+            <tbody>
+              ${items.map((item) => {
+                const uploaderId = String((item.uploadedBy && (item.uploadedBy._id || item.uploadedBy)) || '');
+                const canDelete = boss || uploaderId === currentUserId;
+                return `
+                  <tr>
+                    <td><strong>${sharedIcon(item)} ${UI.escapeHtml(item.name)}</strong></td>
+                    <td><small class="text-muted">${UI.escapeHtml(item.fileName || '')} · ${sharedSize(item.size)} · ${UI.escapeHtml(sharedExt(item).toUpperCase() || 'ARCHIVO')}</small></td>
+                    <td>${UI.escapeHtml((item.uploadedBy && (item.uploadedBy.name || item.uploadedBy.username)) || '—')}</td>
+                    <td>${new Date(item.createdAt).toLocaleDateString('es-MX')}</td>
+                    <td style="white-space:nowrap;text-align:right;">
+                      <button class="btn btn-secondary btn-sm" type="button" data-shared-view="${item._id}">Ver</button>
+                      <button class="btn btn-secondary btn-sm" type="button" data-shared-download="${item._id}">Descargar</button>
+                      ${canDelete ? `<button class="btn btn-danger btn-sm" type="button" data-shared-del="${item._id}">Eliminar</button>` : ''}
+                    </td>
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
+      const download = async (id, mode, btn) => {
+        const item = sharedItems.find((x) => String(x._id) === String(id));
+        if (!item) return;
+        const label = btn.textContent;
+        // Abrimos la pestaña ANTES del await: así el navegador no la bloquea
+        // como ventana emergente (el clic del usuario sigue siendo el origen).
+        const win = mode === 'view' ? window.open('', '_blank') : null;
+        btn.disabled = true;
+        btn.textContent = 'Abriendo…';
+        try {
+          const blob = await API.formatos.descargarCompartido(id);
+          const url = URL.createObjectURL(blob);
+          if (mode === 'view' && win) {
+            win.location.href = url;
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } else {
+            if (win) win.close();
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = item.fileName || item.name || 'formato';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+            if (mode === 'view') {
+              UI.toast('El navegador bloqueó la ventana; el archivo se descargó.', 'warning');
+            }
+          }
+        } catch (error) {
+          if (win) win.close();
+          UI.toast(error.message || 'No se pudo descargar el archivo.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = label;
+        }
+      };
+
+      sharedListEl.querySelectorAll('[data-shared-view]').forEach((btn) => {
+        btn.addEventListener('click', () => download(btn.dataset.sharedView, 'view', btn));
+      });
+      sharedListEl.querySelectorAll('[data-shared-download]').forEach((btn) => {
+        btn.addEventListener('click', () => download(btn.dataset.sharedDownload, 'download', btn));
+      });
+      sharedListEl.querySelectorAll('[data-shared-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const ok = await UI.confirm('¿Eliminar este formato compartido? Dejará de estar disponible para el equipo.');
+          if (!ok) return;
+          btn.disabled = true;
+          try {
+            await API.formatos.eliminarCompartido(btn.dataset.sharedDel);
+            UI.toast('Formato eliminado', 'success');
+            loadShared();
+          } catch (error) {
+            btn.disabled = false;
+            UI.toast(error.message, 'error');
+          }
+        });
+      });
+    }
+
+    async function loadShared() {
+      if (!sharedListEl) return;
+      try {
+        sharedItems = (await API.formatos.listarCompartidos()) || [];
+        renderSharedList();
+      } catch (error) {
+        sharedListEl.innerHTML = `<p class="text-muted" style="margin:0;font-size:13px;color:#b91c1c;">${UI.escapeHtml(error.message)}</p>`;
+      }
+    }
+
+    if (sharedSearchEl) {
+      sharedSearchEl.addEventListener('input', () => {
+        sharedQuery = sharedSearchEl.value || '';
+        renderSharedList();
+      });
+    }
+
+    // Arrastrar y soltar archivos sobre la zona de carga.
+    if (sharedDrop && sharedFileEl) {
+      const showFileName = () => {
+        const file = sharedFileEl.files && sharedFileEl.files[0];
+        if (sharedFileName) sharedFileName.textContent = file ? `${file.name} (${sharedSize(file.size)})` : '';
+        if (sharedDropText) sharedDropText.textContent = file ? 'Archivo seleccionado. Puedes cambiarlo.' : 'Arrastra el archivo aquí o haz clic para elegirlo';
+      };
+      sharedFileEl.addEventListener('change', showFileName);
+      ['dragenter', 'dragover'].forEach((evt) => sharedDrop.addEventListener(evt, (event) => {
+        event.preventDefault();
+        sharedDrop.style.borderColor = 'var(--primary)';
+        sharedDrop.style.background = 'var(--icon-bg)';
+      }));
+      ['dragleave', 'drop'].forEach((evt) => sharedDrop.addEventListener(evt, () => {
+        sharedDrop.style.borderColor = 'var(--border)';
+        sharedDrop.style.background = 'var(--white)';
+      }));
+      sharedDrop.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const files = event.dataTransfer && event.dataTransfer.files;
+        if (!files || !files.length) return;
+        try {
+          const transfer = new DataTransfer();
+          transfer.items.add(files[0]);
+          sharedFileEl.files = transfer.files;
+          showFileName();
+        } catch (error) {
+          UI.toast('No se pudo tomar el archivo. Usa el selector.', 'warning');
+        }
+      });
+    }
+
+    if (sharedForm) {
+      sharedForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const nameEl = sharedForm.querySelector('#shared-name');
+        const fileEl = sharedForm.querySelector('#shared-file');
+        const name = String(nameEl.value || '').trim();
+        const file = fileEl.files && fileEl.files[0];
+        if (!name) {
+          if (sharedMsg) sharedMsg.textContent = 'Escribe el nombre del formato.';
+          nameEl.focus();
+          return;
+        }
+        if (!file) {
+          if (sharedMsg) sharedMsg.textContent = 'Selecciona el archivo que quieres subir.';
+          return;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+          if (sharedMsg) sharedMsg.textContent = 'El archivo supera los 15 MB. Comprime el archivo o usa una versión más ligera.';
+          return;
+        }
+        sharedSubmit.disabled = true;
+        sharedSubmit.textContent = 'Guardando…';
+        if (sharedMsg) sharedMsg.textContent = 'Subiendo archivo, espera un momento…';
+        try {
+          await API.formatos.subirCompartido(name, file);
+          sharedForm.reset();
+          if (sharedFileName) sharedFileName.textContent = '';
+          if (sharedDropText) sharedDropText.textContent = 'Arrastra el archivo aquí o haz clic para elegirlo';
+          sharedQuery = '';
+          if (sharedSearchEl) sharedSearchEl.value = '';
+          if (sharedMsg) sharedMsg.textContent = '';
+          UI.toast('Formato guardado. Ya está disponible para el equipo.', 'success');
+          loadShared();
+        } catch (error) {
+          if (sharedMsg) sharedMsg.textContent = error.message || 'No se pudo guardar el formato.';
+          UI.toast(error.message || 'No se pudo guardar el formato.', 'error');
+        } finally {
+          sharedSubmit.disabled = false;
+          sharedSubmit.textContent = 'Guardar formato';
+        }
+      });
+    }
+    loadShared();
 
     const listEl = container.querySelector('#doc-list');
     const searchEl = container.querySelector('#doc-search');

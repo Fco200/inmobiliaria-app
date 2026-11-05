@@ -152,6 +152,13 @@ window.Pages.businesses = {
     // (`asesor_captador_id`, `asesor_cliente_id`, `cliente_id`) y el backend
     // los sincroniza con mainAdvisor/partnerAdvisor/buyerClient. Aquí se arma
     // el cuerpo una sola vez para que crear y editar se comporten igual.
+    // Tipo de negocio = tipo de operación de la propiedad (se hereda al elegirla).
+    const BUSINESS_OPERATION_LABELS = { venta: 'VENTA', renta: 'RENTA', compra_localizada: 'COMPRA LOCALIZADA' };
+    const businessTypeLabel = (business) => {
+      const op = business && business.property && business.property.operationType;
+      return op ? (BUSINESS_OPERATION_LABELS[op] || String(op).toUpperCase()) : 'SIN PROPIEDAD';
+    };
+
     function ensureSelectOption(select, value, label) {
       if (!select || value == null || value === '') return;
       const id = String(value);
@@ -176,7 +183,10 @@ window.Pages.businesses = {
 
     // Al elegir una propiedad se muestra quién es el propietario y el asesor
     // responsable, y se completan el vendedor y (si está vacío) el captador.
-    async function syncPropertyInfo(form) {
+    // `byUser = true` cuando el usuario cambió la propiedad: en ese caso el
+    // vendedor, captador, asesor externo y nombre se actualizan con la nueva
+    // propiedad. Al abrir un negocio existente solo se completan los vacíos.
+    async function syncPropertyInfo(form, { byUser = false } = {}) {
       const propSel = form.querySelector('#fld-property');
       if (!propSel) return;
       let info = form.querySelector('[data-property-info]');
@@ -203,6 +213,16 @@ window.Pages.businesses = {
           info.style.display = 'none';
           return;
         }
+        form.dataset.propertyOperation = prop.operationType || '';
+
+        // Nombre del negocio por defecto: dirección (o nombre) de la propiedad.
+        // Si el usuario escribió un nombre propio, no se sobrescribe.
+        const nameEl = form.querySelector('#fld-name');
+        const propertyTitle = String(prop.address || '').trim() || UI.propertyOptionLabel(prop, { includeFolio: false });
+        if (nameEl && (byUser || !nameEl.value.trim() || nameEl.dataset.auto === '1')) {
+          nameEl.value = propertyTitle;
+          nameEl.dataset.auto = '1';
+        }
         const owner = prop.owner && typeof prop.owner === 'object' ? prop.owner : null;
         const ownerName = (owner && (owner.nombre || owner.name)) || prop.ownerName || '';
         const ownerId = owner ? (owner._id || owner) : (typeof prop.owner === 'string' ? prop.owner : '');
@@ -220,29 +240,48 @@ window.Pages.businesses = {
         const sellerSel = form.querySelector('#fld-sellerClient');
         const sellerExt = form.querySelector('#fld-sellerExternalName');
         const sellerEmpty = !sellerSel || !sellerSel.value;
-        if (ownerId && sellerEmpty) {
+        if (ownerId && (byUser || sellerEmpty)) {
           ensureSelectOption(sellerSel, ownerId, `Propietario: ${ownerName || 'propiedad'}`);
           if (sellerExt) sellerExt.value = '';
           syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
-        } else if (ownerName && sellerEmpty && sellerSel && sellerExt) {
+        } else if (ownerName && (byUser || sellerEmpty) && sellerSel && sellerExt) {
           // Propietario externo (no está en la cartera): seleccionar la opción
           // "Otro / Externo" para que el campo de nombre quede visible.
           sellerSel.value = '__externo__';
           sellerExt.value = ownerName;
           syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
+        } else if (byUser && !ownerId && !ownerName && sellerSel) {
+          // La nueva propiedad no tiene propietario: no dejar el vendedor de la anterior.
+          sellerSel.value = '';
+          if (sellerExt) sellerExt.value = '';
+          syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
         }
 
-        // Captador = asesor responsable de la propiedad, solo si aún no se eligió.
+        // Captador = asesor responsable de la propiedad (si el usuario cambió la propiedad, siempre).
         const captadorSel = form.querySelector('#fld-asesor_captador_id');
-        if (captadorSel && responsibleId && !captadorSel.value) {
+        if (captadorSel && responsibleId && (byUser || !captadorSel.value)) {
           ensureSelectOption(captadorSel, responsibleId, responsibleName || 'Asesor responsable');
         }
 
+        // Asesor externo: si la propiedad viene de una fuente externa, se llena
+        // el asesor que atiende con "Otro / Externo" y el nombre del asesor.
+        const externalAdvisor = prop.isExternal ? String(prop.externalAdvisor || '').trim() : '';
+        const attendSel = form.querySelector('#fld-asesor_cliente_id');
+        const attendExt = form.querySelector('#fld-partnerAdvisorName');
+        if (externalAdvisor && attendSel && attendExt && (byUser || !attendSel.value)) {
+          attendSel.value = '__externo__';
+          attendExt.value = externalAdvisor;
+          syncExternalFieldDisplay(form, 'asesor_cliente_id', 'partnerAdvisorName');
+        }
+
+        const operationLabel = BUSINESS_OPERATION_LABELS[prop.operationType] || '';
         info.innerHTML = `
           <div class="alert alert-info" style="margin:0;">
-            <strong>Propiedad:</strong> ${UI.escapeHtml(UI.propertyOptionLabel(prop))}<br>
+            <strong>Propiedad:</strong> ${UI.escapeHtml(UI.propertyOptionLabel(prop))}
+            ${operationLabel ? ` · <span class="badge badge-info">${UI.escapeHtml(operationLabel)}</span>` : ''}<br>
             <span class="text-muted">Propietario / vendedor:</span> ${UI.escapeHtml(ownerName || 'No registrado')}<br>
-            <span class="text-muted">Asesor responsable:</span> ${UI.escapeHtml(responsibleName || 'No registrado')}
+            <span class="text-muted">Asesor captador:</span> ${UI.escapeHtml(responsibleName || 'No registrado')}
+            ${externalAdvisor ? `<br><span class="text-muted">Asesor externo:</span> ${UI.escapeHtml(externalAdvisor)}` : ''}
           </div>
         `;
       } catch (error) {
@@ -266,8 +305,14 @@ window.Pages.businesses = {
       syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorName');
       const propSel = form.querySelector('#fld-property');
       if (propSel) {
-        propSel.addEventListener('change', () => { syncPropertyInfo(form); });
+        propSel.addEventListener('change', () => { syncPropertyInfo(form, { byUser: true }); });
         if (propSel.value) syncPropertyInfo(form);
+      }
+      // Si el usuario escribe el nombre a mano, deja de ser automático.
+      const nameEl = form.querySelector('#fld-name');
+      if (nameEl) {
+        nameEl.dataset.auto = nameEl.value.trim() ? '0' : '1';
+        nameEl.addEventListener('input', () => { nameEl.dataset.auto = '0'; });
       }
     }
 
@@ -483,7 +528,17 @@ window.Pages.businesses = {
           { value: 'cancelado', label: 'Cancelado/Pausa' },
         ],
         filters: [
-          { key: 'buyerClient', label: 'Comprador', searchSource: UI.remoteSources.client, placeholder: 'Todos los compradores' },
+          { key: 'asesor', label: 'Asesor responsable', placeholder: 'Todos los asesores', options: userOptions.filter((u) => u.value) },
+          { key: 'asesorCliente', label: 'Asesor interno', placeholder: 'Todos los asesores', options: userOptions.filter((u) => u.value) },
+          {
+            key: 'externo',
+            label: 'Asesor externo',
+            placeholder: 'Todos',
+            options: [
+              { value: 'si', label: 'Con asesor externo' },
+              { value: 'no', label: 'Sin asesor externo' },
+            ],
+          },
           {
             key: 'processType',
             label: 'Proceso',
@@ -496,7 +551,7 @@ window.Pages.businesses = {
           { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
         ],
         columns: [
-          { key: 'name', label: 'Negocio', render: (r) => `<strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
+          { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span><br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
@@ -531,6 +586,7 @@ window.Pages.businesses = {
           return `
             ${canChangeStage ? '<button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Etapa</button>' : ''}
             <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Ver bitácora</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-print-bitacora style="margin-left:6px;">&#128424; Imprimir bitácora</button>
             <button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
             <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
@@ -543,6 +599,10 @@ window.Pages.businesses = {
           }
           if (control.dataset.bitacora !== undefined) {
             openBitacoraModal(record);
+            return;
+          }
+          if (control.dataset.printBitacora !== undefined) {
+            printBitacora(record);
             return;
           }
           if (control.dataset.checklist !== undefined) {
@@ -646,12 +706,126 @@ window.Pages.businesses = {
     }
 
     // ============ MODAL DE BITÁCORA ============
+    // ============ IMPRESIÓN / EXPORTACIÓN DE BITÁCORA ============
+    // Une notas, cambios de etapa y seguimientos en orden cronológico y abre
+    // una vista limpia para imprimir o guardar como PDF (Ctrl+P > Guardar como PDF).
+    async function printBitacora(record) {
+      const win = window.open('', '_blank');
+      if (!win) {
+        UI.toast('Permite las ventanas emergentes para imprimir la bitácora.', 'warning');
+        return;
+      }
+      win.document.write('<!doctype html><title>Preparando bitácora…</title><p style="font-family:Arial;padding:24px;">Preparando bitácora…</p>');
+
+      try {
+        const [notesRes, stagesRes] = await Promise.all([
+          notesApi.list(record._id).catch(() => []),
+          API.businesses.history(record._id).catch(() => []),
+        ]);
+        const notes = (notesRes && notesRes.data) || notesRes || [];
+        const stages = (stagesRes && stagesRes.data) || stagesRes || [];
+        const esc = (value) => UI.escapeHtml(String(value == null ? '' : value));
+        const fmt = (value) => (value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+        const who = (u) => (u && (u.name || u.username)) || '—';
+
+        const events = [];
+        notes.forEach((n) => events.push({
+          date: n.createdAt,
+          kind: 'Nota',
+          title: n.stage ? `Nota · ${stageLabel(n.stage)}` : 'Nota',
+          by: who(n.createdBy),
+          text: n.text,
+        }));
+        stages.forEach((s) => {
+          if (s.startedAt) {
+            events.push({
+              date: s.startedAt,
+              kind: 'Etapa',
+              title: `Entró a etapa: ${s.name || stageLabel(s.stageCode)}`,
+              by: who(s.responsibleUser),
+              text: s.comments || '',
+            });
+          }
+          if (s.finishedAt) {
+            events.push({
+              date: s.finishedAt,
+              kind: 'Etapa',
+              title: `Concluyó etapa: ${s.name || stageLabel(s.stageCode)}`,
+              by: who(s.responsibleUser),
+              text: '',
+            });
+          }
+        });
+        events.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+        const propertyLine = record.property ? UI.propertyOptionLabel(record.property) : '—';
+        const buyer = record.buyerClient ? record.buyerClient.name : (record.buyerExternalName || '—');
+        const seller = record.sellerClient ? record.sellerClient.name : (record.sellerExternalName || '—');
+        const advisor = who(record.mainAdvisor || record.asesor_captador_id);
+
+        win.document.open();
+        win.document.write(`<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Bitácora - ${esc(record.name)}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 28px; font-size: 13px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: #666; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 16px 0; border: 1px solid #ddd; border-radius: 6px; padding: 12px 14px; }
+  .grid div b { color: #444; }
+  .badge { display: inline-block; border: 1px solid #333; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border-bottom: 1px solid #ddd; padding: 7px 6px; vertical-align: top; text-align: left; }
+  th { background: #f4f1f8; font-size: 12px; }
+  td.date { white-space: nowrap; width: 150px; }
+  .kind { font-size: 11px; color: #555; }
+  .text { white-space: pre-wrap; margin-top: 3px; }
+  @media print { body { margin: 12mm; } button { display: none; } }
+</style></head>
+<body>
+  <button onclick="window.print()" style="float:right;padding:6px 12px;">Imprimir / Guardar PDF</button>
+  <h1>Bitácora del negocio</h1>
+  <div class="muted">Generada el ${esc(new Date().toLocaleString('es-MX'))}</div>
+  <div class="grid">
+    <div><b>Negocio:</b> ${esc(record.name)}</div>
+    <div><b>Tipo:</b> <span class="badge">${esc(businessTypeLabel(record))}</span></div>
+    <div><b>Propiedad:</b> ${esc(propertyLine)}</div>
+    <div><b>Etapa actual:</b> ${esc(stageLabel(record.currentStage))}</div>
+    <div><b>Comprador:</b> ${esc(buyer)}</div>
+    <div><b>Vendedor:</b> ${esc(seller)}</div>
+    <div><b>Asesor captador:</b> ${esc(advisor)}</div>
+    <div><b>Valor de operación:</b> ${esc(Format.currency(record.valueOperation))}</div>
+  </div>
+  <h3 style="margin:18px 0 0;">Historial cronológico (${events.length})</h3>
+  ${events.length ? `
+  <table>
+    <thead><tr><th>Fecha</th><th>Registro</th><th>Responsable</th></tr></thead>
+    <tbody>
+      ${events.map((e) => `
+        <tr>
+          <td class="date">${esc(fmt(e.date))}</td>
+          <td><span class="kind">${esc(e.kind)}</span><br><b>${esc(e.title)}</b>${e.text ? `<div class="text">${esc(e.text)}</div>` : ''}</td>
+          <td>${esc(e.by)}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>` : '<p class="muted">No hay registros en la bitácora.</p>'}
+  <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });<\/script>
+</body></html>`);
+        win.document.close();
+      } catch (error) {
+        win.close();
+        UI.toast(error.message || 'No se pudo preparar la bitácora.', 'error');
+      }
+    }
+
     async function openBitacoraModal(record) {
       const modal = UI.openModal({
         title: `Bitácora / Notas — ${record.name}`,
-        body: `<div id="biz-notes-container"><div class="loading">Cargando notas...</div></div>`,
+        body: `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-secondary btn-sm" type="button" id="biz-print-bitacora">&#128424;&nbsp; Imprimir / Exportar bitácora</button></div><div id="biz-notes-container"><div class="loading">Cargando notas...</div></div>`,
         size: 600,
       });
+      const printBtn = modal.bodyEl.querySelector('#biz-print-bitacora');
+      if (printBtn) printBtn.addEventListener('click', () => printBitacora(record));
 
       const loadNotesContent = async () => {
         const containerEl = modal.bodyEl.querySelector('#biz-notes-container');
@@ -978,24 +1152,29 @@ window.Pages.businesses = {
             ${columns.map((col) => {
               const items = byStage[col.stage] || [];
               return `
-                <div class="kanban-col">
+                <div class="kanban-col" data-stage="${UI.escapeHtml(col.stage)}">
+                  <span class="kanban-col-resize" data-col-resize title="Arrastra para ajustar el ancho · doble clic para restablecer"></span>
                   <h4><span>${UI.escapeHtml(col.label)}</span><span style="color:${col.color};">${items.length}</span></h4>
                   ${items.map((b) => `
                     <div class="kanban-card" data-card="${b._id}">
-                      <strong>${UI.escapeHtml(b.name)}</strong>
+                      <span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(b))}</span>
+                      <strong style="display:block;margin-top:6px;">${UI.escapeHtml(b.name)}</strong>
                       <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                        ${Format.currency(b.valueOperation)}<br>
-                        ${UI.escapeHtml(b.buyerClient ? b.buyerClient.name : (b.buyerExternalName || 'Sin comprador'))}${b.sellerClient ? ` ← ${UI.escapeHtml(b.sellerClient.name)}` : (b.sellerExternalName ? ` ← ${UI.escapeHtml(b.sellerExternalName)}` : '')}
+                        ${UI.escapeHtml((b.mainAdvisor && (b.mainAdvisor.name || b.mainAdvisor.username)) || (b.asesor_captador_id && (b.asesor_captador_id.name || b.asesor_captador_id.username)) || 'Sin asesor')}<br>
+                        ${UI.escapeHtml(b.buyerClient ? b.buyerClient.name : (b.buyerExternalName || 'Sin cliente'))}${b.sellerClient ? ` ← ${UI.escapeHtml(b.sellerClient.name)}` : (b.sellerExternalName ? ` ← ${UI.escapeHtml(b.sellerExternalName)}` : '')}<br>
+                        ${Format.currency(b.valueOperation)}
                       </div>
                     </div>`).join('') || '<p class="text-muted" style="font-size:12px;">Sin negocios</p>'}
                 </div>`;
             }).join('')}
             ${extras.length ? `
-              <div class="kanban-col">
+              <div class="kanban-col" data-stage="__otras__">
+                <span class="kanban-col-resize" data-col-resize title="Arrastra para ajustar el ancho · doble clic para restablecer"></span>
                 <h4><span>Otras etapas</span><span style="color:#64748b;">${extras.length}</span></h4>
                 ${extras.map((b) => `
                   <div class="kanban-card" data-card="${b._id}">
-                    <strong>${UI.escapeHtml(b.name)}</strong>
+                    <span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(b))}</span>
+                    <strong style="display:block;margin-top:6px;">${UI.escapeHtml(b.name)}</strong>
                     <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
                       ${stageLabel(b.currentStage)}<br>
                       ${Format.currency(b.valueOperation)}
@@ -1011,9 +1190,65 @@ window.Pages.businesses = {
             if (business) openDetail(business);
           });
         });
+        wireKanbanResize(boardEl);
       } catch (error) {
         boardEl.innerHTML = UI.errorAlert(error.message);
       }
+    }
+
+    // ============ ANCHO DE COLUMNAS DEL TABLERO ============
+    // Cada columna recuerda su ancho (por etapa) en localStorage.
+    const KANBAN_WIDTHS_KEY = 'biz-kanban-widths-v1';
+    const KANBAN_MIN_W = 200;
+    const KANBAN_MAX_W = 560;
+
+    function readKanbanWidths() {
+      try { return JSON.parse(localStorage.getItem(KANBAN_WIDTHS_KEY)) || {}; } catch (error) { return {}; }
+    }
+
+    function saveKanbanWidth(key, width) {
+      const all = readKanbanWidths();
+      if (width == null) delete all[key];
+      else all[key] = width;
+      try { localStorage.setItem(KANBAN_WIDTHS_KEY, JSON.stringify(all)); } catch (error) { /* almacenamiento lleno: no es crítico */ }
+    }
+
+    function wireKanbanResize(boardEl) {
+      const saved = readKanbanWidths();
+      boardEl.querySelectorAll('.kanban-col[data-stage]').forEach((col) => {
+        const key = col.dataset.stage;
+        if (saved[key]) col.style.setProperty('--kanban-col-w', `${saved[key]}px`);
+        const handle = col.querySelector('[data-col-resize]');
+        if (!handle) return;
+
+        handle.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          const startX = event.clientX;
+          const startW = col.getBoundingClientRect().width;
+          handle.classList.add('dragging');
+          handle.setPointerCapture(event.pointerId);
+
+          const onMove = (moveEvent) => {
+            const w = Math.min(KANBAN_MAX_W, Math.max(KANBAN_MIN_W, Math.round(startW + moveEvent.clientX - startX)));
+            col.style.setProperty('--kanban-col-w', `${w}px`);
+          };
+          const onUp = () => {
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onUp);
+            handle.removeEventListener('pointercancel', onUp);
+            handle.classList.remove('dragging');
+            saveKanbanWidth(key, Math.round(col.getBoundingClientRect().width));
+          };
+          handle.addEventListener('pointermove', onMove);
+          handle.addEventListener('pointerup', onUp);
+          handle.addEventListener('pointercancel', onUp);
+        });
+
+        handle.addEventListener('dblclick', () => {
+          col.style.removeProperty('--kanban-col-w');
+          saveKanbanWidth(key, null);
+        });
+      });
     }
 
     function openDetail(business) {

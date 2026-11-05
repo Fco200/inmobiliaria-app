@@ -592,8 +592,34 @@ function mailPasswordResetCode({ name, email, code }) {
   };
 }
 
+// Correo cuando Asistencia/Administración restablece la contraseña de un
+// usuario: incluye la temporal para que pueda entrar de inmediato.
+function mailPasswordResetByStaff({ name, email, username, password }) {
+  const subject = 'Tu contraseña del CRM fue restablecida';
+  const loginUrl = `${frontendUrl()}/index.html`;
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Hola ${escapeHtml(name || '')},</p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">El equipo administrativo restableció la contraseña de tu cuenta del CRM INMOBLES.</p>
+    <div style="background:#faf7ee;border:1px solid #eadfc0;border-radius:8px;padding:16px 18px;font-size:14px;color:#2d1048;margin:0 0 14px;">
+      <div style="font-weight:700;margin-bottom:8px;">Tus nuevos datos de acceso</div>
+      <div style="margin-bottom:4px;"><strong>Usuario:</strong> ${escapeHtml(username || '')}</div>
+      <div style="margin-bottom:4px;"><strong>Contraseña temporal:</strong> ${escapeHtml(password || '')}</div>
+    </div>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Ingresa en <a href="${loginUrl}">${loginUrl}</a> y cambia esta contraseña desde <strong>Mi perfil &rarr; Seguridad</strong>.</p>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;font-size:13px;color:#9a3412;">
+      Si no solicitaste este cambio, avisa de inmediato al administrador del sistema.
+    </div>`;
+  return {
+    to: email,
+    subject,
+    html: wrapLayout(subject, inner),
+    text: `Hola ${name || ''}, tu contraseña del CRM INMOBLES fue restablecida.\n\nUsuario: ${username || ''}\nContraseña temporal: ${password || ''}\n\nIngresa en ${loginUrl} y cámbiala desde Mi perfil > Seguridad.`,
+  };
+}
+
 module.exports = {
   mailPasswordResetCode,
+  mailPasswordResetByStaff,
   sendMail,
   sendMailDetailed,
   sendMailWithin,

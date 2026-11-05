@@ -6,6 +6,7 @@ const {
   getUser,
   createUser,
   updateUser,
+  resetUserPassword,
   removeUser,
   listRoles,
   createRole,
@@ -31,6 +32,8 @@ router.get('/:id', userIdParam, getUser);
 const USER_MANAGERS = ['admin', 'direccion', 'asistencia', 'superadmin'];
 router.post('/', authorize(...USER_MANAGERS), userRules, createUser);
 router.put('/:id', authorize(...USER_MANAGERS), userIdParam, userUpdateRules, updateUser);
+// Restablecer contraseña (Asistencia incluida): genera una temporal y la envía.
+router.post('/:id/reset-password', authorize(...USER_MANAGERS), userIdParam, resetUserPassword);
 router.delete('/:id', authorize(...USER_MANAGERS), userIdParam, removeUser);
 
 router.use(authorize('admin', 'direccion', 'superadmin'));

@@ -520,14 +520,25 @@ window.LoginPage = (() => {
           return;
         }
         errBox.classList.add('hide');
+        const originalText = okBtn.textContent;
         okBtn.disabled = true;
+        okBtn.textContent = 'Enviando...';
         try {
           const r = await window.API.auth.requestResetCode({ identifier });
+          if (r && r.emailSent === false) {
+            // El código no salió: no tiene sentido pedirlo. Se explica y se deja reintentar.
+            okBtn.disabled = false;
+            okBtn.textContent = originalText;
+            errBox.textContent = r.message || 'No pudimos enviar el código por correo. Revisa la configuración de correo o avisa al administrador.';
+            errBox.classList.remove('hide');
+            return;
+          }
           UI.closeModal();
           UI.toast((r && r.message) || 'Revisa tu correo para el código.', 'success');
           askCode(identifier);
         } catch (error) {
           okBtn.disabled = false;
+          okBtn.textContent = originalText;
           errBox.textContent = error.message || 'No se pudo enviar el código. Intenta de nuevo.';
           errBox.classList.remove('hide');
         }
@@ -612,11 +623,19 @@ window.LoginPage = (() => {
       if (resend) {
         resend.addEventListener('click', async (e) => {
           e.preventDefault();
+          if (resend.dataset.busy === '1') return;
+          resend.dataset.busy = '1';
+          const label = resend.textContent;
+          resend.textContent = 'Enviando...';
           try {
             const r = await window.API.auth.requestResetCode({ identifier });
-            UI.toast((r && r.message) || 'Código reenviado.', 'success');
+            UI.toast((r && r.message) || 'Código reenviado.', r && r.emailSent === false ? 'warning' : 'success');
+            if (r && r.emailSent === false) showError(r.message || 'No se pudo reenviar el código.');
           } catch (error) {
             showError(error.message);
+          } finally {
+            resend.dataset.busy = '0';
+            resend.textContent = label;
           }
         });
       }

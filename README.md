@@ -168,6 +168,61 @@ para habilitar las notificaciones push en producción. El paquete no depende de
 Web Push externos (motor integrado), por lo que no hace falta `npm install`
 adicional.
 
+### Correo en Render (obligatorio)
+
+Render bloquea los puertos SMTP **25, 465 y 587** en los servicios gratuitos.
+Por eso el correo funciona en tu computadora pero no en produccion, y las
+peticiones se quedan esperando hasta el timeout. La solucion es enviar por una
+API HTTPS (puerto 443). El sistema elige el proveedor automaticamente segun la
+variable que definas.
+
+**Opcion sin tocar Render (recomendada si no tienes acceso a las variables):**
+
+El SUPERADMIN puede configurar el proveedor desde **Panel de soporte > Correo**.
+La clave API se guarda cifrada en MongoDB y el cambio se aplica al instante,
+sin reiniciar el servicio. Alli mismo puede enviar un correo de prueba y usar
+**Suscriptores** para enviar actualizaciones a suscriptores, usuarios, clientes
+o a todos. Si existe una configuracion guardada en el panel, tiene prioridad
+sobre las variables de entorno.
+
+**Opcion con variables de entorno: Brevo (300 correos gratis al dia)**
+
+1. Crea una cuenta en https://www.brevo.com y verifica tu correo como remitente
+   en *Senders & IP > Senders > Add a sender*.
+2. Copia la clave en *SMTP & API > API Keys > Create a new API key*.
+3. En Render > Environment define:
+
+```
+MAIL_PROVIDER=brevo
+BREVO_API_KEY=tu_clave
+BREVO_SENDER_EMAIL=el_correo_verificado
+MAIL_FROM=INMOBLES <no-responder@inmobles.com>
+MAIL_REPLY_TO=el_correo_verificado
+```
+
+`MAIL_FROM` es el nombre visible; `BREVO_SENDER_EMAIL` es la cuenta verificada
+que Brevo usa como remitente real. Si verificaste el mismo correo de
+`MAIL_FROM`, puedes omitir `BREVO_SENDER_EMAIL`.
+
+Tambien se admite Resend (`RESEND_API_KEY` + `RESEND_FROM`) y SendGrid
+(`SENDGRID_API_KEY` + `SENDGRID_FROM`). Define `MAIL_PROVIDER` solo si tienes
+mas de una clave configurada.
+
+Para comprobar: **Configuracion > Boletin y campanas > Estado del correo >
+Enviar correo de prueba**. Tambien desde la consola del servidor:
+
+```bash
+cd backend
+npm run mail:test -- tu@correo.com
+# Envia los 4 correos reales (codigo, credenciales, bienvenida y campana):
+npm run mail:test:flows -- tu@correo.com
+```
+
+Si el panel muestra el error exacto del proveedor (por ejemplo, remitente no
+verificado), corrige esa variable. Los botones de la app ya no se quedan
+colgados: cada envio tiene un limite de 10 segundos y, si falla, la respuesta
+explica el motivo.
+
 ### Escalabilidad (1000+ peticiones)
 
 Los valores por defecto ya están preparados para picos de más de 1000

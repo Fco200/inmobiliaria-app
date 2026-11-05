@@ -4,7 +4,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { UserRequest, Role, User } = require('../models');
 const { ensure } = require('../services/notification.service');
 const { logAudit } = require('../services/log.service');
-const { sendMail, mailAccessRequestApproved, hasSmtp } = require('../services/mail.service');
+const { sendMailWithin, mailAccessRequestApproved, hasSmtp } = require('../services/mail.service');
 const { generatePassword } = require('../utils/password');
 const {
   normalizeRoleCode,
@@ -172,6 +172,7 @@ async function createAccountFromRequest(requestDoc, chosenRole, updateExisting, 
   }
 
   let emailSent = false;
+  let emailError = '';
   try {
     const mail = mailAccessRequestApproved({
       name: requestDoc.name,
@@ -179,8 +180,14 @@ async function createAccountFromRequest(requestDoc, chosenRole, updateExisting, 
       username: user.username,
       password: created ? tempPassword : '',
     });
-    emailSent = await withTimeout(sendMail(mail), 25000, false);
+    // Limite corto: si el proveedor no responde, la solicitud termina igual y
+    // el administrador recibe la contrasena temporal para entregarla a mano.
+    const mailResult = await sendMailWithin(mail, 10000);
+    emailSent = Boolean(mailResult.sent);
+    emailError = mailResult.error || '';
+    if (!emailSent) console.error('No se pudo enviar el correo de credenciales:', emailError);
   } catch (mailError) {
+    emailError = mailError.message;
     console.error('No se pudo enviar el correo de credenciales:', mailError.message);
   }
 
@@ -200,6 +207,7 @@ async function createAccountFromRequest(requestDoc, chosenRole, updateExisting, 
     role: roleDoc.code,
     roleCode: roleDoc.code,
     emailSent,
+    emailError,
     emailSimulated: !hasSmtp(),
     // Solo se devuelve si el correo no salió: el administrador la entrega por otro canal.
     temporaryPassword: created && (!emailSent || !hasSmtp()) ? tempPassword : undefined,
@@ -279,14 +287,20 @@ const handle = asyncHandler(async (req, res) => {
   });
 
   let message;
+  const mailNote = accountResult.emailSimulated
+    ? ' El correo esta en modo simulado: no se envio de verdad.'
+    : accountResult.emailSent
+      ? ' El correo se envio correctamente.'
+      : ` No se pudo enviar el correo${accountResult.emailError ? ` (${accountResult.emailError})` : ''}.`;
+
   if (accountResult.created) {
     message = accountResult.emailSent
       ? `Cuenta creada para ${requestDoc.email} y credenciales enviadas por correo${accountResult.emailSimulated ? ' (modo prueba: correo simulado)' : ''}.`
       : `Cuenta creada para ${requestDoc.email}, pero no se pudo enviar el correo. Entrega la contraseña temporal manualmente.`;
   } else if (accountResult.existingUpdated) {
-    message = `La cuenta ${requestDoc.email} ya existía. Se actualizó su rol a ${accountResult.role} y quedó activa.`;
+    message = `La cuenta ${requestDoc.email} ya existía. Se actualizó su rol a ${accountResult.role} y quedó activa.${mailNote}`;
   } else {
-    message = `La cuenta ${requestDoc.email} ya existía; no se modificó su rol ni su estado. Se le envió un aviso por correo.`;
+    message = `La cuenta ${requestDoc.email} ya existía; no se modificó su rol ni su estado.${mailNote}`;
   }
 
   // El cliente HTTP desempaqueta `data`, por eso el resultado viaja dentro.

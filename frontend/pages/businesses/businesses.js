@@ -214,14 +214,20 @@ window.Pages.businesses = {
           : (typeof prop.responsibleUser === 'string' ? prop.responsibleUser : '');
         const responsibleName = responsible ? (responsible.name || responsible.username || '') : '';
 
-        // Vendedor = propietario de la propiedad (si no se había elegido uno).
+        // Vendedor = propietario de la propiedad. Solo se completa cuando el
+        // usuario aún no eligió un vendedor: al editar un negocio no se debe
+        // reemplazar el vendedor guardado por el propietario de la propiedad.
         const sellerSel = form.querySelector('#fld-sellerClient');
         const sellerExt = form.querySelector('#fld-sellerExternalName');
-        if (ownerId) {
+        const sellerEmpty = !sellerSel || !sellerSel.value;
+        if (ownerId && sellerEmpty) {
           ensureSelectOption(sellerSel, ownerId, `Propietario: ${ownerName || 'propiedad'}`);
           if (sellerExt) sellerExt.value = '';
           syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
-        } else if (ownerName && sellerSel && !sellerSel.value && sellerExt) {
+        } else if (ownerName && sellerEmpty && sellerSel && sellerExt) {
+          // Propietario externo (no está en la cartera): seleccionar la opción
+          // "Otro / Externo" para que el campo de nombre quede visible.
+          sellerSel.value = '__externo__';
           sellerExt.value = ownerName;
           syncExternalFieldDisplay(form, 'sellerClient', 'sellerExternalName');
         }

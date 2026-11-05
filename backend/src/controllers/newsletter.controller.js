@@ -4,7 +4,8 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { Newsletter, User, Client, Role, Campaign, CampaignRecipient } = require('../models');
 const campaignWorker = require('../services/campaign.worker');
 const { logActivity } = require('../services/log.service');
-const { sendMail, mailWelcome } = require('../services/mail.service');
+const { sendMailWithin, mailWelcome, sendTestMail, mailStatus } = require('../services/mail.service');
+const mailConfig = require('../services/mailConfig.service');
 
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EMAIL_RX = /^[\w.+-]+@[\w-]+\.[\w.-]+$/;
@@ -299,10 +300,11 @@ const subscribeMe = asyncHandler(async (req, res) => {
   user.newsletterPrompted = true;
   await user.save();
 
-  // Correo de confirmación (no bloquea la respuesta si falla).
-  sendMail(mailWelcome(email, user.name)).catch((error) => {
-    console.error('[Newsletter] No se pudo enviar la confirmación:', error.message);
-  });
+  // Se espera con un limite corto para poder avisar si el correo no salio.
+  const mailResult = await sendMailWithin(mailWelcome(email, user.name), 10000);
+  if (!mailResult.sent) {
+    console.error('[Newsletter] No se pudo enviar la confirmacion:', mailResult.error || 'error desconocido');
+  }
 
   await logActivity({
     entityType: 'Newsletter',
@@ -312,10 +314,22 @@ const subscribeMe = asyncHandler(async (req, res) => {
     message: `${user.name || user.username} se suscribió a las noticias del CRM (${email})`,
   });
 
+  const emailSent = Boolean(mailResult.sent);
+  const responseMessage = emailSent
+    ? `Listo. Recibirás noticias del CRM en ${email}.`
+    : `Tu suscripción quedó guardada en ${email}, pero no pudimos enviar el correo de confirmación. Revisa la configuración de correo.`;
   res.json({
     success: true,
-    message: `Listo. Recibirás noticias del CRM en ${email}.`,
-    data: { subscribed: true, email, prompted: true },
+    message: responseMessage,
+    data: {
+      subscribed: true,
+      email,
+      prompted: true,
+      emailSent,
+      emailSimulated: Boolean(mailResult.simulated),
+      emailError: mailResult.error || '',
+      message: responseMessage,
+    },
   });
 });
 
@@ -360,6 +374,18 @@ const sendCampaign = asyncHandler(async (req, res) => {
   if (!message) return res.status(400).json({ success: false, message: 'Escribe el contenido del correo.' });
   if (!AUDIENCES.includes(audience)) {
     return res.status(400).json({ success: false, message: 'Destinatarios no válidos.' });
+  }
+
+  // No se encola una campaña que no puede salir: el panel debe decir la verdad.
+  const mail = mailStatus();
+  if (!mail.configured || mail.blocked) {
+    return res.status(400).json({
+      success: false,
+      message: mail.blocked
+        ? 'El correo está configurado por SMTP, pero Render bloquea esos puertos. Configura Brevo, Resend o SendGrid en Panel de soporte > Correo.'
+        : 'No hay proveedor de correo configurado. Configura Brevo, Resend o SendGrid en Panel de soporte > Correo antes de enviar la campaña.',
+      data: { mail },
+    });
   }
 
   let recipients;
@@ -420,6 +446,55 @@ const sendCampaign = asyncHandler(async (req, res) => {
   });
 });
 
+// GET /api/newsletter/mail-status - diagnostico del correo para el panel.
+const getMailStatus = asyncHandler(async (req, res) => {
+  if (!mailConfig.isLoaded()) {
+    try { await mailConfig.load(); } catch (error) { /* se usa el entorno */ }
+  }
+  res.json({
+    success: true,
+    data: { ...mailStatus(), config: mailConfig.describe(), providers: mailConfig.HTTP_PROVIDERS },
+  });
+});
+
+// POST /api/newsletter/test-mail  body: { email? }
+// Envia un correo de prueba y devuelve el error exacto si el proveedor falla.
+const sendTestEmail = asyncHandler(async (req, res) => {
+  const email = cleanEmail(req.body && req.body.email) || String((req.user && req.user.email) || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'No hay un correo de destino. Escribe uno o registra tu correo en el perfil.' });
+  }
+
+  const result = await sendTestMail(email);
+  const status = { ...mailStatus(), config: mailConfig.describe() };
+  if (!result.sent) {
+    return res.status(502).json({
+      success: false,
+      message: `No se pudo enviar el correo de prueba: ${result.error || 'error desconocido'}`,
+      data: { ...result, status, message: `No se pudo enviar el correo de prueba: ${result.error || 'error desconocido'}` },
+    });
+  }
+
+  // Un envío simulado no entrega nada: no se debe reportar como éxito.
+  if (result.simulated) {
+    return res.status(400).json({
+      success: false,
+      message: 'No hay proveedor de correo configurado: el envío se simuló y NO llegará. Pide a soporte que configure Brevo, Resend o SendGrid.',
+      data: { ...result, status, message: 'No hay proveedor de correo configurado: el envío se simuló y NO llegará.' },
+    });
+  }
+
+  res.json({
+    success: true,
+    message: `Correo de prueba enviado a ${email}. Revisa la bandeja y la carpeta de spam.`,
+    data: {
+      ...result,
+      status,
+      message: `Correo de prueba enviado a ${email}. Revisa la bandeja y la carpeta de spam.`,
+    },
+  });
+});
+
 module.exports = {
   listSubscribers,
   updateSubscriber,
@@ -428,6 +503,8 @@ module.exports = {
   getStats,
   listCampaigns,
   sendCampaign,
+  getMailStatus,
+  sendTestEmail,
   getMySubscription,
   subscribeMe,
   unsubscribeMe,

@@ -303,6 +303,8 @@ window.API = {
     me: () => ApiClient.get('/newsletter/me'),
     subscribeMe: (body) => ApiClient.post('/newsletter/me/subscribe', body),
     unsubscribeMe: () => ApiClient.post('/newsletter/me/unsubscribe'),
+    mailStatus: () => ApiClient.get('/newsletter/mail-status'),
+    sendTestMail: (body) => ApiClient.post('/newsletter/test-mail', body),
     exportCsv: (params) => API.downloadCsv('/newsletter/subscribers/export', 'suscriptores.csv', params),
   },
 
@@ -561,6 +563,13 @@ window.API = {
     newsletterCampaigns: (params) => soporteJson(`/newsletter/campaigns${qs(params)}`),
     newsletterSend: (body) => soporteJson('/newsletter/campaign', { method: 'POST', body }),
     newsletterExport: (params) => soporteBlob(`/newsletter/subscribers/export${qs(params)}`),
+
+    // Correo saliente: el SUPERADMIN configura el proveedor HTTPS desde el
+    // panel (sin entrar a Render) y comprueba la entrega con un correo real.
+    correoEstado: () => soporteJson('/soporte/correo'),
+    guardarCorreo: (body) => soporteJson('/soporte/correo', { method: 'PUT', body }),
+    eliminarCorreo: () => soporteJson('/soporte/correo', { method: 'DELETE' }),
+    probarCorreo: (body) => soporteJson('/soporte/correo/probar', { method: 'POST', body }),
 
     // Solicitudes de creación de usuario que llegan desde el login público.
     // Se usan los mismos endpoints del CRM (el token de soporte es SUPERADMIN).

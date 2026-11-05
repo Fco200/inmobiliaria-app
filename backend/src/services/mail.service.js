@@ -8,12 +8,98 @@
 
 const nodemailer = require('nodemailer');
 const env = require('../config/env');
+const mailConfig = require('./mailConfig.service');
+
+// El correo se puede enviar por SMTP o por una API HTTPS. En Render (plan
+// gratuito) los puertos SMTP 25, 465 y 587 estan bloqueados: el correo se
+// queda "colgado" hasta el timeout y nunca llega. Con una API HTTPS si sale.
+const HTTP_TIMEOUT_MS = 12000;
+const PROVIDERS = ['smtp', 'resend', 'brevo', 'sendgrid'];
 
 let transporter = null;
-let failedPermanent = false;
+let lastError = '';
+let lastErrorAt = null;
+let lastSuccessAt = null;
+// Si un SMTP no conecta (p. ej. Render gratuito bloquea los puertos), se deja
+// de intentar unos minutos para que los botones respondan al instante.
+let smtpBlockedUntil = 0;
 
+function resolveProvider() {
+  // 1) Configuracion guardada desde el panel de soporte (tiene prioridad).
+  const saved = mailConfig.get();
+  if (mailConfig.isActive() && saved && PROVIDERS.includes(saved.provider)) {
+    return saved.provider;
+  }
+  // 2) Variables de entorno (Render u otros entornos).
+  const explicit = String(process.env.MAIL_PROVIDER || '').trim().toLowerCase();
+  if (PROVIDERS.includes(explicit)) return explicit;
+  if (process.env.RESEND_API_KEY) return 'resend';
+  if (process.env.BREVO_API_KEY) return 'brevo';
+  if (process.env.SENDGRID_API_KEY) return 'sendgrid';
+  return 'smtp';
+}
+
+function providerKey(provider) {
+  // La clave del panel solo aplica al proveedor que el propio panel eligio.
+  const saved = mailConfig.get();
+  if (mailConfig.isActive() && saved && saved.provider === provider && saved.apiKey) {
+    return saved.apiKey;
+  }
+  return {
+    resend: process.env.RESEND_API_KEY,
+    brevo: process.env.BREVO_API_KEY,
+    sendgrid: process.env.SENDGRID_API_KEY,
+  }[provider] || '';
+}
+
+// Origen del proveedor activo, para mostrarlo en el panel.
+function providerSource() {
+  return mailConfig.isActive() ? 'panel' : 'env';
+}
+
+function isConfigured() {
+  const provider = resolveProvider();
+  if (provider === 'smtp') return Boolean(env.smtpHost && env.smtpUser && env.smtpPass);
+  return Boolean(providerKey(provider));
+}
+
+// Se conserva el nombre hasSmtp porque el resto del sistema ya lo usa para
+// preguntar "hay correo configurado". Ahora tambien cuenta una API HTTPS.
 function hasSmtp() {
-  return Boolean(env.smtpHost && env.smtpUser && env.smtpPass);
+  return isConfigured();
+}
+const hasMailer = hasSmtp;
+
+function mailStatus() {
+  const provider = resolveProvider();
+  const configured = isConfigured();
+  const sender = resolveSender();
+  const source = providerSource();
+  const smtpBlocked = provider === 'smtp' && (env.isProduction || Boolean(process.env.RENDER));
+  const status = {
+    provider,
+    source,
+    panel: mailConfig.describe(),
+    configured,
+    blocked: Boolean(configured && smtpBlocked),
+    simulated: !configured,
+    from: sender.from,
+    replyTo: sender.replyTo || '',
+    lastError,
+    lastErrorAt,
+    lastSuccessAt,
+    hint: '',
+  };
+
+  if (!configured) {
+    status.hint = 'Aun no hay proveedor de correo. Configura Brevo, Resend o SendGrid desde el panel de soporte para activar los envios reales.';
+  } else if (smtpBlocked) {
+    status.hint = 'Render bloquea los puertos SMTP (25, 465, 587). Configura Brevo, Resend o SendGrid desde el panel de soporte para enviar por HTTPS.';
+  } else if (source === 'panel') {
+    status.hint = 'El correo usa la configuracion guardada desde el panel de soporte.';
+  }
+
+  return status;
 }
 
 function getTransporter() {
@@ -23,26 +109,69 @@ function getTransporter() {
     port: env.smtpPort,
     secure: env.smtpSecure,
     auth: { user: env.smtpUser, pass: env.smtpPass },
-    // Sin límites, un SMTP lento deja la petición colgada hasta 2 minutos.
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
+    // Sin limites, un SMTP bloqueado deja la peticion colgada hasta 2 minutos.
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
   });
   return transporter;
 }
 
-// Refresca el transport si la configuración cambió en caliente (env var).
+// Refresca el transport si la configuracion cambio en caliente (env var).
 function resetTransporter() {
   transporter = null;
-  failedPermanent = false;
+  lastError = '';
+  lastErrorAt = null;
+  smtpBlockedUntil = 0;
+}
+
+function parseAddress(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    return { name: match[1].trim().replace(/^"|"$/g, ''), email: match[2].trim() };
+  }
+  return { name: '', email: raw };
 }
 
 // Gmail solo acepta como remitente la cuenta autenticada (o un alias verificado).
-// Si MAIL_FROM usa otro dominio, se envía desde la cuenta SMTP y la dirección
-// configurada queda como "responder a".
+// Si MAIL_FROM usa otro dominio, se envia desde la cuenta SMTP y la direccion
+// configurada queda como "responder a". Con APIs HTTPS el remitente debe estar
+// verificado en el proveedor, asi que se usa MAIL_FROM tal cual.
 function resolveSender() {
-  const from = String(env.mailFrom || '');
-  const addr = (from.match(/<([^>]+)>/) || [null, from])[1].trim();
+  let from = String(env.mailFrom || 'INMOBLES <no-responder@inmobles.com>');
+  const replyTo = String(process.env.MAIL_REPLY_TO || '').trim() || undefined;
+
+  // La configuracion del panel incluye un remitente verificado en el
+  // proveedor. Se usa tal cual para que Brevo/Resend/SendGrid acepten el envio.
+  const saved = mailConfig.get();
+  if (mailConfig.isActive() && saved && saved.senderEmail) {
+    const fallbackName = parseAddress(from).name || 'INMOBLES';
+    const name = saved.senderName || fallbackName;
+    return {
+      from: `${name} <${saved.senderEmail}>`,
+      replyTo: saved.replyTo || replyTo,
+    };
+  }
+
+  if (resolveProvider() !== 'smtp') {
+    // Cada proveedor exige un remitente verificado. Si el dominio de MAIL_FROM
+    // no esta verificado, BREVO_SENDER_EMAIL / RESEND_FROM / SENDGRID_FROM
+    // permiten usar la cuenta verificada sin cambiar el nombre visible.
+    const provider = resolveProvider();
+    const override = {
+      brevo: process.env.BREVO_SENDER_EMAIL || process.env.SMTP_USER,
+      resend: process.env.RESEND_FROM,
+      sendgrid: process.env.SENDGRID_FROM,
+    }[provider];
+    if (override && String(override).trim()) {
+      const name = parseAddress(from).name || 'INMOBLES';
+      from = `${name} <${String(override).trim()}>`;
+    }
+    return { from, replyTo };
+  }
+
+  const addr = parseAddress(from).email;
   const fromDomain = (addr.split('@')[1] || '').toLowerCase();
   const smtpDomain = (String(env.smtpUser || '').split('@')[1] || '').toLowerCase();
   const isGmail = smtpDomain === 'gmail.com' || smtpDomain === 'googlemail.com';
@@ -50,17 +179,106 @@ function resolveSender() {
     const name = from.includes('<') ? from.split('<')[0].trim() : 'INMOBLES';
     return { from: `${name || 'INMOBLES'} <${env.smtpUser}>`, replyTo: addr };
   }
-  return { from, replyTo: undefined };
+  return { from, replyTo };
+}
+
+async function postJson(url, headers, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      let detail = text;
+      try {
+        const parsed = JSON.parse(text);
+        detail = parsed.message
+          || (parsed.error && parsed.error.message)
+          || (Array.isArray(parsed.errors) && parsed.errors[0] && parsed.errors[0].message)
+          || text;
+      } catch (ignored) { /* respuesta no JSON */ }
+      throw new Error(`HTTP ${response.status}: ${String(detail || '').slice(0, 300)}`);
+    }
+    return text;
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error('El proveedor de correo no respondio a tiempo.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Envia por API HTTPS (puerto 443). Es la via que funciona en Render.
+async function sendViaHttp(message) {
+  const provider = resolveProvider();
+  const key = providerKey(provider);
+  const from = parseAddress(message.from);
+  const reply = message.replyTo ? parseAddress(message.replyTo).email : undefined;
+  const text = message.text || '';
+  const html = message.html || text;
+
+  if (provider === 'resend') {
+    const payload = {
+      from: from.name ? `${from.name} <${from.email}>` : from.email,
+      to: [message.to],
+      subject: message.subject,
+      text,
+      html,
+    };
+    if (reply) payload.reply_to = reply;
+    await postJson('https://api.resend.com/emails', { Authorization: `Bearer ${key}` }, payload);
+    return;
+  }
+
+  if (provider === 'brevo') {
+    const payload = {
+      sender: { email: from.email, name: from.name || 'INMOBLES' },
+      to: [{ email: message.to }],
+      subject: message.subject,
+      htmlContent: html,
+      textContent: text,
+    };
+    if (reply) payload.replyTo = { email: reply };
+    await postJson('https://api.brevo.com/v3/smtp/email', { 'api-key': key, Accept: 'application/json' }, payload);
+    return;
+  }
+
+  if (provider === 'sendgrid') {
+    const payload = {
+      personalizations: [{ to: [{ email: message.to }] }],
+      from: { email: from.email, name: from.name || 'INMOBLES' },
+      subject: message.subject,
+      content: [
+        { type: 'text/plain', value: text },
+        { type: 'text/html', value: html },
+      ],
+    };
+    if (reply) payload.reply_to = { email: reply };
+    await postJson('https://api.sendgrid.com/v3/mail/send', { Authorization: `Bearer ${key}` }, payload);
+    return;
+  }
+
+  throw new Error(`Proveedor de correo no soportado: ${provider}`);
 }
 
 /**
- * Envía un correo de texto simple.
- * @param {Object} opts { to, subject, html, text }
- * @returns {Promise<boolean>} true si se consideró entregado.
+ * Envia un correo y devuelve el detalle del intento.
+ * @returns {Promise<{sent:boolean, simulated:boolean, provider:string, configured:boolean, to:string, error?:string}>}
  */
-async function sendMail(opts = {}) {
+async function sendMailDetailed(opts = {}) {
   const to = String(opts.to || '').trim();
-  if (!to) return false;
+  const provider = resolveProvider();
+  const configured = isConfigured();
+  const result = { sent: false, simulated: false, provider, configured, to };
+
+  if (!to) return { ...result, error: 'Destinatario vacio.' };
 
   const sender = resolveSender();
   const message = {
@@ -72,32 +290,89 @@ async function sendMail(opts = {}) {
     html: opts.html || opts.text || '',
   };
 
-  // Sin SMTP: simulamos el envío para no romper el flujo.
-  if (!hasSmtp()) {
+  // Sin proveedor: se simula para no romper el flujo en desarrollo.
+  if (!configured) {
     console.log(
-      `[MAIL dry-run] Para: ${to}\n  Asunto: ${message.subject}\n  ${(message.text || '').slice(0, 300)}`
+      `[MAIL simulado] Para: ${to}\n  Asunto: ${message.subject}\n  ${(message.text || '').slice(0, 300)}`
     );
-    return true;
+    return { ...result, sent: true, simulated: true };
+  }
+
+  // Circuito para SMTP: si hace poco que no conecto, no se vuelve a esperar.
+  if (provider === 'smtp' && Date.now() < smtpBlockedUntil) {
+    const messageText = 'El servidor SMTP no responde (en Render los puertos 25/465/587 estan bloqueados). Configura BREVO_API_KEY o RESEND_API_KEY/SENDGRID_API_KEY para enviar por HTTPS.';
+    return { ...result, sent: false, error: lastError || messageText };
   }
 
   try {
-    const info = await getTransporter().sendMail(message);
-    // Gmail puede aceptar la conexión y rechazar al destinatario sin lanzar error.
-    if (info && Array.isArray(info.rejected) && info.rejected.length) {
-      console.error('[MAIL] Destinatario rechazado por el servidor:', to);
-      return false;
+    if (provider === 'smtp') {
+      const info = await getTransporter().sendMail(message);
+      if (info && Array.isArray(info.rejected) && info.rejected.length) {
+        throw new Error(`Destinatario rechazado por el servidor: ${to}`);
+      }
+    } else {
+      await sendViaHttp(message);
     }
-    return true;
+    lastSuccessAt = new Date();
+    lastError = '';
+    lastErrorAt = null;
+    return { ...result, sent: true };
   } catch (error) {
-    // Si la credencial falla de forma permanente, deja de intentar para no
-    // saturar la cola; el resto sigue operando normal.
-    if (error && error.responseCode >= 500) {
-      failedPermanent = true;
+    lastError = error && error.message ? error.message : String(error);
+    lastErrorAt = new Date();
+    if (provider === 'smtp') {
+      // Si el puerto esta bloqueado, no reintentar en cada clic durante 10 min.
+      smtpBlockedUntil = Date.now() + 10 * 60 * 1000;
+      if (process.env.RENDER || env.isProduction) {
+        lastError = `${lastError}. En Render los puertos SMTP 25/465/587 estan bloqueados: configura BREVO_API_KEY (o RESEND_API_KEY/SENDGRID_API_KEY) para enviar por HTTPS.`;
+      }
     }
-    console.error('[MAIL] Error al enviar correo a', to, ':', error.message);
-    return false;
+    console.error('[MAIL] Error al enviar correo a', to, ':', lastError);
+    return { ...result, sent: false, error: lastError };
   }
 }
+
+async function sendMail(opts = {}) {
+  return (await sendMailDetailed(opts)).sent;
+}
+
+// Correo de prueba para comprobar la configuracion desde el CRM.
+async function sendTestMail(to) {
+  const email = String(to || '').trim();
+  const subject = 'Prueba de correo de INMOBLES';
+  const text = 'Este es un correo de prueba del CRM INMOBLES. Si lo recibes, el envio de correo esta funcionando correctamente.';
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #eadfc0;border-radius:12px;">
+      <h2 style="color:#2d1048;margin:0 0 12px;">Prueba de correo</h2>
+      <p style="font-size:14px;color:#333;line-height:1.6;">Este es un correo de prueba del <strong>CRM INMOBLES</strong>.</p>
+      <p style="font-size:14px;color:#333;line-height:1.6;">Si lo recibes, el envio de correo esta funcionando correctamente.</p>
+    </div>`;
+  return sendMailDetailed({ to: email, subject, text, html });
+}
+
+// Envia con un limite de tiempo: ninguna peticion HTTP debe quedar colgada
+// esperando a un SMTP bloqueado o a un proveedor lento.
+async function sendMailWithin(opts, ms = 10000) {
+  const fallback = {
+    sent: false,
+    simulated: false,
+    provider: resolveProvider(),
+    configured: isConfigured(),
+    to: String((opts && opts.to) || ''),
+    error: 'Tiempo de espera agotado al enviar el correo.',
+  };
+  let timer = null;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(fallback), ms); });
+  try {
+    return await Promise.race([sendMailDetailed(opts), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// El diagnóstico de arranque se hace en server.js, después de cargar la
+// configuración guardada desde el panel de soporte. Así no se reporta "modo
+// simulado" cuando el proveedor está configurado en MongoDB.
 
 const escapeHtml = (s) =>
   String(s || '')
@@ -320,6 +595,12 @@ function mailPasswordResetCode({ name, email, code }) {
 module.exports = {
   mailPasswordResetCode,
   sendMail,
+  sendMailDetailed,
+  sendMailWithin,
+  sendTestMail,
+  mailStatus,
+  resolveProvider,
+  hasMailer,
   resetTransporter,
   mailWelcome,
   mailNewProperty,

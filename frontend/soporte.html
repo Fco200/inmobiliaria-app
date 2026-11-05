@@ -331,6 +331,7 @@
       <button class="sp-tab" data-tab="anuncios"><span class="ico">&#128227;</span> Avisos</button>
       <button class="sp-tab" data-tab="solicitudes"><span class="ico">&#128229;</span> Solicitudes</button>
       <button class="sp-tab" data-tab="suscriptores"><span class="ico">&#128231;</span> Suscriptores</button>
+      <button class="sp-tab" data-tab="correo"><span class="ico">&#9993;&#65039;</span> Correo</button>
       <button class="sp-tab" data-tab="chat"><span class="ico">&#128172;</span> Chat Interno</button>
       <button class="sp-tab" data-tab="herramientas"><span class="ico">&#129513;</span> Herramientas</button>
       <button class="sp-tab" data-tab="config"><span class="ico">&#9881;&#65039;</span> Ajustes Globales</button>
@@ -643,7 +644,7 @@
 
         <div class="sp-card">
           <h3 style="margin-bottom:6px;color:var(--gold);">&#128231; Enviar campaña de correo</h3>
-          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">Los correos se envían uno por destinatario para proteger la privacidad de la lista. En modo desarrollo (sin SMTP) el envío se simula y queda registrado.</p>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">Los correos se envían uno por destinatario para proteger la privacidad de la lista. Antes de enviar, configura el proveedor en la pestaña <b>Correo</b> y comprueba la entrega con un correo de prueba.</p>
           <form id="subs-campaign-form">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="fgroup">
@@ -685,6 +686,77 @@
         <div class="sp-card">
           <h3 style="margin-bottom:12px;">Historial de campañas</h3>
           <div id="subs-history" class="sp-loading"><span class="spinner"></span> Cargando historial…</div>
+        </div>
+      </section>
+
+      <!-- --- Correo y actualizaciones --- -->
+      <section class="sp-pane" id="pane-correo">
+        <h1 class="sp-pane-title">Correo y actualizaciones</h1>
+        <p class="sp-pane-sub">Configura aquí el proveedor de correo del CRM. En Render los puertos SMTP están bloqueados, así que usa Brevo, Resend o SendGrid (envío por HTTPS). El cambio se aplica al instante, sin reiniciar ni tocar variables de Render.</p>
+
+        <div class="sp-card" id="correo-status-card">
+          <div id="correo-status" class="sp-loading"><span class="spinner"></span> Consultando estado del correo…</div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:6px;color:var(--gold);">&#9993;&#65039; Proveedor de correo</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 14px;">La clave API se guarda cifrada. Si dejas el campo vacío se conserva la clave actual. El remitente debe estar verificado en el proveedor.</p>
+          <form id="correo-form">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="fgroup">
+                <label for="correo-provider">Proveedor *</label>
+                <select id="correo-provider" required>
+                  <option value="brevo">Brevo (recomendado)</option>
+                  <option value="resend">Resend</option>
+                  <option value="sendgrid">SendGrid</option>
+                </select>
+              </div>
+              <div class="fgroup">
+                <label for="correo-api-key">Clave API *</label>
+                <input id="correo-api-key" type="password" autocomplete="new-password" placeholder="xkeysib-… / re_… / SG.…" />
+              </div>
+              <div class="fgroup">
+                <label for="correo-sender-email">Correo remitente verificado *</label>
+                <input id="correo-sender-email" type="email" required placeholder="no-responder@inmobles.com" />
+              </div>
+              <div class="fgroup">
+                <label for="correo-sender-name">Nombre visible</label>
+                <input id="correo-sender-name" type="text" maxlength="120" placeholder="INMOBLES" />
+              </div>
+              <div class="fgroup">
+                <label for="correo-reply-to">Responder a (opcional)</label>
+                <input id="correo-reply-to" type="email" placeholder="contacto@inmobles.com" />
+              </div>
+              <div class="fgroup" style="display:flex;align-items:center;gap:8px;padding-top:22px;">
+                <input id="correo-enabled" type="checkbox" checked style="width:auto;" />
+                <label for="correo-enabled" style="margin:0;">Envío activo</label>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;">
+              <button class="btn btn-gold" id="correo-save" type="submit">Guardar configuración</button>
+              <button class="btn btn-ghost" id="correo-reset" type="button">Quitar configuración</button>
+            </div>
+            <div id="correo-alert" class="alert" style="margin-top:12px;"></div>
+          </form>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:6px;color:var(--gold);">&#128233; Probar entrega</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 12px;">Envía un correo real. Si no llega, revisa la carpeta de spam y el estado del proveedor.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="fgroup" style="flex:1 1 240px;">
+              <label for="correo-test-email">Correo de destino</label>
+              <input id="correo-test-email" type="email" placeholder="tu-correo@ejemplo.com" />
+            </div>
+            <button class="btn btn-gold" id="correo-test" type="button">Enviar correo de prueba</button>
+          </div>
+          <div id="correo-test-alert" class="alert" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="sp-card">
+          <h3 style="margin-bottom:6px;color:var(--gold);">&#128227; Enviar una actualización</h3>
+          <p style="color:var(--text-muted);font-size:12px;margin:0 0 12px;">Escribe el asunto y el contenido en el formulario de la pestaña <b>Suscriptores</b>. Puedes enviarlo a suscriptores, usuarios del CRM, clientes o a todos (sin duplicados).</p>
+          <button class="btn btn-gold" id="correo-ir-campana" type="button">Ir al formulario de actualizaciones</button>
         </div>
       </section>
 

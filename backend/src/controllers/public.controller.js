@@ -2,7 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Property, Inventory, User, Role, Newsletter, Client, Appointment } = require('../models');
-const { sendMail, mailWelcome } = require('../services/mail.service');
+const { sendMailWithin, mailWelcome } = require('../services/mail.service');
 
 const PUBLIC_FIELDS =
   '_id type operationType price ticketValue address zone city state description characteristics photos status createdAt';
@@ -210,14 +210,30 @@ const subscribeNewsletter = asyncHandler(async (req, res) => {
 
   const { created, owner } = await resume();
 
-  // Correo de bienvenida (no bloquea la respuesta si falla).
-  sendMail(mailWelcome(clean, owner && owner.name)).catch(() => {});
+  // Se espera con un limite corto para poder avisar si el correo no salio.
+  const mailResult = await sendMailWithin(mailWelcome(clean, owner && owner.name), 10000);
+  if (!mailResult.sent) {
+    console.error('[Newsletter] No se pudo enviar la bienvenida a', clean, ':', mailResult.error || 'error desconocido');
+  }
+  const emailSent = Boolean(mailResult.sent);
+  const suffix = emailSent
+    ? 'Te enviamos un correo de bienvenida.'
+    : 'No pudimos enviar el correo de bienvenida en este momento; tu suscripción quedó registrada.';
 
   if (!created) {
-    // Ya estaba suscrito (o se reactivó): avisamos por si iban de nuevo.
-    return res.json({ success: true, message: 'Ya estás suscrito a nuestras promociones. ¡Te enviamos un correo de bienvenida!' });
+    const message = `Ya estás suscrito a nuestras promociones. ${suffix}`;
+    return res.json({
+      success: true,
+      message,
+      data: { subscribed: true, email: clean, emailSent, emailSimulated: Boolean(mailResult.simulated), message },
+    });
   }
-  res.status(201).json({ success: true, message: '¡Suscripción exitosa! Te enviamos un correo de bienvenida.' });
+  const message = `Suscripción exitosa. ${suffix}`;
+  res.status(201).json({
+    success: true,
+    message,
+    data: { subscribed: true, email: clean, emailSent, emailSimulated: Boolean(mailResult.simulated), message },
+  });
 });
 
 // Lista de suscriptores (solo admin/gerencia/soporte) para el panel.

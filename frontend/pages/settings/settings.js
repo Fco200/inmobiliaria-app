@@ -851,7 +851,9 @@ window.Pages.settings = {
         okBtn.addEventListener('click', async () => {
           const role = bodyEl.querySelector('#adm-srq-role').value;
           errBox.style.display = 'none';
+          const originalText = okBtn.textContent;
           okBtn.disabled = true;
+          okBtn.textContent = 'Aprobando y enviando...';
           try {
             const result = await API.userRequests.handle(request._id, { action: 'aprobada', role });
             UI.closeModal();
@@ -859,6 +861,7 @@ window.Pages.settings = {
             mostrarResultadoAprobacion(result);
           } catch (error) {
             okBtn.disabled = false;
+            okBtn.textContent = originalText;
             errBox.style.display = 'block';
             errBox.textContent = error.message || 'No se pudo aprobar la solicitud.';
           }
@@ -1330,6 +1333,15 @@ window.Pages.settings = {
             usuarios del CRM y clientes. Cada correo se envía por separado para proteger la privacidad de la lista.
           </p>
         </div>
+        <div class="card" style="margin-bottom:16px;" id="nl-mail-card">
+          <div style="display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <h3 style="margin:0 0 6px;">&#9993;&nbsp; Estado del correo</h3>
+              <div id="nl-mail-status" class="text-muted" style="font-size:12.5px;">Consultando...</div>
+            </div>
+            <button class="btn btn-secondary" type="button" id="nl-mail-test">&#128231;&nbsp; Enviar correo de prueba</button>
+          </div>
+        </div>
         <div id="nl-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;"></div>
         <div class="card" style="margin-bottom:16px;">
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
@@ -1406,6 +1418,55 @@ window.Pages.settings = {
       const listEl = tabContent.querySelector('#nl-list');
       const alertEl = tabContent.querySelector('#nl-alert');
       const formAlert = tabContent.querySelector('#nl-form-alert');
+      const mailStatusEl = tabContent.querySelector('#nl-mail-status');
+      const mailTestBtn = tabContent.querySelector('#nl-mail-test');
+
+      const renderMailStatus = (status) => {
+        if (!mailStatusEl || !status) return;
+        const names = { smtp: 'SMTP', resend: 'Resend', brevo: 'Brevo', sendgrid: 'SendGrid' };
+        const badge = status.configured
+          ? UI.badge(`Activo: ${names[status.provider] || status.provider}`, 'success')
+          : UI.badge('Sin configurar (modo simulado)', 'warning');
+        const lines = [`Estado: ${badge}`];
+        if (status.from) lines.push(`Remitente: <code>${UI.escapeHtml(status.from)}</code>`);
+        if (status.source === 'panel') lines.push('Configurado desde: <strong>Panel de soporte</strong>');
+        if (status.lastSuccessAt) lines.push(`Ultimo envio correcto: ${new Date(status.lastSuccessAt).toLocaleString()}`);
+        if (status.lastError) lines.push(`<span style="color:#b91c1c;">Ultimo error: ${UI.escapeHtml(status.lastError)}</span>`);
+        if (!status.configured) lines.push('<span style="color:#b45309;">Pide a soporte configurar el proveedor en <strong>Panel de soporte &gt; Correo</strong>.</span>');
+        if (status.hint) lines.push(`<span style="color:#b45309;">${UI.escapeHtml(status.hint)}</span>`);
+        mailStatusEl.innerHTML = lines.join('<br>');
+      };
+
+      const refreshMailStatus = async () => {
+        try {
+          const status = await API.newsletter.mailStatus();
+          renderMailStatus(status);
+        } catch (error) {
+          if (mailStatusEl) mailStatusEl.textContent = 'No se pudo consultar el estado del correo: ' + error.message;
+        }
+      };
+
+      if (mailTestBtn) {
+        mailTestBtn.addEventListener('click', async () => {
+          const suggested = (me && me.email) || '';
+          const target = window.prompt('Correo de destino para la prueba:', suggested);
+          if (target === null) return;
+          const original = mailTestBtn.textContent;
+          mailTestBtn.disabled = true;
+          mailTestBtn.textContent = 'Enviando...';
+          try {
+            const result = await API.newsletter.sendTestMail({ email: String(target || '').trim() });
+            UI.toast((result && result.message) || 'Correo de prueba enviado.', result && result.simulated ? 'warning' : 'success');
+          } catch (error) {
+            UI.toast(error.message || 'No se pudo enviar el correo de prueba.', 'error');
+          } finally {
+            mailTestBtn.disabled = false;
+            mailTestBtn.textContent = original;
+            refreshMailStatus();
+          }
+        });
+      }
+      refreshMailStatus();
 
       const showBox = (el, message, type) => {
         if (!el) return;

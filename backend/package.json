@@ -14,7 +14,9 @@
     "migrate:folios": "node scripts/migrar_folios_prop.js",
     "migrate:uploads": "node scripts/migrar-uploads-a-gridfs.js",
     "verificar:media": "node scripts/verificar-media.js",
-    "test": "node --test"
+    "test": "node --test",
+    "mail:test": "node scripts/test-mail.js",
+    "mail:test:flows": "node scripts/test-flows-mail.js"
   },
   "keywords": [
     "crm",
@@ -24,6 +26,9 @@
   ],
   "author": "",
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

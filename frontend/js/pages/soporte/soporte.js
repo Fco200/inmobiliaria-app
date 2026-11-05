@@ -75,6 +75,7 @@ window.SoportePanel = (() => {
       cargarSuscriptores(subsFiltros.page);
       cargarHistorialCampanas();
     }
+    if (tab === 'correo') initCorreo();
   }
 
   // ── Pestaña Usuarios ──────────────────────────────────────────────────────
@@ -1326,7 +1327,9 @@ window.SoportePanel = (() => {
         const role = bodyEl.querySelector('#srq-role').value;
         errBox.className = 'alert alert-error';
         errBox.textContent = '';
+        const originalText = okBtn.textContent;
         okBtn.disabled = true;
+        okBtn.textContent = 'Aprobando y enviando...';
         try {
           const result = await window.API.soporte.atenderSolicitud(request._id, { action: 'aprobada', role });
           UI.closeModal();
@@ -1334,6 +1337,7 @@ window.SoportePanel = (() => {
           mostrarResultadoAprobacion(result);
         } catch (error) {
           okBtn.disabled = false;
+          okBtn.textContent = originalText;
           showModalError(errBox, error.message || 'No se pudo aprobar la solicitud.');
         }
       });
@@ -2355,7 +2359,7 @@ window.SoportePanel = (() => {
     }[value] || value || '—';
   }
 
-  const CAMPAIGN_STATUS_LABELS = { en_cola: 'En cola', en_proceso: 'Enviando…', interrumpida: 'Interrumpida', fallida: 'Fallida' };
+  const CAMPAIGN_STATUS_LABELS = { en_cola: 'En cola', en_proceso: 'Enviando…', completada: 'Completada', interrumpida: 'Interrumpida', fallida: 'Fallida' };
 
   async function cargarHistorialCampanas() {
     const box = document.getElementById('subs-history');
@@ -2488,6 +2492,180 @@ window.SoportePanel = (() => {
     }
 
     cargarRolesCampana();
+  }
+
+  // ── Correo y actualizaciones ──────────────────────────────────────────────
+  let correoReady = false;
+
+  function setCorreoAlert(id, message, type) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    if (!message) { hideAlert(box); return; }
+    showAlert(box, message, type || 'info');
+  }
+
+  function renderCorreoStatus(status) {
+    const box = document.getElementById('correo-status');
+    if (!box) return;
+    const data = status || {};
+    const cfg = data.config || {};
+    const providerName = { brevo: 'Brevo', resend: 'Resend', sendgrid: 'SendGrid' }[data.provider] || (data.provider || 'Sin configurar');
+    const origin = data.source === 'panel' ? 'Panel de soporte' : (data.source === 'env' ? 'Servidor (Render)' : 'Sin configurar');
+    const active = Boolean(data.configured && !data.simulated);
+    const stateText = active ? 'Activo' : 'Sin envío real';
+    const lastSuccess = data.lastSuccessAt ? fmtDate(data.lastSuccessAt) : 'Sin envíos recientes';
+    const lastError = data.lastError
+      ? `<div style="margin-top:8px;color:#b91c1c;font-size:12px;"><b>Último error:</b> ${escapeHtml(data.lastError)}</div>`
+      : '';
+
+    box.innerHTML = `
+      <div class="stat-cards" style="margin-bottom:0;">
+        <div class="stat-card"><b>${escapeHtml(providerName)}</b><span>Proveedor</span></div>
+        <div class="stat-card"><b>${escapeHtml(stateText)}</b><span>Estado</span></div>
+        <div class="stat-card"><b>${escapeHtml(origin)}</b><span>Origen</span></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);line-height:1.7;">
+        <div><b>Remitente:</b> ${escapeHtml(data.from || '—')}</div>
+        <div><b>Responder a:</b> ${escapeHtml(data.replyTo || '—')}</div>
+        <div><b>Último envío correcto:</b> ${escapeHtml(lastSuccess)}</div>
+        ${data.hint ? `<div style="margin-top:8px;color:var(--gold);"><b>Aviso:</b> ${escapeHtml(data.hint)}</div>` : ''}
+        ${lastError}
+        ${cfg.apiKeyPreview ? `<div style="margin-top:8px;"><b>Clave guardada:</b> ${escapeHtml(cfg.apiKeyPreview)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  async function cargarEstadoCorreo() {
+    const box = document.getElementById('correo-status');
+    if (!box) return;
+    box.className = 'sp-loading';
+    box.innerHTML = '<span class="spinner"></span> Consultando estado del correo…';
+    try {
+      const status = await window.API.soporte.correoEstado();
+      box.className = '';
+      renderCorreoStatus(status);
+      const cfg = (status && status.config) || {};
+      const provider = document.getElementById('correo-provider');
+      const senderEmail = document.getElementById('correo-sender-email');
+      const senderName = document.getElementById('correo-sender-name');
+      const replyTo = document.getElementById('correo-reply-to');
+      const enabled = document.getElementById('correo-enabled');
+      if (provider && cfg.provider && ['brevo', 'resend', 'sendgrid'].includes(cfg.provider)) provider.value = cfg.provider;
+      if (senderEmail && cfg.senderEmail) senderEmail.value = cfg.senderEmail;
+      if (senderName && cfg.senderName) senderName.value = cfg.senderName;
+      if (replyTo && cfg.replyTo) replyTo.value = cfg.replyTo;
+      if (enabled) enabled.checked = cfg.enabled !== false;
+    } catch (error) {
+      box.className = '';
+      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function initCorreo() {
+    if (correoReady) {
+      cargarEstadoCorreo();
+      return;
+    }
+    correoReady = true;
+
+    const form = document.getElementById('correo-form');
+    if (form) {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const alertBox = 'correo-alert';
+        const save = document.getElementById('correo-save');
+        const provider = document.getElementById('correo-provider').value;
+        const apiKey = document.getElementById('correo-api-key').value.trim();
+        const senderEmail = document.getElementById('correo-sender-email').value.trim();
+        const senderName = document.getElementById('correo-sender-name').value.trim();
+        const replyTo = document.getElementById('correo-reply-to').value.trim();
+        const enabled = document.getElementById('correo-enabled').checked;
+
+        if (!senderEmail) {
+          setCorreoAlert(alertBox, 'Escribe el correo remitente verificado en el proveedor.', 'error');
+          return;
+        }
+        if (!apiKey) {
+          const hint = window.confirm('No escribiste una clave API. Si ya habías guardado una, se conservará. ¿Continuar?');
+          if (!hint) return;
+        }
+
+        if (save) save.disabled = true;
+        setCorreoAlert(alertBox, '');
+        try {
+          const status = await window.API.soporte.guardarCorreo({ provider, apiKey, senderEmail, senderName, replyTo, enabled });
+          renderCorreoStatus(status);
+          document.getElementById('correo-api-key').value = '';
+          setCorreoAlert(alertBox, 'Configuración guardada. Envía un correo de prueba para confirmar que llega.', 'success');
+        } catch (error) {
+          setCorreoAlert(alertBox, error.message, 'error');
+        } finally {
+          if (save) save.disabled = false;
+        }
+      });
+    }
+
+    const reset = document.getElementById('correo-reset');
+    if (reset) {
+      reset.addEventListener('click', async () => {
+        if (!window.confirm('¿Quitar la configuración de correo guardada? El envío volverá a usar las variables del servidor.')) return;
+        reset.disabled = true;
+        setCorreoAlert('correo-alert', '');
+        try {
+          const status = await window.API.soporte.eliminarCorreo();
+          renderCorreoStatus(status);
+          const apiKey = document.getElementById('correo-api-key');
+          if (apiKey) apiKey.value = '';
+          setCorreoAlert('correo-alert', 'Configuración eliminada. El correo usa ahora las variables del servidor.', 'success');
+        } catch (error) {
+          setCorreoAlert('correo-alert', error.message, 'error');
+        } finally {
+          reset.disabled = false;
+        }
+      });
+    }
+
+    const test = document.getElementById('correo-test');
+    if (test) {
+      test.addEventListener('click', async () => {
+        const email = document.getElementById('correo-test-email').value.trim();
+        if (!email) {
+          setCorreoAlert('correo-test-alert', 'Escribe un correo de destino para la prueba.', 'error');
+          return;
+        }
+        test.disabled = true;
+        setCorreoAlert('correo-test-alert', '');
+        try {
+          await window.API.soporte.probarCorreo({ email });
+          setCorreoAlert('correo-test-alert', `Correo de prueba enviado a ${email}. Revisa la bandeja de entrada y la carpeta de spam.`, 'success');
+          cargarEstadoCorreo();
+        } catch (error) {
+          setCorreoAlert('correo-test-alert', error.message, 'error');
+          cargarEstadoCorreo();
+        } finally {
+          test.disabled = false;
+        }
+      });
+    }
+
+    const testEmail = document.getElementById('correo-test-email');
+    const savedUser = getSavedUser();
+    if (testEmail && !testEmail.value && savedUser && savedUser.email) {
+      testEmail.value = savedUser.email;
+    }
+
+    const goCampaign = document.getElementById('correo-ir-campana');
+    if (goCampaign) {
+      goCampaign.addEventListener('click', () => {
+        activarTab('suscriptores');
+        setTimeout(() => {
+          const subject = document.getElementById('camp-subject');
+          if (subject) { subject.focus(); subject.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        }, 120);
+      });
+    }
+
+    cargarEstadoCorreo();
   }
 
   function renderHerramientas() {

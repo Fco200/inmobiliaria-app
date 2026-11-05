@@ -51,6 +51,10 @@ const {
   accionMasiva,
   listarSuscriptores,
   eliminarSuscriptor,
+  estadoCorreo,
+  guardarCorreo,
+  eliminarCorreo,
+  probarCorreo,
 } = require('../controllers/soporte.controller');
 
 const router = Router();
@@ -136,5 +140,12 @@ router.post('/push/limpiar', requireSoporte, limpiarPushSoporte);
 router.post('/acciones-masivas', requireSoporte, accionMasiva);
 router.get('/newsletter', requireSoporte, listarSuscriptores);
 router.delete('/newsletter/:id', requireSoporte, eliminarSuscriptor);
+
+// Correo saliente: configurar proveedor HTTPS y probarlo desde el panel.
+// Así el correo de producción no depende de editar variables en Render.
+router.get('/correo', requireSoporte, estadoCorreo);
+router.put('/correo', requireSoporte, guardarCorreo);
+router.delete('/correo', requireSoporte, eliminarCorreo);
+router.post('/correo/probar', requireSoporte, probarCorreo);
 
 module.exports = router;

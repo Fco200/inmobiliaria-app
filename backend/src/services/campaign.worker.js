@@ -14,7 +14,7 @@
 const os = require('os');
 const crypto = require('crypto');
 const { Campaign, CampaignRecipient } = require('../models');
-const { sendMail, mailNewsletterCampaign } = require('./mail.service');
+const { sendMailWithin, mailNewsletterCampaign } = require('./mail.service');
 const { logActivity } = require('./log.service');
 
 const WORKER_ID = `${os.hostname()}-${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
@@ -79,10 +79,25 @@ async function sendToRecipient(campaign, recipient) {
       message: campaign.message,
       intro: campaign.intro || undefined,
     });
-    const ok = await sendMail(mail);
-    return ok
-      ? { status: 'enviado', sentAt: new Date(), error: '' }
-      : { status: 'fallido', sentAt: null, error: 'El servidor de correo no aceptó el mensaje.' };
+    // Con límite de tiempo: una campaña no debe quedarse colgada esperando a
+    // un SMTP bloqueado. Un envío simulado (sin proveedor) NO cuenta como
+    // entregado: el panel debe reflejar la verdad.
+    const result = await sendMailWithin(mail, 12000);
+    if (result && result.sent && !result.simulated) {
+      return { status: 'enviado', sentAt: new Date(), error: '' };
+    }
+    if (result && result.simulated) {
+      return {
+        status: 'fallido',
+        sentAt: null,
+        error: 'No hay proveedor de correo configurado: el envío se simuló y no llegó.',
+      };
+    }
+    return {
+      status: 'fallido',
+      sentAt: null,
+      error: String((result && result.error) || 'El servidor de correo no aceptó el mensaje.').slice(0, 300),
+    };
   } catch (error) {
     return { status: 'fallido', sentAt: null, error: String(error.message || 'Error al enviar').slice(0, 300) };
   }
@@ -132,11 +147,14 @@ async function runCampaign(campaign) {
   }
 
   const counts = await countByStatus(campaignId);
+  // Si no salió ni un correo y hubo fallos, la campaña es "fallida": así el
+  // panel de soporte no muestra como exitoso un envío que en realidad no llegó.
+  const finalStatus = counts.enviado === 0 && counts.fallido > 0 ? 'fallida' : 'completada';
   const finished = await Campaign.findOneAndUpdate(
     { _id: campaignId, lockedBy: WORKER_ID },
     {
       $set: {
-        status: 'completada',
+        status: finalStatus,
         enviados: counts.enviado,
         fallidos: counts.fallido,
         finishedAt: new Date(),
@@ -153,7 +171,9 @@ async function runCampaign(campaign) {
     entityId: finished.createdBy || finished._id,
     user: finished.createdBy,
     action: 'campana_newsletter',
-    message: `Campaña "${finished.subject}" enviada a ${counts.enviado} destinatarios (${finished.audience})`,
+    message: finalStatus === 'fallida'
+      ? `La campaña "${finished.subject}" no pudo entregarse (${counts.fallidos} fallidos). Revisa el estado del correo.`
+      : `Campaña "${finished.subject}" enviada a ${counts.enviado} destinatarios (${finished.audience})`,
     data: {
       subject: finished.subject,
       audience: finished.audience,
@@ -161,6 +181,7 @@ async function runCampaign(campaign) {
       total: finished.total,
       enviados: counts.enviado,
       fallidos: counts.fallido,
+      status: finalStatus,
     },
   });
 }

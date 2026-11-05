@@ -15,6 +15,8 @@ router.post('/me/unsubscribe', protect, controller.unsubscribeMe);
 
 router.use(protect, authorize('admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'));
 
+router.get('/mail-status', controller.getMailStatus);
+router.post('/test-mail', controller.sendTestEmail);
 router.get('/subscribers', controller.listSubscribers);
 router.patch('/subscribers/:id', controller.updateSubscriber);
 router.delete('/subscribers/:id', controller.removeSubscriber);

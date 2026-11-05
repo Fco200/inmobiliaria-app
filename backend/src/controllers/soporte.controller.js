@@ -37,6 +37,8 @@ const { createSession, revokeSessionByToken, hashToken } = require('../services/
 const sessionService = require('../services/session.service');
 const logger = require('../services/logger.service');
 const maintenanceService = require('../services/maintenance.service');
+const mailConfig = require('../services/mailConfig.service');
+const { mailStatus, sendTestMail } = require('../services/mail.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
@@ -373,7 +375,9 @@ const listarRoles = asyncHandler(async (req, res) => {
 
 // ── Variables y ajustes globales (Config) ───────────────────────────────────
 const listarConfig = asyncHandler(async (req, res) => {
-  const configs = await Config.find();
+  // La configuración de correo tiene su propia pantalla y contiene una clave
+  // cifrada: no se mezcla con las variables globales del CRM.
+  const configs = await Config.find({ key: { $ne: mailConfig.CONFIG_KEY } });
   res.json({ success: true, data: configs });
 });
 
@@ -1526,7 +1530,90 @@ const soporteLogout = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Sesión de soporte cerrada' });
 });
 
+// ── Correo saliente (configuración desde el panel de soporte) ──────────────
+// En Render los puertos SMTP están bloqueados. Estos endpoints permiten al
+// SUPERADMIN configurar un proveedor HTTPS (Brevo, Resend o SendGrid) sin
+// entrar a Render ni reiniciar el servicio. La clave se guarda cifrada.
+const estadoCorreo = asyncHandler(async (req, res) => {
+  if (!mailConfig.isLoaded()) {
+    try { await mailConfig.load(); } catch (error) { /* se usa el entorno */ }
+  }
+  res.json({
+    success: true,
+    data: {
+      ...mailStatus(),
+      config: mailConfig.describe(),
+      providers: mailConfig.HTTP_PROVIDERS,
+    },
+  });
+});
+
+const guardarCorreo = asyncHandler(async (req, res) => {
+  const config = await mailConfig.save(req.body, req.user);
+  await logActivity({
+    entityType: 'Config',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'actualizar_correo',
+    message: `Soporte configuró el correo con ${config.provider} (${config.senderEmail})`,
+  });
+  const status = mailStatus();
+  res.json({
+    success: true,
+    message: 'Configuración de correo guardada. Envía un correo de prueba para confirmar que llega.',
+    data: { ...status, config },
+  });
+});
+
+const eliminarCorreo = asyncHandler(async (req, res) => {
+  const config = await mailConfig.reset(req.user);
+  await logActivity({
+    entityType: 'Config',
+    entityId: req.user._id,
+    user: req.user._id,
+    action: 'restablecer_correo',
+    message: 'Soporte eliminó la configuración de correo del panel',
+  });
+  res.json({
+    success: true,
+    message: 'Configuración eliminada. El correo vuelve a usar las variables del servidor.',
+    data: { ...mailStatus(), config },
+  });
+});
+
+const probarCorreo = asyncHandler(async (req, res) => {
+  const email = String((req.body && req.body.email) || req.user.email || '').trim();
+  if (!mailConfig.isEmail(email)) {
+    return res.status(400).json({ success: false, message: 'Escribe un correo válido para la prueba.' });
+  }
+  const result = await sendTestMail(email);
+  const status = mailStatus();
+  if (!result.sent) {
+    return res.status(502).json({
+      success: false,
+      message: `No se pudo enviar el correo: ${result.error || 'error desconocido'}`,
+      data: { ...status, result },
+    });
+  }
+  if (result.simulated) {
+    return res.status(400).json({
+      success: false,
+      message: 'No hay proveedor activo: el envío se simuló y NO llegará. Configura Brevo, Resend o SendGrid.',
+      data: { ...status, result },
+    });
+  }
+  res.json({
+    success: true,
+    message: `Correo de prueba enviado a ${email}. Revisa la bandeja de entrada y la carpeta de spam.`,
+    data: { ...status, result },
+  });
+});
+
 module.exports = {
+  estadoCorreo,
+  guardarCorreo,
+  eliminarCorreo,
+  probarCorreo,
   soporteLogin,
   soporteMe,
   soporteLogout,

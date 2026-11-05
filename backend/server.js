@@ -17,7 +17,8 @@ const connectDB = require('./src/config/db');
 const seed = require('./src/services/seed.service');
 const { runDataMigrations } = require('./src/services/migration.service');
 const { port, nodeEnv, jwtSecret } = require('./src/config/env');
-const { hasSmtp, resetTransporter } = require('./src/services/mail.service');
+const { mailStatus, resetTransporter } = require('./src/services/mail.service');
+const mailConfig = require('./src/services/mailConfig.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
 const campaignWorker = require('./src/services/campaign.worker');
 const maintenanceJob = require('./src/jobs/maintenance.job');
@@ -31,13 +32,6 @@ const sessionService = require('./src/services/session.service');
 const logger = require('./src/services/logger.service');
 
 async function start() {
-  // Diagnóstico de correo: si no hay SMTP, todo se queda en "dry-run" (no envía).
-  if (hasSmtp()) {
-    console.log('[MAIL] SMTP configurado: envío REAL activado.');
-  } else {
-    console.warn('[MAIL] SIN SMTP configurado: MODO DRY-RUN. Revisa SMTP_HOST/USER/PASS en las variables de entorno.');
-  }
-
   // Diagnóstico de almacenamiento: deja claro en los logs DÓNDE se guardan las
   // fotos y documentos. En Render debe ser "mongodb" o "r2" (persistente); si
   // aparece "local" las fotos se borrarán en cada despliegue.
@@ -49,6 +43,22 @@ async function start() {
   }
 
   const connection = await connectDB();
+
+  // La configuración de correo puede venir del panel de soporte (MongoDB).
+  // Se carga antes del diagnóstico para no reportar "modo simulado" cuando el
+  // panel ya configuró un proveedor HTTPS.
+  if (connection) {
+    await mailConfig.load();
+  }
+
+  // Diagnóstico de correo: deja claro si los correos salen de verdad.
+  const mail = mailStatus();
+  if (mail.configured) {
+    console.log(`[MAIL] Proveedor: ${mail.provider} (${mail.source}). Envío real activado.`);
+  } else {
+    console.warn('[MAIL] SIN proveedor configurado: MODO SIMULADO. Configura Brevo, Resend o SendGrid en el panel de soporte (o define BREVO_API_KEY/SMTP_*).');
+  }
+  if (mail.hint) console.warn(`[MAIL] ${mail.hint}`);
 
   if (connection) {
     await seed();

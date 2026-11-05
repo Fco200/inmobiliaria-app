@@ -10,7 +10,13 @@ window.NewsletterOptIn = (() => {
   function setMsg(el, text, type) {
     if (!el) return;
     el.textContent = text || '';
-    el.style.color = type === 'error' ? '#b91c1c' : type === 'success' ? '#166534' : 'var(--text-muted)';
+    el.style.color = type === 'error'
+      ? '#b91c1c'
+      : type === 'warning'
+        ? '#b45309'
+        : type === 'success'
+          ? '#166534'
+          : 'var(--text-muted)';
   }
 
   function welcomeMarkup(email) {
@@ -77,7 +83,7 @@ window.NewsletterOptIn = (() => {
       setMsg(msg, 'Guardando…');
       try {
         const r = await window.API.newsletter.subscribeMe({ email, accept: true });
-        finish(r.message || '¡Listo!', 'success');
+        finish(r.message || '¡Listo!', r.emailSent === false ? 'warning' : 'success');
       } catch (error) {
         setMsg(msg, error.message, 'error');
       }
@@ -116,7 +122,7 @@ window.NewsletterOptIn = (() => {
       setMsg(msg, 'Guardando…');
       try {
         const r = await window.API.newsletter.subscribeMe({ email, accept: true });
-        UI.toast(r.message || 'Listo.', 'success');
+        UI.toast(r.message || 'Listo.', r.emailSent === false ? 'warning' : 'success');
         mountProfile(host);
       } catch (error) {
         setMsg(msg, error.message, 'error');

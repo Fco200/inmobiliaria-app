@@ -18,7 +18,7 @@ const {
   revokeSessionByToken,
 } = require('../services/session.service');
 const { ensure } = require('../services/notification.service');
-const { sendMail, mailPasswordResetCode } = require('../services/mail.service');
+const { sendMailWithin, mailPasswordResetCode } = require('../services/mail.service');
 const Session = require('../models/session.model');
 const maintenanceService = require('../services/maintenance.service');
 const {
@@ -556,10 +556,31 @@ const requestPasswordResetCode = asyncHandler(async (req, res) => {
     }
   );
 
-  const sent = await sendMail(mailPasswordResetCode({ name: user.name, email: user.email, code })).catch(() => false);
-  if (!sent) console.error('[Auth] No se pudo enviar el código de recuperación a', user.email);
+  const mailResult = await sendMailWithin(
+    mailPasswordResetCode({ name: user.name, email: user.email, code }),
+    10000
+  );
+  if (!mailResult.sent) {
+    console.error('[Auth] No se pudo enviar el codigo de recuperacion a', user.email, ':', mailResult.error || 'error desconocido');
+    // Sin correo no hay forma de usar el codigo: se invalida para no dejar la
+    // cuenta con un codigo pendiente que nadie recibio.
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { resetCodeHash: null, resetCodeExpires: null, resetCodeAttempts: 0 } }
+    );
+  }
 
-  res.json(generic);
+  res.json({
+    ...generic,
+    data: {
+      emailSent: Boolean(mailResult.sent),
+      emailSimulated: Boolean(mailResult.simulated),
+      email: user.email.replace(/^(.).*(@.*)$/, '$1***$2'),
+      message: (mailResult.sent
+      ? 'Si la cuenta existe, enviamos un código de 6 dígitos al correo registrado. Revisa también la carpeta de spam.'
+      : 'No pudimos enviar el código por correo. Revisa la configuración de correo del sistema o avisa al administrador.'),
+    },
+  });
 });
 
 // POST /auth/password-reset/confirm  body: { identifier, code, newPassword }

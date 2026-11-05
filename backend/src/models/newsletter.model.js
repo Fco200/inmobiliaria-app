@@ -22,6 +22,18 @@ const newsletterSchema = new mongoose.Schema(
       enum: ['suscrito', 'dado_baja'],
       default: 'suscrito',
     },
+    // Correo de bienvenida. Se envía en segundo plano y se reintenta si el
+    // proveedor falla o todavía no está configurado, para que una suscripción
+    // no pierda su correo de confirmación por un fallo temporal.
+    welcomeStatus: {
+      type: String,
+      enum: ['pendiente', 'enviado', 'fallido'],
+      default: 'pendiente',
+    },
+    welcomeAttempts: { type: Number, default: 0 },
+    welcomeLastAttemptAt: { type: Date, default: null },
+    welcomeSentAt: { type: Date, default: null },
+    welcomeLastError: { type: String, trim: true, default: '' },
   },
   {
     timestamps: true,
@@ -30,5 +42,6 @@ const newsletterSchema = new mongoose.Schema(
 );
 
 newsletterSchema.index({ createdAt: -1 });
+newsletterSchema.index({ welcomeStatus: 1, welcomeLastAttemptAt: 1 });
 
 module.exports = mongoose.model('Newsletter', newsletterSchema);

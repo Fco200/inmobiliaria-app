@@ -20,6 +20,7 @@ const { port, nodeEnv, jwtSecret } = require('./src/config/env');
 const { mailStatus, resetTransporter } = require('./src/services/mail.service');
 const mailConfig = require('./src/services/mailConfig.service');
 const { startJobs, stopJobs } = require('./src/jobs/notification.job');
+const { startWelcomeJob, stopWelcomeJob } = require('./src/services/welcome.service');
 const campaignWorker = require('./src/services/campaign.worker');
 const maintenanceJob = require('./src/jobs/maintenance.job');
 const storageJob = require('./src/jobs/storage.job');
@@ -72,6 +73,8 @@ async function start() {
     startJobs();
     // Retoma las campañas de correo pendientes (también tras un reinicio).
     campaignWorker.startCampaignWorker();
+    // Reintenta los correos de bienvenida que no pudieron salir.
+    startWelcomeJob();
     // Carga el flujo de negocio para que los nombres de etapa personalizados ya estén listos.
     require('./src/services/process.service').flow().catch((e) => console.warn('[Flujo] No se pudo cargar el flujo de negocio:', e.message));
     // Los avisos internos de tipo "nueva_propiedad" ("Se publicó una casa…
@@ -266,6 +269,7 @@ async function start() {
     // Por si el cierre se atora, forzamos la salida tras 30 s.
     setTimeout(() => process.exit(1), 30000).unref();
     stopJobs();
+    stopWelcomeJob();
     maintenanceJob.stopMaintenanceJob();
     // Termina el lote de correos en curso y libera la campaña para retomarla.
     await campaignWorker.stopCampaignWorker().catch(() => {});

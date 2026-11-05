@@ -2,7 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Property, Inventory, User, Role, Newsletter, Client, Appointment } = require('../models');
-const { sendMailWithin, mailWelcome } = require('../services/mail.service');
+const { queueWelcome } = require('../services/welcome.service');
 
 const PUBLIC_FIELDS =
   '_id type operationType price ticketValue address zone city state description characteristics photos status createdAt';
@@ -197,42 +197,44 @@ const subscribeNewsletter = asyncHandler(async (req, res) => {
   const resume = async () => {
     const owner = await Newsletter.findOne({ email: clean });
     if (owner) {
+      let reactivated = false;
       if (owner.status === 'dado_baja') {
         owner.status = 'suscrito';
         if (name) owner.name = String(name).trim();
         await owner.save();
+        reactivated = true;
       }
-      return { created: false, owner };
+      return { created: false, reactivated, owner };
     }
     const created = await Newsletter.create({ email: clean, name: String(name || '').trim(), source: 'landing' });
-    return { created: true, owner: created };
+    return { created: true, reactivated: false, owner: created };
   };
 
-  const { created, owner } = await resume();
+  const { created, reactivated, owner } = await resume();
 
-  // Se espera con un limite corto para poder avisar si el correo no salio.
-  const mailResult = await sendMailWithin(mailWelcome(clean, owner && owner.name), 10000);
-  if (!mailResult.sent) {
-    console.error('[Newsletter] No se pudo enviar la bienvenida a', clean, ':', mailResult.error || 'error desconocido');
+  // El correo de bienvenida se encola y se envía en segundo plano. Así la
+  // suscripción no falla ni se queda esperando a un proveedor lento, y la cola
+  // reintenta automáticamente si el correo no pudo salir.
+  if (created || reactivated) {
+    await queueWelcome(owner, { reset: reactivated });
   }
-  const emailSent = Boolean(mailResult.sent);
-  const suffix = emailSent
-    ? 'Te enviamos un correo de bienvenida.'
-    : 'No pudimos enviar el correo de bienvenida en este momento; tu suscripción quedó registrada.';
 
   if (!created) {
-    const message = `Ya estás suscrito a nuestras promociones. ${suffix}`;
+    const message = reactivated
+      ? 'Tu suscripción quedó activa de nuevo. En breve recibirás tu correo de bienvenida.'
+      : 'Ya estás suscrito a nuestras promociones.';
     return res.json({
       success: true,
       message,
-      data: { subscribed: true, email: clean, emailSent, emailSimulated: Boolean(mailResult.simulated), message },
+      data: { subscribed: true, email: clean, welcomeQueued: reactivated, message },
     });
   }
-  const message = `Suscripción exitosa. ${suffix}`;
+
+  const message = 'Suscripción exitosa. En breve recibirás tu correo de bienvenida.';
   res.status(201).json({
     success: true,
     message,
-    data: { subscribed: true, email: clean, emailSent, emailSimulated: Boolean(mailResult.simulated), message },
+    data: { subscribed: true, email: clean, welcomeQueued: true, message },
   });
 });
 

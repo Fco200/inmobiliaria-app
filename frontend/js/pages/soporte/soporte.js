@@ -2281,18 +2281,23 @@ window.SoportePanel = (() => {
         <div class="sp-card">
           <div class="sp-table-wrap">
             <table>
-              <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Correo</th><th>Nombre</th><th>Origen</th><th>Estado</th><th>Bienvenida</th><th>Alta</th><th>Acciones</th></tr></thead>
               <tbody>
                 ${subs.map((s) => {
                   const activo = s.status === 'suscrito';
+                  const welcome = s.welcomeStatus || '';
+                  const welcomeText = welcome === 'enviado' ? 'Enviada' : welcome === 'fallido' ? 'Fallida' : welcome === 'pendiente' ? 'Pendiente' : '—';
+                  const welcomeClass = welcome === 'enviado' ? 'badge-on' : welcome === 'fallido' ? 'badge-off' : '';
                   return `
                   <tr>
                     <td>${escapeHtml(s.email || '')}</td>
                     <td>${escapeHtml(s.name || '—')}</td>
                     <td>${escapeHtml(s.source || '—')}</td>
                     <td><span class="badge ${activo ? 'badge-on' : 'badge-off'}">${activo ? 'Suscrito' : 'Dado de baja'}</span></td>
+                    <td>${welcomeClass ? `<span class="badge ${welcomeClass}">${welcomeText}</span>` : welcomeText}</td>
                     <td>${fmtDate(s.createdAt)}</td>
                     <td style="white-space:nowrap;">
+                      <button class="btn btn-ghost btn-sm" data-sub-welcome="${escapeHtml(s._id)}" type="button">Enviar bienvenida</button>
                       <button class="btn btn-ghost btn-sm" data-sub-toggle="${escapeHtml(s._id)}" data-next="${activo ? 'dado_baja' : 'suscrito'}" type="button">${activo ? 'Dar de baja' : 'Reactivar'}</button>
                       <button class="btn btn-danger btn-sm" data-sub-del="${escapeHtml(s._id)}" type="button">Eliminar</button>
                     </td>
@@ -2309,6 +2314,21 @@ window.SoportePanel = (() => {
             </span>
           </div>
         </div>` : '<div class="sp-card"><div class="sp-empty">No hay suscriptores que coincidan con el filtro.</div></div>';
+
+      box.querySelectorAll('[data-sub-welcome]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          setSubsAlert('');
+          try {
+            const r = await window.API.soporte.newsletterWelcome(btn.dataset.subWelcome);
+            setSubsAlert((r && r.message) || 'Bienvenida en cola. Se enviará en los próximos minutos.', 'success');
+            cargarSuscriptores(subsFiltros.page);
+          } catch (error) {
+            btn.disabled = false;
+            setSubsAlert(error.message, 'error');
+          }
+        });
+      });
 
       box.querySelectorAll('[data-sub-toggle]').forEach((btn) => {
         btn.addEventListener('click', async () => {

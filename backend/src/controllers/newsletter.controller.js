@@ -4,8 +4,9 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { Newsletter, User, Client, Role, Campaign, CampaignRecipient } = require('../models');
 const campaignWorker = require('../services/campaign.worker');
 const { logActivity } = require('../services/log.service');
-const { sendMailWithin, mailWelcome, sendTestMail, mailStatus } = require('../services/mail.service');
+const { sendTestMail, mailStatus } = require('../services/mail.service');
 const mailConfig = require('../services/mailConfig.service');
+const { queueWelcome } = require('../services/welcome.service');
 
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EMAIL_RX = /^[\w.+-]+@[\w-]+\.[\w.-]+$/;
@@ -282,6 +283,7 @@ const subscribeMe = asyncHandler(async (req, res) => {
   );
 
   let sub = await Newsletter.findOne({ email });
+  const wasInactive = Boolean(sub && sub.status === 'dado_baja');
   if (sub) {
     sub.status = 'suscrito';
     sub.user = user._id;
@@ -300,10 +302,11 @@ const subscribeMe = asyncHandler(async (req, res) => {
   user.newsletterPrompted = true;
   await user.save();
 
-  // Se espera con un limite corto para poder avisar si el correo no salio.
-  const mailResult = await sendMailWithin(mailWelcome(email, user.name), 10000);
-  if (!mailResult.sent) {
-    console.error('[Newsletter] No se pudo enviar la confirmacion:', mailResult.error || 'error desconocido');
+  // La confirmación se encola: la petición responde rápido y la cola
+  // reintenta si el proveedor falla o aún no está configurado.
+  const shouldQueueWelcome = wasInactive || !sub.welcomeSentAt || sub.welcomeStatus === 'fallido';
+  if (shouldQueueWelcome) {
+    await queueWelcome(sub, { reset: wasInactive || sub.welcomeStatus === 'fallido' });
   }
 
   await logActivity({
@@ -314,10 +317,7 @@ const subscribeMe = asyncHandler(async (req, res) => {
     message: `${user.name || user.username} se suscribió a las noticias del CRM (${email})`,
   });
 
-  const emailSent = Boolean(mailResult.sent);
-  const responseMessage = emailSent
-    ? `Listo. Recibirás noticias del CRM en ${email}.`
-    : `Tu suscripción quedó guardada en ${email}, pero no pudimos enviar el correo de confirmación. Revisa la configuración de correo.`;
+  const responseMessage = `Listo. Recibirás noticias del CRM en ${email}.`;
   res.json({
     success: true,
     message: responseMessage,
@@ -325,9 +325,7 @@ const subscribeMe = asyncHandler(async (req, res) => {
       subscribed: true,
       email,
       prompted: true,
-      emailSent,
-      emailSimulated: Boolean(mailResult.simulated),
-      emailError: mailResult.error || '',
+      welcomeQueued: shouldQueueWelcome,
       message: responseMessage,
     },
   });

@@ -185,6 +185,12 @@ sin reiniciar el servicio. Alli mismo puede enviar un correo de prueba y usar
 o a todos. Si existe una configuracion guardada en el panel, tiene prioridad
 sobre las variables de entorno.
 
+Los correos de bienvenida del boletín se envían en una cola con reintentos.
+Si el proveedor falla o aún no está configurado, la suscripción queda guardada
+y el correo se envía automáticamente en cuanto el correo esté operativo. En
+**Suscriptores** cada fila muestra el estado de la bienvenida y tiene un botón
+para reenviarla.
+
 **Opcion con variables de entorno: Brevo (300 correos gratis al dia)**
 
 1. Crea una cuenta en https://www.brevo.com y verifica tu correo como remitente

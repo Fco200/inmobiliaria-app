@@ -559,6 +559,7 @@ window.API = {
     newsletterList: (params) => soporteJson(`/newsletter/subscribers${qs(params)}`),
     newsletterStats: () => soporteJson('/newsletter/stats'),
     newsletterUpdate: (id, body) => soporteJson(`/newsletter/subscribers/${id}`, { method: 'PATCH', body }),
+    newsletterWelcome: (id) => soporteJson(`/soporte/newsletter/${id}/bienvenida`, { method: 'POST' }),
     newsletterRemove: (id) => soporteJson(`/newsletter/subscribers/${id}`, { method: 'DELETE' }),
     newsletterCampaigns: (params) => soporteJson(`/newsletter/campaigns${qs(params)}`),
     newsletterSend: (body) => soporteJson('/newsletter/campaign', { method: 'POST', body }),

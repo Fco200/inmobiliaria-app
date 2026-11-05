@@ -55,6 +55,7 @@ const {
   guardarCorreo,
   eliminarCorreo,
   probarCorreo,
+  reenviarBienvenida,
 } = require('../controllers/soporte.controller');
 
 const router = Router();
@@ -139,6 +140,7 @@ router.get('/actividad', requireSoporte, actividadEquipo);
 router.post('/push/limpiar', requireSoporte, limpiarPushSoporte);
 router.post('/acciones-masivas', requireSoporte, accionMasiva);
 router.get('/newsletter', requireSoporte, listarSuscriptores);
+router.post('/newsletter/:id/bienvenida', requireSoporte, reenviarBienvenida);
 router.delete('/newsletter/:id', requireSoporte, eliminarSuscriptor);
 
 // Correo saliente: configurar proveedor HTTPS y probarlo desde el panel.

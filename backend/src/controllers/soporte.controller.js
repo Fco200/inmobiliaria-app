@@ -39,6 +39,7 @@ const logger = require('../services/logger.service');
 const maintenanceService = require('../services/maintenance.service');
 const mailConfig = require('../services/mailConfig.service');
 const { mailStatus, sendTestMail } = require('../services/mail.service');
+const { queueWelcome } = require('../services/welcome.service');
 
 const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
@@ -1609,11 +1610,29 @@ const probarCorreo = asyncHandler(async (req, res) => {
   });
 });
 
+// Reenvía el correo de bienvenida a un suscriptor concreto. Útil cuando el
+// correo falló antes de configurar el proveedor o el cliente lo perdió.
+const reenviarBienvenida = asyncHandler(async (req, res) => {
+  const sub = await Newsletter.findById(req.params.id);
+  if (!sub) return res.status(404).json({ success: false, message: 'Suscriptor no encontrado.' });
+  if (sub.status !== 'suscrito') {
+    return res.status(400).json({ success: false, message: 'El suscriptor está dado de baja. Reactívalo antes de enviarle la bienvenida.' });
+  }
+
+  await queueWelcome(sub, { reset: true });
+  res.json({
+    success: true,
+    message: `Bienvenida en cola para ${sub.email}. Se enviará en los próximos minutos.`,
+    data: { _id: sub._id, email: sub.email, welcomeStatus: sub.welcomeStatus },
+  });
+});
+
 module.exports = {
   estadoCorreo,
   guardarCorreo,
   eliminarCorreo,
   probarCorreo,
+  reenviarBienvenida,
   soporteLogin,
   soporteMe,
   soporteLogout,

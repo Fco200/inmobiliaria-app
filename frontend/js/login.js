@@ -478,94 +478,160 @@ window.LoginPage = (() => {
     const btn = document.getElementById('btn-forgot-password');
     if (!btn) return;
 
-    const SUPPORT_EMAIL = 'FranciscoAguayo2005@gmail.com';
-
     btn.addEventListener('click', () => {
       const currentIdentifier = (document.getElementById('identifier') || {}).value || '';
+      askIdentifier(currentIdentifier);
+    });
+
+    // Paso 1: usuario o correo. El sistema envía un código al correo de la cuenta.
+    function askIdentifier(initial) {
       const modal = UI.openModal({
         title: '&#128274;&nbsp; Restablecer contraseña',
         size: 480,
         body: `
-          <p style="margin:0 0 14px;" class="text-muted">Ingresa tu usuario o correo de la cuenta. Avisaremos al administrador y al soporte técnico para que te ayuden a restablecerla.</p>
+          <p style="margin:0 0 14px;" class="text-muted">Te enviaremos un código de 6 dígitos al correo de tu cuenta. Con ese código podrás crear una nueva contraseña.</p>
           <div class="form-group">
             <label for="fp-identifier">Usuario o correo</label>
-            <input class="form-control" id="fp-identifier" type="text" value="${UI.escapeHtml(currentIdentifier)}" placeholder="usuario o correo@ejemplo.com" autofocus>
+            <input class="form-control" id="fp-identifier" type="text" value="${UI.escapeHtml(initial)}" placeholder="usuario o correo@ejemplo.com" autofocus>
           </div>
           <div id="fp-error" class="alert alert-error hide" role="alert"></div>
         `,
         footer: `
           <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="button" data-ok>&#10148;&nbsp; Enviar solicitud</button>
+          <button class="btn btn-primary" type="button" data-ok>&#10148;&nbsp; Enviar código</button>
         `,
       });
 
       const bodyEl = modal.bodyEl;
       const overlay = bodyEl.closest('#modal-overlay');
       if (!overlay) return;
-
       const input = bodyEl.querySelector('#fp-identifier');
       const errBox = bodyEl.querySelector('#fp-error');
       const okBtn = overlay.querySelector('[data-ok]');
       const cancelBtn = overlay.querySelector('[data-cancel]');
 
       if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-      if (okBtn) {
-        okBtn.addEventListener('click', async () => {
-          const identifier = (input.value || '').trim();
-          if (!identifier) {
-            errBox.textContent = 'Ingresa tu usuario o correo.';
-            errBox.classList.remove('hide');
-            return;
-          }
-          errBox.classList.add('hide');
-          okBtn.disabled = true;
-          try {
-            await window.API.auth.forgotPassword({ identifier });
-            UI.closeModal();
-            showResetInstructions(identifier);
-          } catch (error) {
-            okBtn.disabled = false;
-            errBox.textContent = error.message || 'No se pudo enviar la solicitud. Intenta de nuevo.';
-            errBox.classList.remove('hide');
-          }
-        });
-      }
-      if (input) {
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && okBtn) okBtn.click();
-        });
-      }
-    });
 
-    // El primer paso ya notificó a administrador y soporte. Al cerrar esa ventana,
-    // se pide al asesor enviar un correo al soporte para restablecer la contraseña,
-    // con botón funcional que abre su correo con un mensaje preestablecido.
-    function showResetInstructions(identifier) {
-      const subject = 'Solicitud de restablecimiento de contraseña - INMOBLES';
-      const body =
-        'Hola, soy asesor de INMOBLES y olvidé mi contraseña.\n\n' +
-        `Mi usuario o correo es: ${identifier}\n\n` +
-        'Solicito que me ayuden a restablecerla. ¡Gracias!';
-      const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      const send = async () => {
+        const identifier = (input.value || '').trim();
+        if (!identifier) {
+          errBox.textContent = 'Ingresa tu usuario o correo.';
+          errBox.classList.remove('hide');
+          return;
+        }
+        errBox.classList.add('hide');
+        okBtn.disabled = true;
+        try {
+          const r = await window.API.auth.requestResetCode({ identifier });
+          UI.closeModal();
+          UI.toast((r && r.message) || 'Revisa tu correo para el código.', 'success');
+          askCode(identifier);
+        } catch (error) {
+          okBtn.disabled = false;
+          errBox.textContent = error.message || 'No se pudo enviar el código. Intenta de nuevo.';
+          errBox.classList.remove('hide');
+        }
+      };
 
+      if (okBtn) okBtn.addEventListener('click', send);
+      if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    }
+
+    // Paso 2: código + nueva contraseña.
+    function askCode(identifier) {
       const modal = UI.openModal({
-        title: '&#9993;&nbsp; Restablecer contraseña',
-        size: 520,
+        title: '&#128274;&nbsp; Escribe el código',
+        size: 480,
         body: `
-          <p style="margin:0 0 10px;">Ya avisamos al <strong>administrador</strong> y al <strong>soporte técnico</strong> sobre tu solicitud.</p>
-          <p style="margin:0 0 14px;" class="text-muted">Para que puedan restablecer tu contraseña, envía ahora un correo al soporte con tus datos. Al hacer clic en el botón se abrirá tu correo con el mensaje ya redactado.</p>
-          <div style="background:#faf8fd;border:1px solid #f0edf3;border-radius:12px;padding:12px 14px;font-size:13px;color:#3d3560;word-break:break-all;">${UI.escapeHtml(mailto)}</div>
+          <p style="margin:0 0 14px;" class="text-muted">Revisa tu correo (y la carpeta de spam). El código vence en 15 minutos y solo sirve una vez.</p>
+          <div class="form-group">
+            <label for="fp-code">Código de 6 dígitos</label>
+            <input class="form-control" id="fp-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456">
+          </div>
+          <div class="form-group">
+            <label for="fp-pass">Nueva contraseña</label>
+            <input class="form-control" id="fp-pass" type="password" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="fp-pass2">Repite la nueva contraseña</label>
+            <input class="form-control" id="fp-pass2" type="password" autocomplete="new-password">
+          </div>
+          <p class="text-muted" style="font-size:12px;margin:0 0 10px;">Mínimo 8 caracteres, con mayúscula, minúscula y número.</p>
+          <div id="fp-error" class="alert alert-error hide" role="alert"></div>
+          <p style="font-size:12px;margin:12px 0 0;">
+            <a href="#" id="fp-resend">Enviar un código nuevo</a> &middot;
+            <a href="#" id="fp-admin">¿No te llega? Avisar al administrador</a>
+          </p>
         `,
         footer: `
-          <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
-          <a class="btn btn-primary" href="${mailto}" target="_blank" rel="noopener" data-mail>&#128231;&nbsp; Abrir correo al soporte</a>
+          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" type="button" data-ok>&#10004;&nbsp; Cambiar contraseña</button>
         `,
       });
 
-      const overlay = modal.bodyEl.closest('#modal-overlay');
-      if (overlay) {
-        const closeBtn = overlay.querySelector('[data-cancel]');
-        if (closeBtn) closeBtn.addEventListener('click', () => UI.closeModal());
+      const bodyEl = modal.bodyEl;
+      const overlay = bodyEl.closest('#modal-overlay');
+      if (!overlay) return;
+      const codeInput = bodyEl.querySelector('#fp-code');
+      const passInput = bodyEl.querySelector('#fp-pass');
+      const pass2Input = bodyEl.querySelector('#fp-pass2');
+      const errBox = bodyEl.querySelector('#fp-error');
+      const okBtn = overlay.querySelector('[data-ok]');
+      const cancelBtn = overlay.querySelector('[data-cancel]');
+      const showError = (text) => {
+        errBox.textContent = text;
+        errBox.classList.remove('hide');
+      };
+
+      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+
+      const confirm = async () => {
+        const code = (codeInput.value || '').replace(/\s/g, '');
+        const pass = passInput.value || '';
+        if (!/^\d{6}$/.test(code)) return showError('El código tiene 6 dígitos.');
+        if (pass.length < 8) return showError('La contraseña debe tener al menos 8 caracteres.');
+        if (pass !== pass2Input.value) return showError('Las contraseñas no coinciden.');
+        errBox.classList.add('hide');
+        okBtn.disabled = true;
+        try {
+          const r = await window.API.auth.confirmResetCode({ identifier, code, newPassword: pass });
+          UI.closeModal();
+          UI.toast((r && r.message) || 'Contraseña actualizada.', 'success');
+          const loginId = document.getElementById('identifier');
+          if (loginId) loginId.value = identifier;
+          const loginPass = document.getElementById('password');
+          if (loginPass) loginPass.value = '';
+        } catch (error) {
+          okBtn.disabled = false;
+          showError(error.message || 'No se pudo cambiar la contraseña.');
+        }
+      };
+      if (okBtn) okBtn.addEventListener('click', confirm);
+
+      const resend = bodyEl.querySelector('#fp-resend');
+      if (resend) {
+        resend.addEventListener('click', async (e) => {
+          e.preventDefault();
+          try {
+            const r = await window.API.auth.requestResetCode({ identifier });
+            UI.toast((r && r.message) || 'Código reenviado.', 'success');
+          } catch (error) {
+            showError(error.message);
+          }
+        });
+      }
+
+      const adminLink = bodyEl.querySelector('#fp-admin');
+      if (adminLink) {
+        adminLink.addEventListener('click', async (e) => {
+          e.preventDefault();
+          try {
+            await window.API.auth.forgotPassword({ identifier });
+            UI.toast('Avisamos al administrador para que te ayude.', 'info');
+          } catch (error) {
+            showError(error.message);
+          }
+        });
       }
     }
   }

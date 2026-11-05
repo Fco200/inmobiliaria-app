@@ -161,7 +161,7 @@ window.Pages.properties = {
                 ${detailRow('Valor ticket', record.ticketValue ? Format.currency(record.ticketValue) : '—')}
                 ${detailRow('Origen', record.isExternal ? `Externa${record.externalAdvisor ? ` — ofrecida por ${UI.escapeHtml(record.externalAdvisor)}` : ''}` : 'Captación del equipo')}
                 ${detailRow('Asesor', record.responsibleUser ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser) : '—')}
-                ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.name || record.owner) : UI.escapeHtml(record.ownerName || '—'))}
+                ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.nombre || record.owner.name || '') : UI.escapeHtml(record.ownerName || '—'))}
                 ${detailRow('Se puede vender con', paymentMethodsLabel(record))}
               </tbody>
             </table>

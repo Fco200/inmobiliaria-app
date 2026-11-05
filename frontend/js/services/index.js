@@ -33,6 +33,8 @@ window.API = {
     completeOnboarding: () => ApiClient.patch('/auth/onboarding-complete'),
     changePassword: (body) => ApiClient.post('/auth/change-password', body),
     forgotPassword: (body) => ApiClient.post('/auth/forgot-password', body),
+    requestResetCode: (body) => ApiClient.post('/auth/password-reset/request', body),
+    confirmResetCode: (body) => ApiClient.post('/auth/password-reset/confirm', body),
   },
 
   userRequests: {
@@ -182,6 +184,8 @@ window.API = {
       () => ApiClient.get('/businesses/options', params)
     ),
     stages: () => ApiClient.get('/businesses/stages'),
+    flow: () => ApiClient.get('/businesses/flow'),
+    saveFlow: (stages) => ApiClient.put('/businesses/flow', { stages }),
     byProperty: (propertyId) => ApiClient.get(`/businesses/property/${propertyId}`),
     create: (body) => ApiClient.post('/businesses', body),
     update: (id, body) => ApiClient.put(`/businesses/${id}`, body),

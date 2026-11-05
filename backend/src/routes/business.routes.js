@@ -2,7 +2,7 @@
 
 const { Router } = require('express');
 const businessController = require('../controllers/business.controller');
-const { protect } = require('../middlewares/auth');
+const { protect, authorize } = require('../middlewares/auth');
 const {
   uploadBusiness,
   verifyUpload,
@@ -16,6 +16,9 @@ router.use(protect);
 
 router.get('/', businessController.list);
 router.get('/stages', businessController.stages);
+// Flujo de negocio configurable (solo administración y dirección lo editan).
+router.get('/flow', businessController.getFlow);
+router.put('/flow', authorize('admin', 'direccion', 'superadmin', 'system_admin'), businessController.saveFlow);
 // Catálogo ligero para selects con búsqueda remota (?q=…). Debe ir ANTES de
 // /:id para que "options" no se interprete como un identificador.
 router.get('/options', businessController.options);

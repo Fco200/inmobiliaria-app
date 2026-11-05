@@ -29,6 +29,7 @@ const {
   stageLabel,
   stageOrder,
 } = require('../constants/business-stages');
+const processFlow = require('../services/process.service');
 const { BUSINESS_CREATOR_ROLES } = require('../constants/roles');
 
 // Etapas del embudo "en curso". Las terminales (concluido/cancelado/pausa)
@@ -63,6 +64,11 @@ function canManageBusiness(req) {
 
 // Escrituración cambia etapas, concluye negocios, agrega notas/checklist y
 // sube documentos. Gerencia (jefe) también puede cancelar/concluir.
+// Dirección, administración y soporte pueden saltarse las reglas del flujo.
+function canOverrideFlow(req) {
+  return ['direccion', 'admin', 'superadmin'].includes(roleCode(req));
+}
+
 function canChangeStage(req) {
   return isBoss(req)
     || hasRole(req, ['escrituracion'])
@@ -101,14 +107,25 @@ async function notifyTeamPropertyBusiness(req, business) {
 // el orden global. Lo usa el frontend para renderizar el embudo sin duplicar
 // la lógica.
 const stages = asyncHandler(async (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      byProcess: STAGES_BY_PROCESS,
-      order: STAGE_ORDER,
-      labels: STAGE_LABELS,
-    },
-  });
+  await processFlow.flow();
+  res.json({ success: true, data: processFlow.describe() });
+});
+
+// GET /api/businesses/flow — configuración completa (para la pantalla de administración).
+const getFlow = asyncHandler(async (req, res) => {
+  await processFlow.flow();
+  res.json({ success: true, data: processFlow.describe() });
+});
+
+// PUT /api/businesses/flow — solo dirección, administración y soporte.
+const saveFlow = asyncHandler(async (req, res) => {
+  const stagesInput = req.body && req.body.stages;
+  try {
+    await processFlow.saveFlow(stagesInput);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+  res.json({ success: true, message: 'Flujo de negocio guardado.', data: processFlow.describe() });
 });
 
 const businessCrud = buildCrud(Business, {
@@ -361,7 +378,11 @@ const create = asyncHandler(async (req, res) => {
   applyFechaCierre(body);
   syncBusinessAliases(body);
 
+  await processFlow.flow();
   if (body.currentStage) body.currentStage = normalizeStage(body.currentStage);
+  if (body.currentStage && !processFlow.isUsable(body.currentStage)) {
+    return res.status(400).json({ success: false, message: `La etapa "${req.body.currentStage}" no está disponible en el flujo de negocio.` });
+  }
 
   // Nunca se asigna automáticamente al usuario que crea (p. ej. la cuenta de
   // Administración) como asesor del negocio: el captador debe elegirse de forma
@@ -479,6 +500,16 @@ const update = asyncHandler(async (req, res) => {
 
   if (body.currentStage !== undefined) {
     body.currentStage = normalizeStage(body.currentStage);
+    if (body.currentStage !== previousStage) {
+      await processFlow.flow();
+      if (!processFlow.isUsable(body.currentStage)) {
+        return res.status(400).json({ success: false, message: 'Esa etapa no está disponible en el flujo de negocio.' });
+      }
+      if (!processFlow.allowedNext(previousStage, body.currentStage) && !canOverrideFlow(req)) {
+        const opciones = processFlow.nextLabels(previousStage).join(', ');
+        return res.status(400).json({ success: false, message: `Según el flujo, desde esta etapa solo se puede pasar a: ${opciones}.` });
+      }
+    }
     if (body.currentStage !== previousStage && !canChangeStage(req)) {
       return res.status(403).json({
         success: false,
@@ -664,7 +695,8 @@ const changeStage = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'La nota es obligatoria para cambiar de etapa' });
   }
 
-  if (!stage || !VALID_STAGE_CODES.has(stage) || !STAGE_ORDER.includes(stage)) {
+  await processFlow.flow();
+  if (!stage || !processFlow.isUsable(stage)) {
     return res.status(400).json({
       success: false,
       message: `La etapa "${req.body.stage}" no es válida.`,
@@ -673,6 +705,10 @@ const changeStage = asyncHandler(async (req, res) => {
 
   const previousStatus = business.status;
   const previousStage = normalizeStage(business.currentStage);
+  if (previousStage !== stage && !processFlow.allowedNext(previousStage, stage) && !canOverrideFlow(req)) {
+    const opciones = processFlow.nextLabels(previousStage).join(', ');
+    return res.status(400).json({ success: false, message: `Según el flujo, desde esta etapa solo se puede pasar a: ${opciones}.` });
+  }
   if (previousStage === stage) {
     return res.status(400).json({ success: false, message: 'El negocio ya está en esa etapa' });
   }
@@ -1062,6 +1098,8 @@ module.exports = {
   removeDocument,
   propertyBusinesses,
   stages,
+  getFlow,
+  saveFlow,
   stagesFor,
   STAGE_ORDER,
   STAGE_LABELS,

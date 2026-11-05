@@ -47,6 +47,10 @@ const userSchema = new mongoose.Schema(
     hasCompletedOnboarding: { type: Boolean, default: false },
     // Ya respondió la pregunta de "recibir noticias por correo" en la bienvenida.
     newsletterPrompted: { type: Boolean, default: false },
+    // Código de recuperación de contraseña (se guarda solo el hash, con vencimiento).
+    resetCodeHash: { type: String, default: null, select: false },
+    resetCodeExpires: { type: Date, default: null, select: false },
+    resetCodeAttempts: { type: Number, default: 0, select: false },
     // Bloqueo temporal por intentos fallidos de inicio de sesión.
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockUntil: { type: Date, default: null, select: false },

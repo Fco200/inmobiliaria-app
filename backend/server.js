@@ -62,6 +62,8 @@ async function start() {
     startJobs();
     // Retoma las campañas de correo pendientes (también tras un reinicio).
     campaignWorker.startCampaignWorker();
+    // Carga el flujo de negocio para que los nombres de etapa personalizados ya estén listos.
+    require('./src/services/process.service').flow().catch((e) => console.warn('[Flujo] No se pudo cargar el flujo de negocio:', e.message));
     // Los avisos internos de tipo "nueva_propiedad" ("Se publicó una casa…
     // coincide con los intereses de X") ya no se generan por defecto. Aquí se
     // eliminan los que quedaron de versiones anteriores para que la campana

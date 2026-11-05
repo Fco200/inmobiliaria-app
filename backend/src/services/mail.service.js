@@ -23,6 +23,10 @@ function getTransporter() {
     port: env.smtpPort,
     secure: env.smtpSecure,
     auth: { user: env.smtpUser, pass: env.smtpPass },
+    // Sin límites, un SMTP lento deja la petición colgada hasta 2 minutos.
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
   });
   return transporter;
 }
@@ -294,7 +298,27 @@ function mailNewsletterCampaign({ email, name, subject, message, intro }) {
   };
 }
 
+// Correo con el código de 6 dígitos para restablecer la contraseña.
+function mailPasswordResetCode({ name, email, code }) {
+  const subject = 'Tu código para restablecer la contraseña';
+  const inner = `
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Hola ${escapeHtml(name || '')},</p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#333;">Recibimos una solicitud para restablecer la contraseña de tu cuenta del CRM. Usa este código:</p>
+    <div style="text-align:center;margin:18px 0;font-size:30px;font-weight:700;letter-spacing:8px;color:#2d1048;">${escapeHtml(code)}</div>
+    <p style="margin:0 0 14px;font-size:13px;line-height:1.65;color:#555;">El código vence en 15 minutos y solo puede usarse una vez.</p>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;font-size:13px;color:#9a3412;">
+      Si no solicitaste este cambio, ignora este correo: tu contraseña no cambiará.
+    </div>`;
+  return {
+    to: email,
+    subject,
+    html: wrapLayout(subject, inner),
+    text: `Hola ${name || ''}. Tu código para restablecer la contraseña es: ${code}. Vence en 15 minutos. Si no lo solicitaste, ignora este correo.`,
+  };
+}
+
 module.exports = {
+  mailPasswordResetCode,
   sendMail,
   resetTransporter,
   mailWelcome,

@@ -4,6 +4,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { Newsletter, User, Client, Role, Campaign, CampaignRecipient } = require('../models');
 const campaignWorker = require('../services/campaign.worker');
 const { logActivity } = require('../services/log.service');
+const { sendMail, mailWelcome } = require('../services/mail.service');
 
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EMAIL_RX = /^[\w.+-]+@[\w-]+\.[\w.-]+$/;
@@ -297,6 +298,11 @@ const subscribeMe = asyncHandler(async (req, res) => {
 
   user.newsletterPrompted = true;
   await user.save();
+
+  // Correo de confirmación (no bloquea la respuesta si falla).
+  sendMail(mailWelcome(email, user.name)).catch((error) => {
+    console.error('[Newsletter] No se pudo enviar la confirmación:', error.message);
+  });
 
   await logActivity({
     entityType: 'Newsletter',

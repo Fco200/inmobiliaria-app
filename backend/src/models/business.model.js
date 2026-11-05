@@ -83,37 +83,7 @@ const businessSchema = new mongoose.Schema(
     },
     currentStage: {
       type: String,
-      enum: [
-        // Flujo oficial solicitado.
-        'PROMESA',
-        'INTEGRACION',
-        'AVALUO',
-        'REVISION_AVALUO',
-        'NOTARIA',
-        'DICTAMEN_PRESUPUESTO',
-        'FIRMA',
-        'PAGO',
-        'ENTREGA',
-        'concluido',
-        'cancelado',
-        'PAUSA',
-        // Valores heredados (se conservan para poder leer/guardar registros
-        // viejos hasta que corre la migración de etapas).
-        'INSCRIPCION',
-        'DICTAMEN',
-        'CONCLUIDO',
-        'CANCELADO',
-        'CANCELADO_DEFINITIVO',
-        'REVISION',
-        'NOTARIAS',
-        'integracion',
-        'avaluo',
-        'revision',
-        'notarias',
-        'firma',
-        'pago',
-        'entrega',
-      ],
+      // Las etapas se configuran en Configuración > Flujo de negocio (ProcessFlow).
       default: 'PROMESA',
     },
     status: {

@@ -18,6 +18,8 @@ const {
   revokeSessionByToken,
 } = require('../services/session.service');
 const { ensure } = require('../services/notification.service');
+const { sendMail, mailPasswordResetCode } = require('../services/mail.service');
+const Session = require('../models/session.model');
 const maintenanceService = require('../services/maintenance.service');
 const {
   KEY_PROTECTED_ROLE_CODES,
@@ -509,4 +511,106 @@ const forgotPassword = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword, forgotPassword };
+// ── Recuperación de contraseña con código por correo ─────────────────────────
+// El usuario pide un código de 6 dígitos; llega a su correo y lo usa una sola vez
+// (vence en 15 minutos y admite 5 intentos). No depende del administrador.
+const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+const RESET_MAX_ATTEMPTS = 5;
+
+const hashResetCode = (code) => crypto.createHash('sha256').update(String(code)).digest('hex');
+
+function passwordProblem(password) {
+  if (password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (!/[A-Z]/.test(password)) return 'La contraseña debe incluir una mayúscula.';
+  if (!/[a-z]/.test(password)) return 'La contraseña debe incluir una minúscula.';
+  if (!/\d/.test(password)) return 'La contraseña debe incluir un número.';
+  return '';
+}
+
+// POST /auth/password-reset/request  body: { identifier }
+// Responde siempre igual para no revelar qué cuentas existen.
+const requestPasswordResetCode = asyncHandler(async (req, res) => {
+  const identifier = String((req.body && req.body.identifier) || '').trim().toLowerCase();
+  if (!identifier) {
+    return res.status(400).json({ success: false, message: 'Ingresa tu usuario o correo.' });
+  }
+
+  const generic = {
+    success: true,
+    message: 'Si la cuenta existe, enviamos un código de 6 dígitos al correo registrado. Revisa también la carpeta de spam.',
+  };
+
+  const user = await User.findOne({ $or: [{ email: identifier }, { username: identifier }] });
+  if (!user || user.status !== 'activo' || !user.email) return res.json(generic);
+
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  // updateOne evita validar el documento completo (la contraseña no viene seleccionada).
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        resetCodeHash: hashResetCode(code),
+        resetCodeExpires: new Date(Date.now() + RESET_CODE_TTL_MS),
+        resetCodeAttempts: 0,
+      },
+    }
+  );
+
+  const sent = await sendMail(mailPasswordResetCode({ name: user.name, email: user.email, code })).catch(() => false);
+  if (!sent) console.error('[Auth] No se pudo enviar el código de recuperación a', user.email);
+
+  res.json(generic);
+});
+
+// POST /auth/password-reset/confirm  body: { identifier, code, newPassword }
+const confirmPasswordResetCode = asyncHandler(async (req, res) => {
+  const identifier = String((req.body && req.body.identifier) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').replace(/\s/g, '');
+  const newPassword = String((req.body && req.body.newPassword) || '');
+
+  if (!identifier || !code || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Completa el usuario, el código y la nueva contraseña.' });
+  }
+  const problem = passwordProblem(newPassword);
+  if (problem) return res.status(400).json({ success: false, message: problem });
+
+  const invalid = () => res.status(400).json({
+    success: false,
+    message: 'El código no es válido o ya venció. Solicita uno nuevo.',
+  });
+
+  const user = await User.findOne({ $or: [{ email: identifier }, { username: identifier }] })
+    .select('+resetCodeHash +resetCodeExpires +resetCodeAttempts');
+  if (!user || !user.resetCodeHash || !user.resetCodeExpires) return invalid();
+  if (user.resetCodeExpires < new Date()) return invalid();
+  if ((user.resetCodeAttempts || 0) >= RESET_MAX_ATTEMPTS) return invalid();
+
+  const given = Buffer.from(hashResetCode(code));
+  const expected = Buffer.from(user.resetCodeHash);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+    await User.updateOne({ _id: user._id }, { $inc: { resetCodeAttempts: 1 } });
+    return invalid();
+  }
+
+  const full = await User.findById(user._id).select('+password');
+  full.password = newPassword;
+  full.resetCodeHash = null;
+  full.resetCodeExpires = null;
+  full.resetCodeAttempts = 0;
+  await full.save();
+
+  // Cierra las sesiones abiertas: quien tenga la contraseña vieja debe volver a entrar.
+  await Session.deleteMany({ user: full._id });
+
+  await logActivity({
+    entityType: 'User',
+    entityId: full._id,
+    user: full._id,
+    action: 'restablecer_contrasena',
+    message: `${full.name || full.username} restableció su contraseña con código de correo`,
+  });
+
+  res.json({ success: true, message: 'Contraseña actualizada. Ya puedes iniciar sesión con tu nueva contraseña.' });
+});
+
+module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword, forgotPassword, requestPasswordResetCode, confirmPasswordResetCode };

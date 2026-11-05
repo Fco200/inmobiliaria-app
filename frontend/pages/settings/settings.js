@@ -53,6 +53,7 @@ window.Pages.settings = {
       || roleCode === 'asistencia'
       || permissions.includes('settings_manage');
     const canManageNewsletter = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'].includes(roleCode);
+    const canManageFlow = ['admin', 'direccion', 'superadmin', 'system_admin'].includes(roleCode);
     if (!isBoss) {
       container.innerHTML = `
         <div class="card">
@@ -75,6 +76,7 @@ window.Pages.settings = {
         <button class="btn btn-secondary" data-tab="register" type="button">&#128274;&nbsp; Registro</button>
         <button class="btn btn-secondary" data-tab="alerts" type="button">&#128276;&nbsp; Avisos</button>
         ${canManageNewsletter ? '<button class="btn btn-secondary" data-tab="newsletter" type="button">&#128231;&nbsp; Boletín y campañas</button>' : ''}
+        ${canManageFlow ? '<button class="btn btn-secondary" data-tab="flow" type="button">&#128200;&nbsp; Flujo de negocio</button>' : ''}
         <button class="btn btn-secondary" data-tab="sessions" type="button">&#128275;&nbsp; Sesiones</button>
         <button class="btn btn-secondary" data-tab="catalog" type="button">&#127760;&nbsp; Catálogo público</button>
         <button class="btn btn-secondary" data-tab="guide" type="button">&#128214;&nbsp; Guía del sistema</button>
@@ -122,6 +124,7 @@ window.Pages.settings = {
         else if (btn.dataset.tab === 'register') renderRegister();
         else if (btn.dataset.tab === 'alerts') renderAlerts();
         else if (btn.dataset.tab === 'newsletter') renderNewsletter();
+        else if (btn.dataset.tab === 'flow') renderBusinessFlow();
         else if (btn.dataset.tab === 'sessions') renderSessions();
         else if (btn.dataset.tab === 'catalog') renderCatalog();
         else if (btn.dataset.tab === 'guide') renderGuide();
@@ -1645,6 +1648,141 @@ window.Pages.settings = {
 
       loadSubscribers();
       loadHistory();
+    }
+
+    // ── Flujo de negocio (configurable por el administrador) ─────────────────
+    let flowRows = [];
+
+    async function renderBusinessFlow() {
+      tabContent.innerHTML = '<div class="loading">Cargando flujo de negocio...</div>';
+      try {
+        const res = await API.businesses.flow();
+        flowRows = (res.stages || []).map((s) => ({ ...s, next: [...(s.next || [])] }));
+        drawBusinessFlow();
+      } catch (error) {
+        tabContent.innerHTML = UI.errorAlert(error.message);
+      }
+    }
+
+    // Copia lo que el administrador escribió en la tabla hacia flowRows.
+    function collectBusinessFlow() {
+      tabContent.querySelectorAll('tr[data-row]').forEach((tr) => {
+        const row = flowRows[Number(tr.dataset.row)];
+        if (!row) return;
+        row.label = tr.querySelector('[data-label]').value.trim();
+        row.color = tr.querySelector('[data-color]').value;
+        const active = tr.querySelector('[data-active]');
+        row.active = active ? active.checked : true;
+        row.next = Array.from(tr.querySelectorAll('[data-next]'))
+          .filter((c) => c.checked)
+          .map((c) => flowRows[Number(c.dataset.next)])
+          .filter((target) => target && target.code)
+          .map((target) => target.code);
+      });
+    }
+
+    function moveBusinessFlow(index, delta) {
+      collectBusinessFlow();
+      const target = index + delta;
+      if (target < 0 || target >= flowRows.length) return;
+      [flowRows[index], flowRows[target]] = [flowRows[target], flowRows[index]];
+      drawBusinessFlow();
+    }
+
+    function drawBusinessFlow() {
+      const rows = flowRows.map((s, i) => `
+        <tr data-row="${i}">
+          <td style="white-space:nowrap;">
+            <button class="btn btn-secondary btn-sm" type="button" data-up="${i}" ${i === 0 ? 'disabled' : ''}>&#9650;</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-down="${i}" ${i === flowRows.length - 1 ? 'disabled' : ''}>&#9660;</button>
+          </td>
+          <td><input class="form-control" data-label value="${UI.escapeHtml(s.label)}" maxlength="60"></td>
+          <td><input type="color" data-color value="${UI.escapeHtml(s.color || '#64748b')}"></td>
+          <td style="text-align:center;"><input type="checkbox" data-active ${s.active ? 'checked' : ''} ${s.system ? 'disabled' : ''}></td>
+          <td>
+            <details>
+              <summary>${s.next && s.next.length ? `${s.next.length} etapa(s)` : 'Cualquiera'}</summary>
+              <div style="display:flex;flex-direction:column;gap:4px;padding:6px 0;">
+                ${flowRows.map((o, j) => (j === i ? '' : `
+                  <label style="font-size:12px;"><input type="checkbox" data-next="${j}" ${s.next && s.next.includes(o.code) ? 'checked' : ''}> ${UI.escapeHtml(o.label)}</label>`)).join('')}
+              </div>
+            </details>
+          </td>
+          <td>${s.system ? UI.badge('Sistema', 'info') : UI.badge(s.active ? 'Activa' : 'Inactiva', s.active ? 'success' : 'muted')}</td>
+        </tr>`).join('');
+
+      tabContent.innerHTML = `
+        <div class="card" style="margin-bottom:16px;">
+          <h3 style="margin:0 0 6px;">&#128200;&nbsp; Flujo de negocio</h3>
+          <p class="text-muted" style="font-size:13px;margin:0 0 8px;">
+            Define las etapas por las que pasa un negocio, en el orden en que deben seguirse.
+          </p>
+          <ul class="text-muted" style="font-size:12px;margin:0 0 0 18px;">
+            <li><strong>Orden:</strong> usa las flechas. Así se muestran en el tablero y en los selectores.</li>
+            <li><strong>Puede pasar a:</strong> si no eliges ninguna, el negocio puede cambiar a cualquier etapa. Si eliges algunas, solo podrá pasar a esas. Dirección, administración y soporte pueden saltarse la regla.</li>
+            <li><strong>Activa:</strong> las inactivas dejan de ofrecerse para negocios nuevos, pero los que ya están en ella se conservan.</li>
+            <li><strong>Sistema:</strong> Concluido, Cancelado y Pausa no se pueden quitar, porque el resto del sistema las usa.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="table-wrapper">
+            <table class="table">
+              <thead><tr><th>Orden</th><th>Nombre de la etapa</th><th>Color</th><th>Activa</th><th>Puede pasar a</th><th>Tipo</th></tr></thead>
+              <tbody>${rows || '<tr><td colspan="6">Sin etapas.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;">
+            <div class="form-group" style="flex:1;min-width:220px;margin:0;">
+              <label for="flow-new-label">Nueva etapa</label>
+              <input class="form-control" id="flow-new-label" type="text" maxlength="60" placeholder="Ej. Contrato firmado">
+            </div>
+            <button class="btn btn-secondary" type="button" data-flow-add>+ Agregar etapa</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" type="button" data-flow-save>Guardar flujo</button>
+          <span class="text-muted" style="font-size:12px;">Los cambios se aplican a los negocios de inmediato.</span>
+        </div>
+      `;
+
+      tabContent.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => moveBusinessFlow(Number(b.dataset.up), -1)));
+      tabContent.querySelectorAll('[data-down]').forEach((b) => b.addEventListener('click', () => moveBusinessFlow(Number(b.dataset.down), 1)));
+
+      tabContent.querySelector('[data-flow-add]').addEventListener('click', () => {
+        collectBusinessFlow();
+        const input = tabContent.querySelector('#flow-new-label');
+        const label = (input.value || '').trim();
+        if (!label) {
+          UI.toast('Escribe el nombre de la nueva etapa.', 'warning');
+          return;
+        }
+        flowRows.push({ label, color: '#64748b', active: true, system: false, next: [] });
+        drawBusinessFlow();
+      });
+
+      tabContent.querySelector('[data-flow-save]').addEventListener('click', async (event) => {
+        collectBusinessFlow();
+        const btn = event.currentTarget;
+        btn.disabled = true;
+        try {
+          const payload = flowRows.map((r) => ({
+            code: r.code,
+            label: r.label,
+            color: r.color,
+            active: r.active,
+            next: r.next || [],
+          }));
+          const res = await API.businesses.saveFlow(payload);
+          flowRows = (res.stages || []).map((s) => ({ ...s, next: [...(s.next || [])] }));
+          UI.toast('Flujo de negocio guardado.', 'success');
+          drawBusinessFlow();
+        } catch (error) {
+          UI.toast(error.message, 'error');
+          btn.disabled = false;
+        }
+      });
     }
 
     function renderActivity() {

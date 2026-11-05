@@ -23,6 +23,8 @@ window.Pages.businesses = {
       byProcess: { comprador: FALLBACK_STAGES.slice(), vendedor: FALLBACK_STAGES.slice() },
       order: [...FALLBACK_STAGES, ...TERMINAL_STAGES],
       labels: {},
+      colors: {},
+      next: {},
     };
     try {
       const stagesRes = await API.businesses.stages();
@@ -35,6 +37,8 @@ window.Pages.businesses = {
           },
           order: data.order || [...FALLBACK_STAGES, ...TERMINAL_STAGES],
           labels: data.labels || {},
+          colors: data.colors || {},
+          next: data.next || {},
         };
       }
     } catch (error) {
@@ -109,7 +113,7 @@ window.Pages.businesses = {
       cancelado: '#dc2626',
       PAUSA: '#f59e0b',
     };
-    const colorFor = (stage) => STAGE_COLORS[stage] || '#64748b';
+    const colorFor = (stage) => (stageMeta.colors && stageMeta.colors[stage]) || STAGE_COLORS[stage] || '#64748b';
 
     const currentUser = me || ApiClient.getStoredUser();
     const currentUserId = currentUser ? (currentUser._id || currentUser.id || '') : '';
@@ -580,8 +584,10 @@ window.Pages.businesses = {
     }
 
     function openChangeStageModal(record, ctx) {
-      const stages = stagesFor(record.processType);
-      const stageOptions = [...stages, 'PAUSA', 'concluido', 'cancelado']
+      const allowedNext = (stageMeta.next && stageMeta.next[record.currentStage]) || [];
+      // Si el flujo define a qué etapas puede pasar, solo se ofrecen esas.
+      const stages = allowedNext.length ? allowedNext : stagesFor(record.processType);
+      const stageOptions = [...stages, ...(allowedNext.length ? [] : ['PAUSA', 'concluido', 'cancelado'])]
         .map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`)
         .join('');
       const modal = UI.openModal({
@@ -1123,7 +1129,6 @@ window.Pages.businesses = {
         .map((s) => ({ value: s, label: stageLabel(s) }));
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
-        { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }], value: 'comprador' },
         { name: 'currentStage', label: 'Etapa inicial', type: 'select', options: stageOptionsForNew('comprador') },
         { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
         { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
@@ -1182,7 +1187,7 @@ window.Pages.businesses = {
           e.preventDefault();
           try {
             const values = UI.collectForm(e.target);
-            const body = buildBusinessPayload(values, null);
+            const body = buildBusinessPayload({ processType: 'comprador', ...values }, null);
             await API.businesses.create(body);
             UI.toast('Negocio creado', 'success');
             UI.closeModal();

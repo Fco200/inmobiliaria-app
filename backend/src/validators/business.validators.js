@@ -2,11 +2,11 @@
 
 const { body, param } = require('express-validator');
 const validate = require('../middlewares/validate');
-const { STAGE_ORDER, STAGE_ALIASES } = require('../constants/business-stages');
+
 
 // Se aceptan las etapas canónicas y los códigos heredados; el controlador los
 // normaliza antes de guardar para que la base quede siempre en el flujo nuevo.
-const STAGES = [...new Set([...STAGE_ORDER, ...Object.keys(STAGE_ALIASES)])];
+
 
 const businessRules = [
   body('name').notEmpty().withMessage('El nombre del negocio es obligatorio'),
@@ -22,7 +22,7 @@ const businessRules = [
   body('property').optional({ values: 'falsy' }).isMongoId().withMessage('Propiedad no válida'),
   body('processType').optional().isIn(['comprador', 'vendedor']).withMessage('Tipo de proceso no válido'),
   body('valueOperation').optional().isFloat({ min: 0 }).withMessage('El valor de la operación no puede ser negativo'),
-  body('currentStage').optional({ values: 'falsy' }).isIn(STAGES).withMessage('Etapa no válida'),
+  body('currentStage').optional({ values: 'falsy' }).isString().trim().notEmpty().withMessage('Etapa no válida'),
   body('fecha_cierre').optional({ values: 'falsy' }).custom((v) => !v || !isNaN(Date.parse(v))).withMessage('Fecha de cierre estimada no válida'),
 ];
 
@@ -41,7 +41,7 @@ const businessUpdateRules = [
   body('partnerAdvisor').optional({ values: 'falsy' }).custom((v) => !v || /^[0-9a-fA-F]{24}$/.test(v)).withMessage('Compañero no válido'),
   body('processType').optional().isIn(['comprador', 'vendedor']).withMessage('Tipo de proceso no válido'),
   body('valueOperation').optional().isFloat({ min: 0 }).withMessage('El valor de la operación no puede ser negativo'),
-  body('currentStage').optional({ values: 'falsy' }).isIn(STAGES).withMessage('Etapa no válida'),
+  body('currentStage').optional({ values: 'falsy' }).isString().trim().notEmpty().withMessage('Etapa no válida'),
   body('status').optional().isIn(['activo', 'concluido', 'cancelado']).withMessage('Estado no válido'),
   body('fecha_cierre').optional({ values: 'falsy' }).custom((v) => !v || !isNaN(Date.parse(v))).withMessage('Fecha de cierre estimada no válida'),
   body('negotiation.offer').optional().isFloat({ min: 0 }).withMessage('La propuesta no puede ser negativa'),
@@ -59,7 +59,7 @@ const stageRules = [
   body('stage')
     .notEmpty()
     .withMessage('La etapa es obligatoria')
-    .isIn(STAGES)
+    .isString().trim().notEmpty()
     .withMessage('Etapa no válida'),
 ];
 

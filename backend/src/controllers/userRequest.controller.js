@@ -129,10 +129,89 @@ const list = asyncHandler(async (req, res) => {
   res.json({ success: true, data: requests });
 });
 
+// Espera un máximo de `ms` para una promesa; si se pasa, resuelve `fallback`.
+function withTimeout(promise, ms, fallback) {
+  let timer = null;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(fallback), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Crea (o reutiliza) la cuenta de una solicitud aprobada y envía las credenciales.
+// No modifica la solicitud: eso lo hace `handle` solo si todo esto salió bien.
+async function createAccountFromRequest(requestDoc, chosenRole, updateExisting, adminId) {
+  const RoleModel = require('../models/role.model');
+  const requestedCode = chosenRole ? normalizeRoleCode(chosenRole) : (normalizeRoleCode(requestDoc.role) || 'asesor');
+  let roleDoc = await RoleModel.findOne({ code: requestedCode });
+  if (!roleDoc) roleDoc = await RoleModel.findOne({ code: 'asesor' });
+  if (!roleDoc) throw new Error('No hay roles configurados para asignar al nuevo usuario.');
+
+  let user = await User.findOne({ email: requestDoc.email });
+  const created = !user;
+  let tempPassword = '';
+
+  if (!user) {
+    tempPassword = generatePassword(12);
+    const username = await buildUniqueUsername(requestDoc.email);
+    user = await User.create({
+      name: requestDoc.name,
+      email: requestDoc.email,
+      username,
+      phone: requestDoc.phone || '',
+      role: roleDoc._id,
+      password: tempPassword,
+      status: 'activo',
+    });
+  }
+
+  let existingUpdated = false;
+  if (!created && updateExisting) {
+    user.role = roleDoc._id;
+    user.status = 'activo';
+    await user.save();
+    existingUpdated = true;
+  }
+
+  let emailSent = false;
+  try {
+    const mail = mailAccessRequestApproved({
+      name: requestDoc.name,
+      email: requestDoc.email,
+      username: user.username,
+      password: created ? tempPassword : '',
+    });
+    emailSent = await withTimeout(sendMail(mail), 25000, false);
+  } catch (mailError) {
+    console.error('No se pudo enviar el correo de credenciales:', mailError.message);
+  }
+
+  await logAudit({
+    user: adminId,
+    action: 'creacion',
+    entity: 'User',
+    entityId: user._id,
+    newValue: created ? 'cuenta creada desde solicitud de acceso' : 'cuenta existente reutilizada',
+  });
+
+  return {
+    created,
+    existing: !created,
+    existingUpdated,
+    username: user.username,
+    role: roleDoc.code,
+    roleCode: roleDoc.code,
+    emailSent,
+    emailSimulated: !hasSmtp(),
+    // Solo se devuelve si el correo no salió: el administrador la entrega por otro canal.
+    temporaryPassword: created && (!emailSent || !hasSmtp()) ? tempPassword : undefined,
+  };
+}
+
 // Marca una solicitud como aprobada o rechazada (opcionalmente con comentario).
+// Orden: primero se crea la cuenta; si eso falla, la solicitud sigue pendiente y
+// se puede reintentar sin el mensaje "ya fue atendida".
 const handle = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const action = String(req.body && req.body.action || '').toLowerCase();
+  const action = String((req.body && req.body.action) || '').toLowerCase();
   const comment = String((req.body && req.body.comment) || '').trim();
 
   if (!['aprobada', 'rechazada'].includes(action)) {
@@ -150,10 +229,44 @@ const handle = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Esa solicitud ya fue atendida.' });
   }
 
-  requestDoc.status = action;
+  if (action === 'rechazada') {
+    requestDoc.status = 'rechazada';
+    requestDoc.comment = comment;
+    requestDoc.handledBy = req.user._id;
+    requestDoc.handledAt = new Date();
+    await requestDoc.save();
+    await logAudit({
+      user: req.user._id,
+      action: 'actualizacion',
+      entity: 'UserRequest',
+      entityId: requestDoc._id,
+      previousValue: 'pendiente',
+      newValue: 'rechazada',
+    });
+    return res.json({ success: true, message: 'Solicitud rechazada.', data: { ...requestDoc.toObject(), account: null, message: 'Solicitud rechazada.' } });
+  }
+
+  let accountResult;
+  try {
+    accountResult = await createAccountFromRequest(
+      requestDoc,
+      chosenRole,
+      Boolean(req.body && req.body.updateExisting),
+      req.user._id
+    );
+  } catch (error) {
+    console.error('Error al crear usuario desde solicitud:', error);
+    return res.status(500).json({
+      success: false,
+      message: `No se pudo crear la cuenta: ${error.message}. La solicitud sigue pendiente; revisa los datos e intenta de nuevo.`,
+    });
+  }
+
+  requestDoc.status = 'aprobada';
   requestDoc.comment = comment;
   requestDoc.handledBy = req.user._id;
   requestDoc.handledAt = new Date();
+  requestDoc.role = accountResult.roleCode;
   await requestDoc.save();
 
   await logAudit({
@@ -162,115 +275,21 @@ const handle = asyncHandler(async (req, res) => {
     entity: 'UserRequest',
     entityId: requestDoc._id,
     previousValue: 'pendiente',
-    newValue: action,
+    newValue: 'aprobada',
   });
 
-  // Si fue aprobada, crear la cuenta y enviar las credenciales al solicitante.
-  // La contraseña se genera automáticamente (nunca se usa la que la persona
-  // escribió al solicitar acceso) y se envía por correo junto con el usuario.
-  let accountResult = null;
-  if (action === 'aprobada') {
-    try {
-      // El administrador puede cambiar el rol al aprobar; si no lo envía, se usa
-      // el que pidió la persona.
-      const requestedCode = chosenRole ? normalizeRoleCode(chosenRole) : (normalizeRoleCode(requestDoc.role) || 'asesor');
-      const RoleModel = require('../models/role.model');
-      let roleDoc = await RoleModel.findOne({ code: requestedCode });
-      if (!roleDoc) roleDoc = await RoleModel.findOne({ code: 'asesor' });
-      if (!roleDoc) throw new Error('No hay roles configurados para asignar al nuevo usuario.');
-      requestDoc.role = roleDoc.code;
-      await requestDoc.save();
-
-      let user = await User.findOne({ email: requestDoc.email });
-      const created = !user;
-      let tempPassword = '';
-
-      if (!user) {
-        tempPassword = generatePassword(12);
-        const username = await buildUniqueUsername(requestDoc.email);
-        user = await User.create({
-          name: requestDoc.name,
-          email: requestDoc.email,
-          username,
-          phone: requestDoc.phone || '',
-          role: roleDoc._id,
-          password: tempPassword,
-          status: 'activo',
-        });
-      }
-
-      // Cuenta existente: no se cambia su rol ni su estado sin confirmación
-      // explícita (`updateExisting`), para no sobrescribir privilegios por error.
-      const updateExisting = Boolean(req.body && req.body.updateExisting);
-      let existingUpdated = false;
-      if (!created && updateExisting) {
-        user.role = roleDoc._id;
-        user.status = 'activo';
-        await user.save();
-        existingUpdated = true;
-      }
-
-      let emailSent = false;
-      try {
-        const mail = mailAccessRequestApproved({
-          name: requestDoc.name,
-          email: requestDoc.email,
-          username: user.username,
-          password: created ? tempPassword : '',
-        });
-        emailSent = await sendMail(mail);
-      } catch (mailError) {
-        console.error('No se pudo enviar el correo de credenciales:', mailError.message);
-      }
-
-      accountResult = {
-        created,
-        existing: !created,
-        existingUpdated,
-        username: user.username,
-        role: roleDoc.code,
-        emailSent,
-        emailSimulated: !hasSmtp(),
-        // Solo se devuelve si no hubo correo: así el administrador puede
-        // entregarla por otro canal. Nunca se guarda en el registro.
-        temporaryPassword: created && (!emailSent || !hasSmtp()) ? tempPassword : undefined,
-      };
-
-      await logAudit({
-        user: req.user._id,
-        action: 'creacion',
-        entity: 'User',
-        entityId: user._id,
-        newValue: created ? 'cuenta creada desde solicitud de acceso' : 'cuenta existente reutilizada',
-      });
-    } catch (e) {
-      console.error('Error al crear usuario desde solicitud:', e);
-      // La solicitud ya quedó marcada como aprobada, pero devolvemos el detalle
-      // para que el administrador sepa que debe crear la cuenta manualmente.
-      return res.status(500).json({
-        success: false,
-        message: `La solicitud se marcó como aprobada, pero no se pudo crear la cuenta: ${e.message}`,
-        data: requestDoc,
-      });
-    }
+  let message;
+  if (accountResult.created) {
+    message = accountResult.emailSent
+      ? `Cuenta creada para ${requestDoc.email} y credenciales enviadas por correo${accountResult.emailSimulated ? ' (modo prueba: correo simulado)' : ''}.`
+      : `Cuenta creada para ${requestDoc.email}, pero no se pudo enviar el correo. Entrega la contraseña temporal manualmente.`;
+  } else if (accountResult.existingUpdated) {
+    message = `La cuenta ${requestDoc.email} ya existía. Se actualizó su rol a ${accountResult.role} y quedó activa.`;
+  } else {
+    message = `La cuenta ${requestDoc.email} ya existía; no se modificó su rol ni su estado. Se le envió un aviso por correo.`;
   }
 
-  let message = 'Solicitud rechazada.';
-  if (action === 'aprobada' && accountResult) {
-    if (accountResult.created) {
-      message = accountResult.emailSent
-        ? `Cuenta creada para ${requestDoc.email} y credenciales enviadas por correo${accountResult.emailSimulated ? ' (modo prueba: correo simulado)' : ''}.`
-        : `Cuenta creada para ${requestDoc.email}, pero no se pudo enviar el correo. Entrega la contraseña temporal manualmente.`;
-    } else if (accountResult.existingUpdated) {
-      message = `La cuenta ${requestDoc.email} ya existía. Se actualizó su rol a ${accountResult.role} y quedó activa.`;
-    } else {
-      message = `La cuenta ${requestDoc.email} ya existía; no se modificó su rol ni su estado. Se le envió un aviso por correo.`;
-    }
-  } else if (action === 'aprobada') {
-    message = 'Solicitud aprobada.';
-  }
-
-  // El cliente HTTP desempaqueta `data`, por eso el resultado de la cuenta viaja dentro.
+  // El cliente HTTP desempaqueta `data`, por eso el resultado viaja dentro.
   res.json({
     success: true,
     message,

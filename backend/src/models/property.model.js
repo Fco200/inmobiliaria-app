@@ -18,7 +18,8 @@ const propertySchema = new mongoose.Schema(
     },
     operationType: {
       type: String,
-      enum: ['venta', 'renta', 'compra_localizada'],
+      trim: true,
+      maxlength: 80,
       required: [true, 'El tipo de operación es obligatorio'],
     },
     address: { type: String, trim: true, default: '' },

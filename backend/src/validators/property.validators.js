@@ -10,10 +10,12 @@ const { PROPERTY_PAYMENT_METHODS } = require('../constants/appointment-types');
 const propertyRules = [
   body('type').notEmpty().withMessage('El tipo de inmueble es obligatorio'),
   body('operationType')
+    .isString()
+    .trim()
     .notEmpty()
     .withMessage('El tipo de operación es obligatorio')
-    .isIn(['venta', 'renta', 'compra_localizada'])
-    .withMessage('El tipo de operación no es válido'),
+    .isLength({ max: 80 })
+    .withMessage('El tipo de operación no puede exceder 80 caracteres'),
   body('status')
     .optional({ values: 'falsy' })
     .isIn(['disponible', 'apartada', 'inactiva', 'concluida'])

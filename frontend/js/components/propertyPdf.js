@@ -356,7 +356,10 @@ window.PropertyPdf = (() => {
 
     // ── Datos de contacto de quien COMPARTE (usuario activo) ───────────
     const user = (window.ApiClient && ApiClient.getStoredUser()) || {};
-    const asesorNombre = (asesor && asesor.name) || user.name || '';
+    const assignedAdvisor = prop.responsibleUser && typeof prop.responsibleUser === 'object'
+      ? prop.responsibleUser.name
+      : '';
+    const asesorNombre = assignedAdvisor || (asesor && asesor.name) || user.name || '';
     const asesorTel = (asesor && asesor.phone) || user.phone || '';
     const asesorEmail = (asesor && asesor.email) || user.email || '';
 
@@ -417,7 +420,7 @@ window.PropertyPdf = (() => {
 
     // ── Título, ubicación y precio destacado ───────────────────────────
     const tipo = TYPE_LABELS[prop.type] || 'Propiedad';
-    const operacion = OP_LABELS[prop.operationType] || '';
+    const operacion = OP_LABELS[prop.operationType] || String(prop.operationType || '');
     const titulo = operacion ? `${tipo} en ${operacion}` : tipo;
     const estado = prop.status ? (STATUS_LABELS[prop.status] || String(prop.status).replace(/_/g, ' ')) : '';
 
@@ -433,7 +436,7 @@ window.PropertyPdf = (() => {
     doc.text(titulo, margin, y + 16);
     y += 31;
 
-    const place = [prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
+    const place = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (place) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11.5);
@@ -496,7 +499,6 @@ window.PropertyPdf = (() => {
     if (prop.operationType) filas.push({ label: 'Operación', value: OP_LABELS[prop.operationType] || prop.operationType });
     if (prop.type) filas.push({ label: 'Tipo', value: tipo });
     if (prop.status) filas.push({ label: 'Estado', value: estado || String(prop.status).replace(/_/g, ' ') });
-    if (prop.address) filas.push({ label: 'Dirección', value: prop.address });
     const zonaTxt = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (zonaTxt) filas.push({ label: 'Zona / ciudad', value: zonaTxt });
     const chars = caracteristicas(prop);
@@ -509,9 +511,6 @@ window.PropertyPdf = (() => {
     if (asesorResp) filas.push({ label: 'Asesor responsable', value: asesorResp });
     if (prop.isExternal) {
       filas.push({ label: 'Origen', value: prop.externalAdvisor ? `Externa — ofrecida por ${prop.externalAdvisor}` : 'Externa (otra inmobiliaria)' });
-    }
-    if (prop.location && prop.location.lat && prop.location.lng) {
-      filas.push({ label: 'Coordenadas', value: `${prop.location.lat}, ${prop.location.lng}` });
     }
     if (prop.createdAt) {
       try { filas.push({ label: 'Alta en el CRM', value: new Date(prop.createdAt).toLocaleDateString('es-MX') }); } catch (e) { /* opcional */ }

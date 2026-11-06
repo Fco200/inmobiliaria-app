@@ -1,7 +1,7 @@
 {
-  "version": "2.27",
+  "version": "2.28",
   "channel": "estable",
-  "title": "Actualización 2.27",
+  "title": "Actualización 2.28",
   "date": "2026-11-05",
   "notes": [
     "Inventario: todos los roles pueden consultar el inventario general desde el menú Propiedades, sin depender de permisos de administración.",
@@ -10,6 +10,7 @@
     "Contraseñas: además del código por correo, el personal autorizado puede generar una contraseña temporal y enviarla por correo o WhatsApp.",
     "Formatos compartidos: búsqueda, arrastrar y soltar, validación de tamaño, descarga segura para todo el equipo y mejor visualización en celular.",
     "Negocios: columnas del tablero redimensionables, filtros por asesor responsable/interno/externo, autocompletado al elegir propiedad y bitácora imprimible.",
-    "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos."
+    "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos.",
+    "Icono de la aplicación: se usa el nuevo isotipo como favicon, icono instalable y marca de notificaciones."
   ]
 }

@@ -61,7 +61,7 @@ window.WhatsAppGenerator = (() => {
     if (prop && prop.price) lines.push(`Precio: ${window.Format ? Format.currency(prop.price) : prop.price}`);
     const chars = caracteristicas(prop);
     if (chars.length) lines.push(`Características: ${chars.join(', ')}`);
-    const place = [prop.address, prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
+    const place = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
     if (place) lines.push(`Ubicación: ${place}`);
     lines.push('', 'Te envío el detalle en el archivo adjunto 📄');
     if (asesor && (asesor.name || asesor.phone)) {
@@ -262,6 +262,7 @@ window.WhatsAppGenerator = (() => {
       }
       const msg = textoMensaje(prop, contact);
       try {
+        downloadPdf();
         window.open(`https://wa.me/${digits(num)}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
       } catch (e) {
         UI.toast('No se pudo abrir WhatsApp. Revisa si el navegador bloqueó la ventana.', 'error');

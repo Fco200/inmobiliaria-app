@@ -403,11 +403,16 @@ const create = asyncHandler(async (req, res) => {
   // Nunca se asigna automáticamente al usuario que crea (p. ej. la cuenta de
   // Administración) como asesor del negocio: el captador debe elegirse de forma
   // explícita en el formulario. El esquema exige asesor principal.
-  if (!body.mainAdvisor) {
+  const captadorExterno = String(body.captadorExternalName || '').trim();
+  if (!body.mainAdvisor && !captadorExterno) {
     return res.status(400).json({
       success: false,
       message: 'Selecciona el asesor captador (asesor_captador_id) del negocio.',
     });
+  }
+  if (captadorExterno) {
+    body.captadorExternalName = captadorExterno;
+    body.mainAdvisor = body.mainAdvisor || null;
   }
   if (body.partnerAdvisor && String(body.partnerAdvisor) === String(req.user._id)) {
     body.partnerAdvisor = null;

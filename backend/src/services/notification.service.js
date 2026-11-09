@@ -38,6 +38,19 @@ function emitNew(doc) {
   }
 }
 
+// Copia por correo del recordatorio personal de una cita (además de la notificación).
+async function enviarCorreoRecordatorio(userId, texto) {
+  const user = await User.findById(userId).select('name email');
+  if (!user || !user.email) return;
+  const { sendMail } = require('./mail.service');
+  await sendMail({
+    to: user.email,
+    subject: 'Recordatorio de cita · INMOBLES',
+    text: `Hola ${user.name || ''}, recuerda tu cita: ${texto}.`,
+    html: `<p>Hola ${user.name || ''},</p><p>Recuerda tu cita: <strong>${texto}</strong>.</p>`,
+  });
+}
+
 async function ensure({ type, key, title, message, userId, data }) {
   const existing = await Notification.findOne({ user: userId, type, 'data.key': key });
   if (existing) return existing;
@@ -226,6 +239,28 @@ async function generateForUser(userId) {
     // Stock: propiedades del inventario del usuario sin publicar hace +7 días.
     Inventory.find({ assignedAgent: userId }).populate('property'),
   ]);
+
+  // Recordatorio personalizado que eligió el usuario al crear/editar la cita.
+  const customReminders = await Appointment.find({
+    user: userId,
+    status: { $in: ['pendiente', 'confirmada'] },
+    reminder: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), $lte: now },
+    date: { $gte: now },
+  }).populate('client');
+  for (const app of customReminders) {
+    const key = `appointment-reminder-${app._id}`;
+    const yaExiste = await Notification.exists({ user: userId, type: 'cita_recordatorio_personal', 'data.key': key });
+    if (yaExiste) continue;
+    const texto = `${app.concepto || app.typeOther || 'Tu cita'}${app.client ? ` con ${app.client.name}` : ''} el ${app.date.toLocaleDateString('es-MX')} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`;
+    items.push({
+      type: 'cita_recordatorio_personal',
+      key,
+      title: 'Recordatorio de cita',
+      message: texto,
+      data: { entityId: app._id, date: app.date },
+    });
+    await enviarCorreoRecordatorio(userId, texto).catch(() => {});
+  }
 
   for (const app of upcoming24h) {
     items.push({

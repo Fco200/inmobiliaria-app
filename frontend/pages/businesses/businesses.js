@@ -258,14 +258,20 @@ window.Pages.businesses = {
         }
 
         // Captador = asesor responsable de la propiedad (si el usuario cambió la propiedad, siempre).
+        const externalAdvisor = prop.isExternal ? String(prop.externalAdvisor || '').trim() : '';
         const captadorSel = form.querySelector('#fld-asesor_captador_id');
-        if (captadorSel && responsibleId && (byUser || !captadorSel.value)) {
+        const captadorExtName = form.querySelector('#fld-captadorExternalName');
+        if (captadorSel && externalAdvisor && captadorExtName && (byUser || !captadorSel.value)) {
+          captadorSel.value = '__externo__';
+          captadorExtName.value = externalAdvisor;
+          syncCaptadorExterno(form);
+        } else if (captadorSel && responsibleId && (byUser || !captadorSel.value)) {
           ensureSelectOption(captadorSel, responsibleId, responsibleName || 'Asesor responsable');
+          syncCaptadorExterno(form);
         }
 
         // Asesor externo: si la propiedad viene de una fuente externa, se llena
         // el asesor que atiende con "Otro / Externo" y el nombre del asesor.
-        const externalAdvisor = prop.isExternal ? String(prop.externalAdvisor || '').trim() : '';
         const attendSel = form.querySelector('#fld-asesor_cliente_id');
         const attendExt = form.querySelector('#fld-partnerAdvisorName');
         if (externalAdvisor && attendSel && attendExt && (byUser || !attendSel.value)) {
@@ -289,6 +295,22 @@ window.Pages.businesses = {
       }
     }
 
+    function syncCaptadorExterno(form) {
+      const sel = form.querySelector('#fld-asesor_captador_id');
+      if (!sel) return;
+      if (!sel.dataset.externoWired) {
+        sel.dataset.externoWired = '1';
+        sel.addEventListener('change', () => syncCaptadorExterno(form));
+      }
+      const esExterno = sel.value === '__externo__';
+      ['captadorExternalName', 'captadorExternalPhone', 'captadorExternalEmail'].forEach((name) => {
+        const wrap = form.querySelector(`#fld-${name}`);
+        if (!wrap) return;
+        const parent = wrap.closest('.form-field') || wrap.parentElement || wrap;
+        parent.style.display = esExterno ? '' : 'none';
+      });
+    }
+
     function syncExternalFieldDisplay(form, selName, wrapName) {
       const sel = form.querySelector(`#fld-${selName}`);
       const wrap = form.querySelector(`#fld-${wrapName}`);
@@ -300,6 +322,7 @@ window.Pages.businesses = {
     function wireBusinessForm(form) {
       if (!form) return;
       if (UI.wireSearchSelects) UI.wireSearchSelects(form);
+      syncCaptadorExterno(form);
       syncExternalField(form, 'cliente_id', 'buyerExternalName');
       syncExternalField(form, 'sellerClient', 'sellerExternalName');
       syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorName');
@@ -326,6 +349,9 @@ window.Pages.businesses = {
         buyerExternalName,
         sellerExternalName,
         partnerAdvisorName,
+        captadorExternalName,
+        captadorExternalPhone,
+        captadorExternalEmail,
         closing_promiseDate,
         closing_commission,
         fecha_cierre,
@@ -351,13 +377,22 @@ window.Pages.businesses = {
       if (rest.asesor_cliente_id === '__externo__' && !asesorCliente.nombre) {
         throw new Error('Escribe el nombre del asesor externo.');
       }
-      const captador = rest.asesor_captador_id || rest.mainAdvisor || '';
-      if (!captador) {
+      const captadorElegido = rest.asesor_captador_id || rest.mainAdvisor || '';
+      const captadorEsExterno = captadorElegido === '__externo__';
+      const captadorNombre = String(captadorExternalName || '').trim();
+      if (captadorEsExterno && !captadorNombre) {
+        throw new Error('Escribe el nombre del asesor captador externo.');
+      }
+      if (!captadorElegido) {
         throw new Error('Selecciona el asesor captador del negocio.');
       }
 
+      const captador = captadorEsExterno ? null : captadorElegido;
       rest.asesor_captador_id = captador;
       rest.mainAdvisor = captador;
+      rest.captadorExternalName = captadorEsExterno ? captadorNombre : '';
+      rest.captadorExternalPhone = captadorEsExterno ? String(captadorExternalPhone || '').trim() : '';
+      rest.captadorExternalEmail = captadorEsExterno ? String(captadorExternalEmail || '').trim() : '';
       rest.cliente_id = clienteExterno ? null : (clienteRaw || null);
       rest.buyerClient = rest.cliente_id;
       rest.buyerExternalName = clienteExterno ? clienteNombre : '';
@@ -561,7 +596,10 @@ window.Pages.businesses = {
         fields: [
           { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
           { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
-          { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, value: (r) => (r.asesor_captador_id ? (r.asesor_captador_id._id || r.asesor_captador_id) : (r.mainAdvisor ? (r.mainAdvisor._id || r.mainAdvisor) : '')), options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+          { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, value: (r) => (r.asesor_captador_id ? (r.asesor_captador_id._id || r.asesor_captador_id) : (r.mainAdvisor ? (r.mainAdvisor._id || r.mainAdvisor) : (r.captadorExternalName ? '__externo__' : ''))), options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir datos' }], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+          { name: 'captadorExternalName', label: 'Nombre del captador externo', type: 'text', value: (r) => r.captadorExternalName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'captadorExternalPhone', label: 'Teléfono del captador externo', type: 'text', value: (r) => r.captadorExternalPhone || '' },
+          { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email', value: (r) => r.captadorExternalEmail || '' },
           { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, value: (r) => (r.asesor_cliente_id ? (r.asesor_cliente_id._id || r.asesor_cliente_id) : (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, value: (r) => (r.cliente_id ? (r.cliente_id._id || r.cliente_id) : (r.buyerClient ? (r.buyerClient._id || r.buyerClient) : (r.buyerExternalName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(buyers, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
@@ -570,6 +608,7 @@ window.Pages.businesses = {
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
+          { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
@@ -653,7 +692,7 @@ window.Pages.businesses = {
       const allowedNext = (stageMeta.next && stageMeta.next[record.currentStage]) || [];
       // Si el flujo define a qué etapas puede pasar, solo se ofrecen esas.
       const stages = allowedNext.length ? allowedNext : stagesFor(record.processType);
-      const stageOptions = [...stages, ...(allowedNext.length ? [] : ['PAUSA', 'concluido', 'cancelado'])]
+      const stageOptions = [...new Set([...stages, ...(allowedNext.length ? [] : ['PAUSA', 'concluido', 'cancelado'])])]
         .map((s) => `<option value="${s}" ${s === record.currentStage ? 'selected' : ''}>${UI.escapeHtml(stageLabel(s))}</option>`)
         .join('');
       const modal = UI.openModal({
@@ -1371,7 +1410,10 @@ window.Pages.businesses = {
       const fields = [
         { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
         { name: 'currentStage', label: 'Etapa inicial', type: 'select', options: stageOptionsForNew('comprador') },
-        { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+        { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir datos' }], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
+        { name: 'captadorExternalName', label: 'Nombre del captador externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'captadorExternalPhone', label: 'Teléfono del captador externo', type: 'text' },
+        { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email' },
         { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
@@ -1380,6 +1422,7 @@ window.Pages.businesses = {
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
+        { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
         { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'number' },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
         { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },

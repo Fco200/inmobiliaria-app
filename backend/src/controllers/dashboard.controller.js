@@ -16,7 +16,9 @@ const summary = asyncHandler(async (req, res) => {
   updateGoalsAuto().catch(() => {});
 
   const isAdminOrGerencia = seesAllDashboard(req);
-  const myFilter = isAdminOrGerencia ? {} : { mainAdvisor: user._id };
+  // Un negocio cuenta para el asesor si lo captó (mainAdvisor) o si lo atiende
+  // (partnerAdvisor); antes los cobrados donde solo atendía no aparecían.
+  const myFilter = isAdminOrGerencia ? {} : { $or: [{ mainAdvisor: user._id }, { partnerAdvisor: user._id }] };
 
   const [clients, properties, businessesActive, businessesConcluded, businessesCancelled, businessesNegotiation, businessesPromesa, appointmentsUpcoming, tasksPending, unread, expensesThisMonth, activeGoals, pipelineAgg, thisMonthAgg] =
     await Promise.all([

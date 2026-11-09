@@ -46,6 +46,41 @@ const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 const signSoporteToken = (userId, expiresIn = jwtExpiresIn) =>
   jwt.sign({ id: userId }, jwtSecret, { expiresIn });
 
+// ── Recuperación de contraseña de soporte por correo ───────────────────────
+// Solo aplica a cuentas SUPERADMIN. Para cualquier otra cuenta responde igual
+// (sin revelar si existe) y no envía nada.
+const { requestPasswordResetCode, confirmPasswordResetCode } = require('./auth.controller');
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const esCuentaSoporte = async (identifier) => {
+  const id = String(identifier || '').trim().toLowerCase();
+  if (!id) return false;
+  const user = await User.findOne({ $or: [{ email: id }, { username: id }] }).populate('role', 'code');
+  return Boolean(user && user.role && user.role.code === 'superadmin');
+};
+
+const soporteSolicitarCodigo = asyncHandler(async (req, res) => {
+  const identifier = String((req.body && req.body.identifier) || '').trim();
+  if (!EMAIL_RX.test(identifier)) {
+    return res.status(400).json({ success: false, message: 'Ingresa un correo válido.' });
+  }
+  if (!(await esCuentaSoporte(identifier))) {
+    return res.json({
+      success: true,
+      message: 'Si la cuenta existe, enviamos un código de 6 dígitos al correo registrado. Revisa también la carpeta de spam.',
+    });
+  }
+  return requestPasswordResetCode(req, res);
+});
+
+const soporteConfirmarCodigo = asyncHandler(async (req, res) => {
+  const identifier = String((req.body && req.body.identifier) || '').trim();
+  if (!(await esCuentaSoporte(identifier))) {
+    return res.status(400).json({ success: false, message: 'El código no es válido o ya venció. Solicita uno nuevo.' });
+  }
+  return confirmPasswordResetCode(req, res);
+});
+
 // ── Autenticación de soporte técnico ────────────────────────────────────────
 const soporteLogin = asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
@@ -1634,6 +1669,8 @@ module.exports = {
   probarCorreo,
   reenviarBienvenida,
   soporteLogin,
+  soporteSolicitarCodigo,
+  soporteConfirmarCodigo,
   soporteMe,
   soporteLogout,
   listarUsuarios,

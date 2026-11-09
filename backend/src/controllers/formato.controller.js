@@ -833,12 +833,56 @@ const eliminarPlantilla = async (req, res) => {
   }
 };
 
+/**
+ * Renombra una plantilla PDF compartida.
+ * PATCH /api/formatos/plantillas/:id  body: { nuevoNombre }
+ */
+const renombrarPlantilla = async (req, res) => {
+  try {
+    const found = await plantillas.findById(req.params.id, norm);
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'Plantilla no encontrada.' });
+    }
+
+    let nuevoNombre = String((req.body && req.body.nuevoNombre) || '').trim();
+    if (!nuevoNombre) {
+      return res.status(400).json({ success: false, message: 'Escribe el nuevo nombre de la plantilla.' });
+    }
+    const base = nuevoNombre.replace(/\.pdf$/i, '').replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim();
+    nuevoNombre = `${base || 'plantilla'}.pdf`;
+
+    if (nuevoNombre.toLowerCase() === String(found.archivo).toLowerCase()) {
+      return res.status(400).json({ success: false, message: 'El nuevo nombre es igual al actual.' });
+    }
+    if (!(await plantillas.nameIsFree(nuevoNombre))) {
+      return res.status(409).json({ success: false, message: 'Ya existe una plantilla con ese nombre.' });
+    }
+
+    const anterior = found.archivo;
+    await plantillas.rename(found, nuevoNombre);
+
+    await logActivity({
+      entityType: 'Plantilla',
+      entityId: req.user ? req.user._id : null,
+      user: req.user ? req.user._id : null,
+      action: 'renombrar_plantilla_compartida',
+      message: `Renombró la plantilla ${anterior} → ${nuevoNombre}`,
+    });
+
+    res.json({ success: true, message: 'Plantilla actualizada.', data: { anterior, archivo: nuevoNombre } });
+  } catch (error) {
+    console.error('Error al actualizar plantilla:', error);
+    res.status(500).json({ success: false, message: 'No se pudo actualizar la plantilla.' });
+  }
+};
+
 module.exports = {
   listarPlantillas,
   obtenerCamposPlantilla,
   generarPDF,
   descargarPlantilla,
   subirPlantilla,
+  renombrarPlantilla,
   eliminarPlantilla,
   plantillaUpload,
 };

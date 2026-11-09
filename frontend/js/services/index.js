@@ -367,8 +367,16 @@ window.API = {
       form.append('archivo', file);
       return ApiClient.postMultipart('/formatos/compartidos', form);
     },
+    // Cambia el nombre y, opcionalmente, reemplaza el archivo.
+    actualizarCompartido: (id, name, file) => {
+      const form = new FormData();
+      form.append('name', name);
+      if (file) form.append('archivo', file);
+      return ApiClient.postMultipart(`/formatos/compartidos/${encodeURIComponent(id)}`, form, 'PATCH');
+    },
     descargarCompartido: (id) => ApiClient.getBlob(`/formatos/compartidos/${encodeURIComponent(id)}/descargar`),
     eliminarCompartido: (id) => ApiClient.remove(`/formatos/compartidos/${encodeURIComponent(id)}`),
+    renombrarPlantilla: (id, nuevoNombre) => ApiClient.patch(`/formatos/plantillas/${encodeURIComponent(id)}`, { nuevoNombre }),
     listarPlantillas: () => ApiClient.get('/formatos/plantillas'),
     obtenerCampos: (id) => ApiClient.get(`/formatos/plantillas/${encodeURIComponent(id)}/campos`),
     generar: (plantillaId, data) => ApiClient.postBlob(`/formatos/generar/${encodeURIComponent(plantillaId)}`, data),
@@ -467,6 +475,26 @@ window.API = {
       }).then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error((data && data.message) || 'Error de soporte');
+        return data;
+      }),
+    passwordResetRequest: (body) =>
+      fetch(`${window.AppConfig.API_URL}/soporte/auth/password-reset/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'No se pudo enviar el código.');
+        return data;
+      }),
+    passwordResetConfirm: (body) =>
+      fetch(`${window.AppConfig.API_URL}/soporte/auth/password-reset/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error((data && data.message) || 'No se pudo cambiar la contraseña.');
         return data;
       }),
     logout: () => soporteJson('/soporte/auth/logout', { method: 'POST' }),

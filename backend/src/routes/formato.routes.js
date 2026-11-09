@@ -8,6 +8,7 @@ const {
   generarPDF,
   descargarPlantilla,
   subirPlantilla,
+  renombrarPlantilla,
   eliminarPlantilla,
   plantillaUpload,
 } = require('../controllers/formato.controller');
@@ -29,6 +30,13 @@ router.post(
   sharedFormat.uploadSharedFormat
 );
 router.get('/compartidos/:id/descargar', sharedFormat.downloadSharedFormat);
+router.patch(
+  '/compartidos/:id',
+  upload.single('archivo'),
+  uploadErrorHandler,
+  verifyUpload,
+  sharedFormat.updateSharedFormat
+);
 router.delete('/compartidos/:id', sharedFormat.removeSharedFormat);
 
 router.get('/plantillas', listarPlantillas);
@@ -42,6 +50,7 @@ const canManageTemplates = authorize(
   'admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'
 );
 router.post('/plantillas', canManageTemplates, plantillaUpload.single('plantilla'), subirPlantilla);
+router.patch('/plantillas/:id', canManageTemplates, renombrarPlantilla);
 router.delete('/plantillas/:id', canManageTemplates, eliminarPlantilla);
 
 module.exports = router;

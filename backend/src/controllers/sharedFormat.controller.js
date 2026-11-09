@@ -74,6 +74,50 @@ const downloadSharedFormat = asyncHandler(async (req, res) => {
   return res.send(buffer);
 });
 
+// PATCH /api/formatos/compartidos/:id — cambia el nombre y/o reemplaza el archivo.
+// Lo puede hacer quien lo subió o un perfil de dirección.
+const updateSharedFormat = asyncHandler(async (req, res) => {
+  const item = await SharedFormat.findById(req.params.id);
+  if (!item) return res.status(404).json({ success: false, message: 'Formato no encontrado.' });
+
+  const isOwner = String(item.uploadedBy) === String(req.user._id);
+  if (!isBoss(req) && !isOwner) {
+    return res.status(403).json({ success: false, message: 'Solo quien lo subió o dirección puede editarlo.' });
+  }
+
+  const name = String((req.body && req.body.name) || '').trim().slice(0, MAX_NAME);
+  if (req.body && req.body.name !== undefined && !name) {
+    return res.status(400).json({ success: false, message: 'El nombre del formato no puede estar vacío.' });
+  }
+  if (name) item.name = name;
+
+  let oldFileUrl = null;
+  if (req.file) {
+    await storage.persistFile(req.file);
+    oldFileUrl = item.fileUrl;
+    item.fileUrl = `/uploads/${req.file.filename}`;
+    item.fileName = req.file.originalname || req.file.filename;
+    item.mimeType = req.file.mimetype || '';
+    item.size = req.file.size || 0;
+  }
+
+  await item.save();
+  if (oldFileUrl && oldFileUrl !== item.fileUrl) {
+    await storage.deleteFileIfUnused(oldFileUrl).catch(() => {});
+  }
+
+  await logActivity({
+    entityType: 'Document',
+    entityId: item._id,
+    user: req.user._id,
+    action: 'actualizar_formato_compartido',
+    message: `Actualizó el formato "${item.name}"${req.file ? ' (archivo reemplazado)' : ''}`,
+  });
+
+  const populated = await item.populate('uploadedBy', 'name username');
+  res.json({ success: true, message: 'Formato actualizado.', data: populated });
+});
+
 // DELETE /api/formatos/compartidos/:id — quien lo subió o un perfil de dirección.
 const removeSharedFormat = asyncHandler(async (req, res) => {
   const item = await SharedFormat.findById(req.params.id);
@@ -99,4 +143,4 @@ const removeSharedFormat = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Formato eliminado.' });
 });
 
-module.exports = { listSharedFormats, uploadSharedFormat, downloadSharedFormat, removeSharedFormat };
+module.exports = { listSharedFormats, uploadSharedFormat, updateSharedFormat, downloadSharedFormat, removeSharedFormat };

@@ -18,6 +18,8 @@ const appointmentRules = [
   body('property').optional({ values: 'falsy' }).isMongoId().withMessage('Propiedad no válida'),
   body('type').optional({ values: 'falsy' }).isIn(APPOINTMENT_TYPES).withMessage('Tipo de cita no válido'),
   body('typeOther').optional({ values: 'falsy' }).isString().isLength({ max: 120 }).withMessage('El tipo "otro" es demasiado largo'),
+  body('concepto').optional({ values: 'falsy' }).isString().isLength({ max: 200 }).withMessage('El concepto es demasiado largo'),
+  body('isPersonal').optional().isBoolean().withMessage('Valor de cita personal no válido'),
   body('notes').optional({ values: 'falsy' }).isString().isLength({ max: 2000 }),
   body('place').optional({ values: 'falsy' }).isString().isLength({ max: 200 }),
 ];

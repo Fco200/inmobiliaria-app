@@ -31,8 +31,15 @@ const businessSchema = new mongoose.Schema(
     mainAdvisor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'El asesor principal es obligatorio'],
+      required: [
+        function requiereCaptador() { return !this.captadorExternalName; },
+        'El asesor principal es obligatorio',
+      ],
     },
+    // Captador externo (no es usuario del CRM). Si se usa, mainAdvisor queda vacío.
+    captadorExternalName: { type: String, trim: true, default: '' },
+    captadorExternalPhone: { type: String, trim: true, default: '' },
+    captadorExternalEmail: { type: String, trim: true, lowercase: true, default: '' },
     partnerAdvisor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -76,6 +83,7 @@ const businessSchema = new mongoose.Schema(
       default: null,
     },
     valueOperation: { type: Number, min: 0, default: 0 },
+    ticketValue: { type: Number, min: 0, default: 0 },
     processType: {
       type: String,
       enum: ['comprador', 'vendedor'],

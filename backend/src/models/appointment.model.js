@@ -35,6 +35,8 @@ const appointmentSchema = new mongoose.Schema(
     },
     // Texto libre cuando el tipo es 'otro': "Otro (especificar)".
     typeOther: { type: String, trim: true, default: '' },
+    concepto: { type: String, trim: true, default: '' },
+    isPersonal: { type: Boolean, default: false },
     notes: { type: String, trim: true, default: '' },
     reminder: { type: Date, default: null },
     status: {

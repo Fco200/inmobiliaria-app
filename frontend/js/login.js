@@ -461,6 +461,86 @@ window.LoginPage = (() => {
     const soporteForm = document.getElementById('soporte-form');
     if (soporteForm) soporteForm.addEventListener('submit', submitLogin);
 
+    const loginForm = document.getElementById('soporte-form');
+    const resetForm = document.getElementById('soporte-reset-form');
+    const resetEmail = document.getElementById('soporte-reset-email');
+    const resetCode = document.getElementById('soporte-reset-code');
+    const resetNew = document.getElementById('soporte-reset-new');
+    const resetStepCode = document.getElementById('soporte-reset-step-code');
+    const resetStepEmail = document.getElementById('soporte-reset-step-email');
+    const resetInfo = document.getElementById('soporte-reset-info');
+    const resetError = document.getElementById('soporte-reset-error');
+    const resetOk = document.getElementById('soporte-reset-ok');
+    const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let resetIdentifier = '';
+
+    function resetMsg(box, text) {
+      if (!box) return;
+      box.textContent = text || '';
+      box.classList.toggle('hide', !text);
+    }
+
+    function showResetForm(show) {
+      if (loginForm) loginForm.hidden = show;
+      if (resetForm) resetForm.hidden = !show;
+      resetMsg(resetError, '');
+      resetMsg(resetOk, '');
+      if (show && resetStepCode) resetStepCode.hidden = true;
+      if (show && resetStepEmail) resetStepEmail.hidden = false;
+    }
+
+    document.getElementById('btn-soporte-olvide')?.addEventListener('click', () => {
+      showResetForm(true);
+      if (resetEmail) resetEmail.focus();
+    });
+    document.getElementById('btn-soporte-volver')?.addEventListener('click', () => showResetForm(false));
+
+    document.getElementById('btn-soporte-enviar-codigo')?.addEventListener('click', async (event) => {
+      const correo = (resetEmail.value || '').trim().toLowerCase();
+      if (!EMAIL_RX.test(correo)) {
+        resetMsg(resetError, 'Ingresa un correo válido.');
+        return;
+      }
+      const btn = event.currentTarget;
+      btn.disabled = true;
+      resetMsg(resetError, '');
+      try {
+        const result = await window.API.soporte.passwordResetRequest({ identifier: correo });
+        resetIdentifier = correo;
+        if (resetInfo) resetInfo.textContent = (result.data && result.data.message) || result.message;
+        if (resetStepEmail) resetStepEmail.hidden = true;
+        if (resetStepCode) resetStepCode.hidden = false;
+        if (resetCode) resetCode.focus();
+      } catch (error) {
+        resetMsg(resetError, error.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btn-soporte-cambiar-password')?.addEventListener('click', async (event) => {
+      const code = (resetCode.value || '').replace(/\s/g, '');
+      const newPassword = resetNew.value || '';
+      if (!code || !newPassword) {
+        resetMsg(resetError, 'Escribe el código y la nueva contraseña.');
+        return;
+      }
+      const btn = event.currentTarget;
+      btn.disabled = true;
+      resetMsg(resetError, '');
+      try {
+        const result = await window.API.soporte.passwordResetConfirm({ identifier: resetIdentifier, code, newPassword });
+        resetMsg(resetOk, result.message || 'Contraseña actualizada. Ya puedes iniciar sesión.');
+        resetCode.value = '';
+        resetNew.value = '';
+        setTimeout(() => showResetForm(false), 1500);
+      } catch (error) {
+        resetMsg(resetError, error.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     const sToggle = document.getElementById('btn-toggle-soporte-password');
     if (sToggle && password) {
       sToggle.addEventListener('click', () => {

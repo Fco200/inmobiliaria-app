@@ -244,6 +244,7 @@ window.Pages.documents = {
                     <td style="white-space:nowrap;text-align:right;">
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-view="${item._id}">Ver</button>
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-download="${item._id}">Descargar</button>
+                      ${canDelete ? `<button class="btn btn-secondary btn-sm" type="button" data-shared-edit="${item._id}">Editar</button>` : ''}
                       ${canDelete ? `<button class="btn btn-danger btn-sm" type="button" data-shared-del="${item._id}">Eliminar</button>` : ''}
                     </td>
                   </tr>`;
@@ -294,6 +295,56 @@ window.Pages.documents = {
       });
       sharedListEl.querySelectorAll('[data-shared-download]').forEach((btn) => {
         btn.addEventListener('click', () => download(btn.dataset.sharedDownload, 'download', btn));
+      });
+      const editShared = (item) => {
+        const modal = UI.openModal({
+          title: 'Editar formato',
+          body: `
+            <form id="shared-edit-form" novalidate>
+              <div class="form-field form-field-full">
+                <label for="shared-edit-name">Nombre del formato</label>
+                <input id="shared-edit-name" type="text" value="${UI.escapeHtml(item.name)}" maxlength="160">
+              </div>
+              <div class="form-field form-field-full">
+                <label for="shared-edit-file">Reemplazar archivo (opcional)</label>
+                <input id="shared-edit-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp">
+                <small class="text-muted">Archivo actual: ${UI.escapeHtml(item.fileName || '')}</small>
+              </div>
+            </form>
+          `,
+          footer: `
+            <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+            <button class="btn btn-primary" type="button" data-save>Guardar cambios</button>
+          `,
+        });
+        const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
+        if (!overlay) return;
+        overlay.querySelector('[data-cancel]').addEventListener('click', () => UI.closeModal());
+        overlay.querySelector('[data-save]').addEventListener('click', async (event) => {
+          const name = (overlay.querySelector('#shared-edit-name').value || '').trim();
+          const file = overlay.querySelector('#shared-edit-file').files[0] || null;
+          if (!name) {
+            UI.toast('Escribe el nombre del formato.', 'error');
+            return;
+          }
+          const btn = event.currentTarget;
+          btn.disabled = true;
+          try {
+            await API.formatos.actualizarCompartido(item._id, name, file);
+            UI.toast('Formato actualizado', 'success');
+            UI.closeModal();
+            loadShared();
+          } catch (error) {
+            btn.disabled = false;
+            UI.toast(error.message, 'error');
+          }
+        });
+      };
+      sharedListEl.querySelectorAll('[data-shared-edit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const item = sharedItems.find((x) => String(x._id) === String(btn.dataset.sharedEdit));
+          if (item) editShared(item);
+        });
       });
       sharedListEl.querySelectorAll('[data-shared-del]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -938,6 +989,10 @@ window.Pages.documents = {
                     <button class="btn btn-primary btn-sm" data-plantilla="${UI.escapeHtml(p.id)}" style="flex:1;">Llenar y Descargar</button>
                     <button class="btn btn-secondary btn-sm" data-download-blank="${UI.escapeHtml(p.id)}" style="flex:1;">Descargar en Blanco</button>
                   </div>
+                  ${boss ? `<div style="display:flex;gap:6px;margin-top:6px;">
+                    <button class="btn btn-secondary btn-sm" data-plt-rename="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}" style="flex:1;">Renombrar</button>
+                    <button class="btn btn-danger btn-sm" data-plt-del="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}" style="flex:1;">Eliminar</button>
+                  </div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -949,7 +1004,11 @@ window.Pages.documents = {
                 ${plantillasSinFormulario.map(p => `
                   <div style="padding:10px 14px;background:var(--bg);border-radius:var(--radius);font-size:13px;display:flex;justify-content:space-between;align-items:center;">
                     <span>${UI.escapeHtml(p.nombre)}</span>
-                    <button class="btn btn-secondary btn-sm" data-download-blank="${UI.escapeHtml(p.id)}">Descargar</button>
+                    <span style="display:flex;gap:6px;">
+                      <button class="btn btn-secondary btn-sm" data-download-blank="${UI.escapeHtml(p.id)}">Descargar</button>
+                      ${boss ? `<button class="btn btn-secondary btn-sm" data-plt-rename="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}">Renombrar</button>
+                      <button class="btn btn-danger btn-sm" data-plt-del="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}">Eliminar</button>` : ''}
+                    </span>
                   </div>
                 `).join('')}
               </div>
@@ -967,6 +1026,47 @@ window.Pages.documents = {
       if (overlay) {
         const cancelBtn = overlay.querySelector('[data-cancel]');
         if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
+      }
+
+      const recargarPlantillas = async () => {
+        const refreshed = await API.formatos.listarPlantillas().catch(() => null);
+        if (refreshed && Array.isArray(refreshed.plantillas)) plantillas = refreshed.plantillas;
+      };
+
+      if (bodyEl && boss) {
+        bodyEl.querySelectorAll('[data-plt-rename]').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const actual = btn.dataset.nombre.replace(/\.pdf$/i, '');
+            const nuevo = window.prompt('Nuevo nombre de la plantilla (sin .pdf):', actual);
+            if (!nuevo || !nuevo.trim() || nuevo.trim() === actual) return;
+            try {
+              await API.formatos.renombrarPlantilla(btn.dataset.pltRename, nuevo.trim());
+              UI.toast('Plantilla renombrada', 'success');
+              UI.closeModal();
+              await recargarPlantillas();
+              openPlantillasSelector(keyword);
+            } catch (error) {
+              UI.toast(error.message, 'error');
+            }
+          });
+        });
+        bodyEl.querySelectorAll('[data-plt-del]').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const ok = await UI.confirm(`¿Eliminar la plantilla "${btn.dataset.nombre}"? Dejará de estar disponible para el equipo.`);
+            if (!ok) return;
+            try {
+              await API.formatos.eliminarPlantilla(btn.dataset.pltDel);
+              UI.toast('Plantilla eliminada', 'success');
+              UI.closeModal();
+              await recargarPlantillas();
+              openPlantillasSelector(keyword);
+            } catch (error) {
+              UI.toast(error.message, 'error');
+            }
+          });
+        });
       }
 
       // Eventos para plantillas con formulario

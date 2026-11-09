@@ -1,16 +1,14 @@
 {
-  "version": "2.28",
+  "version": "2.29",
   "channel": "estable",
-  "title": "Actualización 2.28",
-  "date": "2026-11-05",
+  "title": "Actualización 2.29",
+  "date": "2026-11-09",
   "notes": [
-    "Inventario: todos los roles pueden consultar el inventario general desde el menú Propiedades, sin depender de permisos de administración.",
-    "Asistencia: puede asignar prospectos y clientes a cualquier asesor; el asesor recibe el aviso en la campana de notificaciones. También puede restablecer contraseñas desde Configuración > Usuarios.",
-    "Acceso: nuevo botón \"Restablecer por WhatsApp\" en el inicio de sesión, con usuario/correo, rol y mensaje predeterminado listo para enviar al soporte.",
-    "Contraseñas: además del código por correo, el personal autorizado puede generar una contraseña temporal y enviarla por correo o WhatsApp.",
-    "Formatos compartidos: búsqueda, arrastrar y soltar, validación de tamaño, descarga segura para todo el equipo y mejor visualización en celular.",
-    "Negocios: columnas del tablero redimensionables, filtros por asesor responsable/interno/externo, autocompletado al elegir propiedad y bitácora imprimible.",
-    "Se renovó la caché de la aplicación para que estos cambios lleguen a todos los dispositivos sin quedarse con archivos viejos.",
-    "Icono de la aplicación: se usa el nuevo isotipo como favicon, icono instalable y marca de notificaciones."
+    "Citas: nuevos campos de concepto y cita personal; el recordatorio es opcional y se envía por la app y por correo.",
+    "Negocios: captador externo con nombre, teléfono y correo; valor ticket y fecha estimada de cierre en el formulario.",
+    "Negocios: al elegir una propiedad externa se completa el captador con su asesor; corregidas las etapas repetidas al cambiar de etapa.",
+    "Dashboard: los negocios cobrados donde participas como asesor que atiende al cliente ahora aparecen en tus indicadores.",
+    "Formatos compartidos: editar nombre o reemplazar el archivo desde el botón Editar.",
+    "Plantillas PDF: administradores pueden renombrar y eliminar plantillas desde el selector de formatos."
   ]
 }

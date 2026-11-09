@@ -8,7 +8,15 @@ const validate = require('../middlewares/validate');
 // normaliza antes de guardar para que la base quede siempre en el flujo nuevo.
 
 
+const captadorExternoRules = [
+  body('captadorExternalName').optional({ values: 'falsy' }).isString().isLength({ max: 140 }).withMessage('El nombre del captador externo es demasiado largo'),
+  body('captadorExternalPhone').optional({ values: 'falsy' }).isString().isLength({ max: 30 }).withMessage('El teléfono del captador externo no es válido'),
+  body('captadorExternalEmail').optional({ values: 'falsy' }).isEmail().withMessage('El correo del captador externo no es válido'),
+  body('ticketValue').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('El valor ticket no puede ser negativo'),
+];
+
 const businessRules = [
+  ...captadorExternoRules,
   body('name').notEmpty().withMessage('El nombre del negocio es obligatorio'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
   body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),
@@ -27,6 +35,7 @@ const businessRules = [
 ];
 
 const businessUpdateRules = [
+  ...captadorExternoRules,
   body('name').optional().notEmpty().withMessage('El nombre del negocio no puede estar vacío'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
   body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),

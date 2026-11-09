@@ -147,6 +147,29 @@
           <span id="soporte-spinner" class="spinner hide"></span>
           <span>Entrar a Soporte</span>
         </button>
+        <button class="link-btn" id="btn-soporte-olvide" type="button">¿Olvidaste tu contraseña?</button>
+      </form>
+      <form id="soporte-reset-form" class="soporte-form" novalidate hidden>
+        <div class="form-group" id="soporte-reset-step-email">
+          <label for="soporte-reset-email">Correo de soporte</label>
+          <input class="form-control" id="soporte-reset-email" type="email" placeholder="correo@ejemplo.com" autocomplete="email">
+          <button class="btn btn-primary btn-block" id="btn-soporte-enviar-codigo" type="button">Enviar código al correo</button>
+        </div>
+        <div id="soporte-reset-step-code" hidden>
+          <p class="login-version" id="soporte-reset-info"></p>
+          <div class="form-group">
+            <label for="soporte-reset-code">Código de 6 dígitos</label>
+            <input class="form-control" id="soporte-reset-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+          </div>
+          <div class="form-group">
+            <label for="soporte-reset-new">Nueva contraseña</label>
+            <input class="form-control" id="soporte-reset-new" type="password" autocomplete="new-password" placeholder="Mín. 8, con mayúscula, minúscula y número">
+          </div>
+          <button class="btn btn-primary btn-block" id="btn-soporte-cambiar-password" type="button">Cambiar contraseña</button>
+        </div>
+        <div id="soporte-reset-error" class="alert alert-error hide" role="alert"></div>
+        <div id="soporte-reset-ok" class="alert alert-success hide" role="status"></div>
+        <button class="link-btn" id="btn-soporte-volver" type="button">Volver a iniciar sesión</button>
       </form>
     </div>
   </div>

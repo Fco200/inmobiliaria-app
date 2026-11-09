@@ -1,9 +1,12 @@
 'use strict';
 
 const { Router } = require('express');
+const rateLimit = require('express-rate-limit');
 const { protect, authorize } = require('../middlewares/auth');
 const {
   soporteLogin,
+  soporteSolicitarCodigo,
+  soporteConfirmarCodigo,
   soporteMe,
   soporteLogout,
   listarUsuarios,
@@ -62,6 +65,17 @@ const router = Router();
 
 // Ruta pública de autenticación de soporte (NO requiere sesión previa).
 router.post('/auth/login', soporteLogin);
+
+// Recuperación de contraseña de soporte por código enviado al correo.
+const soporteResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' },
+});
+router.post('/auth/password-reset/request', soporteResetLimiter, soporteSolicitarCodigo);
+router.post('/auth/password-reset/confirm', soporteResetLimiter, soporteConfirmarCodigo);
 
 // ── Todas las rutas siguientes exigen una sesión de SUPERADMIN ──────────────
 const requireSoporte = [protect, authorize('superadmin')];

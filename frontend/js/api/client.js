@@ -177,8 +177,8 @@ window.ApiClient = (() => {
     put: (path, body) => request(path, { method: 'PUT', body }),
     patch: (path, body) => request(path, { method: 'PATCH', body }),
     remove: (path) => request(path, { method: 'DELETE' }),
-    postMultipart: (path, form) => {
-      const config = { method: 'POST', body: form };
+    postMultipart: (path, form, method = 'POST') => {
+      const config = { method, body: form };
       const token = getToken();
       if (token && !isExpired()) {
         config.headers = { Authorization: `Bearer ${token}` };

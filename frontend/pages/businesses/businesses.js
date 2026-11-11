@@ -177,6 +177,31 @@ window.Pages.businesses = {
       select.value = id;
     }
 
+    // Al editar, el valor guardado (propiedad, cliente, vendedor o asesor) puede
+    // no estar en las opciones cargadas (p. ej. la propiedad ya no está en el
+    // inventario o el cliente no es de esa lista). Sin esta opción el select se
+    // queda vacío y al guardar se borra el dato. Aquí se garantiza que exista.
+    function asegurarOpcionesActuales(form, record) {
+      if (!form || !record) return;
+      const refId = (valor) => String((valor && (valor._id || valor)) || '');
+      const nombreDe = (valor) => (valor && typeof valor === 'object' ? (valor.name || valor.nombre || '') : '');
+      const pares = [
+        ['property', record.property, record.property && typeof record.property === 'object' ? UI.propertyOptionLabel(record.property) : ''],
+        ['sellerClient', record.sellerClient, nombreDe(record.sellerClient)],
+        ['cliente_id', record.cliente_id || record.buyerClient, nombreDe(record.cliente_id || record.buyerClient)],
+        ['asesor_captador_id', record.asesor_captador_id || record.mainAdvisor, nombreDe(record.asesor_captador_id || record.mainAdvisor)],
+        ['asesor_cliente_id', record.asesor_cliente_id || record.partnerAdvisor, nombreDe(record.asesor_cliente_id || record.partnerAdvisor)],
+      ];
+      pares.forEach(([name, valor, etiqueta]) => {
+        const id = refId(valor);
+        if (!id) return;
+        const sel = form.querySelector(`#fld-${name}`);
+        if (sel && sel.tagName === 'SELECT') {
+          ensureSelectOption(sel, id, etiqueta || 'Seleccionado');
+        }
+      });
+    }
+
     function syncExternalField(form, selName, wrapName) {
       const sel = form.querySelector(`#fld-${selName}`);
       const wrap = form.querySelector(`#fld-${wrapName}`);
@@ -621,7 +646,8 @@ window.Pages.businesses = {
           if (!Object.prototype.hasOwnProperty.call(values, 'name')) return buildAssignmentPayload(values);
           return buildBusinessPayload(values, record);
         },
-        onFormMount(form) {
+        onFormMount(form, record) {
+          asegurarOpcionesActuales(form, record);
           wireBusinessForm(form);
         },
         extraActions(record) {
@@ -954,19 +980,24 @@ window.Pages.businesses = {
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
                   <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
                     <input type="checkbox" data-check-id="${item._id || idx}" ${item.done || item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
-                    <span style="${item.done || item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
+                    <span style="word-break:break-word;${item.done || item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
                   </label>
                   ${canChecklist ? `<button class="btn btn-danger btn-sm" data-delete-check="${item._id || idx}" style="padding:2px 6px;font-size:11px;">✕</button>` : ''}
                 </div>`;
           }).join('');
+          const hechos = items.filter((item) => item.done || item.completed).length;
           containerEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13px;">
+              <span class="text-muted">Avance</span>
+              <strong>${hechos} de ${items.length}</strong>
+            </div>
             ${canChecklist ? `
-              <form id="add-check-form" style="margin-bottom:16px;display:flex;gap:8px;">
-                <input type="text" class="form-control" name="text" placeholder="Nuevo elemento para el checklist..." required />
+              <form id="add-check-form" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px;">
+                <input type="text" class="form-control" name="text" placeholder="Nuevo elemento para el checklist..." required style="flex:1 1 180px;min-width:0;" />
                 <button class="btn btn-primary" type="submit">Añadir</button>
               </form>
             ` : ''}
-            <div style="max-height:350px;overflow-y:auto;">
+            <div style="max-height:60vh;overflow-y:auto;padding-right:4px;">
               ${items.length ? filas : '<p class="text-muted">No hay elementos en el checklist.</p>'}
             </div>
           `;

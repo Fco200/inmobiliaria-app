@@ -356,10 +356,7 @@ window.PropertyPdf = (() => {
 
     // ── Datos de contacto de quien COMPARTE (usuario activo) ───────────
     const user = (window.ApiClient && ApiClient.getStoredUser()) || {};
-    const assignedAdvisor = prop.responsibleUser && typeof prop.responsibleUser === 'object'
-      ? (prop.responsibleUser.name || prop.responsibleUser.username || '')
-      : '';
-    const asesorNombre = assignedAdvisor || (asesor && asesor.name) || user.name || '';
+    const asesorNombre = (asesor && asesor.name) || user.name || '';
     const asesorTel = (asesor && asesor.phone) || user.phone || '';
     const asesorEmail = (asesor && asesor.email) || user.email || '';
 

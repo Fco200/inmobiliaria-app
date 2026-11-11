@@ -1057,11 +1057,42 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     },
   };
 
+  // Visor de documentos adjuntos (PDF e imágenes) dentro de la plataforma.
+  // `src` puede ser una URL autenticada (ya resuelta con AppConfig.resolveUrl)
+  // o una blob: URL. Lo que no se puede previsualizar ofrece solo descarga.
+  function openFileViewer({ title, src, fileName = '', downloadName = '' }) {
+    const name = String(fileName || title || '');
+    const ext = (name.split('?')[0].split('.').pop() || '').toLowerCase();
+    const safeSrc = escapeHtml(src || '');
+    const isPdf = ext === 'pdf';
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+    let content;
+    if (isPdf) {
+      content = `<iframe src="${safeSrc}" title="${escapeHtml(title || 'Documento')}" style="width:100%;height:72vh;min-height:360px;border:1px solid var(--border);border-radius:8px;background:#f1f5f9;"></iframe>
+        <p class="text-muted" style="font-size:12px;margin:10px 0 0;">Si el documento no se muestra aquí, usa <strong>Descargar</strong>.</p>`;
+    } else if (isImage) {
+      content = `<div style="text-align:center;"><img src="${safeSrc}" alt="${escapeHtml(title || '')}" style="max-width:100%;max-height:72vh;border-radius:8px;"></div>`;
+    } else {
+      content = '<div class="empty-state"><p>Este tipo de archivo no se puede previsualizar. Usa <strong>Descargar</strong>.</p></div>';
+    }
+    const footer = `
+      ${src ? `<a class="btn btn-secondary" href="${safeSrc}" download="${escapeHtml(downloadName || fileName || 'documento')}" rel="noopener">Descargar</a>` : ''}
+      <button class="btn btn-primary" type="button" data-close>Cerrar</button>
+    `;
+    return openModal({
+      title: escapeHtml(title || 'Documento'),
+      body: content,
+      footer,
+      size: 960,
+    });
+  }
+
   return {
     escapeHtml,
     propertyOptionLabel,
     toast,
     openModal,
+    openFileViewer,
     closeModal,
     confirm,
     badge,

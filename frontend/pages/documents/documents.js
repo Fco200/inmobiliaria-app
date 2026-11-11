@@ -257,19 +257,21 @@ window.Pages.documents = {
         const item = sharedItems.find((x) => String(x._id) === String(id));
         if (!item) return;
         const label = btn.textContent;
-        // Abrimos la pestaña ANTES del await: así el navegador no la bloquea
-        // como ventana emergente (el clic del usuario sigue siendo el origen).
-        const win = mode === 'view' ? window.open('', '_blank') : null;
         btn.disabled = true;
-        btn.textContent = 'Abriendo…';
+        btn.textContent = mode === 'view' ? 'Abriendo…' : 'Descargando…';
         try {
           const blob = await API.formatos.descargarCompartido(id);
           const url = URL.createObjectURL(blob);
-          if (mode === 'view' && win) {
-            win.location.href = url;
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          if (mode === 'view') {
+            // Visor dentro de la plataforma (PDF / imágenes); otros formatos ofrecen descarga.
+            UI.openFileViewer({
+              title: item.name || 'Documento',
+              src: url,
+              fileName: item.fileName || item.name || '',
+              downloadName: item.fileName || item.name || 'formato',
+            });
+            setTimeout(() => URL.revokeObjectURL(url), 600000);
           } else {
-            if (win) win.close();
             const a = document.createElement('a');
             a.href = url;
             a.download = item.fileName || item.name || 'formato';
@@ -277,12 +279,8 @@ window.Pages.documents = {
             a.click();
             a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 10000);
-            if (mode === 'view') {
-              UI.toast('El navegador bloqueó la ventana; el archivo se descargó.', 'warning');
-            }
           }
         } catch (error) {
-          if (win) win.close();
           UI.toast(error.message || 'No se pudo descargar el archivo.', 'error');
         } finally {
           btn.disabled = false;
@@ -497,7 +495,7 @@ window.Pages.documents = {
                   <td>${UI.statusBadge(d.status)}</td>
                   <td>
                     ${d.fileUrl ? `
-                      <a href="${window.AppConfig.resolveUrl(d.fileUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Ver</a>
+                      <button type="button" class="btn btn-secondary btn-sm" data-doc-view="${d._id}">Ver</button>
                       <a href="${window.AppConfig.resolveUrl(d.fileUrl)}" download class="btn btn-secondary btn-sm">Descargar</a>
                     ` : '<span class="text-muted">—</span>'}
                     ${d.isTemplate && d.templateFields && d.templateFields.length ? `
@@ -566,6 +564,18 @@ window.Pages.documents = {
           btn.addEventListener('click', () => {
             const record = records.find((r) => r._id === btn.dataset.fill);
             openFillForm(record);
+          });
+        });
+        listEl.querySelectorAll('[data-doc-view]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const record = records.find((r) => r._id === btn.dataset.docView);
+            if (!record || !record.fileUrl) return;
+            UI.openFileViewer({
+              title: record.name || 'Documento',
+              src: window.AppConfig.resolveUrl(record.fileUrl),
+              fileName: record.fileName || record.fileUrl,
+              downloadName: record.fileName || record.name || 'documento',
+            });
           });
         });
       } catch (error) {

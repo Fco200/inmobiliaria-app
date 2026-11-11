@@ -92,6 +92,21 @@ function scopeCondition(ownerField, ownerMatch, userId) {
   return {};
 }
 
+// Asignar o reasignar el asesor responsable de una propiedad o los asesores de
+// un negocio. Además de los jefes, lo tienen Asistencia y Escrituración, pero
+// solo para ESA acción (no para editar el resto de la ficha).
+const ADVISOR_ASSIGNMENT_ROLES = ['asistencia', 'escrituracion'];
+
+function canAssignAdvisors(req) {
+  return isBoss(req) || hasRole(req, ADVISOR_ASSIGNMENT_ROLES);
+}
+
+/** ¿El cuerpo de la petición trae solo campos de la lista permitida? */
+function soloCampos(body, campos) {
+  const keys = Object.keys(body || {});
+  return keys.length > 0 && keys.every((key) => campos.includes(key));
+}
+
 /** Middleware Express: solo admin/dirección/gerencia pueden pasar. */
 function bossOnly(req, res, next) {
   if (!isBoss(req)) {
@@ -116,4 +131,7 @@ module.exports = {
   isClientStaff,
   scopeCondition,
   bossOnly,
+  ADVISOR_ASSIGNMENT_ROLES,
+  canAssignAdvisors,
+  soloCampos,
 };

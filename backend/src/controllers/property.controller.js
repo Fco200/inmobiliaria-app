@@ -4,7 +4,9 @@ const path = require('path');
 const fs = require('fs');
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
+const {
+  isBoss, isCustomRole, hasPermission, canAssignAdvisors, soloCampos,
+} = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
 const { sendMail, mailNewProperty, mailPropertyPublishedToAdvisor } = require('../services/mail.service');
@@ -401,7 +403,10 @@ const create = asyncHandler(async (req, res) => {
 const update = asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id);
   if (!property) return res.status(404).json({ success: false, message: 'Propiedad no encontrada' });
-  if (!assertOwnership(req, property)) {
+  // Asistencia y escrituración pueden reasignar el asesor responsable de
+  // cualquier propiedad, pero no editar el resto de la ficha.
+  const soloAsignacion = canAssignAdvisors(req) && soloCampos(req.body, ['responsibleUser']);
+  if (!assertOwnership(req, property) && !soloAsignacion) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a esta propiedad.' });
   }
 
@@ -535,7 +540,9 @@ const togglePublish = asyncHandler(async (req, res) => {
   property.isPublished = isPublished;
   await property.save();
 
-  await syncInventoryOnPublish(property, isPublished, req.body.assignedAgent || null);
+  // Sin asesor explícito, el inventario toma al responsable de la propiedad
+  // (antes llegaba null y el registro quedaba como "Sin asignar").
+  await syncInventoryOnPublish(property, isPublished, req.body.assignedAgent || property.responsibleUser);
 
   const justPublished = isPublished && !previousPublished;
 

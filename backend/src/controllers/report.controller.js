@@ -66,7 +66,7 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
 
   const tickets = await Ticket.aggregate([
     { $match: { user: userId } },
-    { $group: { _id: null, generated: { $sum: '$generatedAmount' }, collected: { $sum: '$collectedAmount' } } },
+    { $group: { _id: null, generated: { $sum: '$generatedAmount' }, collected: { $sum: '$collectedAmount' }, negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } } } },
   ]);
 
   const total = activeBusinesses + concludedBusinesses + cancelledBusinesses;
@@ -90,6 +90,7 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
     investment: expenses[0] ? expenses[0].total : 0,
     ticketsGenerated: tickets[0] ? tickets[0].generated : 0,
     ticketsCollected: tickets[0] ? tickets[0].collected : 0,
+    ticketsNegotiating: tickets[0] ? tickets[0].negotiating : 0,
     goals,
     conversion,
   };
@@ -151,6 +152,7 @@ async function buildManagementData(req) {
     investment: sum('investment'),
     ticketsGenerated: sum('ticketsGenerated'),
     ticketsCollected: sum('ticketsCollected'),
+    ticketsNegotiating: sum('ticketsNegotiating'),
     goals: sum('goals'),
   };
   const grand = totals.activeBusinesses + totals.concludedBusinesses + totals.cancelledBusinesses;

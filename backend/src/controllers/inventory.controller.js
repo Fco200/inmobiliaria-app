@@ -153,7 +153,12 @@ const generalList = asyncHandler(async (req, res) => {
     Inventory.find(filter)
       // Proyección: la tarjeta solo necesita los campos que se muestran en la
       // lista y el detalle, no el documento completo ni los historiales.
-      .populate('property', 'folio type operationType price ticketValue zone city state address photos description characteristics paymentMethods paymentMethodsOther status isExternal externalAdvisor isPublished owner ownerName responsibleUser')
+      .populate({
+        path: 'property',
+        select: 'folio type operationType price ticketValue zone city state address photos description characteristics paymentMethods paymentMethodsOther status isExternal externalAdvisor isPublished owner ownerName responsibleUser',
+        // El asesor responsable llega con su nombre (no solo su ID).
+        populate: { path: 'responsibleUser', select: 'name username' },
+      })
       .populate('assignedAgent', 'name photo')
       .skip((page - 1) * limit)
       .limit(limit)
@@ -457,9 +462,18 @@ const publicList = asyncHandler(async (req, res) => {
       characteristics: item.property.characteristics,
     }));
 
+  // Registros publicados antes de la corrección: si no tienen asesor asignado,
+  // se muestra el responsable de la propiedad en lugar de "Sin asignar".
+  items.forEach((item) => {
+    const responsable = item.property && item.property.responsibleUser;
+    if (!item.assignedAgent && responsable && typeof responsable === 'object') {
+      item.assignedAgent = { _id: responsable._id, name: responsable.name || responsable.username || '' };
+    }
+  });
+
   res.json({
     success: true,
-    data: properties,
+    data: items,
     meta: { page, limit, total, pages: Math.ceil(total / limit) },
   });
 });

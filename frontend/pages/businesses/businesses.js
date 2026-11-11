@@ -92,6 +92,12 @@ window.Pages.businesses = {
     const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
     const canChangeStage = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
     const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
+    // Asignar o reasignar asesores: además de quien edita, lo tiene escrituración.
+    const canAssignAdvisors = canManage || ['escrituracion'].includes(roleCode);
+    const CAMPOS_ASIGNACION = [
+      'asesor_captador_id', 'captadorExternalName', 'captadorExternalPhone', 'captadorExternalEmail',
+      'asesor_cliente_id', 'partnerAdvisorName', 'partnerAdvisorPhone', 'partnerAdvisorEmail',
+    ];
     const canWriteNotes = true;
 
     const allStages = stageMeta.order && stageMeta.order.length
@@ -145,7 +151,7 @@ window.Pages.businesses = {
       remove: (id, docId) => ApiClient.remove(`/businesses/${id}/documents/${docId}`),
     };
 
-    const state = { view: 'table', processType: 'comprador' };
+    const state = {};
 
     // ── Utilidades del formulario de negocios ──────────────────────────────
     // El formulario usa los alias solicitados por la inmobiliaria
@@ -326,6 +332,8 @@ window.Pages.businesses = {
       syncExternalField(form, 'cliente_id', 'buyerExternalName');
       syncExternalField(form, 'sellerClient', 'sellerExternalName');
       syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorName');
+      syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorPhone');
+      syncExternalField(form, 'asesor_cliente_id', 'partnerAdvisorEmail');
       const propSel = form.querySelector('#fld-property');
       if (propSel) {
         propSel.addEventListener('change', () => { syncPropertyInfo(form, { byUser: true }); });
@@ -339,6 +347,34 @@ window.Pages.businesses = {
       }
     }
 
+    // Solo reasignación de asesores (escrituración): mismas reglas de captador y
+    // asesor que atiende que el formulario completo, sin tocar el resto del negocio.
+    function buildAssignmentPayload(values) {
+      const captadorElegido = values.asesor_captador_id || '';
+      if (!captadorElegido) throw new Error('Selecciona el asesor captador del negocio.');
+      const captadorExterno = captadorElegido === '__externo__';
+      const captadorNombre = String(values.captadorExternalName || '').trim();
+      if (captadorExterno && !captadorNombre) throw new Error('Escribe el nombre del asesor captador externo.');
+      const clienteElegido = values.asesor_cliente_id || '';
+      const clienteExterno = clienteElegido === '__externo__';
+      const clienteNombre = String(values.partnerAdvisorName || '').trim();
+      if (clienteExterno && !clienteNombre) throw new Error('Escribe el nombre del asesor externo.');
+      const captador = captadorExterno ? null : captadorElegido;
+      const companero = clienteExterno || !clienteElegido ? null : clienteElegido;
+      return {
+        asesor_captador_id: captador,
+        mainAdvisor: captador,
+        captadorExternalName: captadorExterno ? captadorNombre : '',
+        captadorExternalPhone: captadorExterno ? String(values.captadorExternalPhone || '').trim() : '',
+        captadorExternalEmail: captadorExterno ? String(values.captadorExternalEmail || '').trim() : '',
+        asesor_cliente_id: companero,
+        partnerAdvisor: companero,
+        partnerAdvisorName: clienteExterno ? clienteNombre : '',
+        partnerAdvisorPhone: clienteExterno ? String(values.partnerAdvisorPhone || '').trim() : '',
+        partnerAdvisorEmail: clienteExterno ? String(values.partnerAdvisorEmail || '').trim() : '',
+      };
+    }
+
     // Construye el payload canónico + alias. Lanza errores legibles cuando
     // falta un dato obligatorio (p. ej. el asesor captador).
     function buildBusinessPayload(values, record) {
@@ -349,11 +385,12 @@ window.Pages.businesses = {
         buyerExternalName,
         sellerExternalName,
         partnerAdvisorName,
+        partnerAdvisorPhone,
+        partnerAdvisorEmail,
         captadorExternalName,
         captadorExternalPhone,
         captadorExternalEmail,
         closing_promiseDate,
-        closing_commission,
         fecha_cierre,
         ...rest
       } = data;
@@ -374,6 +411,7 @@ window.Pages.businesses = {
         throw new Error('Escribe el nombre del vendedor externo.');
       }
       const asesorCliente = externo(rest.asesor_cliente_id, partnerAdvisorName);
+      const asesorClienteExterno = rest.asesor_cliente_id === '__externo__';
       if (rest.asesor_cliente_id === '__externo__' && !asesorCliente.nombre) {
         throw new Error('Escribe el nombre del asesor externo.');
       }
@@ -401,6 +439,9 @@ window.Pages.businesses = {
       rest.asesor_cliente_id = asesorCliente.id;
       rest.partnerAdvisor = asesorCliente.id;
       rest.partnerAdvisorName = asesorCliente.nombre;
+      // Teléfono y correo solo aplican cuando el asesor que atiende es externo.
+      rest.partnerAdvisorPhone = asesorClienteExterno ? String(partnerAdvisorPhone || '').trim() : '';
+      rest.partnerAdvisorEmail = asesorClienteExterno ? String(partnerAdvisorEmail || '').trim() : '';
 
       const negPrevio = (record && record.negotiation) || {};
       const closePrevio = (record && record.closing) || {};
@@ -411,7 +452,6 @@ window.Pages.businesses = {
         }))
         .filter((p) => p.user);
       const tienePromise = Object.prototype.hasOwnProperty.call(values, 'closing_promiseDate');
-      const tieneCommission = Object.prototype.hasOwnProperty.call(values, 'closing_commission');
       const closingDate = fecha_cierre ? new Date(fecha_cierre).toISOString() : null;
 
       return {
@@ -428,7 +468,8 @@ window.Pages.businesses = {
             : (closePrevio.promiseDate || null),
           closingAmount: closePrevio.closingAmount || 0,
           closingDate,
-          commission: tieneCommission ? (closing_commission || 0) : (closePrevio.commission || 0),
+          // La comisión la calcula el servidor a partir del valor ticket.
+          commission: closePrevio.commission || 0,
           participants: closeParticipants,
         },
         fecha_cierre: closingDate,
@@ -439,10 +480,6 @@ window.Pages.businesses = {
       <div class="page-header">
         <h2>Negocios</h2>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <div class="process-tabs" role="tablist" aria-label="Vista">
-            <button class="process-tab active" type="button" data-view="table">&#128203; Lista</button>
-            <button class="process-tab" type="button" data-view="kanban">&#128200; Kanban</button>
-          </div>
           ${canManage ? `
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
               <button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>
@@ -462,34 +499,8 @@ window.Pages.businesses = {
       if (recordId) showHistory(recordId);
     });
 
-    container.querySelectorAll('[data-view]').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        state.view = tab.dataset.view;
-        container.querySelectorAll('[data-view]').forEach((t) => t.classList.toggle('active', t === tab));
-        renderView();
-      });
-    });
-
     const newBtnEl = container.querySelector('[data-new]');
     if (newBtnEl) newBtnEl.addEventListener('click', () => openNew());
-
-    function columnsFor(processType) {
-      const columns = stagesFor(processType)
-        .filter((s) => !TERMINAL_STAGES.includes(s))
-        .map((s) => ({ stage: s, label: stageLabel(s), color: colorFor(s) }));
-      columns.push({ stage: 'PAUSA', label: stageLabel('PAUSA'), color: colorFor('PAUSA') });
-      columns.push({ stage: 'concluido', label: stageLabel('concluido'), color: '#1f9d55' });
-      columns.push({ stage: 'cancelado', label: stageLabel('cancelado'), color: '#dc2626' });
-      return columns;
-    }
-
-    function renderView() {
-      if (state.view === 'kanban') {
-        renderKanban();
-      } else {
-        renderTable();
-      }
-    }
 
     async function renderSummary(summaryEl) {
       if (!summaryEl) return;
@@ -574,15 +585,6 @@ window.Pages.businesses = {
               { value: 'no', label: 'Sin asesor externo' },
             ],
           },
-          {
-            key: 'processType',
-            label: 'Proceso',
-            placeholder: 'Todos los procesos',
-            options: [
-              { value: 'comprador', label: 'Comprador' },
-              { value: 'vendedor', label: 'Vendedor' },
-            ],
-          },
           { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
         ],
         columns: [
@@ -595,27 +597,28 @@ window.Pages.businesses = {
         ],
         fields: [
           { name: 'name', label: 'Nombre del negocio', type: 'text', required: true, full: true },
-          { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }] },
           { name: 'asesor_captador_id', label: 'Asesor captador', type: 'select', required: true, sinOtros: true, value: (r) => (r.asesor_captador_id ? (r.asesor_captador_id._id || r.asesor_captador_id) : (r.mainAdvisor ? (r.mainAdvisor._id || r.mainAdvisor) : (r.captadorExternalName ? '__externo__' : ''))), options: [{ value: '', label: '— Selecciona al asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir datos' }], hint: 'Asesor que captó el negocio o la propiedad. Obligatorio.' },
           { name: 'captadorExternalName', label: 'Nombre del captador externo', type: 'text', value: (r) => r.captadorExternalName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'captadorExternalPhone', label: 'Teléfono del captador externo', type: 'text', value: (r) => r.captadorExternalPhone || '' },
           { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email', value: (r) => r.captadorExternalEmail || '' },
           { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, value: (r) => (r.asesor_cliente_id ? (r.asesor_cliente_id._id || r.asesor_cliente_id) : (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+          { name: 'partnerAdvisorPhone', label: 'Teléfono del asesor externo', type: 'text', value: (r) => r.partnerAdvisorPhone || '', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
+          { name: 'partnerAdvisorEmail', label: 'Correo del asesor externo', type: 'email', value: (r) => r.partnerAdvisorEmail || '', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
           { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, value: (r) => (r.cliente_id ? (r.cliente_id._id || r.cliente_id) : (r.buyerClient ? (r.buyerClient._id || r.buyerClient) : (r.buyerExternalName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(buyers, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
-          { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
           { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate), hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
-          { name: 'closing_commission', label: 'Comisión', type: 'number', value: (r) => (r.closing || {}).commission || 0 },
         ],
         formData(values, record) {
+          // Sin el campo de nombre el formulario es solo de asesores (escrituración).
+          if (!Object.prototype.hasOwnProperty.call(values, 'name')) return buildAssignmentPayload(values);
           return buildBusinessPayload(values, record);
         },
         onFormMount(form) {
@@ -657,7 +660,10 @@ window.Pages.businesses = {
             return;
           }
         },
-        onEdit: canManage,
+        canEdit: () => canAssignAdvisors,
+        onEdit: (record, open) => (canManage
+          ? open(record)
+          : open(record, { allowedNames: CAMPOS_ASIGNACION, title: 'Asignar asesores' })),
         onRemove: canManage,
       });
 
@@ -737,7 +743,7 @@ window.Pages.businesses = {
           UI.closeModal();
           UI.toast((res && res.message) || 'Etapa actualizada', 'success');
           if (ctx && typeof ctx.reload === 'function') ctx.reload();
-          else renderView();
+          else renderTable();
         } catch (error) {
           UI.toast(error.message, 'error');
         }
@@ -928,6 +934,25 @@ window.Pages.businesses = {
         try {
           const res = await checklistApi.list(record._id).catch(() => record.checklist || []);
           const items = (res && res.data) || res || [];
+          // Las secciones de la plantilla llevan su título; los pendientes
+          // agregados a mano se agrupan al final en "Tareas adicionales".
+          const hayGrupos = items.some((item) => item.group);
+          let ultimoGrupo = null;
+          const filas = items.map((item, idx) => {
+            const grupo = item.group || (hayGrupos ? 'Tareas adicionales' : '');
+            const titulo = grupo && grupo !== ultimoGrupo
+              ? `<div style="font-weight:700;font-size:13px;margin:14px 0 4px;color:var(--primary);">${UI.escapeHtml(grupo)}</div>`
+              : '';
+            ultimoGrupo = grupo;
+            return `${titulo}
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+                    <input type="checkbox" data-check-id="${item._id || idx}" ${item.done || item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
+                    <span style="${item.done || item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
+                  </label>
+                  ${canChecklist ? `<button class="btn btn-danger btn-sm" data-delete-check="${item._id || idx}" style="padding:2px 6px;font-size:11px;">✕</button>` : ''}
+                </div>`;
+          }).join('');
           containerEl.innerHTML = `
             ${canChecklist ? `
               <form id="add-check-form" style="margin-bottom:16px;display:flex;gap:8px;">
@@ -936,15 +961,7 @@ window.Pages.businesses = {
               </form>
             ` : ''}
             <div style="max-height:350px;overflow-y:auto;">
-              ${items.length ? items.map((item, idx) => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
-                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-                    <input type="checkbox" data-check-id="${item._id || idx}" ${item.done || item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />
-                    <span style="${item.done || item.completed ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">${UI.escapeHtml(item.text || item.title)}</span>
-                  </label>
-                  ${canChecklist ? `<button class="btn btn-danger btn-sm" data-delete-check="${item._id || idx}" style="padding:2px 6px;font-size:11px;">✕</button>` : ''}
-                </div>
-              `).join('') : '<p class="text-muted">No hay elementos en el checklist.</p>'}
+              ${items.length ? filas : '<p class="text-muted">No hay elementos en el checklist.</p>'}
             </div>
           `;
 
@@ -1039,7 +1056,7 @@ window.Pages.businesses = {
                     <br><small class="text-muted">${Format.dateTime(doc.createdAt)}${uploaderName ? ` · ${UI.escapeHtml(uploaderName)}` : ''}</small>
                   </div>
                   <div style="display:flex;gap:8px;flex-shrink:0;">
-                    ${url ? `<a href="${UI.escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Ver</a>` : ''}
+                    ${url ? `<button type="button" class="btn btn-secondary btn-sm" data-view-doc="${doc._id}">Ver</button>` : ''}
                     ${url ? `<a href="${UI.escapeHtml(url)}" download class="btn btn-secondary btn-sm">Descargar</a>` : ''}
                     ${canDelete ? `<button class="btn btn-danger btn-sm" data-delete-doc="${doc._id}">Eliminar</button>` : ''}
                   </div>
@@ -1063,6 +1080,19 @@ window.Pages.businesses = {
               }
             });
           }
+
+          containerEl.querySelectorAll('[data-view-doc]').forEach((viewBtn) => {
+            viewBtn.addEventListener('click', () => {
+              const doc = docs.find((d) => String(d._id) === viewBtn.dataset.viewDoc);
+              if (!doc) return;
+              UI.openFileViewer({
+                title: doc.name || doc.originalName || 'Documento',
+                src: resolveDocUrl(doc),
+                fileName: doc.fileName || doc.name || '',
+                downloadName: doc.fileName || doc.name || '',
+              });
+            });
+          });
 
           containerEl.querySelectorAll('[data-delete-doc]').forEach((delBtn) => {
             delBtn.addEventListener('click', async (ev) => {
@@ -1118,31 +1148,6 @@ window.Pages.businesses = {
       }
     }
 
-    async function renderKanban() {
-      contentEl.innerHTML = `
-        <div id="biz-summary"></div>
-        <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <div class="process-tabs" role="tablist" aria-label="Proceso de venta">
-            <button class="process-tab ${state.processType === 'comprador' ? 'active' : ''}" type="button" data-process="comprador">Comprador</button>
-            <button class="process-tab ${state.processType === 'vendedor' ? 'active' : ''}" type="button" data-process="vendedor">Vendedor</button>
-          </div>
-        </div>
-        <div id="neg-board"><div class="loading">Cargando negociaciones...</div></div>
-      `;
-
-      renderSummary(contentEl.querySelector('#biz-summary'));
-
-      contentEl.querySelectorAll('.process-tab').forEach((tab) => {
-        tab.addEventListener('click', () => {
-          state.processType = tab.dataset.process;
-          contentEl.querySelectorAll('.process-tab').forEach((t) => t.classList.toggle('active', t === tab));
-          loadBoard();
-        });
-      });
-
-      loadBoard();
-    }
-
     async function fetchAllBusinesses(params) {
       const all = [];
       let page = 1;
@@ -1163,245 +1168,6 @@ window.Pages.businesses = {
       }
     }
 
-    async function loadBoard() {
-      const boardEl = contentEl.querySelector('#neg-board');
-      if (!boardEl) return;
-      boardEl.innerHTML = '<div class="loading">Cargando negociaciones...</div>';
-      try {
-        const [active, doneResult, cancelledResult] = await Promise.all([
-          fetchAllBusinesses({ status: 'activo' }),
-          fetchAllBusinesses({ status: 'concluido' }),
-          fetchAllBusinesses({ status: 'cancelado' }),
-        ]);
-        const all = [...active, ...doneResult, ...cancelledResult];
-
-        const columns = columnsFor(state.processType);
-        const byStage = {};
-        columns.forEach((c) => { byStage[c.stage] = []; });
-        const extras = [];
-        all.forEach((b) => {
-          if (b.processType && b.processType !== state.processType) return;
-          const stage = b.currentStage;
-          if (byStage[stage]) byStage[stage].push(b);
-          else extras.push(b);
-        });
-
-        boardEl.innerHTML = `
-          <div class="funnel-board">
-            ${columns.map((col) => {
-              const items = byStage[col.stage] || [];
-              return `
-                <div class="kanban-col" data-stage="${UI.escapeHtml(col.stage)}">
-                  <span class="kanban-col-resize" data-col-resize title="Arrastra para ajustar el ancho · doble clic para restablecer"></span>
-                  <h4><span>${UI.escapeHtml(col.label)}</span><span style="color:${col.color};">${items.length}</span></h4>
-                  ${items.map((b) => `
-                    <div class="kanban-card" data-card="${b._id}">
-                      <span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(b))}</span>
-                      <strong style="display:block;margin-top:6px;">${UI.escapeHtml(b.name)}</strong>
-                      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                        ${UI.escapeHtml((b.mainAdvisor && (b.mainAdvisor.name || b.mainAdvisor.username)) || (b.asesor_captador_id && (b.asesor_captador_id.name || b.asesor_captador_id.username)) || 'Sin asesor')}<br>
-                        ${UI.escapeHtml(b.buyerClient ? b.buyerClient.name : (b.buyerExternalName || 'Sin cliente'))}${b.sellerClient ? ` ← ${UI.escapeHtml(b.sellerClient.name)}` : (b.sellerExternalName ? ` ← ${UI.escapeHtml(b.sellerExternalName)}` : '')}<br>
-                        ${Format.currency(b.valueOperation)}
-                      </div>
-                    </div>`).join('') || '<p class="text-muted" style="font-size:12px;">Sin negocios</p>'}
-                </div>`;
-            }).join('')}
-            ${extras.length ? `
-              <div class="kanban-col" data-stage="__otras__">
-                <span class="kanban-col-resize" data-col-resize title="Arrastra para ajustar el ancho · doble clic para restablecer"></span>
-                <h4><span>Otras etapas</span><span style="color:#64748b;">${extras.length}</span></h4>
-                ${extras.map((b) => `
-                  <div class="kanban-card" data-card="${b._id}">
-                    <span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(b))}</span>
-                    <strong style="display:block;margin-top:6px;">${UI.escapeHtml(b.name)}</strong>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-                      ${stageLabel(b.currentStage)}<br>
-                      ${Format.currency(b.valueOperation)}
-                    </div>
-                  </div>`).join('')}
-              </div>` : ''}
-          </div>
-        `;
-
-        boardEl.querySelectorAll('[data-card]').forEach((card) => {
-          card.addEventListener('click', () => {
-            const business = all.find((b) => b._id === card.dataset.card);
-            if (business) openDetail(business);
-          });
-        });
-        wireKanbanResize(boardEl);
-      } catch (error) {
-        boardEl.innerHTML = UI.errorAlert(error.message);
-      }
-    }
-
-    // ============ ANCHO DE COLUMNAS DEL TABLERO ============
-    // Cada columna recuerda su ancho (por etapa) en localStorage.
-    const KANBAN_WIDTHS_KEY = 'biz-kanban-widths-v1';
-    const KANBAN_MIN_W = 200;
-    const KANBAN_MAX_W = 560;
-
-    function readKanbanWidths() {
-      try { return JSON.parse(localStorage.getItem(KANBAN_WIDTHS_KEY)) || {}; } catch (error) { return {}; }
-    }
-
-    function saveKanbanWidth(key, width) {
-      const all = readKanbanWidths();
-      if (width == null) delete all[key];
-      else all[key] = width;
-      try { localStorage.setItem(KANBAN_WIDTHS_KEY, JSON.stringify(all)); } catch (error) { /* almacenamiento lleno: no es crítico */ }
-    }
-
-    function wireKanbanResize(boardEl) {
-      const saved = readKanbanWidths();
-      boardEl.querySelectorAll('.kanban-col[data-stage]').forEach((col) => {
-        const key = col.dataset.stage;
-        if (saved[key]) col.style.setProperty('--kanban-col-w', `${saved[key]}px`);
-        const handle = col.querySelector('[data-col-resize]');
-        if (!handle) return;
-
-        handle.addEventListener('pointerdown', (event) => {
-          event.preventDefault();
-          const startX = event.clientX;
-          const startW = col.getBoundingClientRect().width;
-          handle.classList.add('dragging');
-          handle.setPointerCapture(event.pointerId);
-
-          const onMove = (moveEvent) => {
-            const w = Math.min(KANBAN_MAX_W, Math.max(KANBAN_MIN_W, Math.round(startW + moveEvent.clientX - startX)));
-            col.style.setProperty('--kanban-col-w', `${w}px`);
-          };
-          const onUp = () => {
-            handle.removeEventListener('pointermove', onMove);
-            handle.removeEventListener('pointerup', onUp);
-            handle.removeEventListener('pointercancel', onUp);
-            handle.classList.remove('dragging');
-            saveKanbanWidth(key, Math.round(col.getBoundingClientRect().width));
-          };
-          handle.addEventListener('pointermove', onMove);
-          handle.addEventListener('pointerup', onUp);
-          handle.addEventListener('pointercancel', onUp);
-        });
-
-        handle.addEventListener('dblclick', () => {
-          col.style.removeProperty('--kanban-col-w');
-          saveKanbanWidth(key, null);
-        });
-      });
-    }
-
-    function openDetail(business) {
-      const neg = business.negotiation || {};
-      const closing = business.closing || {};
-      const fields = [
-        { name: 'processType', label: 'Proceso de venta', type: 'select', options: [{ value: 'comprador', label: 'Comprador' }, { value: 'vendedor', label: 'Vendedor' }], value: business.processType || 'comprador' },
-        { name: 'stage', label: 'Etapa', type: 'select', options: stagesFor(business.processType || 'comprador'), value: business.currentStage },
-        { name: 'valueOperation', label: 'Valor de operación', type: 'number', value: business.valueOperation || 0 },
-        { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: neg.offer || 0 },
-        { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: Format.toLocalInput(closing.promiseDate) },
-        { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', value: Format.toLocalInput(closing.closingDate), hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
-        { name: 'closing_commission', label: 'Comisión', type: 'number', value: closing.commission || 0 },
-        { name: 'partnerAdvisor', label: 'Compañero / asesor', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin compañero —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }], value: business.partnerAdvisor ? business.partnerAdvisor._id || business.partnerAdvisor : (business.partnerAdvisorName ? '__externo__' : '') },
-        { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', value: business.partnerAdvisorName || '' },
-        { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: neg.notes || '' },
-      ];
-      const modal = UI.openModal({
-        title: `Negociación: ${business.name}`,
-        body: `
-          <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px;">
-            ${UI.badge(business.processType === 'vendedor' ? 'Proceso vendedor' : 'Proceso comprador', 'info')}
-            ${UI.badge(stageLabel(business.currentStage), 'info')}
-            <span class="text-muted">Comprador: ${UI.escapeHtml(business.buyerClient ? business.buyerClient.name : (business.buyerExternalName || '—'))}</span>
-            <span class="text-muted">Vendedor: ${UI.escapeHtml(business.sellerClient ? business.sellerClient.name : (business.sellerExternalName || '—'))}</span>
-          </div>
-          <form id="neg-form" novalidate>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${fields.map((f) => UI.field(f.name, f.label, { ...f, value: f.value })).join('')}
-            </div>
-          </form>
-        `,
-        footer: canManage
-          ? `
-          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="submit" form="neg-form">Guardar</button>
-        `
-          : `
-          <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
-        `,
-        size: 820,
-      });
-      const bodyEl = modal.bodyEl;
-      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
-      if (overlay) {
-        const cancelBtn = overlay.querySelector('[data-cancel]');
-        if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-      }
-      const form = bodyEl ? bodyEl.querySelector('#neg-form') : null;
-      if (form) {
-        const partnerSel = form.querySelector('#fld-partnerAdvisor');
-        const partnerWrap = form.querySelector('#fld-partnerAdvisorName');
-        if (partnerSel && partnerWrap) {
-          const parent = partnerWrap.parentElement || partnerWrap;
-          const syncPartner = () => { parent.style.display = partnerSel.value === '__externo__' ? '' : 'none'; };
-          partnerSel.addEventListener('change', syncPartner);
-          syncPartner();
-        }
-        if (!canManage) {
-          // Asesor / escrituración: consulta del avance en modo solo lectura.
-          form.querySelectorAll('input, select, textarea').forEach((el) => { el.disabled = true; });
-          return;
-        }
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const v = UI.collectForm(e.target);
-          const { negotiation_offer, negotiation_notes, closing_promiseDate, fecha_cierre, closing_commission, stage, processType, partnerAdvisorName, ...rest } = v;
-          if (rest.partnerAdvisor === '__externo__') {
-            if (!String(partnerAdvisorName || '').trim()) return UI.toast('Escribe el nombre del asesor externo', 'warning');
-            rest.partnerAdvisor = null;
-            rest.partnerAdvisorName = String(partnerAdvisorName).trim();
-          } else {
-            rest.partnerAdvisorName = '';
-          }
-          const body = {
-            ...rest,
-            processType,
-            negotiation: {
-              offer: negotiation_offer || 0,
-              counterOffer: neg.counterOffer || 0,
-              notes: negotiation_notes || '',
-            },
-            closing: {
-              promiseAmount: closing.promiseAmount || 0,
-              promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
-              closingAmount: closing.closingAmount || 0,
-              closingDate: fecha_cierre ? new Date(fecha_cierre).toISOString() : null,
-              commission: closing_commission || 0,
-              participants: (Array.isArray(closing.participants) ? closing.participants : [])
-                .map((p) => ({
-                  user: (p && p.user && (p.user._id || p.user)) || null,
-                  share: Number((p && p.share) || 0),
-                }))
-                .filter((p) => p.user),
-            },
-            fecha_cierre: fecha_cierre ? new Date(fecha_cierre).toISOString() : null,
-          };
-          try {
-            const hasProcessChange = Boolean(processType && processType !== business.processType);
-            if (!hasProcessChange && stage && stage !== business.currentStage) {
-              await API.businesses.stage(business._id, { stage, nota: 'Actualización desde detalle', comments: 'Actualización desde detalle' });
-            }
-            await API.businesses.update(business._id, body);
-            UI.toast('Cambios guardados', 'success');
-            UI.closeModal();
-            await refrescarActivos();
-            renderView();
-          } catch (error) {
-            UI.toast(error.message, 'error');
-          }
-        });
-      }
-    }
-
     async function openNew() {
       await refrescarActivos();
       const stageOptionsForNew = (processType) => (stagesFor(processType) || [])
@@ -1416,15 +1182,18 @@ window.Pages.businesses = {
         { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email' },
         { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
+        { name: 'partnerAdvisorPhone', label: 'Teléfono del asesor externo', type: 'text', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
+        { name: 'partnerAdvisorEmail', label: 'Correo del asesor externo', type: 'email', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
         { name: 'cliente_id', label: 'Cliente (comprador)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...opcionesCliente(clients, 'buyerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
         { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
-        { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
+        { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
         { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'number' },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
+        { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local' },
         { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
       ];
       const modal = UI.openModal({
@@ -1475,7 +1244,7 @@ window.Pages.businesses = {
             await API.businesses.create(body);
             UI.toast('Negocio creado', 'success');
             UI.closeModal();
-            renderView();
+            renderTable();
           } catch (error) {
             UI.toast(error.message, 'error');
           }
@@ -1483,6 +1252,6 @@ window.Pages.businesses = {
       }
     }
 
-    renderView();
+    renderTable();
   },
 };

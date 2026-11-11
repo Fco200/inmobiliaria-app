@@ -68,6 +68,9 @@ const businessSchema = new mongoose.Schema(
     },
     // Asor externo (otra inmobiliaria / colaborador sin cuenta en el CRM).
     partnerAdvisorName: { type: String, trim: true, default: '' },
+    // Contacto del asesor externo que atiende al cliente (opcionales).
+    partnerAdvisorPhone: { type: String, trim: true, default: '' },
+    partnerAdvisorEmail: { type: String, trim: true, lowercase: true, default: '' },
     partnerBusiness: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Business',
@@ -140,9 +143,13 @@ const businessSchema = new mongoose.Schema(
     finishedAt: { type: Date, default: null },
     // Checklist operativo del negocio (documentos por integrar, trámites,
     // pendientes antes de firma, etc.). Cada elemento puede marcarse hecho.
+    // Versión de la plantilla de escrituración aplicada a este negocio.
+    checklistTemplateVersion: { type: Number, default: 0 },
     checklist: [
       {
         text: { type: String, trim: true, required: true },
+        // Sección de la plantilla (vacío para pendientes agregados a mano).
+        group: { type: String, trim: true, default: '' },
         done: { type: Boolean, default: false },
         createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
         completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

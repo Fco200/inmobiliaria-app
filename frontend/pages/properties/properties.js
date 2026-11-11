@@ -9,6 +9,9 @@ window.Pages.properties = {
     const stored = window.ApiClient ? window.ApiClient.getStoredUser() : null;
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
     const isBossUser = role === 'admin' || role === 'gerencia' || role === 'superadmin' || role === 'direccion';
+    // Asistencia y escrituración pueden reasignar el asesor de cualquier propiedad.
+    const ROLES_ASIGNAN_ASESOR = ['asistencia', 'escrituracion'];
+    const myId = stored ? String(stored._id || stored.id || '') : '';
 
     const OPERATION_LABELS = {
       venta: 'Venta',
@@ -160,7 +163,7 @@ window.Pages.properties = {
                 ${detailRow('Precio', Format.currency(record.price))}
                 ${detailRow('Valor ticket', record.ticketValue ? Format.currency(record.ticketValue) : '—')}
                 ${detailRow('Origen', record.isExternal ? `Externa${record.externalAdvisor ? ` — ofrecida por ${UI.escapeHtml(record.externalAdvisor)}` : ''}` : 'Captación del equipo')}
-                ${detailRow('Asesor', record.responsibleUser ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser) : '—')}
+                ${detailRow('Asesor', record.responsibleUser && typeof record.responsibleUser === 'object' ? UI.escapeHtml(record.responsibleUser.name || record.responsibleUser.username || '—') : '—')}
                 ${detailRow('Propietario', record.owner ? UI.escapeHtml(record.owner.nombre || record.owner.name || '') : UI.escapeHtml(record.ownerName || '—'))}
                 ${detailRow('Se puede vender con', paymentMethodsLabel(record))}
               </tbody>
@@ -337,6 +340,16 @@ window.Pages.properties = {
     // reactiva y le pasa el registro (sin perder los botones del detalle).
     let openPropertyForm = null;
 
+    // Propiedades ajenas para asistencia/escrituración: solo se reasigna el asesor.
+    const soloAsignaAsesor = (record) => {
+      if (isBossUser || !ROLES_ASIGNAN_ASESOR.includes(role)) return false;
+      const dueno = record && record.responsibleUser;
+      return String((dueno && (dueno._id || dueno)) || '') !== myId;
+    };
+    const abrirEdicion = (record, openForm) => (soloAsignaAsesor(record)
+      ? openForm(record, { allowedNames: ['responsibleUser'], title: 'Asignar asesor responsable' })
+      : openForm(record));
+
     crudPage(container, {
       title: 'Captar Propiedades',
       newLabel: 'Nueva propiedad',
@@ -411,7 +424,7 @@ window.Pages.properties = {
         { key: 'price', label: 'Precio', render: (r) => Format.currency(r.price) },
         { key: 'ticketValue', label: 'Valor ticket', render: (r) => (r.ticketValue ? Format.currency(r.ticketValue) : '—') },
         { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
-        { key: 'responsibleUser', label: 'Asesor', render: (r) => UI.escapeHtml(r.responsibleUser ? (r.responsibleUser.name || r.responsibleUser) : '—') },
+        { key: 'responsibleUser', label: 'Asesor', render: (r) => UI.escapeHtml(r.responsibleUser && typeof r.responsibleUser === 'object' ? (r.responsibleUser.name || r.responsibleUser.username || '—') : '—') },
         { key: 'isPublished', label: 'Inventario general', render: (r) => (r.isPublished ? UI.badge('Compartida', 'success') : UI.badge('Privada', 'muted')) },
         { key: 'isExternal', label: 'Origen', render: (r) => (r.isExternal ? `${UI.badge('Externa', 'warning')}${r.externalAdvisor ? `<div class="text-muted" style="font-size:11px;">${UI.escapeHtml(r.externalAdvisor)}</div>` : ''}` : '<span class="text-muted" style="font-size:12px;">Equipo</span>') },
       ],
@@ -420,7 +433,6 @@ window.Pages.properties = {
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
         { name: 'operationType', label: 'Tipo de operación', type: 'select', required: true, options: operationOptions },
         { name: 'price', label: 'Precio', type: 'number' },
-        { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Costo equivalente de la operación para métricas' },
         { name: 'status', label: 'Estado', type: 'select', options: PROPERTY_STATUS },
         { name: 'address', label: 'Dirección', type: 'text', full: true },
         { name: 'zone', label: 'Zona / colonia', type: 'text' },
@@ -444,6 +456,10 @@ window.Pages.properties = {
         { name: 'description', label: 'Descripción', type: 'textarea', rows: 10, full: true, hint: 'Describe medidas, espacios, amenidades y estado. Mientras más detalle, mejor aparece en el catálogo y en las búsquedas. El campo es amplio (10 renglones) y se puede arrastrar para hacerlo más grande.' },
       ],
       formData(values, record, form) {
+        // Edición limitada (solo asesor responsable): no se envía el resto de la ficha.
+        if (!Object.prototype.hasOwnProperty.call(values, 'type')) {
+          return { responsibleUser: values.responsibleUser };
+        }
         const body = { ...values };
         // Al crear, el asesor responsable viaja explícitamente con el ID del
         // usuario que registra la propiedad (el backend también lo confirma).
@@ -489,7 +505,7 @@ window.Pages.properties = {
       },
       onFormMount(form, record) {
         // Editor visual de fotografías (agregar / quitar / reordenar).
-        mountPhotoManager(form, record);
+        if (form && form.querySelector('#fld-type')) mountPhotoManager(form, record);
 
         // Asesor responsable: al CREAR queda fijado al usuario que registra la
         // propiedad (el backend también lo fuerza). Al editar se conserva el
@@ -614,8 +630,8 @@ window.Pages.properties = {
       },
       onEdit: (record, openForm) => {
         // Captura el formulario de crudPage para reabrirlo desde el detalle.
-        openPropertyForm = openForm;
-        return openForm(record);
+        openPropertyForm = (rec) => abrirEdicion(rec, openForm);
+        return abrirEdicion(record, openForm);
       },
       onRemove: true,
     });

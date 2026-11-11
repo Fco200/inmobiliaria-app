@@ -9,7 +9,16 @@ const {
   roleCode,
   isCustomRole,
   hasPermission,
+  canAssignAdvisors,
+  soloCampos,
 } = require('../utils/scope');
+
+// Campos de asesores que pueden reasignar Asistencia y Escrituración sin tener
+// permiso de edición completa del negocio.
+const CAMPOS_ASIGNACION_NEGOCIO = [
+  'asesor_captador_id', 'mainAdvisor', 'captadorExternalName', 'captadorExternalPhone', 'captadorExternalEmail',
+  'asesor_cliente_id', 'partnerAdvisor', 'partnerAdvisorName', 'partnerAdvisorPhone', 'partnerAdvisorEmail',
+];
 const {
   Business,
   BusinessStage,
@@ -17,6 +26,7 @@ const {
   Client,
   Property,
   Document,
+  Ticket,
 } = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
 const { ensure } = require('../services/notification.service');
@@ -31,6 +41,7 @@ const {
 } = require('../constants/business-stages');
 const processFlow = require('../services/process.service');
 const { BUSINESS_CREATOR_ROLES } = require('../constants/roles');
+const { CHECKLIST_TEMPLATE, CHECKLIST_TEMPLATE_VERSION } = require('../constants/business-checklist');
 
 // Etapas del embudo "en curso". Las terminales (concluido/cancelado/pausa)
 // se agregan aparte en el tablero y en los selectores.
@@ -382,6 +393,82 @@ function aplicarCicloDeVida(business, stage, { finished = true } = {}) {
   business.currentStage = code;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ticket: reparto entre asesores internos y flujo financiero
+// ─────────────────────────────────────────────────────────────────────────────
+//  · 2 asesores internos        → 50% / 50%
+//  · 1 asesor interno (sin externo) o interviene un externo → 100% al interno
+//  · La comisión del negocio es el valor ticket (ya no se captura por separado).
+//  · Cada asesor con parte del ticket tiene un registro Ticket:
+//      activo     → "en negociación" (generatedAmount, sin cobrar)
+//      concluido  → "cobrado" (collectedAmount)
+//      cancelado  → sin monto
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+function calcularReparto({
+  mainAdvisor, partnerAdvisor, captadorExternalName, partnerAdvisorName,
+}) {
+  const captadorExterno = Boolean(String(captadorExternalName || '').trim()) || !mainAdvisor;
+  const partnerExterno = Boolean(String(partnerAdvisorName || '').trim()) && !partnerAdvisor;
+  const ids = [];
+  if (!captadorExterno) ids.push(String(idOf(mainAdvisor)));
+  if (partnerAdvisor) {
+    const partnerId = String(idOf(partnerAdvisor));
+    if (!ids.includes(partnerId)) ids.push(partnerId);
+  }
+  if (!ids.length) return [];
+  const share = ids.length === 2 && !captadorExterno && !partnerExterno ? 50 : 100;
+  return ids.map((user) => ({ user, share }));
+}
+
+// Aplica el reparto y la comisión (= valor ticket) sobre el bloque `closing`.
+function aplicarRepartoTicket(target) {
+  const valor = round2(target.ticketValue);
+  const participants = calcularReparto(target);
+  if (!target.closing || typeof target.closing !== 'object') target.closing = {};
+  target.closing.participants = participants;
+  target.closing.commission = valor;
+  return target;
+}
+
+// Mantiene un registro Ticket por asesor participante, acorde al estado del negocio.
+async function sincronizarTickets(business) {
+  const valor = round2(business.ticketValue);
+  const participants = (business.closing && business.closing.participants) || [];
+  const cancelado = business.status === 'cancelado';
+  const concluido = business.status === 'concluido';
+  const status = cancelado ? 'cancelado' : (concluido ? 'cobrado' : 'generado');
+  const userIds = [];
+
+  for (const p of participants) {
+    const userId = idOf(p.user);
+    if (!userId) continue;
+    userIds.push(String(userId));
+    const monto = round2((valor * (Number(p.share) || 0)) / 100);
+    const existente = await Ticket.findOne({ business: business._id, user: userId }).select('generatedAt').lean();
+    await Ticket.updateOne(
+      { business: business._id, user: userId },
+      {
+        $set: {
+          value: monto,
+          generatedAmount: cancelado ? 0 : monto,
+          collectedAmount: concluido ? monto : 0,
+          status,
+          generatedAt: cancelado ? null : ((existente && existente.generatedAt) || new Date()),
+          collectedAt: concluido ? (business.finishedAt || new Date()) : null,
+        },
+      },
+      { upsert: true }
+    );
+  }
+
+  await Ticket.deleteMany({ business: business._id, user: { $nin: userIds } });
+  const primero = await Ticket.findOne({ business: business._id }).sort({ createdAt: 1 }).select('_id').lean();
+  const ticketId = primero ? primero._id : null;
+  await Business.updateOne({ _id: business._id }, { $set: { ticket: ticketId } });
+  business.ticket = ticketId;
+}
+
 const create = asyncHandler(async (req, res) => {
   if (!canManageBusiness(req)) {
     return res.status(403).json({
@@ -421,6 +508,13 @@ const create = asyncHandler(async (req, res) => {
 
   // El vendedor sale del propietario de la propiedad si no se eligió uno.
   await completarVendedorDesdePropiedad(body);
+
+  // Reparto del ticket entre asesores internos y comisión = valor ticket.
+  aplicarRepartoTicket(body);
+
+  // Plantilla base de escrituración: cada negocio nuevo nace con sus pendientes.
+  body.checklist = CHECKLIST_TEMPLATE.map((item) => ({ ...item }));
+  body.checklistTemplateVersion = CHECKLIST_TEMPLATE_VERSION;
 
   const initialStage = normalizeStage(body.currentStage) || 'PROMESA';
   if (!body.currentStage) body.currentStage = initialStage;
@@ -463,6 +557,7 @@ const create = asyncHandler(async (req, res) => {
   // Vínculo con el cliente y estado de la propiedad (no bloquean la creación).
   await sincronizarClientes(business).catch(() => {});
   await sincronizarPropiedad(business).catch(() => {});
+  await sincronizarTickets(business).catch(() => {});
 
   await logActivity({
     entityType: 'Business',
@@ -501,7 +596,8 @@ const update = asyncHandler(async (req, res) => {
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
   }
-  if (!canManageBusiness(req)) {
+  const reasignaAsesores = canAssignAdvisors(req) && soloCampos(req.body, CAMPOS_ASIGNACION_NEGOCIO);
+  if (!canManageBusiness(req) && !reasignaAsesores) {
     return res.status(403).json({
       success: false,
       message: 'Solo Dirección, Administración, Gerencia o Asistencia pueden editar los datos del negocio.',
@@ -578,6 +674,9 @@ const update = asyncHandler(async (req, res) => {
 
   Object.assign(business, body);
 
+  // Reparto del ticket con los asesores ya actualizados (la comisión sigue al valor ticket).
+  aplicarRepartoTicket(business);
+
   // Si la etapa o el estado cambiaron, se aplica el ciclo de vida completo.
   if (body.currentStage !== undefined || body.status !== undefined) {
     const targetStage = body.currentStage !== undefined
@@ -623,6 +722,7 @@ const update = asyncHandler(async (req, res) => {
 
   await sincronizarClientes(business, clientesPrevios).catch(() => {});
   await sincronizarPropiedad(business, previousStatus).catch(() => {});
+  await sincronizarTickets(business).catch(() => {});
 
   Object.entries(changed).forEach(([field, values]) => {
     logAudit({
@@ -684,6 +784,7 @@ const remove = asyncHandler(async (req, res) => {
 
   await BusinessStage.deleteMany({ business: business._id });
   await BusinessNote.deleteMany({ business: business._id });
+  await Ticket.deleteMany({ business: business._id });
   await business.deleteOne();
 
   await logActivity({
@@ -748,6 +849,7 @@ const changeStage = asyncHandler(async (req, res) => {
 
   aplicarCicloDeVida(business, stage);
   await business.save();
+  await sincronizarTickets(business).catch(() => {});
 
   await registrarEtapa(business, stage, {
     note,
@@ -866,6 +968,21 @@ const removeNote = asyncHandler(async (req, res) => {
 // Checklist del negocio
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Negocios creados antes de la plantilla reciben los pendientes que les falten
+// la primera vez que se consulta su checklist. Nunca se repite un pendiente que
+// ya exista con el mismo texto, y los eliminados a mano no se vuelven a crear
+// (la versión queda registrada en el negocio).
+async function asegurarPlantillaChecklist(business) {
+  if ((business.checklistTemplateVersion || 0) >= CHECKLIST_TEMPLATE_VERSION) return business;
+  const existentes = new Set((business.checklist || []).map((item) => item.text));
+  CHECKLIST_TEMPLATE.forEach((item) => {
+    if (!existentes.has(item.text)) business.checklist.push({ ...item });
+  });
+  business.checklistTemplateVersion = CHECKLIST_TEMPLATE_VERSION;
+  await business.save();
+  return business;
+}
+
 async function findBusinessForChecklist(req, res) {
   const business = await Business.findById(req.params.id);
   if (!business) {
@@ -876,6 +993,7 @@ async function findBusinessForChecklist(req, res) {
     res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
     return null;
   }
+  await asegurarPlantillaChecklist(business).catch(() => {});
   return business;
 }
 

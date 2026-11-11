@@ -337,7 +337,7 @@ window.PropertyPdf = (() => {
     // Enriquecido: si el objeto viene parcial (por ejemplo desde una tarjeta de
     // inventario), se pide la ficha COMPLETA para que el PDF lleve toda la
     // información de la propiedad (características, propietario, descripción…).
-    const needsFull = prop._id && (prop.characteristics === undefined || prop.owner === undefined || prop.description === undefined);
+    const needsFull = prop._id && (prop.characteristics === undefined || prop.owner === undefined || prop.description === undefined || (prop.responsibleUser && typeof prop.responsibleUser !== 'object'));
     if (needsFull && window.API && window.API.properties && window.API.properties.get) {
       try {
         const full = await window.API.properties.get(prop._id);
@@ -357,7 +357,7 @@ window.PropertyPdf = (() => {
     // ── Datos de contacto de quien COMPARTE (usuario activo) ───────────
     const user = (window.ApiClient && ApiClient.getStoredUser()) || {};
     const assignedAdvisor = prop.responsibleUser && typeof prop.responsibleUser === 'object'
-      ? prop.responsibleUser.name
+      ? (prop.responsibleUser.name || prop.responsibleUser.username || '')
       : '';
     const asesorNombre = assignedAdvisor || (asesor && asesor.name) || user.name || '';
     const asesorTel = (asesor && asesor.phone) || user.phone || '';
@@ -507,7 +507,9 @@ window.PropertyPdf = (() => {
     if (pagos) filas.push({ label: 'Se puede vender con', value: pagos });
     const propietario = (prop.owner && (prop.owner.nombre || prop.owner.name)) || prop.ownerName;
     if (propietario) filas.push({ label: 'Propietario', value: propietario });
-    const asesorResp = prop.responsibleUser && (prop.responsibleUser.name || prop.responsibleUser);
+    const asesorResp = prop.responsibleUser && typeof prop.responsibleUser === 'object'
+      ? (prop.responsibleUser.name || prop.responsibleUser.username || '')
+      : '';
     if (asesorResp) filas.push({ label: 'Asesor responsable', value: asesorResp });
     if (prop.isExternal) {
       filas.push({ label: 'Origen', value: prop.externalAdvisor ? `Externa — ofrecida por ${prop.externalAdvisor}` : 'Externa (otra inmobiliaria)' });

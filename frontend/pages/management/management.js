@@ -242,7 +242,7 @@ window.Pages.management = {
               <div class="grid grid-4 mt-1">
                 ${stat('Valor de cierres', Format.currency(report.closureValue))}
                 ${stat('Gastos / inversión', Format.currency(report.expenses))}
-                ${stat('En negociación', report.negotiations, 'Negociación y promesa')}
+                ${stat('En negociación', report.negotiations, `Tickets en negociación: ${Format.currency(report.ticketsNegotiating || 0)}`)}
                 ${stat('Metas totales', report.goals)}
               </div>
               <div class="card mt-2">
@@ -354,7 +354,7 @@ window.Pages.management = {
             ${stat('Ingresos', Format.currency(t.ticketsCollected), 'Tickets cobrados')}
           </div>
           <div class="grid grid-4 mt-1">
-            ${stat('Tickets generados', Format.currency(t.ticketsGenerated))}
+            ${stat('Tickets generados', Format.currency(t.ticketsGenerated), `En negociación: ${Format.currency(t.ticketsNegotiating || 0)}`)}
             ${stat('Valor de cierres', Format.currency(t.closureValue))}
             ${stat('Comisiones', Format.currency(t.commission))}
             ${stat('Conversión', `${t.conversion}%`, 'Concluidos / total')}

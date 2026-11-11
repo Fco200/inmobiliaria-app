@@ -84,7 +84,7 @@ window.Pages.reports = {
             ${card('Tickets cobrados', Format.currency(d.ticketsCollected), 'Ingreso registrado')}
           </div>
           <div class="grid grid-4 mt-1">
-            ${card('En negociación', d.negotiations, 'Negociación y promesa')}
+            ${card('En negociación', d.negotiations, `Tickets en negociación: ${Format.currency(d.ticketsNegotiating || 0)}`)}
             ${card('Valor de cierres', Format.currency(d.closureValue))}
             ${card('Comisiones', Format.currency(d.commission))}
             ${card('Gastos / inversión', Format.currency(d.expenses))}

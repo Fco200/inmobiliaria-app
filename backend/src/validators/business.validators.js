@@ -15,8 +15,14 @@ const captadorExternoRules = [
   body('ticketValue').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('El valor ticket no puede ser negativo'),
 ];
 
+const partnerExternoRules = [
+  body('partnerAdvisorPhone').optional({ values: 'falsy' }).isString().isLength({ max: 30 }).withMessage('El teléfono del asesor externo no es válido'),
+  body('partnerAdvisorEmail').optional({ values: 'falsy' }).isEmail().withMessage('El correo del asesor externo no es válido'),
+];
+
 const businessRules = [
   ...captadorExternoRules,
+  ...partnerExternoRules,
   body('name').notEmpty().withMessage('El nombre del negocio es obligatorio'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
   body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),
@@ -36,6 +42,7 @@ const businessRules = [
 
 const businessUpdateRules = [
   ...captadorExternoRules,
+  ...partnerExternoRules,
   body('name').optional().notEmpty().withMessage('El nombre del negocio no puede estar vacío'),
   body('mainAdvisor').optional().isMongoId().withMessage('Asesor principal no válido'),
   body('asesor_captador_id').optional({ values: 'falsy' }).isMongoId().withMessage('Asesor captador no válido'),

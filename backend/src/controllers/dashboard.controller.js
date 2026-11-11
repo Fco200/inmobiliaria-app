@@ -65,6 +65,7 @@ const summary = asyncHandler(async (req, res) => {
         _id: null,
         generated: { $sum: '$generatedAmount' },
         collected: { $sum: '$collectedAmount' },
+        negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } },
       },
     },
   ]);
@@ -118,6 +119,7 @@ const summary = asyncHandler(async (req, res) => {
         tasksPending,
         ticketsGenerated: ticketAgg[0] ? ticketAgg[0].generated : 0,
         ticketsCollected: ticketAgg[0] ? ticketAgg[0].collected : 0,
+        ticketsNegotiating: ticketAgg[0] ? ticketAgg[0].negotiating : 0,
         notificationsUnread: unread,
         expensesThisMonth: expensesThisMonth[0] ? expensesThisMonth[0].total : 0,
         activeGoals,
@@ -150,7 +152,7 @@ const userReport = asyncHandler(async (req, res) => {
       Goal.countDocuments({ user: target }),
       Ticket.aggregate([
         { $match: { user: target } },
-        { $group: { _id: null, generated: { $sum: '$generatedAmount' }, collected: { $sum: '$collectedAmount' } } },
+        { $group: { _id: null, generated: { $sum: '$generatedAmount' }, collected: { $sum: '$collectedAmount' }, negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } } } },
       ]),
       Expense.aggregate([
         { $match: { user: target } },
@@ -192,6 +194,7 @@ const userReport = asyncHandler(async (req, res) => {
       commission: closuresAgg[0] ? closuresAgg[0].commission : 0,
       ticketsGenerated: tickets[0] ? tickets[0].generated : 0,
       ticketsCollected: tickets[0] ? tickets[0].collected : 0,
+      ticketsNegotiating: tickets[0] ? tickets[0].negotiating : 0,
       expenses: expenses[0] ? expenses[0].total : 0,
       goals,
       funnel: funnelMap,

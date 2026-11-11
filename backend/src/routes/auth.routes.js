@@ -7,6 +7,7 @@ const {
   logout,
   me,
   updateMe,
+  saveUiPref,
   register,
   checkRegisterKey,
   registerGoogle,
@@ -100,6 +101,7 @@ router.post('/password-reset/request', forgotPasswordLimiter, authIpLimiter, req
 router.post('/password-reset/confirm', authIpLimiter, confirmPasswordResetCode);
 router.get('/me', protect, me);
 router.put('/me', protect, updateMeRules, updateMe);
+router.put('/me/ui-prefs', protect, saveUiPref);
 router.post('/logout', protect, logout);
 router.patch('/onboarding-complete', protect, completeOnboarding);
 router.post('/change-password', protect, changePassword);

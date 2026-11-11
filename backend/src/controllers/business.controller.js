@@ -40,6 +40,7 @@ const {
   stageOrder,
 } = require('../constants/business-stages');
 const processFlow = require('../services/process.service');
+const { updateGoalsAuto } = require('../services/goal-auto.service');
 const { BUSINESS_CREATOR_ROLES } = require('../constants/roles');
 const { CHECKLIST_TEMPLATE, CHECKLIST_TEMPLATE_VERSION } = require('../constants/business-checklist');
 
@@ -149,8 +150,7 @@ const businessCrud = buildCrud(Business, {
     buyerClient: 'buyerClient',
     sellerClient: 'sellerClient',
     property: 'property',
-    // Asesor responsable (captador) y asesor interno que atiende al cliente.
-    asesor: 'mainAdvisor',
+    // Asesor interno que atiende al cliente (el responsable va en customFilter).
     asesorCliente: 'asesor_cliente_id',
   },
   // ?externo=si|no: negocios donde participa un asesor externo (nombre libre).
@@ -174,6 +174,20 @@ const businessCrud = buildCrud(Business, {
   wideRoles: ['asistencia', 'escrituracion'],
   // Los roles personalizados con el módulo Negocios ven todos los negocios.
   widePermission: 'businesses_manage',
+  // Responsable (?asesor=id). Por defecto es quien subió la propiedad
+  // (responsibleUser); con ?asesorTipo=captador se usa el asesor captador del negocio.
+  customFilter: async (req, filter) => {
+    const userId = String(req.query.asesor || '').trim();
+    if (!userId) return;
+    const cond = req.query.asesorTipo === 'captador'
+      ? { mainAdvisor: userId }
+      : { property: { $in: await Property.distinct('_id', { responsibleUser: userId }) } };
+    filter.$and = [...(filter.$and || []), cond];
+  },
+  // Filtro por fechas (?dateFrom / ?dateTo) sobre la fecha de alta del negocio.
+  dateField: 'createdAt',
+  // Los concluidos quedan al final: "activo" < "cancelado" < "concluido".
+  sort: { status: 1, createdAt: -1 },
 });
 
 const list = businessCrud.list;
@@ -251,48 +265,6 @@ async function sincronizarClientes(business, anteriores = []) {
       { $set: { negocioId: business._id } }
     );
   }
-}
-
-// Un cliente no puede tener dos negocios activos a la vez, ni como comprador ni
-// como vendedor: `Cliente.negocioId` es una referencia única, así que un segundo
-// negocio activo dejaría la insignia del cliente apuntando solo al último.
-//
-// El índice único parcial del esquema es el seguro definitivo (protege contra
-// dos clics simultáneos), pero aquí se revisa antes de insertar para poder
-// devolver un mensaje útil en lugar de un error de clave duplicada.
-async function conflictoNegocioActivo({ buyerClient, sellerClient, excludeId }) {
-  const condiciones = [];
-  if (buyerClient) condiciones.push({ buyerClient });
-  if (sellerClient) condiciones.push({ sellerClient });
-  if (!condiciones.length) return null;
-
-  const filtro = { status: 'activo', $or: condiciones };
-  if (excludeId) filtro._id = { $ne: excludeId };
-
-  const encontrado = await Business.findOne(filtro)
-    .select('name processType currentStage buyerClient sellerClient')
-    .populate('buyerClient', 'nombre')
-    .populate('sellerClient', 'nombre')
-    .lean();
-  if (!encontrado) return null;
-
-  // El cliente se elige como "el que ya tiene negocio": el comprador si coincide
-  // con el comprador del negocio encontrado; si no, es el vendedor.
-  const ref = encontrado.buyerClient;
-  const coincideComprador = buyerClient && ref && String(ref._id || ref) === String(buyerClient);
-  const cliente = encontrado[coincideComprador ? 'buyerClient' : 'sellerClient'];
-  const nombre = (cliente && (cliente.nombre || cliente.name)) || 'ese cliente';
-  const rol = coincideComprador ? 'comprador' : 'vendedor';
-  const etapa = stageLabel(encontrado.currentStage);
-
-  return `${nombre} ya tiene el negocio activo "${encontrado.name}" como ${rol} (etapa: ${etapa}). `
-    + 'Concluye o cancela ese negocio antes de abrir otro para el mismo cliente.';
-}
-
-// El índice único parcial puede dispararse entre la revisión previa y el INSERT
-// (dos peticiones simultáneas). Se traduce a un 409 con el mismo mensaje.
-function esErrorDuplicado(error) {
-  return Boolean(error) && (error.code === 11000 || error.code === 11001);
 }
 
 // Completa el vendedor con el PROPIETARIO de la propiedad elegida. El
@@ -467,6 +439,8 @@ async function sincronizarTickets(business) {
   const ticketId = primero ? primero._id : null;
   await Business.updateOne({ _id: business._id }, { $set: { ticket: ticketId } });
   business.ticket = ticketId;
+
+  await updateGoalsAuto().catch(() => {});
 }
 
 const create = asyncHandler(async (req, res) => {
@@ -520,34 +494,7 @@ const create = asyncHandler(async (req, res) => {
   if (!body.currentStage) body.currentStage = initialStage;
   aplicarCicloDeVida(body, initialStage, { finished: false });
 
-  // Solo se revisa el duplicado si el negocio va a quedar activo, que es lo que
-  // cubre el índice único: uno creado ya cerrado no bloquea al cliente.
-  if (body.status === 'activo') {
-    const conflicto = await conflictoNegocioActivo({
-      buyerClient: body.buyerClient,
-      sellerClient: body.sellerClient,
-    });
-    if (conflicto) {
-      return res.status(409).json({ success: false, message: conflicto });
-    }
-  }
-
-  let business;
-  try {
-    business = await Business.create(body);
-  } catch (error) {
-    if (esErrorDuplicado(error)) {
-      const msg = await conflictoNegocioActivo({
-        buyerClient: body.buyerClient,
-        sellerClient: body.sellerClient,
-      });
-      return res.status(409).json({
-        success: false,
-        message: msg || 'Ese cliente ya tiene un negocio activo. No se puede crear otro.',
-      });
-    }
-    throw error;
-  }
+  const business = await Business.create(body);
 
   await registrarEtapa(business, business.currentStage, {
     user: req.user._id,
@@ -658,20 +605,6 @@ const update = asyncHandler(async (req, res) => {
     await completarVendedorDesdePropiedad(body);
   }
 
-  // Si el formulario mueve el negocio a otro cliente, ese cliente tampoco puede
-  // tener ya otro negocio activo (el negocio actual se excluye del chequeo).
-  if (business.status === 'activo'
-    && (body.buyerClient !== undefined || body.sellerClient !== undefined)) {
-    const conflicto = await conflictoNegocioActivo({
-      buyerClient: body.buyerClient !== undefined ? body.buyerClient : idOf(business.buyerClient),
-      sellerClient: body.sellerClient !== undefined ? body.sellerClient : idOf(business.sellerClient),
-      excludeId: business._id,
-    });
-    if (conflicto) {
-      return res.status(409).json({ success: false, message: conflicto });
-    }
-  }
-
   Object.assign(business, body);
 
   // Reparto del ticket con los asesores ya actualizados (la comisión sigue al valor ticket).
@@ -696,22 +629,7 @@ const update = asyncHandler(async (req, res) => {
     }
   }
 
-  try {
-    await business.save();
-  } catch (error) {
-    if (esErrorDuplicado(error)) {
-      const msg = await conflictoNegocioActivo({
-        buyerClient: idOf(business.buyerClient),
-        sellerClient: idOf(business.sellerClient),
-        excludeId: business._id,
-      });
-      return res.status(409).json({
-        success: false,
-        message: msg || 'Ese cliente ya tiene un negocio activo. No se puede asignar dos veces.',
-      });
-    }
-    throw error;
-  }
+  await business.save();
 
   if (normalizeStage(business.currentStage) !== previousStage) {
     await registrarEtapa(business, business.currentStage, {
@@ -786,6 +704,7 @@ const remove = asyncHandler(async (req, res) => {
   await BusinessNote.deleteMany({ business: business._id });
   await Ticket.deleteMany({ business: business._id });
   await business.deleteOne();
+  await updateGoalsAuto().catch(() => {});
 
   await logActivity({
     entityType: 'Business',

@@ -27,6 +27,7 @@ const calendarRoutes = require('./calendar.routes');
 const meetingRoutes = require('./meeting.routes');
 const pushRoutes = require('./push.routes');
 const newsletterRoutes = require('./newsletter.routes');
+const appraisalRoutes = require('./appraisal.routes');
 const router = Router();
 
 router.get('/', (req, res) => {
@@ -40,6 +41,7 @@ router.get('/', (req, res) => {
       '/api/properties',
       '/api/inventory',
       '/api/businesses',
+      '/api/avaluos',
       '/api/appointments',
       '/api/tasks',
       '/api/goals',
@@ -78,6 +80,7 @@ router.use('/clients', clientRoutes);
 router.use('/properties', propertyRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/businesses', businessRoutes);
+router.use('/avaluos', appraisalRoutes);
 router.use('/appointments', appointmentRoutes.appointmentRouter);
 router.use('/tasks', appointmentRoutes.taskRouter);
 router.use('/goals', financeRoutes.goalRouter);

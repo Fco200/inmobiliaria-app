@@ -64,6 +64,8 @@ const userSchema = new mongoose.Schema(
       syncedAt: { type: Date, default: null },
       expiresAt: { type: Date, default: null },
     },
+    // Preferencias de interfaz (p. ej. anchos de columnas), una entrada por tabla.
+    uiPrefs: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: true,

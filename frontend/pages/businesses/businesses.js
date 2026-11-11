@@ -89,7 +89,7 @@ window.Pages.businesses = {
     const stageLabel = (code) => stageMeta.labels[code] || String(code || '').replace(/_/g, ' ');
 
     const roleCode = String((me && me.role && (me.role.code || me.role)) || '');
-    const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
+    const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
     const canChangeStage = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
     const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
     // Asignar o reasignar asesores: además de quien edita, lo tiene escrituración.
@@ -99,6 +99,8 @@ window.Pages.businesses = {
       'asesor_cliente_id', 'partnerAdvisorName', 'partnerAdvisorPhone', 'partnerAdvisorEmail',
     ];
     const canWriteNotes = true;
+    // Operaciones de propiedad que muestran el botón "Avalúo" en la lista de negocios.
+    const AVALUO_OPERATIONS = ['venta', 'compra_localizada'];
 
     const allStages = stageMeta.order && stageMeta.order.length
       ? stageMeta.order
@@ -468,6 +470,10 @@ window.Pages.businesses = {
       rest.partnerAdvisorPhone = asesorClienteExterno ? String(partnerAdvisorPhone || '').trim() : '';
       rest.partnerAdvisorEmail = asesorClienteExterno ? String(partnerAdvisorEmail || '').trim() : '';
 
+      if (Object.prototype.hasOwnProperty.call(rest, 'ticketValue')) {
+        rest.ticketValue = Number(rest.ticketValue) || 0;
+      }
+
       const negPrevio = (record && record.negotiation) || {};
       const closePrevio = (record && record.closing) || {};
       const closeParticipants = (Array.isArray(closePrevio.participants) ? closePrevio.participants : [])
@@ -508,7 +514,7 @@ window.Pages.businesses = {
           ${canManage ? `
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
               <button class="btn btn-primary" type="button" data-new>+ Nuevo negocio</button>
-              <small class="text-muted" style="max-width:320px;text-align:right;font-size:11px;">Abre el formulario completo: comprador o vendedor, propiedad, asesor captador y asesor que atiende al cliente. Para cambiar un negocio existente usa <em>Editar</em> en la lista.</small>
+              <small class="text-muted" style="max-width:320px;text-align:right;font-size:11px;">Abre el formulario completo: comprador o vendedor, propiedad, asesor captador y asesor cerrador. Para cambiar un negocio existente usa <em>Editar</em> en la lista.</small>
             </div>` : ''}
         </div>
       </div>
@@ -587,6 +593,11 @@ window.Pages.businesses = {
         title: 'Negocios',
         newLabel: 'Nuevo negocio',
         hideNew: true,
+        storageKey: 'negocios',
+        serverLayout: (me && me.uiPrefs && me.uiPrefs['crud-layout:negocios']) || null,
+        onLayoutSave: (layout) => API.auth.saveUiPref('crud-layout:negocios', layout),
+        // Por defecto el responsable es el usuario que captó la propiedad (y que la subió).
+        initialFilters: currentUserId ? { asesor: currentUserId, asesorTipo: 'propiedad' } : { asesorTipo: 'propiedad' },
         service: {
           list: (params) => API.businesses.list(params),
           create: (body) => API.businesses.create(body),
@@ -599,11 +610,20 @@ window.Pages.businesses = {
           { value: 'cancelado', label: 'Cancelado/Pausa' },
         ],
         filters: [
-          { key: 'asesor', label: 'Asesor responsable', placeholder: 'Todos los asesores', options: userOptions.filter((u) => u.value) },
-          { key: 'asesorCliente', label: 'Asesor interno', placeholder: 'Todos los asesores', options: userOptions.filter((u) => u.value) },
+          {
+            key: 'asesorTipo',
+            label: 'Tipo de responsable',
+            placeholder: 'Quién subió la propiedad',
+            options: [
+              { value: 'propiedad', label: 'Quien subió la propiedad' },
+              { value: 'captador', label: 'Asesor captador' },
+            ],
+          },
+          { key: 'asesor', label: 'Responsable', placeholder: 'Todos los responsables', options: userOptions.filter((u) => u.value) },
+          { key: 'asesorCliente', label: 'Interno', placeholder: 'Todos los internos', options: userOptions.filter((u) => u.value) },
           {
             key: 'externo',
-            label: 'Asesor externo',
+            label: 'Externo',
             placeholder: 'Todos',
             options: [
               { value: 'si', label: 'Con asesor externo' },
@@ -611,12 +631,15 @@ window.Pages.businesses = {
             ],
           },
           { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
+          { key: 'dateFrom', label: 'Desde (fecha)', type: 'date' },
+          { key: 'dateTo', label: 'Hasta (fecha)', type: 'date' },
         ],
         columns: [
           { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span><br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
+          { key: 'asesor_cliente_id', label: 'Asesor Cerrador', render: (r) => UI.escapeHtml((r.asesor_cliente_id && (r.asesor_cliente_id.name || r.asesor_cliente_id.username)) || r.partnerAdvisorName || '—') },
           { key: 'currentStage', label: 'Etapa', render: (r) => `${UI.statusBadge(stageLabel(r.currentStage))}${r.status === 'concluido' ? ' ' + UI.statusBadge('Concluido', 'success') : ''}` },
           { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         ],
@@ -626,7 +649,7 @@ window.Pages.businesses = {
           { name: 'captadorExternalName', label: 'Nombre del captador externo', type: 'text', value: (r) => r.captadorExternalName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'captadorExternalPhone', label: 'Teléfono del captador externo', type: 'text', value: (r) => r.captadorExternalPhone || '' },
           { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email', value: (r) => r.captadorExternalEmail || '' },
-          { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, value: (r) => (r.asesor_cliente_id ? (r.asesor_cliente_id._id || r.asesor_cliente_id) : (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+          { name: 'asesor_cliente_id', label: 'Asesor Cerrador', type: 'select', sinOtros: true, value: (r) => (r.asesor_cliente_id ? (r.asesor_cliente_id._id || r.asesor_cliente_id) : (r.partnerAdvisor ? (r.partnerAdvisor._id || r.partnerAdvisor) : (r.partnerAdvisorName ? '__externo__' : ''))), options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', value: (r) => r.partnerAdvisorName || '', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'partnerAdvisorPhone', label: 'Teléfono del asesor externo', type: 'text', value: (r) => r.partnerAdvisorPhone || '', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
           { name: 'partnerAdvisorEmail', label: 'Correo del asesor externo', type: 'email', value: (r) => r.partnerAdvisorEmail || '', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
@@ -636,6 +659,7 @@ window.Pages.businesses = {
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
+          { name: 'ticketValue', label: 'Valor ticket', type: 'number', value: (r) => (r.ticketValue || ''), hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
@@ -658,9 +682,21 @@ window.Pages.businesses = {
             <button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
             <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
+            ${AVALUO_OPERATIONS.includes(record.property && record.property.operationType) ? '<button class="btn btn-primary btn-sm" data-extra data-avaluo style="margin-left:6px;">Avalúo</button>' : ''}
           `;
         },
         onExtraAction(record, control, ctx) {
+          if (control.dataset.avaluo !== undefined) {
+            // Lleva la propiedad y el negocio al módulo Avalúo para iniciar la gestión.
+            const prop = record.property || {};
+            sessionStorage.setItem('avaluoPropiedad', JSON.stringify({
+              propertyId: prop._id || '',
+              businessId: record._id,
+              businessName: record.name || '',
+            }));
+            window.location.href = 'avaluo.html';
+            return;
+          }
           if (control.dataset.changeStage !== undefined) {
             openChangeStageModal(record, ctx);
             return;
@@ -1217,7 +1253,7 @@ window.Pages.businesses = {
         { name: 'captadorExternalName', label: 'Nombre del captador externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'captadorExternalPhone', label: 'Teléfono del captador externo', type: 'text' },
         { name: 'captadorExternalEmail', label: 'Correo del captador externo', type: 'email' },
-        { name: 'asesor_cliente_id', label: 'Asesor que atiende al cliente', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
+        { name: 'asesor_cliente_id', label: 'Asesor Cerrador', type: 'select', sinOtros: true, options: [{ value: '', label: '— Sin asesor —' }, ...userOptions, { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'partnerAdvisorName', label: 'Nombre del asesor externo', type: 'text', placeholder: 'Ej. Lic. Ramírez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'partnerAdvisorPhone', label: 'Teléfono del asesor externo', type: 'text', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },
         { name: 'partnerAdvisorEmail', label: 'Correo del asesor externo', type: 'email', hint: 'Solo si elegiste "Otro / Externo". Opcional.' },

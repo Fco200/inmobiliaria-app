@@ -70,6 +70,13 @@ function buildCrud(model, {
   // Permiso que, en roles personalizados, otorga el mismo alcance global que
   // un jefe dentro de ESTE módulo (p. ej. clients_manage).
   widePermission = null,
+  // Campo de fecha para ?dateFrom=YYYY-MM-DD y ?dateTo=YYYY-MM-DD (rango inclusivo).
+  dateField = null,
+  // Orden del listado (por defecto, lo más reciente primero).
+  sort = { createdAt: -1 },
+  // Filtro a medida: async (req, filter) => void. Permite condiciones que
+  // dependen de otra colección; debe usar $and para no pisar el alcance.
+  customFilter = null,
 } = {}) {
   function hasWideAccess(req) {
     return isBoss(req)
@@ -167,6 +174,17 @@ function buildCrud(model, {
         }
       }
 
+      if (customFilter) await customFilter(req, filter);
+
+      if (dateField) {
+        const range = {};
+        const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateFrom || '') ? new Date(`${req.query.dateFrom}T00:00:00`) : null;
+        const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateTo || '') ? new Date(`${req.query.dateTo}T23:59:59.999`) : null;
+        if (from && !Number.isNaN(from.getTime())) range.$gte = from;
+        if (to && !Number.isNaN(to.getTime())) range.$lte = to;
+        if (Object.keys(range).length) filter[dateField] = range;
+      }
+
       // Rango de precio (?minPrice / ?maxPrice) sobre el campo numérico.
       if (priceField) {
         const priceFilter = {};
@@ -195,7 +213,7 @@ function buildCrud(model, {
         query
           .skip((page - 1) * limit)
           .limit(limit)
-          .sort({ createdAt: -1 }),
+          .sort(sort),
       ]);
 
       res.json({

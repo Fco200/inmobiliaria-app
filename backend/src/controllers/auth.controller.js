@@ -185,6 +185,21 @@ const me = asyncHandler(async (req, res) => {
   res.json({ success: true, data: buildUserResponse(user) });
 });
 
+// PUT /api/auth/me/ui-prefs — guarda una preferencia de interfaz del usuario
+// (p. ej. anchos de columnas de una tabla). Solo se aceptan claves simples.
+const saveUiPref = asyncHandler(async (req, res) => {
+  const key = String((req.body && req.body.key) || '');
+  const value = req.body ? req.body.value : undefined;
+  if (!/^[a-z0-9:_-]{1,60}$/i.test(key)) {
+    return res.status(400).json({ success: false, message: 'Clave de preferencia no válida.' });
+  }
+  if (JSON.stringify(value || {}).length > 5000) {
+    return res.status(400).json({ success: false, message: 'La preferencia es demasiado grande.' });
+  }
+  await User.updateOne({ _id: req.user._id }, { $set: { [`uiPrefs.${key}`]: value ?? null } });
+  res.json({ success: true });
+});
+
 const updateMe = asyncHandler(async (req, res) => {
   const { password, ...rest } = req.body;
 
@@ -634,4 +649,4 @@ const confirmPasswordResetCode = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Contraseña actualizada. Ya puedes iniciar sesión con tu nueva contraseña.' });
 });
 
-module.exports = { login, logout, me, updateMe, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword, forgotPassword, requestPasswordResetCode, confirmPasswordResetCode };
+module.exports = { login, logout, me, updateMe, saveUiPref, register, checkRegisterKey, registerGoogle, completeOnboarding, changePassword, forgotPassword, requestPasswordResetCode, confirmPasswordResetCode };

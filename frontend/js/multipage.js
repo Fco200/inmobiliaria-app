@@ -7,6 +7,7 @@ window.AppShell = (() => {
     { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;', section: 'Comercial' },
     { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;', section: 'Comercial' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;', section: 'Comercial' },
+    { key: 'avaluo', label: 'Avalúo', href: 'avaluo.html', icon: '&#128207;', section: 'Propiedades' },
     { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;', section: 'Comercial' },
     { key: 'calendar', label: 'Calendario', href: 'calendar.html', icon: '&#128467;', section: 'Comercial' },
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;', section: 'Comercial' },

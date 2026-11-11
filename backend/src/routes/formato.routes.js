@@ -20,10 +20,17 @@ const router = Router();
 
 router.use(protect);
 
+// Carga de formatos y PDFs para todo el equipo (solo perfiles administrativos).
+// Los asesores solo los consultan y descargan.
+const canManageTemplates = authorize(
+  'admin', 'direccion', 'gerencia', 'asistencia', 'escrituracion', 'superadmin', 'system_admin'
+);
+
 // Formatos compartidos (cualquier archivo): todo el equipo los consulta y descarga.
 router.get('/compartidos', sharedFormat.listSharedFormats);
 router.post(
   '/compartidos',
+  canManageTemplates,
   upload.single('archivo'),
   uploadErrorHandler,
   verifyUpload,
@@ -44,11 +51,6 @@ router.get('/plantillas/:id/campos', obtenerCamposPlantilla);
 router.get('/plantillas/:id/descargar', descargarPlantilla);
 router.post('/generar/:plantillaId', generarPDF);
 
-// Carga de PDFs compartidos para todo el equipo (administración y personal
-// autorizado). Los asesores solo los consultan y descargan.
-const canManageTemplates = authorize(
-  'admin', 'direccion', 'gerencia', 'asistencia', 'superadmin', 'system_admin'
-);
 router.post('/plantillas', canManageTemplates, plantillaUpload.single('plantilla'), subirPlantilla);
 router.patch('/plantillas/:id', canManageTemplates, renombrarPlantilla);
 router.delete('/plantillas/:id', canManageTemplates, eliminarPlantilla);

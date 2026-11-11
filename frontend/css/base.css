@@ -4504,6 +4504,41 @@ body.is-embed .app-loader { display: none !important; }
 [data-theme="dark"] .fab-notif:hover { background: #241a33; }
 [data-theme="dark"] .fab-notif.is-unread { background: #2c1f3f; }
 
+/* ---- Tabla con columnas y filas ajustables (estilo Excel) ---- */
+.crud-row-height {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.crud-row-height input[type="range"] {
+  width: 110px;
+}
+table.crud-resizable thead th {
+  position: relative;
+}
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+.col-resizer:hover {
+  background: var(--primary);
+  opacity: 0.35;
+}
+@media (max-width: 768px) {
+  .col-resizer,
+  .crud-row-height {
+    display: none !important;
+  }
+}
+
 /* ---- Formatos compartidos ---- */
 .shared-drop:hover,
 .shared-drop:focus-within {

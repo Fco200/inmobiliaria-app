@@ -27,6 +27,7 @@ window.API = {
     login: (body) => ApiClient.post('/auth/login', body),
     me: () => ApiClient.get('/auth/me'),
     updateMe: (body) => ApiClient.put('/auth/me', body),
+    saveUiPref: (key, value) => ApiClient.put('/auth/me/ui-prefs', { key, value }),
     logout: () => ApiClient.post('/auth/logout'),
     checkRegisterKey: (body) => ApiClient.post('/auth/check-register-key', body),
     google: (body) => ApiClient.post('/auth/google', body),
@@ -174,6 +175,16 @@ window.API = {
     remove: (id) => ApiClient.remove(`/inventory/${id}`),
     publish: (id, body) => ApiClient.patch(`/inventory/${id}/publish`, body),
     public: (params) => ApiClient.get('/inventory/public', params),
+  },
+
+  avaluos: {
+    list: (params) => ApiClient.get('/avaluos', params),
+    get: (id) => ApiClient.get(`/avaluos/${id}`),
+    create: (body) => ApiClient.post('/avaluos', body),
+    update: (id, body) => ApiClient.put(`/avaluos/${id}`, body),
+    remove: (id) => ApiClient.remove(`/avaluos/${id}`),
+    saveChecklist: (id, checklist) => ApiClient.put(`/avaluos/${id}/checklist`, { checklist }),
+    addBitacora: (id, message) => ApiClient.post(`/avaluos/${id}/bitacora`, { message }),
   },
 
   businesses: {

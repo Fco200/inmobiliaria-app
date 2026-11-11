@@ -51,6 +51,7 @@ window.Pages.documents = {
       return (role && (role.code || role)) || '';
     })();
     const boss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
+    const canUploadShared = ['admin', 'direccion', 'gerencia', 'asistencia', 'escrituracion', 'superadmin'].includes(roleCode);
     const canUpload = boss || ['asesor', 'escrituracion'].includes(roleCode);
     const typeLabel = (t) => {
       const found = TYPES.find((x) => x.value === t);
@@ -62,9 +63,7 @@ window.Pages.documents = {
         <h2>Formatos</h2>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-primary" type="button" data-open-formatos>&#128196; Generar Formato PDF</button>
-          ${boss ? '<button class="btn btn-secondary" type="button" data-upload-shared>&#128228; Subir PDF compartido</button>' : ''}
           ${boss ? '<button class="btn btn-secondary" type="button" data-new-template>+ Crear plantilla</button>' : ''}
-          ${canUpload ? '<button class="btn btn-secondary" type="button" data-new>+ Subir formato</button>' : ''}
         </div>
       </div>
       <div style="margin-bottom:20px;">
@@ -132,7 +131,7 @@ window.Pages.documents = {
           </div>
           <span id="shared-count" class="badge badge-info" style="display:none;"></span>
         </div>
-        ${canUpload || boss ? `
+        ${canUploadShared ? `
           <form id="shared-form" class="shared-form" novalidate style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) auto;gap:10px;align-items:end;margin-bottom:10px;">
             <div style="min-width:0;">
               <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;" for="shared-name">Nombre del formato</label>
@@ -664,19 +663,9 @@ window.Pages.documents = {
     if (searchEl) searchEl.addEventListener('input', () => load());
     if (statusEl) statusEl.addEventListener('change', () => load());
     if (clientEl) clientEl.addEventListener('change', () => load());
-    const newBtn = container.querySelector('[data-new]');
-    if (newBtn) newBtn.addEventListener('click', () => openForm(null));
-    
     const newTemplateBtn = container.querySelector('[data-new-template]');
     if (newTemplateBtn) {
       newTemplateBtn.addEventListener('click', () => openTemplateForm(null));
-    }
-
-    // Subida de un PDF compartido: queda en ./plantillas y lo puede ver y
-    // descargar todo el equipo desde el selector de formatos.
-    const uploadSharedBtn = container.querySelector('[data-upload-shared]');
-    if (uploadSharedBtn) {
-      uploadSharedBtn.addEventListener('click', () => openSharedPdfUpload());
     }
 
     // Botón para abrir selector de formatos PDF
@@ -929,33 +918,6 @@ window.Pages.documents = {
 
     // ============ FUNCIONES PARA PLANTILLAS PDF ============
 
-    // Permite a administración/gerencia/asistencia subir un PDF que quedará
-    // disponible para todos los asesores en el selector de plantillas.
-    function openSharedPdfUpload() {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'application/pdf,.pdf';
-      input.addEventListener('change', async () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
-          UI.toast('Selecciona un archivo PDF válido.', 'error');
-          return;
-        }
-        try {
-          UI.toast('Subiendo PDF compartido...', 'info');
-          const result = await API.formatos.subirPlantilla(file);
-          const refreshed = await API.formatos.listarPlantillas().catch(() => null);
-          if (refreshed && Array.isArray(refreshed.plantillas)) plantillas = refreshed.plantillas;
-          UI.toast((result && result.message) || 'PDF compartido subido. Ya está disponible para todo el equipo.', 'success');
-          if (window.Sounds) window.Sounds.confirmation().catch(() => {});
-        } catch (error) {
-          UI.toast(error.message, 'error');
-        }
-      });
-      input.click();
-    }
-
     // Selector de plantillas PDF. Con `keyword` opcional filtra la vista a las
     // plantillas que coinciden (los formatos rápidos lo usan para preseleccionar).
     function openPlantillasSelector(keyword) {
@@ -1024,11 +986,48 @@ window.Pages.documents = {
               </div>
             </div>
           ` : ''}
+          ${sharedItems.length ? `
+            <div style="margin-top:20px;">
+              <h4 style="margin:0 0 12px;color:var(--text-muted);">&#128228; Formatos compartidos (solo descarga)</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
+                ${sharedItems.map(item => `
+                  <div style="padding:10px 14px;background:var(--bg);border-radius:var(--radius);font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${sharedIcon(item)} ${UI.escapeHtml(item.name)}</span>
+                    <button class="btn btn-secondary btn-sm" type="button" data-sel-shared="${item._id}">Descargar</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
         `,
         footer: `
           <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
         `,
         size: 800,
+      });
+
+      const sharedDownloadBtns = modal.bodyEl ? modal.bodyEl.querySelectorAll('[data-sel-shared]') : [];
+      sharedDownloadBtns.forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const item = sharedItems.find((x) => String(x._id) === String(btn.dataset.selShared));
+          if (!item) return;
+          btn.disabled = true;
+          try {
+            const blob = await API.formatos.descargarCompartido(item._id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = item.fileName || item.name || 'formato';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+          } catch (error) {
+            UI.toast(error.message || 'No se pudo descargar el archivo.', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        });
       });
 
       const bodyEl = modal.bodyEl;

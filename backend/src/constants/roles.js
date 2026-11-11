@@ -52,6 +52,7 @@ const BUSINESS_CREATOR_ROLES = Object.freeze([
   ROLE_CODES.ADMINISTRACION,
   ROLE_CODES.GERENCIA,
   ROLE_CODES.ASISTENCIA,
+  ROLE_CODES.ESCRITURACION,
 ]);
 
 // Normaliza cualquier variante (mayúsculas, acentos, nombre visible o código

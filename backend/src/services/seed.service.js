@@ -25,6 +25,7 @@ const PERMISSIONS = [
   { code: 'announcements_manage', name: 'Publicar avisos del equipo', module: 'announcements' },
   { code: 'newsletter_manage', name: 'Gestionar boletín y envíos', module: 'newsletter' },
   { code: 'meetings_manage', name: 'Publicar reuniones del equipo', module: 'meetings' },
+  { code: 'appraisals_manage', name: 'Administrar avalúos', module: 'appraisals' },
   { code: 'system_admin', name: 'Acceso total al sistema', module: 'system' },
 ];
 
@@ -59,6 +60,7 @@ const ROLE_DEFINITIONS = [
       'settings_manage',
       'announcements_manage',
       'newsletter_manage',
+      'appraisals_manage',
     ],
   },
   {
@@ -78,6 +80,7 @@ const ROLE_DEFINITIONS = [
       'announcements_manage',
       'newsletter_manage',
       'meetings_manage',
+      'appraisals_manage',
     ],
   },
   {
@@ -90,6 +93,7 @@ const ROLE_DEFINITIONS = [
       'businesses_manage',
       'documents_manage',
       'reports_view',
+      'appraisals_manage',
     ],
   },
   {

@@ -32,6 +32,7 @@ const SharedFormat = require('./sharedFormat.model');
 const Campaign = require('./campaign.model');
 const CampaignRecipient = require('./campaignRecipient.model');
 const PushSubscription = require('./pushSubscription.model');
+const Appraisal = require('./appraisal.model');
 
 module.exports = {
   User,
@@ -66,4 +67,5 @@ module.exports = {
   Campaign,
   CampaignRecipient,
   PushSubscription,
+  Appraisal,
 };

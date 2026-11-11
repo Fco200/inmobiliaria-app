@@ -1,9 +1,86 @@
 'use strict';
 
 function crudPage(container, config) {
-  const state = { page: 1, q: '', status: '', records: [], meta: null, filters: {} };
+  const state = { page: 1, q: '', status: '', records: [], meta: null, filters: { ...(config.initialFilters || {}) } };
   let filterTimer = null;
   let searchTimer = null;
+  let layoutTimer = null;
+
+  // Distribución de la tabla (anchos de columna y alto de fila) estilo Excel.
+  // Se guarda en localStorage al instante y en la base de datos (por usuario)
+  // mediante config.onLayoutSave, para que persista entre sesiones.
+  const LAYOUT_KEY = config.storageKey ? `crud-layout:${config.storageKey}` : null;
+  const DEFAULT_ROW_HEIGHT = 56;
+  const layout = loadLayout();
+
+  function loadLayout() {
+    const empty = { cols: {}, rowHeight: 0 };
+    if (!LAYOUT_KEY) return empty;
+    let local = {};
+    try { local = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}') || {}; } catch (error) { local = {}; }
+    const server = config.serverLayout || {};
+    return {
+      cols: { ...(server.cols || {}), ...(local.cols || {}) },
+      rowHeight: local.rowHeight || server.rowHeight || 0,
+    };
+  }
+
+  function saveLayout() {
+    if (!LAYOUT_KEY) return;
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+    if (!config.onLayoutSave) return;
+    clearTimeout(layoutTimer);
+    layoutTimer = setTimeout(() => {
+      Promise.resolve(config.onLayoutSave(layout)).catch(() => {});
+    }, 800);
+  }
+
+  function applyLayout(root) {
+    const table = root && root.querySelector('table.table');
+    if (!table) return;
+    const mobile = isMobile();
+    table.classList.toggle('crud-resizable', !mobile);
+    table.querySelectorAll('thead th').forEach((th, index) => {
+      const col = config.columns[index];
+      if (!col) return;
+      const width = !mobile ? layout.cols[col.key] : 0;
+      th.style.width = width ? `${width}px` : '';
+      th.style.minWidth = width ? `${width}px` : '';
+      if (!mobile && !th.querySelector('.col-resizer')) attachColResizer(th, col);
+    });
+    const rowHeight = !mobile && layout.rowHeight ? `${layout.rowHeight}px` : '';
+    table.querySelectorAll('tbody tr').forEach((tr) => { tr.style.height = rowHeight; });
+  }
+
+  function attachColResizer(th, col) {
+    const handle = document.createElement('span');
+    handle.className = 'col-resizer';
+    handle.setAttribute('aria-hidden', 'true');
+    th.appendChild(handle);
+    handle.addEventListener('click', (e) => e.stopPropagation());
+    handle.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const startWidth = th.getBoundingClientRect().width;
+      handle.setPointerCapture(event.pointerId);
+      const move = (ev) => {
+        const width = Math.max(70, Math.round(startWidth + ev.clientX - startX));
+        th.style.width = `${width}px`;
+        th.style.minWidth = `${width}px`;
+        layout.cols[col.key] = width;
+      };
+      const end = () => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', end);
+        handle.removeEventListener('pointercancel', end);
+        saveLayout();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', end);
+      handle.addEventListener('pointercancel', end);
+    });
+  }
 
   function renderHeader() {
     const el = document.createElement('div');
@@ -104,6 +181,7 @@ function crudPage(container, config) {
         <input class="form-control crud-search" data-search placeholder="Buscar..." value="${UI.escapeHtml(state.q)}">
         <div class="crud-toolbar-actions">
           ${hasFilters ? '<button class="btn btn-secondary btn-sm crud-filters-toggle" type="button" data-toggle-filters aria-expanded="false">&#9776;&nbsp; Filtros</button>' : ''}
+          ${LAYOUT_KEY && !isMobile() ? `<label class="crud-row-height" title="Alto de las filas">Alto de fila<input type="range" min="40" max="160" step="4" value="${layout.rowHeight || DEFAULT_ROW_HEIGHT}" data-row-height></label>` : ''}
           <button class="btn btn-secondary btn-sm" type="button" data-export-xls title="Exportar a Excel">&#128196;&nbsp; Excel</button>
           <button class="btn btn-secondary btn-sm" type="button" data-export-pdf title="Exportar a PDF (imprime o guarda como PDF)">&#128424;&nbsp; PDF</button>
           ${config.csvExport ? `<button class="btn btn-secondary btn-sm" type="button" data-export-csv title="Exportar a CSV">&#11015;&nbsp; CSV</button>` : ''}
@@ -165,6 +243,14 @@ function crudPage(container, config) {
       toggleFilters.addEventListener('click', () => {
         const collapsed = filtersBox.classList.toggle('is-collapsed');
         toggleFilters.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      });
+    }
+    const rowHeightEl = el.querySelector('[data-row-height]');
+    if (rowHeightEl) {
+      rowHeightEl.addEventListener('input', () => {
+        layout.rowHeight = Number(rowHeightEl.value) || 0;
+        applyLayout(container);
+        saveLayout();
       });
     }
     el.querySelector('[data-export-xls]').addEventListener('click', () => exportXls());
@@ -574,6 +660,7 @@ ${rowXml}
 
       loading.remove();
       body.appendChild(renderTable());
+      applyLayout(body);
 
       if (state.meta && state.meta.pages > 1) {
         body.appendChild(UI.pagination(state.meta, (page) => {
@@ -588,6 +675,7 @@ ${rowXml}
   }
 
   load();
+  if (config.onReady) config.onReady(openForm);
 }
 
 window.crudPage = crudPage;

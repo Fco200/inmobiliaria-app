@@ -171,8 +171,29 @@ async function migrateBusinessStages() {
  * y el arranque del servidor continúa (la app sigue operando con los valores
  * heredados, que están contemplados en los enums de los modelos).
  */
+// Elimina los índices únicos que impedían tener varios negocios activos por
+// cliente. Mongoose no quita índices por sí solo, así que se hace al arrancar.
+async function dropLegacyBusinessIndexes() {
+  const collection = Business.collection;
+  const legacy = ['buyerClient_1', 'sellerClient_1'];
+  const existing = await collection.indexes().catch(() => []);
+  const dropped = [];
+  for (const index of existing) {
+    if (legacy.includes(index.name)) {
+      await collection.dropIndex(index.name);
+      dropped.push(index.name);
+    }
+  }
+  return { dropped };
+}
+
 async function runDataMigrations({ log = true } = {}) {
   const result = {};
+  try {
+    result.indexes = await dropLegacyBusinessIndexes();
+  } catch (error) {
+    result.indexes = { error: error.message };
+  }
   try {
     result.folios = await migratePropertyFolios();
   } catch (error) {
@@ -202,7 +223,10 @@ async function runDataMigrations({ log = true } = {}) {
     if (stages.businesses || stages.stageRecords) {
       console.log(`[Migración] Etapas de negocio normalizadas: ${stages.businesses || 0} negocio(s), ${stages.stageRecords || 0} registro(s) de bitácora.`);
     }
-    [result.folios, result.statuses, result.stages].forEach((item) => {
+    if (result.indexes && result.indexes.dropped && result.indexes.dropped.length) {
+      console.log(`[Migración] Índices de negocio retirados: ${result.indexes.dropped.join(', ')}.`);
+    }
+    [result.indexes, result.folios, result.statuses, result.stages].forEach((item) => {
       if (item && item.error) console.warn('[Migración] Aviso:', item.error);
     });
   }

@@ -601,8 +601,10 @@ window.Pages.businesses = {
         // Asesores: por defecto ven sus propios negocios. Perfiles que ven toda la
         // cartera (dirección, administración, gerencia, asistencia, escrituración) empiezan sin filtrar.
         initialFilters: (!VER_TODOS_NEGOCIOS.includes(roleCode) && currentUserId)
-          ? { asesor: currentUserId, asesorTipo: 'propiedad' }
-          : { asesorTipo: 'propiedad' },
+          ? { asesor: currentUserId }
+          : {},
+        compactRows: true,
+        actionsGrid: true,
         service: {
           list: (params) => API.businesses.list(params),
           create: (body) => API.businesses.create(body),
@@ -615,26 +617,8 @@ window.Pages.businesses = {
           { value: 'cancelado', label: 'Cancelado/Pausa' },
         ],
         filters: [
-          {
-            key: 'asesorTipo',
-            label: 'Tipo de responsable',
-            placeholder: 'Quién subió la propiedad',
-            options: [
-              { value: 'propiedad', label: 'Quien subió la propiedad' },
-              { value: 'captador', label: 'Asesor captador' },
-            ],
-          },
-          { key: 'asesor', label: 'Responsable', placeholder: 'Todos los responsables', options: userOptions.filter((u) => u.value) },
-          { key: 'asesorCliente', label: 'Interno', placeholder: 'Todos los internos', options: userOptions.filter((u) => u.value) },
-          {
-            key: 'externo',
-            label: 'Externo',
-            placeholder: 'Todos',
-            options: [
-              { value: 'si', label: 'Con asesor externo' },
-              { value: 'no', label: 'Sin asesor externo' },
-            ],
-          },
+          { key: 'asesor', label: 'Asesor captador (interno)', placeholder: 'Todos los captadores', options: userOptions.filter((u) => u.value) },
+          { key: 'asesorCliente', label: 'Asesor cerrador (interno)', placeholder: 'Todos los cerradores', options: userOptions.filter((u) => u.value) },
           { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
           { key: 'dateFrom', label: 'Desde (fecha)', type: 'date' },
           { key: 'dateTo', label: 'Hasta (fecha)', type: 'date' },
@@ -644,7 +628,8 @@ window.Pages.businesses = {
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
-          { key: 'asesor_cliente_id', label: 'Asesor Cerrador', render: (r) => UI.escapeHtml((r.asesor_cliente_id && (r.asesor_cliente_id.name || r.asesor_cliente_id.username)) || r.partnerAdvisorName || '—') },
+          { key: 'mainAdvisor', label: 'Captador', render: (r) => UI.escapeHtml((r.mainAdvisor && (r.mainAdvisor.name || r.mainAdvisor.username)) || r.captadorExternalName || '—') },
+          { key: 'asesor_cliente_id', label: 'Cerrador', render: (r) => UI.escapeHtml((r.asesor_cliente_id && (r.asesor_cliente_id.name || r.asesor_cliente_id.username)) || r.partnerAdvisorName || '—') },
           { key: 'currentStage', label: 'Etapa', render: (r) => `${UI.statusBadge(stageLabel(r.currentStage))}${r.status === 'concluido' ? ' ' + UI.statusBadge('Concluido', 'success') : ''}` },
           { key: 'status', label: 'Estado', render: (r) => UI.statusBadge(r.status) },
         ],

@@ -4539,6 +4539,28 @@ table.crud-resizable thead th {
   }
 }
 
+/* Tablas con filas compactas: el texto se ajusta en vez de estirar la fila. */
+.crud-compact td {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 240px;
+  vertical-align: middle;
+}
+.crud-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 4px;
+  justify-content: start;
+}
+.crud-actions-grid .btn,
+.crud-actions-solo .btn {
+  margin: 0 !important;
+  white-space: nowrap;
+}
+.crud-actions-solo {
+  margin-top: 4px;
+}
+
 /* ---- Formatos compartidos ---- */
 .shared-drop:hover,
 .shared-drop:focus-within {

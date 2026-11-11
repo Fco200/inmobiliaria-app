@@ -150,7 +150,8 @@ const businessCrud = buildCrud(Business, {
     buyerClient: 'buyerClient',
     sellerClient: 'sellerClient',
     property: 'property',
-    // Asesor interno que atiende al cliente (el responsable va en customFilter).
+    // Asesor captador (interno) y asesor cerrador (interno).
+    asesor: 'mainAdvisor',
     asesorCliente: 'asesor_cliente_id',
   },
   // ?externo=si|no: negocios donde participa un asesor externo (nombre libre).
@@ -174,16 +175,6 @@ const businessCrud = buildCrud(Business, {
   wideRoles: ['asistencia', 'escrituracion'],
   // Los roles personalizados con el módulo Negocios ven todos los negocios.
   widePermission: 'businesses_manage',
-  // Responsable (?asesor=id). Por defecto es quien subió la propiedad
-  // (responsibleUser); con ?asesorTipo=captador se usa el asesor captador del negocio.
-  customFilter: async (req, filter) => {
-    const userId = String(req.query.asesor || '').trim();
-    if (!userId) return;
-    const cond = req.query.asesorTipo === 'captador'
-      ? { mainAdvisor: userId }
-      : { property: { $in: await Property.distinct('_id', { responsibleUser: userId }) } };
-    filter.$and = [...(filter.$and || []), cond];
-  },
   // Filtro por fechas (?dateFrom / ?dateTo) sobre la fecha de alta del negocio.
   dateField: 'createdAt',
   // Los concluidos quedan al final: "activo" < "cancelado" < "concluido".

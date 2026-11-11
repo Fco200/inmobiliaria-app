@@ -115,6 +115,10 @@ window.Pages.dashboard = {
           ${stat('Tickets cobrados', Format.currency(c.ticketsCollected))}
         </div>
         <div class="grid grid-4 mt-1">
+          ${stat('Tickets por cobrar', c.ticketsPorCobrar || 0, `Monto: ${Format.currency(c.ticketsGenerated - c.ticketsCollected || 0)}`)}
+          ${stat('Total de tickets', c.ticketsTotal || 0, `Generados: ${Format.currency(c.ticketsGenerated || 0)}`)}
+        </div>
+        <div class="grid grid-4 mt-1">
           ${stat('En negociación', c.businessesNegotiation || 0, `Tickets en negociación: ${Format.currency(c.ticketsNegotiating || 0)}`)}
           ${stat('En promesa', c.businessesPromesa || 0)}
           ${stat('Metas activas', c.activeGoals || 0)}

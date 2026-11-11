@@ -396,7 +396,7 @@ ${rowXml}
     }
 
     const table = document.createElement('div');
-    table.className = 'table-wrapper card';
+    table.className = `table-wrapper card${config.compactRows ? ' crud-compact' : ''}`;
     const thead = config.columns.map((c) => `<th>${UI.escapeHtml(c.label)}</th>`).join('');
     let rows = '';
     const editButtons = [];
@@ -413,6 +413,7 @@ ${rowXml}
         })
         .join('');
       let actions = '';
+      let removeBtn = '';
       if (config.extraActions) actions += config.extraActions(record);
       const canEdit = typeof config.canEdit === 'function' ? config.canEdit(record) : true;
       if (config.onEdit && canEdit) {
@@ -425,10 +426,13 @@ ${rowXml}
         // filas (p. ej. no borrar cuentas de Administrador/Gerencia/Soporte).
         const canRemove = typeof config.canRemove === 'function' ? config.canRemove(record) : true;
         if (canRemove) {
-          actions += `<button class="btn btn-danger btn-sm" data-remove="${record._id}" style="margin-left:6px;">Eliminar</button>`;
+          removeBtn += `<button class="btn btn-danger btn-sm" data-remove="${record._id}">Eliminar</button>`;
         }
       }
-      rows += `<tr data-record="${record._id}">${cells}<td data-label="Acciones">${actions}</td></tr>`;
+      const actionsHtml = config.actionsGrid
+        ? `<div class="crud-actions-grid">${actions}</div>${removeBtn ? `<div class="crud-actions-solo">${removeBtn}</div>` : ''}`
+        : `${actions}${removeBtn}`;
+      rows += `<tr data-record="${record._id}">${cells}<td data-label="Acciones">${actionsHtml}</td></tr>`;
     });
 
     table.innerHTML = `

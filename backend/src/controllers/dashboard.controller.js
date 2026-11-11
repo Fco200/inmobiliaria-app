@@ -66,6 +66,8 @@ const summary = asyncHandler(async (req, res) => {
         generated: { $sum: '$generatedAmount' },
         collected: { $sum: '$collectedAmount' },
         negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } },
+        pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'generado'] }, 1, 0] } },
+        totalCount: { $sum: { $cond: [{ $ne: ['$status', 'cancelado'] }, 1, 0] } },
       },
     },
   ]);
@@ -120,6 +122,8 @@ const summary = asyncHandler(async (req, res) => {
         ticketsGenerated: ticketAgg[0] ? ticketAgg[0].generated : 0,
         ticketsCollected: ticketAgg[0] ? ticketAgg[0].collected : 0,
         ticketsNegotiating: ticketAgg[0] ? ticketAgg[0].negotiating : 0,
+        ticketsPorCobrar: ticketAgg[0] ? ticketAgg[0].pendingCount : 0,
+        ticketsTotal: ticketAgg[0] ? ticketAgg[0].totalCount : 0,
         notificationsUnread: unread,
         expensesThisMonth: expensesThisMonth[0] ? expensesThisMonth[0].total : 0,
         activeGoals,

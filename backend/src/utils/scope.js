@@ -51,7 +51,12 @@ function permissionCodes(req) {
     .filter(Boolean);
 }
 
+// Administración, dirección y superadmin tienen TODOS los permisos por rol,
+// sin depender de la lista guardada en base de datos.
+const FULL_ACCESS_ROLES = ['admin', 'direccion', 'superadmin'];
+
 function hasPermission(req, codes) {
+  if (hasRole(req, FULL_ACCESS_ROLES)) return true;
   const wanted = Array.isArray(codes) ? codes : [codes];
   const granted = permissionCodes(req);
   return wanted.some((code) => code && granted.includes(code));

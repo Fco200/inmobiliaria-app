@@ -7,13 +7,13 @@ window.AppShell = (() => {
     { key: 'prospecting', label: 'Prospección', href: 'prospecting.html', icon: '&#128269;', section: 'Comercial' },
     { key: 'clients', label: 'Clientes', href: 'clients.html', icon: '&#128101;', section: 'Comercial' },
     { key: 'businesses', label: 'Negocios', href: 'businesses.html', icon: '&#128179;', section: 'Comercial' },
-    { key: 'avaluo', label: 'Avalúo', href: 'avaluo.html', icon: '&#128207;', section: 'Propiedades' },
     { key: 'appointments', label: 'Citas', href: 'appointments.html', icon: '&#128197;', section: 'Comercial' },
     { key: 'calendar', label: 'Calendario', href: 'calendar.html', icon: '&#128467;', section: 'Comercial' },
     { key: 'tasks', label: 'Tareas', href: 'tasks.html', icon: '&#9745;', section: 'Comercial' },
     { key: 'goals', label: 'Metas', href: 'goals.html', icon: '&#127919;', section: 'Comercial' },
     { key: 'properties', label: 'Captar Propiedades', href: 'properties.html', icon: '&#127968;', section: 'Propiedades' },
     { key: 'inventory', label: 'Propiedades', href: 'inventory.html', icon: '&#128230;', section: 'Propiedades' },
+    { key: 'avaluo', label: 'Avalúo', href: 'avaluo.html', icon: '&#128207;', section: 'Propiedades' },
     { key: 'expenses', label: 'Gastos', href: 'expenses.html', icon: '&#128184;', section: 'Finanzas' },
     { key: 'reports', label: 'Reportes', href: 'reports.html', icon: '&#128202;', section: 'Finanzas' },
     { key: 'management', label: 'Gerencia', href: 'management.html', icon: '&#128200;', section: 'Finanzas', boss: true },
@@ -68,6 +68,8 @@ window.AppShell = (() => {
     const user = window.ApiClient.getStoredUser();
     const role = user && user.role;
     if (!role || typeof role !== 'object') return null;
+    // Administración, dirección y superadmin ven todos los módulos.
+    if (['admin', 'direccion', 'superadmin'].includes(role.code)) return null;
     if (!Array.isArray(role.permissions)) return null;
     return role.permissions;
   }

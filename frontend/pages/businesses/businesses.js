@@ -101,6 +101,7 @@ window.Pages.businesses = {
     const canWriteNotes = true;
     // Operaciones de propiedad que muestran el botón "Avalúo" en la lista de negocios.
     const AVALUO_OPERATIONS = ['venta', 'compra_localizada'];
+    const VER_TODOS_NEGOCIOS = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'];
 
     const allStages = stageMeta.order && stageMeta.order.length
       ? stageMeta.order
@@ -597,7 +598,11 @@ window.Pages.businesses = {
         serverLayout: (me && me.uiPrefs && me.uiPrefs['crud-layout:negocios']) || null,
         onLayoutSave: (layout) => API.auth.saveUiPref('crud-layout:negocios', layout),
         // Por defecto el responsable es el usuario que captó la propiedad (y que la subió).
-        initialFilters: currentUserId ? { asesor: currentUserId, asesorTipo: 'propiedad' } : { asesorTipo: 'propiedad' },
+        // Asesores: por defecto ven sus propios negocios. Perfiles que ven toda la
+        // cartera (dirección, administración, gerencia, asistencia, escrituración) empiezan sin filtrar.
+        initialFilters: (!VER_TODOS_NEGOCIOS.includes(roleCode) && currentUserId)
+          ? { asesor: currentUserId, asesorTipo: 'propiedad' }
+          : { asesorTipo: 'propiedad' },
         service: {
           list: (params) => API.businesses.list(params),
           create: (body) => API.businesses.create(body),

@@ -938,13 +938,19 @@ window.Pages.businesses = {
           // agregados a mano se agrupan al final en "Tareas adicionales".
           const hayGrupos = items.some((item) => item.group);
           let ultimoGrupo = null;
+          let ultimaSeccion = null;
           const filas = items.map((item, idx) => {
+            const seccion = item.section || '';
+            const tituloSeccion = seccion && seccion !== ultimaSeccion
+              ? `<div style="font-weight:800;font-size:14px;margin:18px 0 2px;color:var(--primary);">${UI.escapeHtml(seccion)}</div>`
+              : '';
+            ultimaSeccion = seccion || ultimaSeccion;
             const grupo = item.group || (hayGrupos ? 'Tareas adicionales' : '');
             const titulo = grupo && grupo !== ultimoGrupo
               ? `<div style="font-weight:700;font-size:13px;margin:14px 0 4px;color:var(--primary);">${UI.escapeHtml(grupo)}</div>`
               : '';
             ultimoGrupo = grupo;
-            return `${titulo}
+            return `${tituloSeccion}${titulo}
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color,#e2e8f0);">
                   <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
                     <input type="checkbox" data-check-id="${item._id || idx}" ${item.done || item.completed ? 'checked' : ''} ${!canChecklist ? 'disabled' : ''} />

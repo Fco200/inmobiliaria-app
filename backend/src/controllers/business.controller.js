@@ -973,10 +973,26 @@ const removeNote = asyncHandler(async (req, res) => {
 // ya exista con el mismo texto, y los eliminados a mano no se vuelven a crear
 // (la versión queda registrada en el negocio).
 async function asegurarPlantillaChecklist(business) {
-  if ((business.checklistTemplateVersion || 0) >= CHECKLIST_TEMPLATE_VERSION) return business;
-  const existentes = new Set((business.checklist || []).map((item) => item.text));
-  CHECKLIST_TEMPLATE.forEach((item) => {
-    if (!existentes.has(item.text)) business.checklist.push({ ...item });
+  const version = business.checklistTemplateVersion || 0;
+  if (version >= CHECKLIST_TEMPLATE_VERSION) return business;
+  // Foto de los pendientes que ya existían: los agregados en este mismo ciclo
+  // no deben volver a emparejarse con entradas de la plantilla.
+  const previos = [...(business.checklist || [])];
+  const emparejados = new Set();
+  CHECKLIST_TEMPLATE.forEach((plantilla) => {
+    // Cada entrada de la plantilla casa con UN pendiente distinto (la plantilla
+    // repite textos como "Comprobante de Domicilio" en dos secciones).
+    const existente = previos.find((item) => item.text === plantilla.text && !emparejados.has(item));
+    if (existente) {
+      emparejados.add(existente);
+      // Se actualizan sección y subtítulo (incluye renombres de versiones anteriores).
+      existente.section = plantilla.section;
+      existente.group = plantilla.group;
+    } else if (version === 0) {
+      // Negocio sin plantilla: se aplica completa. Los que luego se eliminen a
+      // mano no se reponen, porque la versión ya queda registrada.
+      business.checklist.push({ ...plantilla });
+    }
   });
   business.checklistTemplateVersion = CHECKLIST_TEMPLATE_VERSION;
   await business.save();

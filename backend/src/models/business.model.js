@@ -148,7 +148,8 @@ const businessSchema = new mongoose.Schema(
     checklist: [
       {
         text: { type: String, trim: true, required: true },
-        // Sección de la plantilla (vacío para pendientes agregados a mano).
+        // Sección y subtítulo de la plantilla (vacíos para pendientes agregados a mano).
+        section: { type: String, trim: true, default: '' },
         group: { type: String, trim: true, default: '' },
         done: { type: Boolean, default: false },
         createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

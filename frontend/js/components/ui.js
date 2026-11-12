@@ -293,6 +293,9 @@ const UI = (() => {
       const rowsAttr = rows ? ` rows="${Number(rows)}"` : '';
       const sizeClass = rows && Number(rows) >= 6 ? ' textarea-tall' : '';
       control = `<textarea class="form-control${sizeClass}" id="${id}" name="${name}" placeholder="${escapeHtml(placeholder)}"${rowsAttr} ${req} ${ro}>${escapeHtml(value)}</textarea>`;
+    } else if (type === 'money') {
+      // Cantidad monetaria: mismo valor numérico que `number`, con el símbolo $ visible.
+      control = `<div class="money-input"><span class="money-input-prefix">$</span><input class="form-control" id="${id}" name="${name}" type="number" step="0.01" min="0" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" ${req} ${ro}></div>`;
     } else if (type === 'file') {
       const attrs = [
         accept ? `accept="${escapeHtml(accept)}"` : '',

@@ -34,7 +34,7 @@
     if (!hasta) { finEl.classList.remove('show'); return; }
     var d = new Date(hasta);
     if (!isNaN(d.getTime())) {
-      finTxt.textContent = 'Volveremos el ' + d.toLocaleString('es-MX', {
+      finTxt.textContent = 'Volveremos el ' + d.toLocaleString('es-MX', { timeZone: 'America/Hermosillo', 
         day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
       });
     } else {

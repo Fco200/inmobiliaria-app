@@ -28,6 +28,11 @@ const BUSINESS_WIDE_ROLES = ['asistencia', 'escrituracion'];
 // - asistencia: recibe prospectos y los reparte entre los asesores.
 const CLIENT_WIDE_ROLES = ['asistencia'];
 
+// Roles que pueden captar y administrar TODAS las propiedades (y asignar su
+// asesor) sin ser jefes del sistema:
+// - asistencia: capta y reparte propiedades como administración.
+const PROPERTY_WIDE_ROLES = ['asistencia'];
+
 function roleCode(req) {
   const role = req && req.user && req.user.role;
   return String((role && (role.code || role)) || '');
@@ -85,6 +90,13 @@ function isClientStaff(req) {
     || (isCustomRole(req) && hasPermission(req, 'clients_manage'));
 }
 
+/** ¿Puede ver/captar/administrar todas las propiedades? */
+function isPropertyStaff(req) {
+  return isBoss(req)
+    || hasRole(req, PROPERTY_WIDE_ROLES)
+    || (isCustomRole(req) && hasPermission(req, 'properties_manage'));
+}
+
 /**
  * Condición Mongo que limita un registro a un usuario según el campo(s)
  * propietario del modelo.
@@ -124,6 +136,7 @@ module.exports = {
   BOSS_ROLES,
   BUSINESS_WIDE_ROLES,
   CLIENT_WIDE_ROLES,
+  PROPERTY_WIDE_ROLES,
   OFFICIAL_ROLE_CODES,
   SYSTEM_ADMIN_PERMISSION,
   roleCode,
@@ -134,6 +147,7 @@ module.exports = {
   isBoss,
   isBusinessStaff,
   isClientStaff,
+  isPropertyStaff,
   scopeCondition,
   bossOnly,
   ADVISOR_ASSIGNMENT_ROLES,

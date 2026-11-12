@@ -26,6 +26,8 @@
 window.Mantenimiento = (() => {
   const POLL_INTERVAL_MS = 15000;
   const EXEMPT_ROLES = ['superadmin'];
+  const SCHED_DISMISS_KEY = 'mtn-sched-dismissed';
+  const MENSAJE_PROGRAMADO_DEFAULT = 'Se ha programado un mantenimiento del sistema. Guarda tu trabajo antes de la hora indicada para no perder información.';
 
   let timer = null;
   let countdownTimer = null;
@@ -35,6 +37,7 @@ window.Mantenimiento = (() => {
   let countdownEndTime = null;
   let modalEl = null;
   let overlayEl = null;
+  let schedEl = null;
 
   function baseUrl() {
     if (window.AppConfig && window.AppConfig.API_URL) return window.AppConfig.API_URL;
@@ -79,6 +82,15 @@ window.Mantenimiento = (() => {
     }
     currentMessage = estado.mensaje || '';
     hasta = estado.hasta || '';
+
+    // MANTENIMIENTO PROGRAMADO (a futuro) → aviso no bloqueante en la parte superior.
+    const programadoFuturo = Boolean(estado.programado && estado.fechaProgramada)
+      && new Date(estado.fechaProgramada).getTime() > Date.now();
+    if (programadoFuturo && esAfectado() && !(estado.mantenimientoActivo || estado.activo)) {
+      showScheduledNotice(estado.fechaProgramada, estado.mensaje);
+    } else {
+      removeScheduledNotice();
+    }
 
     // MANTENIMIENTO ACTIVO → capa de bloqueo a pantalla completa (solo SALIR).
     if (estado.mantenimientoActivo === true || estado.activo === true) {
@@ -228,6 +240,37 @@ window.Mantenimiento = (() => {
     if (overlayEl) { overlayEl.remove(); overlayEl = null; }
   }
 
+  // ---- Aviso de mantenimiento programado (no bloquea la pantalla) ----
+  function showScheduledNotice(fecha, mensaje) {
+    const key = String(fecha);
+    if (schedEl && schedEl.dataset.key === key) return;
+    if (sessionStorage.getItem(SCHED_DISMISS_KEY) === key) return;
+    removeScheduledNotice();
+    const el = document.createElement('div');
+    el.id = 'mtn-sched-banner';
+    el.dataset.key = key;
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+      <div class="mtn-sched-text">
+        <strong>&#9888;&#65039; Mantenimiento programado</strong>
+        <span class="mtn-sched-msg"></span>
+        <span class="mtn-sched-when"></span>
+      </div>
+      <button class="mtn-sched-close" type="button" aria-label="Cerrar">&times;</button>`;
+    el.querySelector('.mtn-sched-msg').textContent = (mensaje && mensaje.trim()) || MENSAJE_PROGRAMADO_DEFAULT;
+    el.querySelector('.mtn-sched-when').textContent = `Inicio: ${formatFecha(key)}`;
+    el.querySelector('.mtn-sched-close').addEventListener('click', () => {
+      sessionStorage.setItem(SCHED_DISMISS_KEY, key);
+      removeScheduledNotice();
+    });
+    document.body.appendChild(el);
+    schedEl = el;
+  }
+
+  function removeScheduledNotice() {
+    if (schedEl) { schedEl.remove(); schedEl = null; }
+  }
+
   // Cierre de sesión definitivo desde la capa de bloqueo (botón SALIR).
   async function forceLogout() {
     try { if (window.API && window.API.auth.logout) await window.API.auth.logout(); } catch (e) { /* ignore */ }
@@ -239,7 +282,7 @@ window.Mantenimiento = (() => {
     try {
       const d = new Date(iso);
       if (isNaN(d.getTime())) return '';
-      return d.toLocaleString('es-MX', {
+      return d.toLocaleString('es-MX', { timeZone: 'America/Hermosillo', 
         day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
       });
     } catch (e) { return ''; }
@@ -265,7 +308,14 @@ window.Mantenimiento = (() => {
       socket.on('mantenimiento-desactivado', () => {
         removeOverlay();
         removeModal();
+        removeScheduledNotice();
         stopCountdownTimer();
+      });
+      // Aviso inmediato a todas las sesiones al programar un mantenimiento.
+      socket.on('mantenimiento-programado', (payload) => {
+        if (!esAfectado() || !payload || !payload.fechaProgramada) return;
+        sessionStorage.removeItem(SCHED_DISMISS_KEY);
+        showScheduledNotice(payload.fechaProgramada, payload.mensaje);
       });
     }).catch(() => {});
   }
@@ -317,6 +367,22 @@ window.Mantenimiento = (() => {
         font-size: 14px; font-weight: 800; letter-spacing: 1px; transition: all .2s;
       }
       .mtn-block-exit:hover { filter: brightness(1.1); }
+
+      /* Aviso de mantenimiento programado (barra superior, no bloquea) */
+      #mtn-sched-banner {
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147481000;
+        width: min(560px, calc(100vw - 24px)); display: flex; align-items: flex-start; gap: 12px;
+        background: #fff7e0; color: #5a3a00; border: 1px solid #f3c86b; border-left: 5px solid #d97706;
+        border-radius: 12px; padding: 12px 14px; box-shadow: 0 12px 32px rgba(0,0,0,.2);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px; line-height: 1.5; animation: mtn-in .3s ease;
+      }
+      #mtn-sched-banner .mtn-sched-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      #mtn-sched-banner .mtn-sched-when { font-weight: 600; }
+      #mtn-sched-banner .mtn-sched-close {
+        background: none; border: none; font-size: 20px; line-height: 1; cursor: pointer;
+        color: inherit; padding: 0 4px;
+      }
 
       /* Modal de cuenta regresiva (flotante, no bloqueante) */
       #mtn-countdown-modal {

@@ -24,7 +24,7 @@ window.SoportePanel = (() => {
     if (!value) return '—';
     const d = new Date(value);
     if (isNaN(d.getTime())) return escapeHtml(value);
-    return d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+    return d.toLocaleString('es-MX', { timeZone: 'America/Hermosillo', dateStyle: 'short', timeStyle: 'short' });
   }
 
   function showAlert(box, message, type) {

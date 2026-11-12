@@ -512,7 +512,7 @@ window.PropertyPdf = (() => {
       filas.push({ label: 'Origen', value: prop.externalAdvisor ? `Externa — ofrecida por ${prop.externalAdvisor}` : 'Externa (otra inmobiliaria)' });
     }
     if (prop.createdAt) {
-      try { filas.push({ label: 'Alta en el CRM', value: new Date(prop.createdAt).toLocaleDateString('es-MX') }); } catch (e) { /* opcional */ }
+      try { filas.push({ label: 'Alta en el CRM', value: new Date(prop.createdAt).toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' }) }); } catch (e) { /* opcional */ }
     }
 
     const VALUE_X = margin + 150;
@@ -753,7 +753,7 @@ window.PropertyPdf = (() => {
       doc.setFontSize(8);
       doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
       doc.text(
-        `INMOBLES | Generado desde el CRM · ${new Date().toLocaleDateString('es-MX')}${asesorNombre ? ` · ${asesorNombre}` : ''}`,
+        `INMOBLES | Generado desde el CRM · ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' })}${asesorNombre ? ` · ${asesorNombre}` : ''}`,
         margin,
         pageH - 16
       );

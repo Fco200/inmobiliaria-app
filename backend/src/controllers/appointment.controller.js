@@ -6,6 +6,7 @@ const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 const { Appointment, Task, User } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { ensure } = require('../services/notification.service');
+const { formatFechaHora } = require('../utils/datetime');
 
 // Sincroniza un evento recién creado al Google Calendar del usuario, SOLO si
 // tiene la integración activa. Nunca interrumpe la creación (fire-and-forget).
@@ -54,7 +55,7 @@ const appointmentCrud = buildCrud(Appointment, {
       type: 'cita_proxima',
       key: `appointment-${doc._id}`,
       title: 'Cita agendada',
-      message: `Tienes una cita${doc.type ? ` (${doc.type.replace(/_/g, ' ')})` : ''} el ${new Date(doc.date).toLocaleString('es-MX')}.`,
+      message: `Tienes una cita${doc.type ? ` (${doc.type.replace(/_/g, ' ')})` : ''} el ${formatFechaHora(doc.date)}.`,
       userId: ownerId,
       data: { entityId: doc._id, date: doc.date },
     }).catch(() => {});

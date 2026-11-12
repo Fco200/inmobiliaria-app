@@ -880,6 +880,19 @@ html, body {
 
 textarea.form-control { resize: vertical; min-height: 80px; }
 
+/* Campos monetarios (UI.field type 'money'): símbolo $ dentro del campo. */
+.money-input { position: relative; }
+.money-input .money-input-prefix {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 600;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.money-input .form-control { padding-left: 26px; }
+
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 
 /* ---- Campos de formulario (UI.field / UI.searchSelect) ----

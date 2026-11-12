@@ -33,6 +33,10 @@ const logger = require('./logger.service');
 
 const GRACE_MS = 5 * 60 * 1000; // ventana de gracia de 5 minutos
 
+// Texto del aviso que ven los usuarios cuando se programa un mantenimiento sin
+// mensaje personalizado.
+const MENSAJE_PROGRAMADO_DEFAULT = 'Se ha programado un mantenimiento del sistema. Guarda tu trabajo antes de la hora indicada para no perder información.';
+
 const KEYS = {
   activo: 'mantenimiento.activo',
   fechaProgramada: 'mantenimiento.fechaProgramada',
@@ -250,6 +254,7 @@ async function isActive() {
 module.exports = {
   KEYS,
   GRACE_MS,
+  MENSAJE_PROGRAMADO_DEFAULT,
   getState,
   saveState,
   startCountdown,

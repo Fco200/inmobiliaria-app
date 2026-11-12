@@ -8,9 +8,10 @@ window.Pages.properties = {
   async render(container) {
     const stored = window.ApiClient ? window.ApiClient.getStoredUser() : null;
     const role = stored && stored.role ? (stored.role.code || stored.role) : '';
-    const isBossUser = role === 'admin' || role === 'gerencia' || role === 'superadmin' || role === 'direccion';
-    // Asistencia y escrituración pueden reasignar el asesor de cualquier propiedad.
-    const ROLES_ASIGNAN_ASESOR = ['asistencia', 'escrituracion'];
+    // Gerencia y asistencia captan y administran todas las propiedades, igual que administración.
+    const isBossUser = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(role);
+    // Escrituración solo puede reasignar el asesor de propiedades ajenas.
+    const ROLES_ASIGNAN_ASESOR = ['escrituracion'];
     const myId = stored ? String(stored._id || stored.id || '') : '';
 
     const OPERATION_LABELS = {
@@ -432,7 +433,7 @@ window.Pages.properties = {
         { name: 'folio', label: 'Folio', type: 'text', readonly: true, placeholder: 'Se genera automáticamente', hint: 'Folio inmutable con formato AÑO-###. Lo asigna el sistema y no se puede editar.' },
         { name: 'type', label: 'Tipo de inmueble', type: 'select', required: true, options: ['casa', 'departamento', 'local', 'bodega', 'rancho', 'terreno', 'playa', 'otro'] },
         { name: 'operationType', label: 'Tipo de operación', type: 'select', required: true, options: operationOptions },
-        { name: 'price', label: 'Precio', type: 'number' },
+        { name: 'price', label: 'Precio', type: 'money' },
         { name: 'status', label: 'Estado', type: 'select', options: PROPERTY_STATUS },
         { name: 'address', label: 'Dirección', type: 'text', full: true },
         { name: 'zone', label: 'Zona / colonia', type: 'text' },

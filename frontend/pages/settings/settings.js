@@ -1492,7 +1492,7 @@ window.Pages.settings = {
         const lines = [`Estado: ${badge}`];
         if (status.from) lines.push(`Remitente: <code>${UI.escapeHtml(status.from)}</code>`);
         if (status.source === 'panel') lines.push('Configurado desde: <strong>Panel de soporte</strong>');
-        if (status.lastSuccessAt) lines.push(`Ultimo envio correcto: ${new Date(status.lastSuccessAt).toLocaleString()}`);
+        if (status.lastSuccessAt) lines.push(`Ultimo envio correcto: ${new Date(status.lastSuccessAt).toLocaleString('es-MX', { timeZone: 'America/Hermosillo' })}`);
         if (status.lastError) lines.push(`<span style="color:#b91c1c;">Ultimo error: ${UI.escapeHtml(status.lastError)}</span>`);
         if (!status.configured) lines.push('<span style="color:#b45309;">Pide a soporte configurar el proveedor en <strong>Panel de soporte &gt; Correo</strong>.</span>');
         if (status.hint) lines.push(`<span style="color:#b45309;">${UI.escapeHtml(status.hint)}</span>`);

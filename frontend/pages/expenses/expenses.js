@@ -53,7 +53,7 @@ window.Pages.expenses = {
       fields: [
         { name: 'concept', label: 'Concepto', type: 'text', required: true },
         { name: 'category', label: 'Categoría', type: 'select', options: ['gasolina', 'publicidad', 'lonas', 'tarjetas', 'volantes', 'imagen', 'traslados', 'material', 'impresiones', 'otros'] },
-        { name: 'amount', label: 'Monto', type: 'number', required: true },
+        { name: 'amount', label: 'Monto', type: 'money', required: true },
         { name: 'date', label: 'Fecha', type: 'datetime-local', required: true, value: (r) => Format.toLocalInput(r.date) },
         { name: 'activity', label: 'Actividad', type: 'text' },
         { name: 'business', label: 'Negocio relacionado', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...UI.sortByLabel(businesses, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))] },

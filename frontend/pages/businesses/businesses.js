@@ -606,7 +606,17 @@ window.Pages.businesses = {
         compactRows: true,
         actionsGrid: true,
         service: {
-          list: (params) => API.businesses.list(params),
+          list: async (params) => {
+            const [res, unseen] = await Promise.all([
+              API.businesses.list(params),
+              ApiClient.get('/businesses/unseen-notes').catch(() => null),
+            ]);
+            const counts = (unseen && unseen.data) || {};
+            if (res && Array.isArray(res.data)) {
+              res.data.forEach((r) => { r.unseenNotes = counts[r._id] || 0; });
+            }
+            return res;
+          },
           create: (body) => API.businesses.create(body),
           update: (id, body) => API.businesses.update(id, body),
           remove: (id) => API.businesses.remove(id),
@@ -624,7 +634,7 @@ window.Pages.businesses = {
           { key: 'dateTo', label: 'Hasta (fecha)', type: 'date' },
         ],
         columns: [
-          { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span><br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
+          { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span>${r.unseenNotes ? ` <span class="badge badge-danger" data-bitacora-badge="${r._id}" title="Bitácora con registros nuevos" style="font-size:10px;">&#9679; ${r.unseenNotes} nuevo${r.unseenNotes === 1 ? '' : 's'} en bitácora</span>` : ''}<br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
@@ -648,9 +658,9 @@ window.Pages.businesses = {
           { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
-          { name: 'valueOperation', label: 'Valor de la operación', type: 'number' },
-          { name: 'ticketValue', label: 'Valor ticket', type: 'number', value: (r) => (r.ticketValue || ''), hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
-          { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'number', value: (r) => (r.negotiation || {}).offer || 0 },
+          { name: 'valueOperation', label: 'Valor de la operación', type: 'money' },
+          { name: 'ticketValue', label: 'Valor ticket', type: 'money', value: (r) => (r.ticketValue || ''), hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
+          { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'money', value: (r) => (r.negotiation || {}).offer || 0 },
           { name: 'negotiation_notes', label: 'Notas de negociación', type: 'textarea', full: true, value: (r) => (r.negotiation || {}).notes || '' },
           { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).promiseDate) },
           { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', value: (r) => Format.toLocalInput((r.closing || {}).closingDate), hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },
@@ -822,7 +832,7 @@ window.Pages.businesses = {
         const notes = (notesRes && notesRes.data) || notesRes || [];
         const stages = (stagesRes && stagesRes.data) || stagesRes || [];
         const esc = (value) => UI.escapeHtml(String(value == null ? '' : value));
-        const fmt = (value) => (value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+        const fmt = (value) => (value ? new Date(value).toLocaleString('es-MX', { timeZone: 'America/Hermosillo', dateStyle: 'medium', timeStyle: 'short' }) : '—');
         const who = (u) => (u && (u.name || u.username)) || '—';
 
         const events = [];
@@ -882,7 +892,7 @@ window.Pages.businesses = {
 <body>
   <button onclick="window.print()" style="float:right;padding:6px 12px;">Imprimir / Guardar PDF</button>
   <h1>Bitácora del negocio</h1>
-  <div class="muted">Generada el ${esc(new Date().toLocaleString('es-MX'))}</div>
+  <div class="muted">Generada el ${esc(new Date().toLocaleString('es-MX', { timeZone: 'America/Hermosillo' }))}</div>
   <div class="grid">
     <div><b>Negocio:</b> ${esc(record.name)}</div>
     <div><b>Tipo:</b> <span class="badge">${esc(businessTypeLabel(record))}</span></div>
@@ -923,6 +933,9 @@ window.Pages.businesses = {
       });
       const printBtn = modal.bodyEl.querySelector('#biz-print-bitacora');
       if (printBtn) printBtn.addEventListener('click', () => printBitacora(record));
+      // Al abrir la bitácora sus notas quedan vistas y se quita el indicador.
+      ApiClient.post(`/businesses/${record._id}/notes/seen`, {}).catch(() => {});
+      document.querySelectorAll(`[data-bitacora-badge="${record._id}"]`).forEach((el) => el.remove());
 
       const loadNotesContent = async () => {
         const containerEl = modal.bodyEl.querySelector('#biz-notes-container');
@@ -1252,9 +1265,9 @@ window.Pages.businesses = {
         { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
-        { name: 'valueOperation', label: 'Valor de operación', type: 'number' },
-        { name: 'ticketValue', label: 'Valor ticket', type: 'number', hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
-        { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'number' },
+        { name: 'valueOperation', label: 'Valor de operación', type: 'money' },
+        { name: 'ticketValue', label: 'Valor ticket', type: 'money', hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
+        { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'money' },
         { name: 'negotiation_notes', label: 'Notas', type: 'textarea', full: true },
         { name: 'closing_promiseDate', label: 'Fecha de promesa', type: 'datetime-local' },
         { name: 'fecha_cierre', label: 'Fecha estimada de cierre', type: 'datetime-local', hint: 'Fecha estimada o proyectada para la conclusión de la operación (firma de escrituras o contratos).' },

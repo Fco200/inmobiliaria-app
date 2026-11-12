@@ -367,7 +367,7 @@ ${rowXml}
     ).join('');
     const head = config.columns.map((c) => `<th>${UI.escapeHtml(c.label)}</th>`).join('');
     const title = UI.escapeHtml(config.title);
-    const when = new Date().toLocaleString('es-MX');
+    const when = new Date().toLocaleString('es-MX', { timeZone: 'America/Hermosillo' });
     // Se imprime en un iframe de la MISMA página (no window.open): así el móvil
     // abre el diálogo nativo de "Guardar como PDF" sin sacar al usuario de la app.
     UI.printHtmlDocument(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${title}</title>
@@ -629,6 +629,23 @@ ${rowXml}
     });
   }
 
+  // Enlace directo desde un aviso (?open=ID): abre el registro de la lista. Se
+  // quita el parámetro para que no se repita al recargar o paginar.
+  function openFromUrl(body) {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('open');
+    if (!id) return;
+    params.delete('open');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+    const row = body.querySelector(`tr[data-record="${CSS.escape(id)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'center' });
+    const editBtn = row.querySelector('[data-edit]');
+    if (editBtn) editBtn.click();
+    else row.click();
+  }
+
   async function load() {
     // El encabezado y la barra de búsqueda/filtros se pintan UNA sola vez:
     // reconstruirlos en cada carga hacía perder el foco del buscador y
@@ -665,6 +682,7 @@ ${rowXml}
       loading.remove();
       body.appendChild(renderTable());
       applyLayout(body);
+      openFromUrl(body);
 
       if (state.meta && state.meta.pages > 1) {
         body.appendChild(UI.pagination(state.meta, (page) => {

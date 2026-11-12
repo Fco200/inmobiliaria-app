@@ -1,5 +1,6 @@
 'use strict';
 
+const { formatHora, formatFecha } = require('../utils/datetime');
 const {
   Notification,
   Appointment,
@@ -138,8 +139,6 @@ async function pushNative(userIds, { title, body, url, tag, icon } = {}) {
   }
 }
 
-const DATE_OPTS = { hour: '2-digit', minute: '2-digit' };
-
 async function generateForUser(userId) {
   const now = new Date();
   const created = [];
@@ -251,7 +250,7 @@ async function generateForUser(userId) {
     const key = `appointment-reminder-${app._id}`;
     const yaExiste = await Notification.exists({ user: userId, type: 'cita_recordatorio_personal', 'data.key': key });
     if (yaExiste) continue;
-    const texto = `${app.concepto || app.typeOther || 'Tu cita'}${app.client ? ` con ${app.client.name}` : ''} el ${app.date.toLocaleDateString('es-MX')} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`;
+    const texto = `${app.concepto || app.typeOther || 'Tu cita'}${app.client ? ` con ${app.client.name}` : ''} el ${formatFecha(app.date)} a las ${formatHora(app.date)}`;
     items.push({
       type: 'cita_recordatorio_personal',
       key,
@@ -267,7 +266,7 @@ async function generateForUser(userId) {
       type: 'cita_recordatorio_24h',
       key: `appointment-24h-${app._id}`,
       title: 'Recordatorio: Cita en 24 horas',
-      message: `Mañana tendrás una cita con ${app.client ? app.client.name : 'sin cliente'} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
+      message: `Mañana tendrás una cita con ${app.client ? app.client.name : 'sin cliente'} a las ${formatHora(app.date)}`,
       data: { entityId: app._id, date: app.date },
     });
   }
@@ -277,7 +276,7 @@ async function generateForUser(userId) {
       type: 'cita_recordatorio_1h',
       key: `appointment-1h-${app._id}`,
       title: '¡Cita en 1 hora!',
-      message: `Tu cita con ${app.client ? app.client.name : 'sin cliente'} es a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
+      message: `Tu cita con ${app.client ? app.client.name : 'sin cliente'} es a las ${formatHora(app.date)}`,
       data: { entityId: app._id, date: app.date },
     });
   }
@@ -287,7 +286,7 @@ async function generateForUser(userId) {
       type: 'cita_proxima',
       key: `appointment-${app._id}`,
       title: 'Cita próxima',
-      message: `Cita: ${app.client ? app.client.name : 'sin cliente'} el ${app.date.toLocaleDateString('es-MX')} a las ${app.date.toLocaleTimeString('es-MX', DATE_OPTS)}`,
+      message: `Cita: ${app.client ? app.client.name : 'sin cliente'} el ${formatFecha(app.date)} a las ${formatHora(app.date)}`,
       data: { entityId: app._id, date: app.date },
     });
   }
@@ -297,7 +296,7 @@ async function generateForUser(userId) {
       type: 'cita_vencida',
       key: `appointment-expired-${app._id}`,
       title: 'Cita sin avance',
-      message: `La cita con ${app.client ? app.client.name : 'sin cliente'} del ${app.date.toLocaleDateString('es-MX')} ya pasó y sigue sin registrar resultado.`,
+      message: `La cita con ${app.client ? app.client.name : 'sin cliente'} del ${formatFecha(app.date)} ya pasó y sigue sin registrar resultado.`,
       data: { entityId: app._id, date: app.date },
     });
   }
@@ -307,7 +306,7 @@ async function generateForUser(userId) {
       type: 'tarea_vencida',
       key: `task-${t._id}`,
       title: 'Tarea vencida',
-      message: `La tarea "${t.title}" venció el ${t.date.toLocaleDateString('es-MX')}.`,
+      message: `La tarea "${t.title}" venció el ${formatFecha(t.date)}.`,
       data: { entityId: t._id, date: t.date },
     });
   }
@@ -317,7 +316,7 @@ async function generateForUser(userId) {
       type: 'tarea_proxima',
       key: `task-near-${t._id}`,
       title: 'Tarea próxima',
-      message: `Tienes la tarea "${t.title}" a las ${t.date.toLocaleTimeString('es-MX', DATE_OPTS)}.`,
+      message: `Tienes la tarea "${t.title}" a las ${formatHora(t.date)}.`,
       data: { entityId: t._id, date: t.date },
     });
   }
@@ -327,7 +326,7 @@ async function generateForUser(userId) {
       type: 'meta_proxima_vencer',
       key: `goal-${g._id}`,
       title: 'Meta próxima a vencer',
-      message: `La meta "${g.name}" vence el ${g.endDate.toLocaleDateString('es-MX')}.`,
+      message: `La meta "${g.name}" vence el ${formatFecha(g.endDate)}.`,
       data: { entityId: g._id, date: g.endDate },
     });
   }

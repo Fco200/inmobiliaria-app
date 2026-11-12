@@ -560,6 +560,15 @@ const cambiarMantenimiento = asyncHandler(async (req, res) => {
       });
       logger.info('Evento Socket.io emitido: mantenimiento-desactivado', {}, 'mantenimiento');
     }
+    // Aviso a todas las sesiones abiertas cuando se programa un mantenimiento a futuro.
+    if (!state.activo && body.fechaProgramada && state.fechaProgramada) {
+      io.emit('mantenimiento-programado', {
+        mensaje: state.mensaje || maintenanceService.MENSAJE_PROGRAMADO_DEFAULT,
+        fechaProgramada: state.fechaProgramada,
+        hasta: state.hasta,
+      });
+      logger.info('Evento Socket.io emitido: mantenimiento-programado', { fechaProgramada: state.fechaProgramada }, 'mantenimiento');
+    }
   }
 
   res.json({

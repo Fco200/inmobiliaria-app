@@ -5,7 +5,7 @@ const fs = require('fs');
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const {
-  isBoss, isCustomRole, hasPermission, canAssignAdvisors, soloCampos,
+  isPropertyStaff, PROPERTY_WIDE_ROLES, canAssignAdvisors, soloCampos,
 } = require('../utils/scope');
 const { Property, Inventory, Client, Notification, Newsletter } = require('../models');
 const { logActivity } = require('../services/log.service');
@@ -65,6 +65,7 @@ const propertyCrud = buildCrud(Property, {
   ownerField: 'responsibleUser',
   extraFilters: { operationType: 'operationType', type: 'type', owner: 'owner' },
   priceField: 'price',
+  wideRoles: PROPERTY_WIDE_ROLES,
   widePermission: 'properties_manage',
 });
 
@@ -72,7 +73,7 @@ const list = propertyCrud.list;
 const get = propertyCrud.get;
 
 function seesAllProperties(req) {
-  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'properties_manage'));
+  return isPropertyStaff(req);
 }
 
 function assertOwnership(req, property) {

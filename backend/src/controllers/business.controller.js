@@ -30,7 +30,6 @@ const {
 } = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
 const { ensure } = require('../services/notification.service');
-const { getOrCreateGeneralChat, persistAndBroadcast } = require('./chat.controller');
 const {
   STAGE_ORDER,
   STAGE_LABELS,
@@ -91,28 +90,6 @@ function canManageChecklist(req) {
   return isBoss(req)
     || hasRole(req, ['escrituracion', 'asistencia'])
     || (isCustomRole(req) && hasPermission(req, 'businesses_manage'));
-}
-
-// Cuando se abre un negocio con una propiedad, el resto del equipo debe saberlo
-// para no duplicar trabajo. Se deja una nota automática en el chat interno
-// general; además, ese canal dispara el push nativo a los demás participantes.
-// El aviso es informativo: nunca debe impedir que el negocio se cree.
-async function notifyTeamPropertyBusiness(req, business) {
-  try {
-    const prop = business && business.property;
-    if (!prop || !prop._id) return;
-    const place = [prop.zone, prop.city].filter(Boolean).join(' ')
-      || prop.address
-      || String(prop.type || '').replace(/_/g, ' ')
-      || 'una propiedad';
-    const actorName = (req.user && (req.user.name || req.user.username)) || 'Un asesor';
-    const text = `🏠 ${actorName} creó el negocio "${business.name}" con la propiedad ${place}.`;
-    const io = req.app && typeof req.app.get === 'function' ? req.app.get('io') : null;
-    const chat = await getOrCreateGeneralChat();
-    await persistAndBroadcast(io, chat._id, req.user._id, actorName, text);
-  } catch (error) {
-    // Silencioso a propósito: la nota es un extra, no parte de la operación.
-  }
 }
 
 // Expone las etapas disponibles por tipo de proceso junto con sus etiquetas y
@@ -199,6 +176,28 @@ function assertOwnership(req, business) {
 // Cliente.negocioId al día para que la tarjeta del cliente muestre la insignia
 // "Negocio vinculado" y el botón para abrirlo.
 const idOf = (v) => (v && typeof v === 'object' ? v._id : v) || null;
+
+// Personas involucradas en el negocio: captador, cerrador y socios asignados.
+// Los avisos del negocio solo llegan a ellas, nunca a todo el equipo.
+function participantesDelNegocio(business) {
+  const ids = [business.mainAdvisor, business.partnerAdvisor, business.asesor_captador_id, business.asesor_cliente_id]
+    .map(idOf)
+    .filter(Boolean)
+    .map(String);
+  return Array.from(new Set(ids));
+}
+
+async function avisarParticipantes(business, actorId, { type, key, title, message }, userIds = null) {
+  const ids = (userIds || participantesDelNegocio(business)).filter((id) => id !== String(actorId || ''));
+  await Promise.all(ids.map((userId) => ensure({
+    type,
+    key,
+    title,
+    message,
+    userId,
+    data: { entityId: business._id },
+  }).catch(() => {})));
+}
 
 // Sincroniza los alias solicitados por la inmobiliaria con los campos
 // canónicos. El formulario puede enviar cualquiera de los dos nombres; la base
@@ -332,6 +331,7 @@ async function crearNota(business, req, text, stage) {
     stage: stage || normalizeStage(business.currentStage),
     text,
     createdBy: req.user._id,
+    readBy: [req.user._id],
   });
   await note.populate('createdBy', 'name username');
   return note;
@@ -505,25 +505,15 @@ const create = asyncHandler(async (req, res) => {
     message: `Se creó el negocio ${business.name}`,
   });
 
-  const advisorId = business.mainAdvisor && (business.mainAdvisor._id || business.mainAdvisor);
-  if (advisorId) {
-    ensure({
-      type: 'nuevo_negocio',
-      key: `business-${business._id}`,
-      title: 'Nuevo negocio',
-      message: `Se creó el negocio "${business.name}".`,
-      userId: advisorId,
-      data: { entityId: business._id },
-    }).catch(() => {});
-  }
-
   await business.populate(['buyerClient', 'sellerClient', 'property', 'mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'cliente_id']);
 
-  // Nota en el chat interno + aviso al resto del equipo (solo si el negocio va
-  // ligado a una propiedad). No bloquea ni condiciona la respuesta.
-  if (business.property) {
-    notifyTeamPropertyBusiness(req, business);
-  }
+  // Aviso solo para los asesores involucrados (no para todo el equipo).
+  avisarParticipantes(business, req.user._id, {
+    type: 'nuevo_negocio',
+    key: `business-${business._id}`,
+    title: 'Nuevo negocio',
+    message: `Se creó el negocio "${business.name}".`,
+  }).catch(() => {});
 
   res.status(201).json({ success: true, data: business });
 });
@@ -596,6 +586,7 @@ const update = asyncHandler(async (req, res) => {
     await completarVendedorDesdePropiedad(body);
   }
 
+  const asesoresPrevios = participantesDelNegocio(business);
   Object.assign(business, body);
 
   // Reparto del ticket con los asesores ya actualizados (la comisión sigue al valor ticket).
@@ -632,6 +623,16 @@ const update = asyncHandler(async (req, res) => {
   await sincronizarClientes(business, clientesPrevios).catch(() => {});
   await sincronizarPropiedad(business, previousStatus).catch(() => {});
   await sincronizarTickets(business).catch(() => {});
+
+  const asesoresNuevos = participantesDelNegocio(business).filter((id) => !asesoresPrevios.includes(id));
+  if (asesoresNuevos.length) {
+    avisarParticipantes(business, req.user._id, {
+      type: 'negocio_asignado',
+      key: `business-assign-${business._id}-${Date.now()}`,
+      title: 'Negocio asignado',
+      message: `Te asignaron al negocio "${business.name}".`,
+    }, asesoresNuevos).catch(() => {});
+  }
 
   Object.entries(changed).forEach(([field, values]) => {
     logAudit({
@@ -790,17 +791,12 @@ const changeStage = asyncHandler(async (req, res) => {
     message: `Cambió de ${stageLabel(previousStage)} a ${stageLabel(stage)}`,
   });
 
-  const stageAdvisorId = idOf(business.mainAdvisor);
-  if (stageAdvisorId) {
-    ensure({
-      type: 'cambio_etapa',
-      key: `stage-${business._id}-${stage}`,
-      title: 'Cambio de etapa',
-      message: `El negocio "${business.name}" cambió a ${stageLabel(stage)}.`,
-      userId: stageAdvisorId,
-      data: { entityId: business._id },
-    }).catch(() => {});
-  }
+  avisarParticipantes(business, req.user._id, {
+    type: 'cambio_etapa',
+    key: `stage-${business._id}-${stage}`,
+    title: 'Cambio de etapa',
+    message: `El negocio "${business.name}" cambió a ${stageLabel(stage)}.`,
+  }).catch(() => {});
 
   res.json({
     success: true,
@@ -1142,10 +1138,57 @@ const propertyBusinesses = asyncHandler(async (req, res) => {
   res.json({ success: true, data: items });
 });
 
+// Cuántas notas de la bitácora no ha visto el usuario, por negocio (las propias
+// no cuentan). Solo considera negocios a los que el usuario tiene acceso.
+const unseenNotes = asyncHandler(async (req, res) => {
+  const uid = String(req.user._id);
+  const notes = await BusinessNote.find({
+    readBy: { $ne: req.user._id },
+    createdBy: { $ne: req.user._id },
+  }).select('business').lean();
+
+  let allowed = null;
+  if (!isBusinessStaff(req)) {
+    const own = await Business.find({
+      $or: [
+        { mainAdvisor: uid },
+        { partnerAdvisor: uid },
+        { asesor_captador_id: uid },
+        { asesor_cliente_id: uid },
+      ],
+    }).select('_id').lean();
+    allowed = new Set(own.map((b) => String(b._id)));
+  }
+
+  const data = {};
+  notes.forEach((note) => {
+    const id = String(note.business);
+    if (allowed && !allowed.has(id)) return;
+    data[id] = (data[id] || 0) + 1;
+  });
+  res.json({ success: true, data });
+});
+
+// Marca como vistas todas las notas de la bitácora del negocio para el usuario.
+const markNotesSeen = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor asesor_captador_id asesor_cliente_id');
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  await BusinessNote.updateMany(
+    { business: business._id, readBy: { $ne: req.user._id } },
+    { $addToSet: { readBy: req.user._id } }
+  );
+  res.json({ success: true });
+});
+
 module.exports = {
   list,
   get,
   options,
+  unseenNotes,
+  markNotesSeen,
   create,
   update,
   remove,

@@ -14,14 +14,14 @@ const Format = {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+    return date.toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo', day: '2-digit', month: 'short', year: 'numeric' });
   },
 
   dateTime(value) {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString('es-MX', {
+    return date.toLocaleString('es-MX', { timeZone: 'America/Hermosillo', 
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -47,7 +47,7 @@ const Format = {
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('es-MX', { timeZone: 'America/Hermosillo', hour: '2-digit', minute: '2-digit' });
   },
 
   plural(count, singular, plural) {

@@ -48,11 +48,12 @@ const ROLE_DEFINITIONS = [
   {
     name: 'Asistencia',
     code: 'asistencia',
-    description: 'Clientes, asignación de prospectos, negocios, usuarios y formatos',
+    description: 'Clientes, propiedades, asignación de prospectos, negocios, usuarios y formatos',
     permissions: [
       'dashboard_view',
       'users_manage',
       'clients_manage',
+      'properties_manage',
       'businesses_manage',
       'appointments_manage',
       'documents_manage',
@@ -66,10 +67,11 @@ const ROLE_DEFINITIONS = [
   {
     name: 'Gerencia',
     code: 'gerencia',
-    description: 'Supervisión comercial, tareas, metas y reportes',
+    description: 'Supervisión comercial, propiedades, tareas, metas y reportes',
     permissions: [
       'dashboard_view',
       'clients_manage',
+      'properties_manage',
       'businesses_manage',
       'tasks_manage',
       'goals_manage',

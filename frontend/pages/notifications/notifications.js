@@ -111,6 +111,8 @@ window.Pages.notifications = {
               // sin acción
             }
           }
+          const url = notif && window.notificationTargetUrl ? window.notificationTargetUrl(notif) : '';
+          if (url) window.location.href = url;
         });
       });
       updateFooter();

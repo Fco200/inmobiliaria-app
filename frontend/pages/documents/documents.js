@@ -239,7 +239,7 @@ window.Pages.documents = {
                     <td><strong>${sharedIcon(item)} ${UI.escapeHtml(item.name)}</strong></td>
                     <td><small class="text-muted">${UI.escapeHtml(item.fileName || '')} · ${sharedSize(item.size)} · ${UI.escapeHtml(sharedExt(item).toUpperCase() || 'ARCHIVO')}</small></td>
                     <td>${UI.escapeHtml((item.uploadedBy && (item.uploadedBy.name || item.uploadedBy.username)) || '—')}</td>
-                    <td>${new Date(item.createdAt).toLocaleDateString('es-MX')}</td>
+                    <td>${new Date(item.createdAt).toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' })}</td>
                     <td style="white-space:nowrap;text-align:right;">
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-view="${item._id}">Ver</button>
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-download="${item._id}">Descargar</button>
@@ -753,7 +753,7 @@ window.Pages.documents = {
           `).join('')}
         </table>
       `).join('');
-      const hoy = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+      const hoy = new Date().toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo', year: 'numeric', month: 'long', day: 'numeric' });
       UI.printHtmlDocument(`<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -859,7 +859,7 @@ window.Pages.documents = {
               name: `Hoja de Visita — ${values.cliente}`,
               type: 'formato',
               status: 'pendiente',
-              observations: `Registrada desde formato rápido el ${new Date().toLocaleDateString('es-MX')}`,
+              observations: `Registrada desde formato rápido el ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' })}`,
             });
             UI.toast('Copia registrada en el sistema', 'success');
           } catch (error) { /* registro best-effort */ }

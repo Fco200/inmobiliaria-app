@@ -4,6 +4,7 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const {
   Client, Property, Business, Appointment, Task, Goal, Expense, Notification, ProspectingActivity, User,
 } = require('../models');
+const { APP_TIMEZONE } = require('../utils/datetime');
 
 const money = (n) => (Number(n) || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
@@ -250,7 +251,7 @@ const ask = asyncHandler(async (req, res) => {
 Appointment.find({ user: uid, status: { $in: ['pendiente', 'confirmada'] }, date: { $gte: now } }).populate('client', 'nombre name').sort({ date: 1 }).limit(3).lean(),
     ]);
     const next = upcoming.length
-      ? upcoming.map((a) => `• ${new Date(a.date).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} — ${a.client ? (a.client.nombre || a.client.name) : 'Sin cliente'}`).join('\n')
+      ? upcoming.map((a) => `• ${new Date(a.date).toLocaleString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE })} — ${a.client ? (a.client.nombre || a.client.name) : 'Sin cliente'}`).join('\n')
       : 'No tienes citas próximas programadas.';
     return res.json({ success: true, data: { answer: `Hoy tienes ${today} cita${today === 1 ? '' : 's'}.\n\nPróximas citas:\n${next}` } });
   }

@@ -23,6 +23,8 @@ router.put('/flow', authorize('admin', 'direccion', 'superadmin', 'system_admin'
 // /:id para que "options" no se interprete como un identificador.
 router.get('/options', businessController.options);
 router.get('/property/:propertyId', businessController.propertyBusinesses);
+// Indicador de bitácora no vista por negocio (antes de /:id).
+router.get('/unseen-notes', businessController.unseenNotes);
 router.post('/', businessRules, businessController.create);
 router.get('/:id', businessIdParam, businessController.get);
 router.put('/:id', businessIdParam, businessUpdateRules, businessController.update);
@@ -33,6 +35,7 @@ router.get('/:id/history', businessIdParam, businessController.history);
 // Bitácora / notas
 router.get('/:id/notes', businessIdParam, businessController.listNotes);
 router.post('/:id/notes', businessIdParam, businessController.addNote);
+router.post('/:id/notes/seen', businessIdParam, businessController.markNotesSeen);
 router.delete('/:id/notes/:noteId', businessIdParam, businessController.removeNote);
 
 // Checklist operativo

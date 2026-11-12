@@ -57,9 +57,13 @@ window.Pages.avaluo = {
       { name: 'appraiserCP', label: 'Código postal del valuador', type: 'text', placeholder: '5 dígitos', value: (r) => r.appraiserCP || '' },
       { name: 'constructionM2', label: 'm² de construcción', type: 'number', value: (r) => numberOrEmpty(r.constructionM2) },
       { name: 'landM2', label: 'm² de terreno', type: 'number', value: (r) => numberOrEmpty(r.landM2) },
-      { name: 'concludedValue', label: 'Valor concluido ($)', type: 'number', value: (r) => numberOrEmpty(r.concludedValue) },
+      { name: 'concludedValue', label: 'Valor concluido', type: 'money', value: (r) => numberOrEmpty(r.concludedValue) },
       { name: 'notes', label: 'Observaciones', type: 'textarea', full: true, value: (r) => r.notes || '' },
     ];
+
+    // ApiClient.unwrap ya quita el envoltorio {data}: el get devuelve el avalúo y
+    // las listas (checklist, bitácora) llegan como arreglo directo.
+    const payload = (res) => (res && res.data !== undefined ? res.data : res);
 
     function openBitacora(recordId) {
       const modal = UI.openModal({
@@ -80,9 +84,9 @@ window.Pages.avaluo = {
       const saveChecklist = async () => {
         try {
           const res = await API.avaluos.saveChecklist(recordId, item.checklist.map((c) => ({
-            text: c.text, done: c.done, createdBy: c.createdBy || null,
+            _id: c._id, text: c.text, done: c.done, createdBy: c.createdBy || null,
           })));
-          item.checklist = res.data || [];
+          item.checklist = payload(res) || [];
           draw();
         } catch (error) {
           UI.toast(error.message, 'error');
@@ -92,12 +96,13 @@ window.Pages.avaluo = {
       const draw = () => {
         const checklist = item.checklist || [];
         const bitacora = (item.bitacora || []).slice().reverse();
+        const hechos = checklist.filter((c) => c.done).length;
         const propLabel = item.property ? UI.propertyOptionLabel(item.property) : '—';
         bodyEl.innerHTML = `
           <p class="text-muted" style="margin:0 0 12px;font-size:13px;">
             ${UI.escapeHtml(propLabel)} · Valuador: ${UI.escapeHtml(item.appraiser || '—')}
           </p>
-          <h4 style="margin:0 0 8px;">Checklist</h4>
+          <h4 style="margin:0 0 8px;">Checklist <small class="text-muted" style="font-weight:400;">Avance: ${hechos} de ${checklist.length}</small></h4>
           <ul style="list-style:none;padding:0;margin:0 0 10px;">
             ${checklist.length ? checklist.map((c, i) => `
               <li style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
@@ -121,7 +126,7 @@ window.Pages.avaluo = {
             ${bitacora.length ? bitacora.map((b) => `
               <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
                 <strong>${UI.escapeHtml(b.userName || 'Sistema')}</strong>
-                <small class="text-muted"> · ${new Date(b.createdAt).toLocaleString('es-MX')}</small><br>
+                <small class="text-muted"> · Registrado el ${Format.dateTime(b.createdAt)}</small><br>
                 ${UI.escapeHtml(b.message)}
               </li>`).join('') : '<li class="text-muted" style="padding:6px 0;">Sin movimientos.</li>'}
           </ul>`;
@@ -156,7 +161,7 @@ window.Pages.avaluo = {
             if (!message) return;
             try {
               const res = await API.avaluos.addBitacora(recordId, message);
-              item.bitacora = res.data || item.bitacora;
+              item.bitacora = payload(res) || item.bitacora;
               draw();
             } catch (error) {
               UI.toast(error.message, 'error');
@@ -168,7 +173,7 @@ window.Pages.avaluo = {
       (async () => {
         try {
           const res = await API.avaluos.get(recordId);
-          item = res.data;
+          item = payload(res);
           draw();
         } catch (error) {
           bodyEl.innerHTML = UI.errorAlert(error.message);

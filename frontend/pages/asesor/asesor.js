@@ -134,7 +134,7 @@ window.AsesorPage = (() => {
           UI.toast('Completa tu nombre, fecha y hora.', 'warning');
           return;
         }
-        const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+        const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { timeZone: 'America/Hermosillo', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
         const msg = `Hola, quiero AGENDAR una visita para ver: ${type} en ${place} (${op}).\n\nMi nombre: ${name}\nFecha y hora: ${when}\nPrecio publicado: ${Format.currency(record.price)}\n\n¿Está disponible?`;
         window.open(PS.whatsappLink(msg, waPhone), '_blank', 'noopener');
       });

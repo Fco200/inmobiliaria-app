@@ -470,6 +470,45 @@ window.AppShell = (() => {
     else openFabPanel(name);
   }
 
+  // Página del CRM donde se atiende cada tipo de aviso. El registro se abre con
+  // ?open=<id> (lo procesa crudPage).
+  const NOTIF_TARGET_PAGES = {
+    nueva_tarea: 'tasks.html',
+    tarea_vencida: 'tasks.html',
+    tarea_proxima: 'tasks.html',
+    cita_proxima: 'appointments.html',
+    cita_vencida: 'appointments.html',
+    cita_recordatorio_24h: 'appointments.html',
+    cita_recordatorio_1h: 'appointments.html',
+    cita_recordatorio_personal: 'appointments.html',
+    meta_proxima_vencer: 'goals.html',
+    documento_pendiente: 'documents.html',
+    documento_rechazado: 'documents.html',
+    avaluo_pendiente: 'businesses.html',
+    firma_pendiente: 'businesses.html',
+    pago_pendiente: 'businesses.html',
+    negocio_sin_actualizacion: 'businesses.html',
+    negocio_cancelado: 'businesses.html',
+    nuevo_negocio: 'businesses.html',
+    negocio_asignado: 'businesses.html',
+    cambio_etapa: 'businesses.html',
+    nuevo_prospecto: 'clients.html',
+    propiedad_apartada: 'properties.html',
+    propiedad_sin_publicar: 'properties.html',
+    nueva_propiedad: 'properties.html',
+    nuevo_mensaje_chat: 'chat.html',
+  };
+
+  window.notificationTargetUrl = function notificationTargetUrl(item) {
+    if (!item) return '';
+    const page = NOTIF_TARGET_PAGES[item.type];
+    if (!page) return '';
+    const data = item.data || {};
+    if (item.type === 'nuevo_mensaje_chat') return data.chatId ? `${page}?open=${encodeURIComponent(data.chatId)}` : page;
+    const id = data.entityId ? String(data.entityId) : '';
+    return id ? `${page}?open=${encodeURIComponent(id)}` : page;
+  };
+
   function notifIcon(type) {
     const map = {
       task: '&#9745;', appointment: '&#128197;', business: '&#128179;', goal: '&#127919;',
@@ -510,7 +549,9 @@ window.AppShell = (() => {
             if (window.API.notifications.markRead) await window.API.notifications.markRead(item._id);
           } catch (e) { /* ignore */ }
           refreshNotificationBadge();
-          openNotificationDetail(item);
+          const url = window.notificationTargetUrl(item);
+          if (url) window.location.href = url;
+          else openNotificationDetail(item);
         });
       });
     } catch (error) {
@@ -708,8 +749,8 @@ window.AppShell = (() => {
     right.insertBefore(clock, right.querySelector('#btn-theme'));
     const update = () => {
       const now = new Date();
-      const time = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      const date = now.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
+      const time = now.toLocaleTimeString('es-MX', { timeZone: 'America/Hermosillo', hour: '2-digit', minute: '2-digit' });
+      const date = now.toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo', weekday: 'short', day: 'numeric', month: 'short' });
       clock.innerHTML = `<span class="clock-time">${time}</span><span class="clock-date">${date}</span>`;
     };
     update();

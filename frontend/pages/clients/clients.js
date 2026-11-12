@@ -615,7 +615,7 @@ window.Pages.clients = {
                   options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago('')],
                   placeholder: 'Ej. Pago mixto, préstamo familiar…',
                 })}
-                ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', placeholder: 'Pendiente / por confirmar' })}
+                ${UI.field('capacidad', 'Capacidad de pago', { type: 'money', placeholder: 'Pendiente / por confirmar' })}
               </div>
               ${fieldConOtro('tipoPropiedad', '¿Qué tipo de propiedad busca?', {
                 options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))],
@@ -728,7 +728,7 @@ window.Pages.clients = {
               ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
               <div id="pago-compra-box" style="display:contents;">
                 ${fieldConOtro('formaPago', 'Forma de compra / pago (opcional)', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
-                ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
+                ${UI.field('capacidad', 'Capacidad de pago', { type: 'money', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
               </div>
               ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 6, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
               ${UI.field('notasGenerales', 'Notas', { type: 'textarea', rows: 4, value: record.notasGenerales || '', full: true, placeholder: 'Comentarios adicionales del cliente…' })}
@@ -838,7 +838,7 @@ window.Pages.clients = {
             ${fieldConOtro('servicio', 'Operación', { value: record.servicio || '', otroValue: record.servicioOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))], placeholder: 'Ej. Permuta, herencia…' })}
             <div id="pago-compra-box" style="display:contents;">
               ${fieldConOtro('formaPago', 'Forma de compra (opcional)', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
-              ${UI.field('capacidad', 'Capacidad de pago ($)', { type: 'number', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
+              ${UI.field('capacidad', 'Capacidad de pago', { type: 'money', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
             </div>
             ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, predio industrial…' })}
             ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
@@ -864,7 +864,7 @@ window.Pages.clients = {
           : '<div class="stage-notice">💼 Los negocios se crean <strong>únicamente de forma manual</strong> desde el módulo <strong>Negocios</strong>: avanzar de etapa ya no genera ninguno automáticamente.</div>';
         extraFields = `
           <div class="stage-input-grid">
-            ${UI.field('capacidad', 'Confirma monto / presupuesto de la operación ($)', { type: 'number', value: record.capacidad || 0, required: true })}
+            ${UI.field('capacidad', 'Confirma monto / presupuesto de la operación', { type: 'money', value: record.capacidad || 0, required: true })}
           </div>`;
       }
 

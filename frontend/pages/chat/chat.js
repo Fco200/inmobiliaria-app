@@ -54,7 +54,7 @@ const chatDayLabel = (d) => {
   const key = chatDayKey(dt);
   if (key === today) return 'Hoy';
   if (key === yesterday) return 'Ayer';
-  return dt.toLocaleDateString('es-MX', {
+  return dt.toLocaleDateString('es-MX', {timeZone: 'America/Hermosillo',
     weekday: 'long',
     day: 'numeric',
     month: 'long',

@@ -25,6 +25,8 @@ const businessNoteSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Usuarios que ya vieron esta nota en la bitácora (base del indicador "no visto").
+    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   {
     timestamps: true,
@@ -33,5 +35,6 @@ const businessNoteSchema = new mongoose.Schema(
 );
 
 businessNoteSchema.index({ business: 1, createdAt: -1 });
+businessNoteSchema.index({ readBy: 1 });
 
 module.exports = mongoose.model('BusinessNote', businessNoteSchema);

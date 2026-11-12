@@ -249,6 +249,23 @@ app.use(
   storage.serveStatic()
 );
 
+// Tiempo real: tras cada cambio exitoso de datos, los navegadores conectados
+// refrescan su vista. Solo se envía el nombre del recurso; cada pantalla vuelve
+// a pedir sus datos con sus propios permisos.
+const LIVE_SKIP_RESOURCES = new Set(['auth', 'sessions', 'push', 'notifications', 'chats', 'health', 'config', 'soporte']);
+const LIVE_WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+app.use('/api', (req, res, next) => {
+  if (!LIVE_WRITE_METHODS.has(req.method)) return next();
+  res.on('finish', () => {
+    if (res.statusCode >= 400) return;
+    const resource = String(req.path || '').split('/').filter(Boolean)[0] || '';
+    const io = req.app.get('io');
+    if (!io || !resource || LIVE_SKIP_RESOURCES.has(resource)) return;
+    io.emit('data-changed', { resource });
+  });
+  next();
+});
+
 app.use('/api', maintenance, apiRoutes);
 
 app.use(notFound);

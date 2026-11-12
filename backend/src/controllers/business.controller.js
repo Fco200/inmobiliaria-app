@@ -29,7 +29,7 @@ const {
   Ticket,
 } = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
-const { ensure } = require('../services/notification.service');
+const { ensure, emitToUsers } = require('../services/notification.service');
 const {
   STAGE_ORDER,
   STAGE_LABELS,
@@ -334,6 +334,12 @@ async function crearNota(business, req, text, stage) {
     readBy: [req.user._id],
   });
   await note.populate('createdBy', 'name username');
+  // Aviso en vivo a los participantes del negocio (sin el autor de la nota).
+  emitToUsers(
+    participantesDelNegocio(business).filter((id) => id !== String(req.user._id)),
+    'business-note',
+    { businessId: String(business._id), noteId: String(note._id), by: (note.createdBy && note.createdBy.name) || '', createdAt: note.createdAt }
+  );
   return note;
 }
 

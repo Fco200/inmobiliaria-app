@@ -1,9 +1,12 @@
 {
-  "version": "2.30",
+  "version": "2.31",
   "channel": "estable",
-  "title": "Actualización 2.30",
+  "title": "Actualización 2.31",
   "date": "2026-11-12",
   "notes": [
+    "Tiempo real: todas las pantallas se actualizan solas al cambiar datos, sin recargar la página.",
+    "Tiempo real: la bitácora de negocios avisa al instante a los asesores involucrados (badge en la lista y la bitácora abierta se actualiza).",
+    "Correo: envíos con Brevo activos (configurable desde Panel de soporte > Correo o variables de entorno).",
     "Horarios: citas, recordatorios, avisos y fechas del sistema se muestran en la hora de Hermosillo, Sonora.",
     "Avalúos: corregido el error al abrir la bitácora y el checklist; ahora se puede agregar, marcar y quitar pendientes, y agregar notas con fecha y hora de registro.",
     "Captar Propiedades: gerencia y asistencia pueden captar y administrar propiedades y asignar asesores sin restricciones.",

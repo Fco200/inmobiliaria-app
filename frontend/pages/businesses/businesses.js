@@ -586,6 +586,51 @@ window.Pages.businesses = {
       }
     }
 
+    // ----- Tiempo real: indicador de bitácora y bitácora abierta -----
+    let bitacoraAbiertaId = null;
+    let bitacoraRecargar = null;
+
+    // Pone o suma el badge de "notas nuevas" en la fila del negocio.
+    function sumarBadgeBitacora(id, delta) {
+      const row = document.querySelector(`tr[data-record="${id}"]`);
+      if (!row) return;
+      const cell = row.querySelector('td');
+      if (!cell) return;
+      const anterior = row.querySelector(`[data-bitacora-badge="${id}"]`);
+      const total = (anterior ? parseInt(anterior.dataset.count, 10) || 0 : 0) + delta;
+      if (anterior) anterior.remove();
+      if (total <= 0) return;
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-danger';
+      badge.dataset.bitacoraBadge = id;
+      badge.dataset.count = String(total);
+      badge.title = 'Bitácora con registros nuevos';
+      badge.style.fontSize = '10px';
+      badge.innerHTML = `&#9679; ${total} nuevo${total === 1 ? '' : 's'} en bitácora`;
+      cell.insertBefore(document.createTextNode(' '), cell.firstChild);
+      cell.insertBefore(badge, cell.firstChild);
+    }
+
+    let notasEnVivoListas = false;
+    function wireNotasEnVivo() {
+      if (notasEnVivoListas || !window.Realtime || !window.Realtime.connect) return;
+      notasEnVivoListas = true;
+      window.Realtime.connect().then((socket) => {
+        if (!socket) return;
+        socket.on('business-note', (payload) => {
+          if (!payload || !payload.businessId) return;
+          const id = payload.businessId;
+          const abierta = document.getElementById('biz-notes-container') && bitacoraAbiertaId === id;
+          if (abierta && bitacoraRecargar) {
+            bitacoraRecargar();
+            ApiClient.post(`/businesses/${id}/notes/seen`, {}).catch(() => {});
+          } else {
+            sumarBadgeBitacora(id, 1);
+          }
+        });
+      }).catch(() => {});
+    }
+
     function renderTable() {
       contentEl.innerHTML = '<div id="biz-summary"></div><div id="biz-list"></div>';
       const summaryEl = contentEl.querySelector('#biz-summary');
@@ -611,7 +656,8 @@ window.Pages.businesses = {
               API.businesses.list(params),
               ApiClient.get('/businesses/unseen-notes').catch(() => null),
             ]);
-            const counts = (unseen && unseen.data) || {};
+            // ApiClient.unwrap ya quita el envoltorio: el mapa llega directo.
+            const counts = (unseen && unseen.data !== undefined ? unseen.data : unseen) || {};
             if (res && Array.isArray(res.data)) {
               res.data.forEach((r) => { r.unseenNotes = counts[r._id] || 0; });
             }
@@ -634,7 +680,7 @@ window.Pages.businesses = {
           { key: 'dateTo', label: 'Hasta (fecha)', type: 'date' },
         ],
         columns: [
-          { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span>${r.unseenNotes ? ` <span class="badge badge-danger" data-bitacora-badge="${r._id}" title="Bitácora con registros nuevos" style="font-size:10px;">&#9679; ${r.unseenNotes} nuevo${r.unseenNotes === 1 ? '' : 's'} en bitácora</span>` : ''}<br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
+          { key: 'name', label: 'Negocio', render: (r) => `<span class="badge badge-info" style="font-size:10px;letter-spacing:.04em;">${UI.escapeHtml(businessTypeLabel(r))}</span>${r.unseenNotes ? ` <span class="badge badge-danger" data-bitacora-badge="${r._id}" data-count="${r.unseenNotes}" title="Bitácora con registros nuevos" style="font-size:10px;">&#9679; ${r.unseenNotes} nuevo${r.unseenNotes === 1 ? '' : 's'} en bitácora</span>` : ''}<br><strong>${UI.escapeHtml(r.name)}</strong><br><small class="text-muted">${Format.currency(r.valueOperation)}</small>` },
           { key: 'buyerClient', label: 'Comprador', render: (r) => UI.escapeHtml(r.buyerClient ? r.buyerClient.name : (r.buyerExternalName || '—')) },
           { key: 'sellerClient', label: 'Vendedor', render: (r) => UI.escapeHtml(r.sellerClient ? r.sellerClient.name : (r.sellerExternalName || '—')) },
           { key: 'property', label: 'Propiedad', render: (r) => (r.property ? UI.escapeHtml(UI.propertyOptionLabel(r.property)) : '—') },
@@ -729,6 +775,8 @@ window.Pages.businesses = {
         onRemove: canManage,
       });
 
+      wireNotasEnVivo();
+      if (window.LiveRefresh) window.LiveRefresh.add(() => renderSummary(summaryEl));
       renderSummary(summaryEl);
     }
 
@@ -982,6 +1030,8 @@ window.Pages.businesses = {
         }
       };
 
+      bitacoraAbiertaId = String(record._id);
+      bitacoraRecargar = loadNotesContent;
       loadNotesContent();
     }
 

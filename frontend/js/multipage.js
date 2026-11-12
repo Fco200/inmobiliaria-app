@@ -1244,11 +1244,70 @@ window.AppShell = (() => {
     });
   }
 
+  // ----- Tiempo real: la vista se refresca sola cuando cambian datos -----
+  // Pantallas con su propio centro de avisos o estado delicado: no se redibujan
+  // solas (notificaciones marcaría todo como leído; calendario reiniciaría el mes).
+  const LIVE_SKIP_PAGES = new Set(['notifications', 'calendar', 'chat', 'profile', 'settings', 'soporte']);
+  // Las listas (crudPage) y otros bloques registran aquí su propia recarga: así
+  // conservan filtros y página en lugar de redibujar todo el módulo.
+  window.LiveRefresh = {
+    handlers: [],
+    add(fn) { if (typeof fn === 'function') this.handlers.push(fn); },
+  };
+  let liveTimer = null;
+  let userEdited = false;
+
+  document.addEventListener('input', (event) => {
+    if (event.target && event.target.closest && event.target.closest('#app-content')) userEdited = true;
+  }, true);
+  document.addEventListener('change', (event) => {
+    if (event.target && event.target.closest && event.target.closest('#app-content')) userEdited = true;
+  }, true);
+
+  // ¿El usuario escribió o cambió algo que aún no se guardó?
+  function hasUnsavedInput(root) {
+    return userEdited && Array.from(root.querySelectorAll('input, textarea, select')).some((el) => {
+      if (el.disabled || el.type === 'file' || el.type === 'button' || el.type === 'submit') return false;
+      if (el.tagName === 'SELECT') return Array.from(el.options).some((o) => o.selected !== o.defaultSelected);
+      if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+      return el.value !== el.defaultValue;
+    });
+  }
+
+  function refreshCurrentView() {
+    const content = document.getElementById('app-content');
+    if (!content) return;
+    const handlers = window.LiveRefresh.handlers.slice();
+    if (handlers.length) {
+      handlers.forEach((fn) => { try { fn(); } catch (error) { /* la vista sigue */ } });
+      return;
+    }
+    const key = currentKey();
+    const page = currentPage();
+    if (!page || typeof page.render !== 'function' || LIVE_SKIP_PAGES.has(key)) return;
+    if (hasUnsavedInput(content)) {
+      scheduleLiveRefresh(3000);
+      return;
+    }
+    Promise.resolve(page.render(content))
+      .then(() => labelTableColumns(content))
+      .catch(() => {});
+  }
+
+  function scheduleLiveRefresh(delay = 700) {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(refreshCurrentView, delay);
+  }
+
+  window.addEventListener('crm:data-changed', () => scheduleLiveRefresh());
+
   async function renderPage() {
     const content = document.getElementById('app-content');
     if (!content) return;
     const key = currentKey();
     const page = currentPage();
+    window.LiveRefresh.handlers = [];
+    userEdited = false;
     if (key === 'management' && !isBoss()) {
       content.innerHTML = '<div class="card"><div class="empty-state"><p>No tienes permiso para ver este módulo.</p></div></div>';
       return;

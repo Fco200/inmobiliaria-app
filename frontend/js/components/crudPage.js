@@ -697,6 +697,8 @@ ${rowXml}
   }
 
   load();
+  // Tiempo real: la lista se recarga sola al cambiar datos (conserva filtros y página).
+  if (window.LiveRefresh) window.LiveRefresh.add(load);
   if (config.onReady) config.onReady(openForm);
 }
 

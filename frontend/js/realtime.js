@@ -382,6 +382,10 @@ window.Realtime = (() => {
       showNotification(item);
       refreshBadges();
     });
+    // Cambio de datos en el servidor: el shell refresca la vista actual.
+    socket.on('data-changed', () => {
+      window.dispatchEvent(new CustomEvent('crm:data-changed'));
+    });
     const onChatActivity = (data) => {
       // Notificación visual de mensaje entrante (fuera del módulo de chat).
       showChatMessage(data);

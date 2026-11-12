@@ -22,6 +22,16 @@ function setIo(io) {
   ioRef = io;
 }
 
+// Envía un evento en tiempo real a varios usuarios (cada uno en su sala privada).
+function emitToUsers(userIds, event, payload) {
+  try {
+    if (!ioRef) return;
+    (userIds || []).forEach((id) => ioRef.to(`user:${String(id)}`).emit(event, payload));
+  } catch (e) {
+    console.error('[Tiempo real] Error emitiendo evento:', e.message);
+  }
+}
+
 // Emite el aviso nuevo en tiempo real al usuario dueño (Socket.IO).
 function emitNew(doc) {
   try {
@@ -443,4 +453,4 @@ async function generateForAllUsers() {
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers, setIo, ensure, ensureMany, pushNative };
+module.exports = { generateForUser, generateForAllUsers, setIo, emitToUsers, ensure, ensureMany, pushNative };

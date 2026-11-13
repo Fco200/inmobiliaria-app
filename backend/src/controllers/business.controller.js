@@ -828,7 +828,7 @@ const history = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const listNotes = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor name');
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor asesor_captador_id asesor_cliente_id name');
   if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
@@ -860,8 +860,42 @@ const addNote = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: note });
 });
 
+const updateNote = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor asesor_captador_id asesor_cliente_id name');
+  if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
+  if (!assertOwnership(req, business)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
+  }
+  const note = await BusinessNote.findOne({ _id: req.params.noteId, business: business._id });
+  if (!note) return res.status(404).json({ success: false, message: 'Nota no encontrada' });
+  const isAuthor = String(note.createdBy) === String(req.user._id);
+  if (!isAuthor && !canManageChecklist(req)) {
+    return res.status(403).json({ success: false, message: 'No puedes editar esta nota.' });
+  }
+  const text = String(req.body.text || req.body.note || req.body.nota || '').trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: 'La nota es obligatoria' });
+  }
+  note.text = text;
+  await note.save();
+  await note.populate('createdBy', 'name username');
+  emitToUsers(
+    participantesDelNegocio(business).filter((id) => id !== String(req.user._id)),
+    'business-note-changed',
+    { businessId: String(business._id), noteId: String(note._id), action: 'updated' }
+  );
+  await logActivity({
+    entityType: 'Business',
+    entityId: business._id,
+    user: req.user._id,
+    action: 'nota',
+    message: `Se editó una nota del negocio ${business.name}`,
+  });
+  res.json({ success: true, data: note });
+});
+
 const removeNote = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor');
+  const business = await Business.findById(req.params.id).select('mainAdvisor partnerAdvisor asesor_captador_id asesor_cliente_id name');
   if (!business) return res.status(404).json({ success: false, message: 'Negocio no encontrado' });
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
@@ -873,6 +907,18 @@ const removeNote = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No puedes eliminar esta nota.' });
   }
   await note.deleteOne();
+  emitToUsers(
+    participantesDelNegocio(business).filter((id) => id !== String(req.user._id)),
+    'business-note-changed',
+    { businessId: String(business._id), noteId: String(note._id), action: 'deleted' }
+  );
+  await logActivity({
+    entityType: 'Business',
+    entityId: business._id,
+    user: req.user._id,
+    action: 'nota',
+    message: `Se eliminó una nota del negocio ${business.name}`,
+  });
   res.json({ success: true, message: 'Nota eliminada' });
 });
 
@@ -1202,6 +1248,7 @@ module.exports = {
   history,
   listNotes,
   addNote,
+  updateNote,
   removeNote,
   getChecklist,
   addChecklistItem,

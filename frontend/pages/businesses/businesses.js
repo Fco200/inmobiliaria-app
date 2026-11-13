@@ -107,6 +107,13 @@ window.Pages.businesses = {
       ? stageMeta.order
       : Array.from(new Set([...stageMeta.byProcess.comprador, ...stageMeta.byProcess.vendedor, ...TERMINAL_STAGES]));
     const allStageOptions = allStages.map((s) => ({ value: s, label: stageLabel(s) }));
+    // El filtro por etapa acepta varios valores separados por coma (el backend
+    // los convierte en $in). Se agrega la opción combinada que usa el botón
+    // "Cancelados / Pausa" para que el selector muestre el filtro activo.
+    const stageFilterOptions = [
+      ...allStageOptions,
+      { value: 'cancelado,PAUSA', label: 'Cancelados / Pausa' },
+    ];
 
     const STAGE_COLORS = {
       PROMESA: '#8b5cf6',
@@ -137,11 +144,15 @@ window.Pages.businesses = {
     // usan las rutas REST directamente en lugar de romper los botones con
     // "API.businesses.documents.list is not a function".
     const bizApi = API.businesses || {};
-    const notesApi = (bizApi.notes && typeof bizApi.notes.list === 'function') ? bizApi.notes : {
-      list: (id) => ApiClient.get(`/businesses/${id}/notes`),
-      create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
-      remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
-    };
+    const updateNoteRequest = (id, noteId, body) => ApiClient.patch(`/businesses/${id}/notes/${noteId}`, body);
+    const notesApi = (bizApi.notes && typeof bizApi.notes.list === 'function')
+      ? { ...bizApi.notes, update: bizApi.notes.update || updateNoteRequest }
+      : {
+        list: (id) => ApiClient.get(`/businesses/${id}/notes`),
+        create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+        update: updateNoteRequest,
+        remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
+      };
     const checklistApi = (bizApi.checklist && typeof bizApi.checklist.list === 'function') ? bizApi.checklist : {
       list: (id) => ApiClient.get(`/businesses/${id}`).then((res) => ((res && res.checklist) || (res && res.data && res.data.checklist) || [])),
       create: (id, body) => ApiClient.post(`/businesses/${id}/checklist`, body),
@@ -534,11 +545,12 @@ window.Pages.businesses = {
     const newBtnEl = container.querySelector('[data-new]');
     if (newBtnEl) newBtnEl.addEventListener('click', () => openNew());
 
-    async function renderSummary(summaryEl) {
+    async function renderSummary(summaryEl, listCtl) {
       if (!summaryEl) return;
       try {
-        const all = await API.businesses.list({ limit: 1000 }).catch(() => ({ data: [] }));
-        const items = (all && (all.data || all)) || [];
+        // Se recorren todas las páginas: el backend limita cada respuesta a 100
+        // y con el límite anterior los contadores se quedaban cortos.
+        const items = await fetchAllBusinesses();
         const counts = {};
         items.forEach((b) => {
           const s = b && b.currentStage ? String(b.currentStage) : '';
@@ -553,34 +565,42 @@ window.Pages.businesses = {
         const stages = [...known, ...others];
         summaryEl.innerHTML = `
           <div class="pipeline-strip" style="margin-bottom:16px;">
-            <button class="pipeline-step pipeline-all is-active" type="button" style="--pipeline-color:var(--primary);">
+            <button class="pipeline-step pipeline-all" type="button" data-stage-filter="" title="Ver todos los negocios" style="--pipeline-color:var(--primary);">
               <span class="pipeline-label">Total de negocios</span>
               <span class="pipeline-count">${total}</span>
             </button>
             ${stages
               .map((s) => {
-                if (s === 'concluido' || s === 'cancelado') return '';
+                // Las etapas terminales tienen su propio botón al final.
+                if (s === 'concluido' || s === 'cancelado' || s === 'PAUSA') return '';
                 const label = stageLabel(s) || s;
                 const color = colorFor(s);
                 const c = Number(counts[s]) || 0;
                 return `
-                  <button class="pipeline-step" type="button" style="--pipeline-color:${color};">
+                  <button class="pipeline-step" type="button" data-stage-filter="${UI.escapeHtml(s)}" title="Filtrar por ${UI.escapeHtml(label)}" style="--pipeline-color:${color};">
                     <span class="pipeline-label">${UI.escapeHtml(label)}</span>
                     <span class="pipeline-count">${c}</span>
                   </button>
                 `;
               })
               .join('')}
-            <button class="pipeline-step" type="button" style="--pipeline-color:#1f9d55;">
+            <button class="pipeline-step" type="button" data-stage-filter="concluido" title="Ver negocios concluidos" style="--pipeline-color:#1f9d55;">
               <span class="pipeline-label">Concluidos</span>
               <span class="pipeline-count">${Number(counts.concluido) || 0}</span>
             </button>
-            <button class="pipeline-step" type="button" style="--pipeline-color:#dc2626;">
+            <button class="pipeline-step" type="button" data-stage-filter="cancelado,PAUSA" title="Ver negocios cancelados o en pausa" style="--pipeline-color:#dc2626;">
               <span class="pipeline-label">Cancelados / Pausa</span>
               <span class="pipeline-count">${(Number(counts.cancelado) || 0) + (Number(counts.PAUSA) || 0)}</span>
             </button>
           </div>
         `;
+        // Cada botón aplica el filtro de etapa en la lista (sin recargar la página).
+        summaryEl.querySelectorAll('[data-stage-filter]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (!listCtl || typeof listCtl.setFilter !== 'function') return;
+            listCtl.setFilter('currentStage', btn.dataset.stageFilter || '');
+          });
+        });
       } catch (error) {
         summaryEl.innerHTML = '';
       }
@@ -666,6 +686,14 @@ window.Pages.businesses = {
             sumarBadgeBitacora(id, 1);
           }
         });
+        // Una nota editada o eliminada no cambia el contador de no vistas, pero
+        // sí debe refrescar la bitácora si otro usuario la tiene abierta.
+        socket.on('business-note-changed', (payload) => {
+          if (!payload || !payload.businessId) return;
+          if (document.getElementById('biz-notes-container') && bitacoraAbiertaId === String(payload.businessId) && bitacoraRecargar) {
+            bitacoraRecargar();
+          }
+        });
       }).catch((error) => {
         console.warn('[Bitácora] No se pudo conectar el aviso en vivo:', (error && (error.message || error)) || 'error desconocido');
       });
@@ -675,13 +703,26 @@ window.Pages.businesses = {
       contentEl.innerHTML = '<div id="biz-summary"></div><div id="biz-list"></div>';
       const summaryEl = contentEl.querySelector('#biz-summary');
       const listEl = contentEl.querySelector('#biz-list');
-      crudPage(listEl, {
+      // Sincroniza el botón activo del embudo con el filtro de etapa real.
+      function marcarEtapaActiva(value) {
+        if (!summaryEl) return;
+        const activa = String(value || '');
+        // Si el selector elige sólo PAUSA o sólo cancelado, el botón combinado
+        // sigue representando ese filtro en el embudo.
+        const terminal = activa === 'PAUSA' || activa === 'cancelado' || activa === 'cancelado,PAUSA';
+        summaryEl.querySelectorAll('[data-stage-filter]').forEach((btn) => {
+          const target = String(btn.dataset.stageFilter || '');
+          btn.classList.toggle('is-active', target === activa || (terminal && target === 'cancelado,PAUSA'));
+        });
+      }
+      const listCtl = crudPage(listEl, {
         title: 'Negocios',
         newLabel: 'Nuevo negocio',
         hideNew: true,
         storageKey: 'negocios',
         serverLayout: (me && me.uiPrefs && me.uiPrefs['crud-layout:negocios']) || null,
         onLayoutSave: (layout) => API.auth.saveUiPref('crud-layout:negocios', layout),
+        onFilterChange: (filters) => marcarEtapaActiva(filters.currentStage),
         // Por defecto el responsable es el usuario que captó la propiedad (y que la subió).
         // Asesores: por defecto ven sus propios negocios. Perfiles que ven toda la
         // cartera (dirección, administración, gerencia, asistencia, escrituración) empiezan sin filtrar.
@@ -718,7 +759,7 @@ window.Pages.businesses = {
         filters: [
           { key: 'asesor', label: 'Asesor captador (interno)', placeholder: 'Todos los captadores', options: userOptions.filter((u) => u.value) },
           { key: 'asesorCliente', label: 'Asesor cerrador (interno)', placeholder: 'Todos los cerradores', options: userOptions.filter((u) => u.value) },
-          { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: allStageOptions },
+          { key: 'currentStage', label: 'Etapa', placeholder: 'Todas las etapas', options: stageFilterOptions },
           { key: 'dateFrom', label: 'Desde (fecha)', type: 'date' },
           { key: 'dateTo', label: 'Hasta (fecha)', type: 'date' },
         ],
@@ -819,8 +860,9 @@ window.Pages.businesses = {
       });
 
       wireNotasEnVivo();
-      if (window.LiveRefresh) window.LiveRefresh.add(() => renderSummary(summaryEl));
-      renderSummary(summaryEl);
+      renderSummary(summaryEl, listCtl).then(() => {
+        marcarEtapaActiva(listCtl && listCtl.getFilters ? listCtl.getFilters().currentStage : '');
+      });
     }
 
     function showStagesInfo(processType) {
@@ -905,8 +947,8 @@ window.Pages.businesses = {
 
     // ============ MODAL DE BITÁCORA ============
     // ============ IMPRESIÓN / EXPORTACIÓN DE BITÁCORA ============
-    // Une notas, cambios de etapa y seguimientos en orden cronológico y abre
-    // una vista limpia para imprimir o guardar como PDF (Ctrl+P > Guardar como PDF).
+    // Une notas, cambios de etapa, checklist y seguimientos en orden
+    // cronológico y abre una vista limpia para imprimir o guardar como PDF.
     async function printBitacora(record) {
       const win = window.open('', '_blank');
       if (!win) {
@@ -916,25 +958,30 @@ window.Pages.businesses = {
       win.document.write('<!doctype html><title>Preparando bitácora…</title><p style="font-family:Arial;padding:24px;">Preparando bitácora…</p>');
 
       try {
-        const [notesRes, stagesRes] = await Promise.all([
+        const [notesRes, stagesRes, checklistRes] = await Promise.all([
           notesApi.list(record._id).catch(() => []),
           API.businesses.history(record._id).catch(() => []),
+          checklistApi.list(record._id).catch(() => record.checklist || []),
         ]);
         const notes = (notesRes && notesRes.data) || notesRes || [];
         const stages = (stagesRes && stagesRes.data) || stagesRes || [];
+        const checklist = (checklistRes && checklistRes.data) || checklistRes || [];
+        const listaNotas = Array.isArray(notes) ? notes : [];
+        const listaEtapas = Array.isArray(stages) ? stages : [];
+        const listaChecklist = Array.isArray(checklist) ? checklist : [];
         const esc = (value) => UI.escapeHtml(String(value == null ? '' : value));
         const fmt = (value) => (value ? new Date(value).toLocaleString('es-MX', { timeZone: 'America/Hermosillo', dateStyle: 'medium', timeStyle: 'short' }) : '—');
         const who = (u) => (u && (u.name || u.username)) || '—';
 
         const events = [];
-        notes.forEach((n) => events.push({
+        listaNotas.forEach((n) => events.push({
           date: n.createdAt,
           kind: 'Nota',
           title: n.stage ? `Nota · ${stageLabel(n.stage)}` : 'Nota',
           by: who(n.createdBy),
           text: n.text,
         }));
-        stages.forEach((s) => {
+        listaEtapas.forEach((s) => {
           if (s.startedAt) {
             events.push({
               date: s.startedAt,
@@ -956,6 +1003,18 @@ window.Pages.businesses = {
         });
         events.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
+        const hechos = listaChecklist.filter((item) => item.done || item.completed).length;
+        const checklistRows = listaChecklist.map((item) => {
+          const hecho = item.done || item.completed;
+          const ubicacion = [item.section, item.group].filter(Boolean).join(' · ');
+          return `
+            <tr>
+              <td class="check">${hecho ? '&#9745;' : '&#9744;'}</td>
+              <td>${esc(item.text || item.title)}</td>
+              <td class="muted">${esc(ubicacion)}</td>
+            </tr>`;
+        }).join('');
+
         const propertyLine = record.property ? UI.propertyOptionLabel(record.property) : '—';
         const buyer = record.buyerClient ? record.buyerClient.name : (record.buyerExternalName || '—');
         const seller = record.sellerClient ? record.sellerClient.name : (record.sellerExternalName || '—');
@@ -976,12 +1035,17 @@ window.Pages.businesses = {
   th, td { border-bottom: 1px solid #ddd; padding: 7px 6px; vertical-align: top; text-align: left; }
   th { background: #f4f1f8; font-size: 12px; }
   td.date { white-space: nowrap; width: 150px; }
+  td.check { width: 34px; text-align: center; font-size: 16px; }
   .kind { font-size: 11px; color: #555; }
   .text { white-space: pre-wrap; margin-top: 3px; }
-  @media print { body { margin: 12mm; } button { display: none; } }
+  .toolbar { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 12px; }
+  .toolbar button { padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  @media print { body { margin: 12mm; } .no-print { display: none !important; } tr { page-break-inside: avoid; } }
 </style></head>
 <body>
-  <button onclick="window.print()" style="float:right;padding:6px 12px;">Imprimir / Guardar PDF</button>
+  <div class="toolbar no-print">
+    <button type="button" id="biz-print-now">Imprimir / Guardar PDF</button>
+  </div>
   <h1>Bitácora del negocio</h1>
   <div class="muted">Generada el ${esc(new Date().toLocaleString('es-MX', { timeZone: 'America/Hermosillo' }))}</div>
   <div class="grid">
@@ -994,6 +1058,12 @@ window.Pages.businesses = {
     <div><b>Asesor captador:</b> ${esc(advisor)}</div>
     <div><b>Valor de operación:</b> ${esc(Format.currency(record.valueOperation))}</div>
   </div>
+  <h3 style="margin:18px 0 0;">Checklist operativo (${hechos} de ${listaChecklist.length} completados)</h3>
+  ${listaChecklist.length ? `
+  <table>
+    <thead><tr><th>Estado</th><th>Pendiente</th><th>Sección / grupo</th></tr></thead>
+    <tbody>${checklistRows}</tbody>
+  </table>` : '<p class="muted">Este negocio no tiene checklist.</p>'}
   <h3 style="margin:18px 0 0;">Historial cronológico (${events.length})</h3>
   ${events.length ? `
   <table>
@@ -1007,9 +1077,23 @@ window.Pages.businesses = {
         </tr>`).join('')}
     </tbody>
   </table>` : '<p class="muted">No hay registros en la bitácora.</p>'}
-  <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });<\/script>
 </body></html>`);
         win.document.close();
+        // El script inline anterior podía ser bloqueado por la CSP y por eso
+        // la página abría pero no lanzaba el diálogo de impresión. Ahora se
+        // dispara desde la ventana que abrió la bitácora, que sí tiene permiso.
+        const printBtn = win.document.getElementById('biz-print-now');
+        if (printBtn) printBtn.addEventListener('click', () => win.print());
+        setTimeout(() => {
+          if (!win.closed) {
+            try {
+              win.focus();
+              win.print();
+            } catch (error) {
+              // Si el navegador bloquea la impresión automática, el botón visible sigue disponible.
+            }
+          }
+        }, 400);
       } catch (error) {
         win.close();
         UI.toast(error.message || 'No se pudo preparar la bitácora.', 'error');
@@ -1019,7 +1103,7 @@ window.Pages.businesses = {
     async function openBitacoraModal(record) {
       const modal = UI.openModal({
         title: `Bitácora / Notas — ${record.name}`,
-        body: `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-secondary btn-sm" type="button" id="biz-print-bitacora">&#128424;&nbsp; Imprimir / Exportar bitácora</button></div><div id="biz-notes-container"><div class="loading">Cargando notas...</div></div>`,
+        body: `<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-secondary btn-sm" type="button" id="biz-print-bitacora">&#128424;&nbsp; Imprimir / Guardar PDF</button></div><div id="biz-notes-container"><div class="loading">Cargando notas...</div></div>`,
         size: 600,
       });
       const printBtn = modal.bodyEl.querySelector('#biz-print-bitacora');
@@ -1037,6 +1121,11 @@ window.Pages.businesses = {
         try {
           const res = await notesApi.list(record._id);
           const notes = (res && res.data) || res || [];
+          const lista = Array.isArray(notes) ? notes : [];
+          const puedeEditarNota = (n) => {
+            const authorId = n && n.createdBy ? (n.createdBy._id || n.createdBy) : '';
+            return canManage || Boolean(authorId && String(authorId) === String(currentUserId));
+          };
           containerEl.innerHTML = `
             ${canWriteNotes ? `
               <form id="add-note-form" style="margin-bottom:16px;display:flex;gap:8px;">
@@ -1045,14 +1134,34 @@ window.Pages.businesses = {
               </form>
             ` : ''}
             <div style="max-height:350px;overflow-y:auto;">
-              ${notes.length ? notes.map((n) => `
-                <div style="padding:10px;margin-bottom:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);">
-                  <div style="font-size:13px;margin-bottom:4px;">${UI.escapeHtml(n.text || n.content || n.note)}</div>
-                  <div class="text-muted" style="font-size:11px;">
-                    ${n.createdBy ? UI.escapeHtml(n.createdBy.name || n.createdBy.username || n.createdBy) : 'Sistema'} · ${Format.dateTime(n.createdAt || n.date)}
+              ${lista.length ? lista.map((n) => {
+                const id = String(n._id || '');
+                const texto = n.text || n.content || n.note || '';
+                const autor = n.createdBy ? (n.createdBy.name || n.createdBy.username || n.createdBy) : 'Sistema';
+                return `
+                <div data-note-card="${UI.escapeHtml(id)}" style="padding:10px;margin-bottom:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);">
+                  <div data-note-view>
+                    <div style="font-size:13px;margin-bottom:4px;white-space:pre-wrap;">${UI.escapeHtml(texto)}</div>
+                    <div class="text-muted" style="font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                      <span>${UI.escapeHtml(autor)} · ${Format.dateTime(n.createdAt || n.date)}</span>
+                      ${puedeEditarNota(n) ? `
+                        <span style="display:flex;gap:6px;flex-shrink:0;">
+                          <button class="btn btn-secondary btn-sm" type="button" data-note-edit="${UI.escapeHtml(id)}">Editar</button>
+                          <button class="btn btn-danger btn-sm" type="button" data-note-delete="${UI.escapeHtml(id)}">Eliminar</button>
+                        </span>
+                      ` : ''}
+                    </div>
                   </div>
+                  <form data-note-edit-form="${UI.escapeHtml(id)}" style="display:none;flex-direction:column;gap:8px;">
+                    <textarea class="form-control" name="text" rows="3" required>${UI.escapeHtml(texto)}</textarea>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                      <button class="btn btn-secondary btn-sm" type="button" data-note-cancel="${UI.escapeHtml(id)}">Cancelar</button>
+                      <button class="btn btn-primary btn-sm" type="submit">Guardar cambios</button>
+                    </div>
+                  </form>
                 </div>
-              `).join('') : '<p class="text-muted">No hay notas registradas en la bitácora.</p>'}
+              `;
+              }).join('') : '<p class="text-muted">No hay notas registradas en la bitácora.</p>'}
             </div>
           `;
 
@@ -1071,6 +1180,64 @@ window.Pages.businesses = {
               }
             });
           }
+
+          containerEl.querySelectorAll('[data-note-edit]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const card = btn.closest('[data-note-card]');
+              if (!card) return;
+              const view = card.querySelector('[data-note-view]');
+              const form = card.querySelector('[data-note-edit-form]');
+              if (!view || !form) return;
+              view.style.display = 'none';
+              form.style.display = 'flex';
+              const textarea = form.querySelector('textarea');
+              if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
+            });
+          });
+
+          containerEl.querySelectorAll('[data-note-cancel]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const card = btn.closest('[data-note-card]');
+              if (!card) return;
+              const view = card.querySelector('[data-note-view]');
+              const form = card.querySelector('[data-note-edit-form]');
+              if (view) view.style.display = '';
+              if (form) form.style.display = 'none';
+            });
+          });
+
+          containerEl.querySelectorAll('[data-note-edit-form]').forEach((form) => {
+            form.addEventListener('submit', async (ev) => {
+              ev.preventDefault();
+              const noteId = form.dataset.noteEditForm;
+              const text = String((form.querySelector('textarea') || {}).value || '').trim();
+              if (!noteId || !text) return;
+              try {
+                await notesApi.update(record._id, noteId, { text });
+                UI.toast('Nota actualizada', 'success');
+                loadNotesContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
+
+          containerEl.querySelectorAll('[data-note-delete]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const noteId = btn.dataset.noteDelete;
+              if (!noteId) return;
+              // confirm() nativo: el modal de confirmación de UI reemplazaría
+              // la bitácora abierta y se perdería el contexto de la nota.
+              if (!confirm('¿Eliminar esta nota de la bitácora?')) return;
+              try {
+                await notesApi.remove(record._id, noteId);
+                UI.toast('Nota eliminada', 'success');
+                loadNotesContent();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
         } catch (err) {
           containerEl.innerHTML = UI.errorAlert(err.message);
         }

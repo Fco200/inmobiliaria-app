@@ -185,6 +185,8 @@ window.API = {
     remove: (id) => ApiClient.remove(`/avaluos/${id}`),
     saveChecklist: (id, checklist) => ApiClient.put(`/avaluos/${id}/checklist`, { checklist }),
     addBitacora: (id, message) => ApiClient.post(`/avaluos/${id}/bitacora`, { message }),
+    updateBitacora: (id, entryId, message) => ApiClient.patch(`/avaluos/${id}/bitacora/${entryId}`, { message }),
+    removeBitacora: (id, entryId) => ApiClient.remove(`/avaluos/${id}/bitacora/${entryId}`),
   },
 
   businesses: {
@@ -209,9 +211,11 @@ window.API = {
     notes: {
       list: (id) => ApiClient.get(`/businesses/${id}/notes`),
       create: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+      update: (id, noteId, body) => ApiClient.patch(`/businesses/${id}/notes/${noteId}`, body),
       remove: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
     },
     addNote: (id, body) => ApiClient.post(`/businesses/${id}/notes`, body),
+    updateNote: (id, noteId, body) => ApiClient.patch(`/businesses/${id}/notes/${noteId}`, body),
     removeNote: (id, noteId) => ApiClient.remove(`/businesses/${id}/notes/${noteId}`),
 
     // Checklist operativo del negocio.

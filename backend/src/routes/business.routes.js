@@ -36,6 +36,7 @@ router.get('/:id/history', businessIdParam, businessController.history);
 router.get('/:id/notes', businessIdParam, businessController.listNotes);
 router.post('/:id/notes', businessIdParam, businessController.addNote);
 router.post('/:id/notes/seen', businessIdParam, businessController.markNotesSeen);
+router.patch('/:id/notes/:noteId', businessIdParam, businessController.updateNote);
 router.delete('/:id/notes/:noteId', businessIdParam, businessController.removeNote);
 
 // Checklist operativo

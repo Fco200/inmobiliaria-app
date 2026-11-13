@@ -24,5 +24,7 @@ router.put('/:id', requireManager, controller.update);
 router.delete('/:id', requireManager, controller.remove);
 router.put('/:id/checklist', requireManager, controller.saveChecklist);
 router.post('/:id/bitacora', requireManager, controller.addBitacora);
+router.patch('/:id/bitacora/:entryId', requireManager, controller.updateBitacora);
+router.delete('/:id/bitacora/:entryId', requireManager, controller.removeBitacora);
 
 module.exports = router;

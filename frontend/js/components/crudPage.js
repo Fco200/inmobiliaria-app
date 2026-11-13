@@ -206,6 +206,7 @@ function crudPage(container, config) {
       const isSelect = ctl.tagName === 'SELECT';
       ctl.addEventListener(isSelect ? 'change' : 'input', () => {
         state.filters[key] = ctl.value;
+        notifyFiltersChanged();
         clearTimeout(filterTimer);
         // El select aplica al instante; los inputs numéricos debouncean (300 ms).
         filterTimer = setTimeout(() => { state.page = 1; load(); }, isSelect ? 0 : 300);
@@ -224,6 +225,7 @@ function crudPage(container, config) {
       select.value = state.filters[key] || '';
       select.addEventListener('change', () => {
         state.filters[key] = select.value;
+        notifyFiltersChanged();
         state.page = 1;
         load();
       });
@@ -232,6 +234,7 @@ function crudPage(container, config) {
     if (statusEl) {
       statusEl.addEventListener('change', () => {
         state.status = statusEl.value;
+        notifyFiltersChanged();
         state.page = 1;
         load();
       });
@@ -266,6 +269,36 @@ function crudPage(container, config) {
     return typeof window.matchMedia === 'function'
       ? window.matchMedia('(max-width: 768px)').matches
       : window.innerWidth <= 768;
+  }
+
+  // Filtros actuales y utilidades para que la página pueda aplicar filtros
+  // desde otros controles (por ejemplo, los botones del embudo de Negocios)
+  // sin duplicar la lógica de recarga.
+  function currentFilters() {
+    return { ...state.filters };
+  }
+
+  function notifyFiltersChanged() {
+    if (typeof config.onFilterChange !== 'function') return;
+    try {
+      config.onFilterChange(currentFilters());
+    } catch (error) {
+      // Un callback de la vista nunca debe romper el filtrado.
+    }
+  }
+
+  function setFilter(key, value, options = {}) {
+    const next = value == null ? '' : String(value);
+    state.filters[key] = next;
+    state.page = 1;
+    clearTimeout(filterTimer);
+    clearTimeout(searchTimer);
+    const ctl = container.querySelector(`[data-filter="${CSS.escape(key)}"]`);
+    if (ctl) ctl.value = next;
+    const searchCtl = container.querySelector(`[data-toolbar-search="${CSS.escape(key)}"] select`);
+    if (searchCtl) searchCtl.value = next;
+    notifyFiltersChanged();
+    if (options.reload !== false) load();
   }
 
   function currentParams() {
@@ -716,9 +749,10 @@ ${rowXml}
   }
 
   load();
-  // Tiempo real: la lista se recarga sola al cambiar datos (conserva filtros y página).
-  if (window.LiveRefresh) window.LiveRefresh.add(load);
+  // La lista no se recarga sola: se actualiza al guardar, al filtrar o con las
+  // acciones manuales. Se expone setFilter para los botones de la vista.
   if (config.onReady) config.onReady(openForm);
+  return { reload: load, setFilter, getFilters: currentFilters };
 }
 
 window.crudPage = crudPage;

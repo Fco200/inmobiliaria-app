@@ -1,16 +1,12 @@
 {
-  "version": "2.32",
+  "version": "2.33",
   "channel": "estable",
-  "title": "Actualización 2.32",
-  "date": "2026-11-12",
+  "title": "Actualización 2.33",
+  "date": "2026-11-13",
   "notes": [
-    "Editar registros ya no borra información: los selectores de cliente, propiedad, negocio, propietario y asesor conservan el dato guardado y sólo se envían los campos que realmente cambiaste.",
-    "Recordatorios de citas a la hora exacta que elegiste (por ejemplo, cita 12:20 con recordatorio 12:15). Se revisan cada minuto y se recuperan si el servidor se reinicia.",
-    "Aviso de nueva versión dentro de la app y por notificación push en tus dispositivos, sin correo. Al tocar la notificación se abre Actualizaciones.",
-    "Las listas ya no se recargan solas mientras trabajas: la información se mantiene estable y se actualiza al navegar o al guardar, sin que los datos desaparezcan y reaparezcan.",
-    "Bitácora de negocios: el indicador de notas nuevas se ve también en el botón \"Ver bitácora\" y se actualiza al instante.",
-    "Fechas y horas unificadas a la hora de Hermosillo, Sonora, al crear y editar citas, tareas, metas, gastos, prospectos, reuniones y fechas de cierre.",
-    "Avalúos: la fecha se guarda y se muestra sin cambiarse de día.",
-    "Mayor seguridad al editar: si un campo no se pudo precargar, se conserva el valor anterior en el servidor en lugar de sobrescribirlo."
+    "Negocios: los botones del embudo por etapa ya filtran la lista al hacer clic, incluyendo Concluidos y Cancelados / Pausa. Los contadores ahora suman todos los negocios, no sólo los primeros 100.",
+    "Bitácora de negocios: las notas se pueden editar y eliminar, con permisos para el autor y para dirección, gerencia, asistencia y escrituración.",
+    "Imprimir bitácora incluye el checklist del negocio y abre el diálogo de impresión para imprimir o guardar como PDF.",
+    "Avalúo: misma bitácora con checklist, edición y eliminación de notas, impresión / guardado en PDF y botones compactos. La tabla ya no se estira a la derecha y puedes ajustar el ancho de las columnas y el alto de las filas."
   ]
 }

@@ -156,4 +156,46 @@ const addBitacora = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: item.bitacora });
 });
 
-module.exports = { list, get, create, update, remove, saveChecklist, addBitacora, canManageAppraisals };
+// PATCH /api/avaluos/:id/bitacora/:entryId — edita una nota manual.
+// Los movimientos automáticos (creación/actualización) no se editan.
+const updateBitacora = asyncHandler(async (req, res) => {
+  const message = String((req.body && req.body.message) || '').trim().slice(0, 500);
+  if (!message) return res.status(400).json({ success: false, message: 'Escribe la nota.' });
+  const item = await Appraisal.findById(req.params.id);
+  if (!item) return res.status(404).json({ success: false, message: 'Avalúo no encontrado.' });
+  const entry = item.bitacora.id(req.params.entryId);
+  if (!entry) return res.status(404).json({ success: false, message: 'Nota no encontrada.' });
+  if (entry.action !== 'nota') {
+    return res.status(400).json({ success: false, message: 'Solo se pueden editar las notas manuales.' });
+  }
+  entry.message = message;
+  await item.save();
+  res.json({ success: true, data: item.bitacora });
+});
+
+// DELETE /api/avaluos/:id/bitacora/:entryId — elimina una nota manual.
+const removeBitacora = asyncHandler(async (req, res) => {
+  const item = await Appraisal.findById(req.params.id);
+  if (!item) return res.status(404).json({ success: false, message: 'Avalúo no encontrado.' });
+  const entry = item.bitacora.id(req.params.entryId);
+  if (!entry) return res.status(404).json({ success: false, message: 'Nota no encontrada.' });
+  if (entry.action !== 'nota') {
+    return res.status(400).json({ success: false, message: 'Solo se pueden eliminar las notas manuales.' });
+  }
+  item.bitacora.pull(entry._id);
+  await item.save();
+  res.json({ success: true, data: item.bitacora });
+});
+
+module.exports = {
+  list,
+  get,
+  create,
+  update,
+  remove,
+  saveChecklist,
+  addBitacora,
+  updateBitacora,
+  removeBitacora,
+  canManageAppraisals,
+};

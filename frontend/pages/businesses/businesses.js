@@ -484,7 +484,7 @@ window.Pages.businesses = {
         }))
         .filter((p) => p.user);
       const tienePromise = Object.prototype.hasOwnProperty.call(values, 'closing_promiseDate');
-      const closingDate = fecha_cierre ? new Date(fecha_cierre).toISOString() : null;
+      const closingDate = fecha_cierre ? Format.fromLocalInput(fecha_cierre) : null;
 
       return {
         ...rest,
@@ -496,7 +496,7 @@ window.Pages.businesses = {
         closing: {
           promiseAmount: closePrevio.promiseAmount || 0,
           promiseDate: tienePromise
-            ? (closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null)
+            ? (closing_promiseDate ? Format.fromLocalInput(closing_promiseDate) : null)
             : (closePrevio.promiseDate || null),
           closingAmount: closePrevio.closingAmount || 0,
           closingDate,
@@ -590,25 +590,61 @@ window.Pages.businesses = {
     let bitacoraAbiertaId = null;
     let bitacoraRecargar = null;
 
-    // Pone o suma el badge de "notas nuevas" en la fila del negocio.
-    function sumarBadgeBitacora(id, delta) {
+    // Pinta (o quita) el badge de "notas nuevas" en la fila y en el botón
+    // "Ver bitácora". El contador vive en dos lugares: junto al nombre del
+    // negocio y dentro del botón de la bitácora, para que se vea aunque la
+    // columna del nombre esté oculta o la fila sea compacta.
+    function pintarBadgeBitacora(id, total) {
       const row = document.querySelector(`tr[data-record="${id}"]`);
       if (!row) return;
       const cell = row.querySelector('td');
-      if (!cell) return;
-      const anterior = row.querySelector(`[data-bitacora-badge="${id}"]`);
-      const total = (anterior ? parseInt(anterior.dataset.count, 10) || 0 : 0) + delta;
-      if (anterior) anterior.remove();
-      if (total <= 0) return;
-      const badge = document.createElement('span');
-      badge.className = 'badge badge-danger';
-      badge.dataset.bitacoraBadge = id;
-      badge.dataset.count = String(total);
-      badge.title = 'Bitácora con registros nuevos';
-      badge.style.fontSize = '10px';
-      badge.innerHTML = `&#9679; ${total} nuevo${total === 1 ? '' : 's'} en bitácora`;
-      cell.insertBefore(document.createTextNode(' '), cell.firstChild);
-      cell.insertBefore(badge, cell.firstChild);
+      row.querySelectorAll(`[data-bitacora-badge="${id}"]`).forEach((el) => el.remove());
+      let btnCount = row.querySelector(`[data-bitacora-count="${id}"]`);
+      if (total <= 0) {
+        if (btnCount) btnCount.remove();
+        return;
+      }
+      if (cell) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-danger';
+        badge.dataset.bitacoraBadge = id;
+        badge.dataset.count = String(total);
+        badge.title = 'Bitácora con registros nuevos';
+        badge.style.fontSize = '10px';
+        badge.style.marginRight = '6px';
+        badge.innerHTML = `&#9679; ${total} nuevo${total === 1 ? '' : 's'} en bitácora`;
+        cell.insertBefore(badge, cell.firstChild);
+      }
+      if (!btnCount) {
+        const btn = row.querySelector('[data-bitacora]');
+        if (btn) {
+          btn.appendChild(document.createTextNode(' '));
+          btnCount = document.createElement('span');
+          btnCount.className = 'badge badge-danger';
+          btnCount.dataset.bitacoraCount = id;
+          btnCount.style.fontSize = '10px';
+          btnCount.style.marginLeft = '4px';
+          btn.appendChild(btnCount);
+        }
+      }
+      if (btnCount) {
+        btnCount.dataset.count = String(total);
+        btnCount.textContent = String(total);
+        btnCount.title = `${total} nota${total === 1 ? '' : 's'} nueva${total === 1 ? '' : 's'} en la bitácora`;
+      }
+    }
+
+    // Lee el contador actual (de cualquiera de los dos badges) y suma el nuevo.
+    function sumarBadgeBitacora(id, delta) {
+      const row = document.querySelector(`tr[data-record="${id}"]`);
+      if (!row) return;
+      const badge = row.querySelector(`[data-bitacora-badge="${id}"]`);
+      const btnCount = row.querySelector(`[data-bitacora-count="${id}"]`);
+      const actual = parseInt(
+        (badge && badge.dataset.count) || (btnCount && btnCount.dataset.count) || '0',
+        10
+      ) || 0;
+      pintarBadgeBitacora(id, Math.max(0, actual + delta));
     }
 
     let notasEnVivoListas = false;
@@ -623,12 +659,16 @@ window.Pages.businesses = {
           const abierta = document.getElementById('biz-notes-container') && bitacoraAbiertaId === id;
           if (abierta && bitacoraRecargar) {
             bitacoraRecargar();
-            ApiClient.post(`/businesses/${id}/notes/seen`, {}).catch(() => {});
+            ApiClient.post(`/businesses/${id}/notes/seen`, {}).catch((error) => {
+              console.warn('[Bitácora] No se pudieron marcar las notas como vistas:', (error && (error.message || error)) || 'error desconocido');
+            });
           } else {
             sumarBadgeBitacora(id, 1);
           }
         });
-      }).catch(() => {});
+      }).catch((error) => {
+        console.warn('[Bitácora] No se pudo conectar el aviso en vivo:', (error && (error.message || error)) || 'error desconocido');
+      });
     }
 
     function renderTable() {
@@ -654,11 +694,14 @@ window.Pages.businesses = {
           list: async (params) => {
             const [res, unseen] = await Promise.all([
               API.businesses.list(params),
-              ApiClient.get('/businesses/unseen-notes').catch(() => null),
+              ApiClient.get('/businesses/unseen-notes').catch((error) => {
+                console.warn('[Bitácora] No se pudo cargar el indicador de notas nuevas:', (error && (error.message || error)) || 'error desconocido');
+                return null;
+              }),
             ]);
             // ApiClient.unwrap ya quita el envoltorio: el mapa llega directo.
-            const counts = (unseen && unseen.data !== undefined ? unseen.data : unseen) || {};
-            if (res && Array.isArray(res.data)) {
+            const counts = unseen ? ((unseen.data !== undefined ? unseen.data : unseen) || {}) : null;
+            if (counts && res && Array.isArray(res.data)) {
               res.data.forEach((r) => { r.unseenNotes = counts[r._id] || 0; });
             }
             return res;
@@ -723,7 +766,7 @@ window.Pages.businesses = {
         extraActions(record) {
           return `
             ${canChangeStage ? '<button class="btn btn-secondary btn-sm" data-extra data-change-stage style="margin-left:6px;">Etapa</button>' : ''}
-            <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Ver bitácora</button>
+            <button class="btn btn-secondary btn-sm" data-extra data-bitacora style="margin-left:6px;">Ver bitácora${record.unseenNotes ? ` <span class="badge badge-danger" data-bitacora-count="${record._id}" data-count="${record.unseenNotes}" style="font-size:10px;margin-left:4px;">${record.unseenNotes}</span>` : ''}</button>
             <button class="btn btn-secondary btn-sm" data-extra data-print-bitacora style="margin-left:6px;">&#128424; Imprimir bitácora</button>
             <button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
@@ -982,8 +1025,11 @@ window.Pages.businesses = {
       const printBtn = modal.bodyEl.querySelector('#biz-print-bitacora');
       if (printBtn) printBtn.addEventListener('click', () => printBitacora(record));
       // Al abrir la bitácora sus notas quedan vistas y se quita el indicador.
-      ApiClient.post(`/businesses/${record._id}/notes/seen`, {}).catch(() => {});
-      document.querySelectorAll(`[data-bitacora-badge="${record._id}"]`).forEach((el) => el.remove());
+      ApiClient.post(`/businesses/${record._id}/notes/seen`, {}).catch((error) => {
+        console.warn('[Bitácora] No se pudieron marcar las notas como vistas:', (error && (error.message || error)) || 'error desconocido');
+      });
+      record.unseenNotes = 0;
+      pintarBadgeBitacora(record._id, 0);
 
       const loadNotesContent = async () => {
         const containerEl = modal.bodyEl.querySelector('#biz-notes-container');

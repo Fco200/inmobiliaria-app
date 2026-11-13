@@ -14,7 +14,7 @@
     "migrate:folios": "node scripts/migrar_folios_prop.js",
     "migrate:uploads": "node scripts/migrar-uploads-a-gridfs.js",
     "verificar:media": "node scripts/verificar-media.js",
-    "test": "node --test",
+    "test": "node --test \"tests/**/*.test.js\"",
     "mail:test": "node scripts/test-mail.js",
     "mail:test:flows": "node scripts/test-flows-mail.js"
   },

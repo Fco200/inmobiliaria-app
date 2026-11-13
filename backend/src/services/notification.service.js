@@ -250,26 +250,8 @@ async function generateForUser(userId) {
   ]);
 
   // Recordatorio personalizado que eligió el usuario al crear/editar la cita.
-  const customReminders = await Appointment.find({
-    user: userId,
-    status: { $in: ['pendiente', 'confirmada'] },
-    reminder: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), $lte: now },
-    date: { $gte: now },
-  }).populate('client');
-  for (const app of customReminders) {
-    const key = `appointment-reminder-${app._id}`;
-    const yaExiste = await Notification.exists({ user: userId, type: 'cita_recordatorio_personal', 'data.key': key });
-    if (yaExiste) continue;
-    const texto = `${app.concepto || app.typeOther || 'Tu cita'}${app.client ? ` con ${app.client.name}` : ''} el ${formatFecha(app.date)} a las ${formatHora(app.date)}`;
-    items.push({
-      type: 'cita_recordatorio_personal',
-      key,
-      title: 'Recordatorio de cita',
-      message: texto,
-      data: { entityId: app._id, date: app.date },
-    });
-    await enviarCorreoRecordatorio(userId, texto).catch(() => {});
-  }
+  // Se generan en su PROPIO job cada minuto (generateCustomReminders) para que
+  // suenen a la hora exacta elegida; aquí no se duplican.
 
   for (const app of upcoming24h) {
     items.push({
@@ -425,6 +407,57 @@ async function generateForUser(userId) {
   return created;
 }
 
+// Recordatorios PERSONALIZADOS de citas: el usuario elige la hora exacta
+// (p. ej. cita 12:20 → recordatorio 12:15). Se revisan cada minuto desde su
+// propio job. La ventana de recuperación permite avisar aunque el servidor se
+// haya reiniciado justo a esa hora, sin mandar avisos de días viejos.
+const REMINDER_LOOKBACK_MS = 15 * 60 * 1000;
+
+async function generateCustomReminders() {
+  const now = new Date();
+  const from = new Date(now.getTime() - REMINDER_LOOKBACK_MS);
+  const appointments = await Appointment.find({
+    status: { $in: ['pendiente', 'confirmada'] },
+    reminder: { $ne: null, $gte: from, $lte: now },
+  })
+    .populate('client')
+    .lean();
+
+  let created = 0;
+  for (const app of appointments) {
+    const userId = app.user && (app.user._id || app.user);
+    if (!userId) continue;
+    // La clave incluye la hora del recordatorio: si el asesor reprograma la
+    // cita con otra hora, debe recibir un aviso nuevo; si no cambió, se evita
+    // duplicarlo en cada ciclo del job.
+    const key = `appointment-reminder-${app._id}-${new Date(app.reminder).getTime()}`;
+    // Deduplicación por cita y hora de recordatorio: si dos ciclos se cruzan,
+    // el segundo encuentra el aviso ya creado y no lo duplica.
+    const existing = await Notification.exists({
+      user: userId,
+      type: 'cita_recordatorio_personal',
+      'data.key': key,
+    });
+    if (existing) continue;
+    const texto = `${app.concepto || app.typeOther || 'Tu cita'}${app.client ? ` con ${app.client.name}` : ''} el ${formatFecha(app.date)} a las ${formatHora(app.date)}`;
+    try {
+      const doc = await Notification.create({
+        user: userId,
+        type: 'cita_recordatorio_personal',
+        title: 'Recordatorio de cita',
+        message: texto,
+        data: { key, entityId: app._id, date: app.date },
+      });
+      emitNew(doc);
+      created += 1;
+      await enviarCorreoRecordatorio(userId, texto).catch(() => {});
+    } catch (error) {
+      console.error(`[Recordatorio] No se pudo crear el aviso de la cita ${app._id}:`, error.message);
+    }
+  }
+  return created;
+}
+
 // Genera avisos automáticos para todos los usuarios del sistema (job programado).
 // Los usuarios se procesan con CONCURRENCIA LIMITADA (no uno por uno): con 50+
 // usuarios en el equipo el job secuencial tardaba minutos y bloqueaba el pool
@@ -453,4 +486,4 @@ async function generateForAllUsers() {
   return totals;
 }
 
-module.exports = { generateForUser, generateForAllUsers, setIo, emitToUsers, ensure, ensureMany, pushNative };
+module.exports = { generateForUser, generateForAllUsers, generateCustomReminders, setIo, emitToUsers, ensure, ensureMany, pushNative };

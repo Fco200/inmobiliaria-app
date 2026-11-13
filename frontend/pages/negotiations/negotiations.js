@@ -260,9 +260,9 @@ window.Pages.negotiations = {
           },
           closing: {
             promiseAmount: closing_promiseAmount || 0,
-            promiseDate: closing_promiseDate ? new Date(closing_promiseDate).toISOString() : null,
+            promiseDate: closing_promiseDate ? Format.fromLocalInput(closing_promiseDate) : null,
             closingAmount: closing_closingAmount || 0,
-            closingDate: closing_closingDate ? new Date(closing_closingDate).toISOString() : null,
+            closingDate: closing_closingDate ? Format.fromLocalInput(closing_closingDate) : null,
             commission: closing_commission || 0,
           },
         };

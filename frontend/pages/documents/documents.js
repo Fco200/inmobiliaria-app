@@ -594,9 +594,9 @@ window.Pages.documents = {
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: record ? record.name : '' },
         { name: 'type', label: 'Tipo', type: 'select', options: TYPES, value: record ? record.type : 'formato' },
         { name: 'status', label: 'Estado', type: 'select', options: STATUS, value: record ? record.status : 'pendiente' },
-        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record ? (record.client ? record.client._id : '') : '' },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record ? (record.property ? record.property._id : '') : '' },
-        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record ? (record.business ? record.business._id : '') : '' },
+        { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...clientOptions], value: record && record.client ? (record.client._id || record.client) : '' },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], value: record && record.property ? (record.property._id || record.property) : '' },
+        { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...businessOptions], value: record && record.business ? (record.business._id || record.business) : '' },
         { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },
         { name: 'observations', label: 'Observaciones', type: 'textarea', full: true, value: record ? record.observations : '' },
       ];

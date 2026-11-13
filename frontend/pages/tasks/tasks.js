@@ -59,7 +59,7 @@ window.Pages.tasks = {
         { name: 'status', label: 'Estado', type: 'select', required: true, options: ['pendiente', 'en_proceso', 'completada', 'cancelada', 'vencida'] },
       ],
       formData(values) {
-        return { ...values, date: new Date(values.date).toISOString() };
+        return { ...values, date: Format.fromLocalInput(values.date) };
       },
       extraActions(record) {
         const statuses = ['pendiente', 'en_proceso', 'completada', 'cancelada', 'vencida'];

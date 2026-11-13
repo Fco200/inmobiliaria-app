@@ -17,8 +17,8 @@
 //    rompía la app en iOS (servía HTML con content-type de JS/CSS).
 // El nombre de la caché DEBE subirse en cada publicación: sin cambiarlo, las
 // copias viejas siguen en disco y ocupan cuota.
-const CACHE_NAME = 'crm-inmob-v62';
-const VERSION = '2.31';
+const CACHE_NAME = 'crm-inmob-v63';
+const VERSION = '2.32';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
@@ -203,16 +203,31 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(payload.title || 'INMOBLES', options));
 });
 
-// Al tocar la notificación se abre (o recupera) la pestaña de la aplicación.
+// Al tocar la notificación se abre (o recupera) la pestaña de la aplicación y
+// se navega a la página indicada por el aviso (p. ej. actualizaciones.html).
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = (event.notification.data && event.notification.data.url) || '/';
+  let targetUrl;
+  try {
+    targetUrl = new URL(target, self.registration.scope).href;
+  } catch (error) {
+    targetUrl = self.registration.scope;
+  }
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
       for (const client of list) {
-        if ('focus' in client) return client.focus();
+        try {
+          if (new URL(client.url).origin !== self.location.origin) continue;
+          // Si la pestaña ya está en esa página, sólo se enfoca.
+          if (client.url !== targetUrl && 'navigate' in client) {
+            await client.navigate(targetUrl);
+          }
+          if ('focus' in client) return client.focus();
+          return client;
+        } catch (error) { /* probar con la siguiente pestaña */ }
       }
-      return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+      return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
     })
   );
 });

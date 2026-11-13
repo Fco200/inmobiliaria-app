@@ -319,8 +319,8 @@ window.Pages.management = {
       };
       const from = container.querySelector('#mgr-from').value;
       const to = container.querySelector('#mgr-to').value;
-      if (from) params.from = new Date(from).toISOString();
-      if (to) params.to = new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
+      if (from) params.from = Format.fromLocalInput(`${from}T00:00`);
+      if (to) params.to = Format.fromLocalInput(`${to}T23:59`);
       return params;
     }
 

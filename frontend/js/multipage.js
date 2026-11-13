@@ -831,19 +831,29 @@ window.AppShell = (() => {
     const items = [].concat(upcoming.tasks || [], upcoming.appointments || []).sort((a, b) => new Date(a.date) - new Date(b.date));
     if (!items.length) return;
     const already = notifiedStore();
-    const fresh = items.filter((it) => !already.includes(`${it.kind}:${it.id}`));
+    const now = Date.now();
+    // Tolerancia de 10 min: el intervalo puede retrasarse si el navegador
+    // suspende la pestaña, pero nunca avisamos de algo que aún no toca.
+    const TOLERANCE = 10 * 60 * 1000;
+    const fresh = items.filter((it) => {
+      const due = new Date(it.reminder || it.date).getTime();
+      if (!Number.isFinite(due)) return false;
+      if (now < due || now > due + TOLERANCE) return false;
+      return !already.includes(`${it.kind}:${it.id}:${due}`);
+    });
     fresh.forEach((it) => {
-      const time = Format.dateTime(it.date);
+      const due = new Date(it.reminder || it.date).getTime();
+      const time = Format.dateTime(it.reminder || it.date);
       const title = it.kind === 'task' ? `Tarea: ${it.title}` : `Cita: ${it.title}`;
       const body = it.clientName ? `${it.clientName} · ${time}` : time;
       try { new Notification(title, { body }); } catch (e) {}
       if (typeof UI !== 'undefined') UI.toast(`${title} — ${body}`, 'info');
-      already.push(`${it.kind}:${it.id}`);
+      already.push(`${it.kind}:${it.id}:${due}`);
     });
     saveNotifiedStore(already);
   }
 
-  function initReminders() { setInterval(checkReminders, 60 * 1000); }
+  function initReminders() { checkReminders(); setInterval(checkReminders, 60 * 1000); }
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -876,13 +886,10 @@ window.AppShell = (() => {
       }
       avisar();
     });
-    // Si el worker cambia de control y no-nosotros no lo detectamos por
-    // mensaje (por ejemplo, tras un rato en segundo plano), recargamos una vez.
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (recargando) return;
-      recargando = true;
-      window.location.reload();
-    });
+    // El navegador puede activar el Service Worker nuevo en segundo plano. No
+    // se recarga la página automáticamente: eso vaciaba y volvía a pintar los
+    // módulos mientras el asesor trabajaba. La actualización se aplica desde
+    // el módulo de Actualizaciones (o al navegar de nuevo).
   }
 
   // Carga el módulo global de sonidos y desbloquea el contexto de audio en el
@@ -1299,7 +1306,12 @@ window.AppShell = (() => {
     liveTimer = setTimeout(refreshCurrentView, delay);
   }
 
-  window.addEventListener('crm:data-changed', () => scheduleLiveRefresh());
+  // Actualización automática de la vista DESACTIVADA a petición del usuario:
+  // al recibir cambios de otros usuarios, la lista se vaciaba y se volvía a
+  // pintar, dando la impresión de que "se quitaban y se ponían los datos" en
+  // todos los módulos. Ahora la información se mantiene estable mientras se
+  // trabaja y se actualiza al navegar, al guardar o con las acciones manuales.
+  // Los avisos, la campana y los contadores siguen funcionando en tiempo real.
 
   async function renderPage() {
     const content = document.getElementById('app-content');

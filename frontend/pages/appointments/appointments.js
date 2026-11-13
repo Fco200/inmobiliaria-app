@@ -114,8 +114,8 @@ window.Pages.appointments = {
           ...rest,
           type,
           typeOther: type === 'otro' ? String(typeOther).trim() : '',
-          date: new Date(values.date).toISOString(),
-          reminder: reminder ? new Date(reminder).toISOString() : null,
+          date: Format.fromLocalInput(values.date),
+          reminder: reminder ? Format.fromLocalInput(reminder) : null,
         };
       },
       onFormMount(form) {

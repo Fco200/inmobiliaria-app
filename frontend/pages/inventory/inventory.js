@@ -465,7 +465,7 @@ window.Pages.inventory = {
             user: myId,
             client,
             property: prop._id,
-            date: new Date(date).toISOString(),
+            date: Format.fromLocalInput(date),
             type,
             typeOther: type === 'otro' ? String(specify).trim() : '',
             notes: notesEl.value || '',

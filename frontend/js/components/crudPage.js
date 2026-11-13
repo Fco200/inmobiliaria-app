@@ -553,6 +553,15 @@ ${rowXml}
         if (config.onFormMount) config.onFormMount(form, record, bodyEl);
         if (opts.mount) opts.mount(form, record, bodyEl);
         if (typeof UI !== 'undefined' && UI.syncOtros) UI.syncOtros(form);
+        // Foto de los valores tal como quedaron precargados. Al guardar una
+        // edición sólo se envían los campos que el usuario realmente cambió:
+        // si un campo no se pudo precargar (o el usuario no lo tocó), se omite
+        // y el servidor conserva el dato guardado en vez de sobrescribirlo.
+        const initialValues = form ? UI.collectForm(form) : {};
+        const initialJson = {};
+        Object.keys(initialValues).forEach((key) => {
+          initialJson[key] = JSON.stringify(initialValues[key]);
+        });
         const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
         if (overlay) {
           const cancelBtn = overlay.querySelector('[data-cancel]');
@@ -600,7 +609,17 @@ ${rowXml}
 
           try {
             const values = UI.collectForm(form);
-            const body = config.formData ? config.formData(values, record, form) : values;
+            let body = config.formData ? config.formData(values, record, form) : values;
+            if (isEdit && body && typeof body === 'object') {
+              body = { ...body };
+              // Sólo se envían los campos que cambiaron. Los campos que no
+              // forman parte del formulario (calculados por formData) se
+              // conservan tal cual.
+              Object.keys(body).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(initialJson, key)) return;
+                if (JSON.stringify(values[key]) === initialJson[key]) delete body[key];
+              });
+            }
             if (isEdit) {
               await config.service.update(record._id, body);
               UI.toast('Cambios guardados', 'success');

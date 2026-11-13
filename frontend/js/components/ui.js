@@ -243,14 +243,23 @@ const UI = (() => {
     let control = '';
     if (type === 'select') {
       const valStr = value && typeof value === 'object' && value._id ? String(value._id) : String(value == null ? '' : value);
-      const opts = selectOptions
-        .map((o) => {
-          const optValue = typeof o === 'object' ? o.value : o;
-          const optLabel = typeof o === 'object' ? o.label : o;
-          const selected = valStr === String(optValue) ? 'selected' : '';
-          return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(optLabel)}</option>`;
-        })
-        .join('');
+      const optionValues = selectOptions.map((o) => String(typeof o === 'object' ? o.value : o));
+      const optsArray = selectOptions.map((o) => {
+        const optValue = typeof o === 'object' ? o.value : o;
+        const optLabel = typeof o === 'object' ? o.label : o;
+        const selected = valStr === String(optValue) ? 'selected' : '';
+        return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(optLabel)}</option>`;
+      });
+      // Si el registro trae un valor que ya no está en el catálogo (o que no se
+      // cargó), se agrega como opción seleccionada. Así el select no muestra
+      // otro valor distinto y al guardar no se sobrescribe el dato original.
+      if (valStr && valStr !== '__ui_otros__' && !optionValues.includes(valStr)) {
+        const label = value && typeof value === 'object'
+          ? (value.nombre || value.name || value.label || value.title || value._id || valStr)
+          : valStr;
+        optsArray.unshift(`<option value="${escapeHtml(valStr)}" selected>${escapeHtml(label)}</option>`);
+      }
+      const opts = optsArray.join('');
       // Soporte genérico "Otro/otros": agrega la opción "especificar" y un campo
       // de texto que aparece cuando se selecciona. Aplica a todos los selects.
       // Los selects que traen su PROPIA opción "Otro" (con su campo de texto
@@ -849,14 +858,40 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
   function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false, source = null } = {}) {
     const id = `fld-${name}`;
     const searchId = `search-${id}`;
-    const valStr = String(value == null ? '' : value);
+    // Al EDITAR, el registro trae el dato ya "poblado" ({ _id, name, … }).
+    // Antes se convertía con String(value) → "[object Object]", el selector
+    // aparecía vacío y al guardar se borraba la relación. Se normaliza al id.
+    const valueField = source && source.valueField ? source.valueField : '_id';
+    const rawValue = value && typeof value === 'object'
+      ? (value[valueField] !== undefined ? value[valueField] : value._id)
+      : value;
+    const valStr = String(rawValue == null ? '' : rawValue);
     const remote = source && typeof source === 'object';
-    const opts = options.map((o) => {
+    const optionValues = options.map((o) => String(typeof o === 'object' ? o.value : o));
+    const optsArray = options.map((o) => {
       const optValue = typeof o === 'object' ? o.value : o;
       const optLabel = typeof o === 'object' ? o.label : o;
       const selected = valStr === String(optValue) ? ' selected' : '';
       return `<option value="${escapeHtml(optValue)}"${selected} data-search-text="${escapeHtml(String(optLabel).toLowerCase())}">${escapeHtml(optLabel)}</option>`;
-    }).join('');
+    });
+    // Si el dato guardado no está en la lista cargada (p. ej. una cartera muy
+    // grande o el registro poblado que trae { _id, nombre }), se agrega como
+    // opción seleccionada. Así al editar SIEMPRE se ve el valor actual en vez
+    // de un selector vacío que parecía haber borrado la relación. Se coloca
+    // después de la opción vacía para no confundir al buscador remoto, que
+    // toma la primera opción como el valor "sin selección".
+    if (valStr && !optionValues.includes(valStr)) {
+      const labelFromValue = value && typeof value === 'object'
+        ? (value[source && source.labelField] || value.nombre || value.name || value.label || value.title || value.fullName || value.razonSocial || value._id || valStr)
+        : valStr;
+      const injected = `<option value="${escapeHtml(valStr)}" selected data-search-text="${escapeHtml(String(labelFromValue).toLowerCase())}">${escapeHtml(labelFromValue)}</option>`;
+      if (optsArray.length && String(typeof options[0] === 'object' ? options[0].value : options[0]) === '') {
+        optsArray.splice(1, 0, injected);
+      } else {
+        optsArray.unshift(injected);
+      }
+    }
+    const opts = optsArray.join('');
     // Leyenda clara de cómo filtrar (se muestra siempre, para que el asesor
     // sepa que puede escribir y no que "no hay clientes").
     const legendText = remote

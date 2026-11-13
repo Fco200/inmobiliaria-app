@@ -257,6 +257,12 @@ async function start() {
 
   app.set('io', io);
   setIo(io);
+  // Aviso de nueva versión: push a los dispositivos suscritos + evento para el
+  // banner dentro de la app. Nunca envía correo. Se ejecuta una sola vez por
+  // versión (Config.lastNotifiedVersion).
+  require('./src/services/version-notice.service')
+    .notifyNewVersion({ io })
+    .catch((e) => console.warn('[Versión] Aviso de actualización omitido:', e.message));
   sessionService.setIo(io);
   maintenanceJob.setIo(io);
   maintenanceJob.startMaintenanceJob();

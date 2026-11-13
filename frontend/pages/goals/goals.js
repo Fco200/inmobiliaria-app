@@ -89,8 +89,8 @@ window.Pages.goals = {
       formData(values) {
         return {
           ...values,
-          startDate: new Date(values.startDate).toISOString(),
-          endDate: new Date(values.endDate).toISOString(),
+          startDate: Format.fromLocalInput(values.startDate),
+          endDate: Format.fromLocalInput(values.endDate),
         };
       },
       extraActions(record) {

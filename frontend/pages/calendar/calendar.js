@@ -212,10 +212,7 @@ window.Pages.calendar = (() => {
     start.setMinutes(0, 0, 0);
     start.setHours(start.getHours() + 1);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
-    const fmt = (d) => {
-      const p = (n) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-    };
+    const fmt = (d) => Format.toLocalInput(d);
 
     const body = `
       <form id="meeting-form" autocomplete="off">
@@ -267,8 +264,8 @@ window.Pages.calendar = (() => {
           title,
           description: (form.querySelector('[name="description"]').value || '').trim(),
           location: (form.querySelector('[name="location"]').value || '').trim(),
-          start: new Date(start).toISOString(),
-          end: new Date(end).toISOString(),
+          start: Format.fromLocalInput(start),
+          end: Format.fromLocalInput(end),
         });
         UI.closeModal();
         UI.toast('Reunión publicada. Todos los asesores la verán en el calendario.', 'success');

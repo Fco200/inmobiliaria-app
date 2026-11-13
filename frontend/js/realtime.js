@@ -358,6 +358,13 @@ window.Realtime = (() => {
 
   function wire() {
     if (!socket) return;
+    // Al (re)conectar se revisa si se publicó una versión nueva. El servidor
+    // reinicia al desplegar, así que el evento "nueva-version" del arranque
+    // puede perderse; esta comprobación garantiza que el banner/modal llegue
+    // igualmente en cuanto la app recupera la conexión.
+    if (window.AppVersion && typeof window.AppVersion.check === 'function') {
+      window.AppVersion.check({ notify: true });
+    }
     // `wire()` se llama en cada evento 'connect'. Si la reconexión reutiliza la
     // misma instancia de Socket.IO, volver a registrar los listeners duplicaba
     // los manejadores (cada aviso se procesaba dos veces). Se registra una
@@ -383,8 +390,18 @@ window.Realtime = (() => {
       refreshBadges();
     });
     // Cambio de datos en el servidor: el shell refresca la vista actual.
-    socket.on('data-changed', () => {
-      window.dispatchEvent(new CustomEvent('crm:data-changed'));
+    // `data-changed` ya no redibuja la vista automáticamente: se conserva el
+    // evento del servidor para otros usos, pero el cliente no lo usa para
+    // recargar listas (evita que los datos "parpadeen" mientras se trabaja).
+    // El servidor publicó una versión nueva: se consulta la versión y se
+    // muestra el banner/modal de Actualizaciones sin recargar la página.
+    socket.on('nueva-version', (payload) => {
+      try {
+        window.dispatchEvent(new CustomEvent('crm:new-version', { detail: payload || {} }));
+      } catch (e) { /* ignore */ }
+      if (window.AppVersion && typeof window.AppVersion.check === 'function') {
+        window.AppVersion.check({ notify: true });
+      }
     });
     const onChatActivity = (data) => {
       // Notificación visual de mensaje entrante (fuera del módulo de chat).

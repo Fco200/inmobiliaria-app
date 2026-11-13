@@ -52,7 +52,7 @@ window.Pages.avaluo = {
         options: [{ value: '', label: '— Selecciona la propiedad —' }, ...propertyOptions],
         value: (r) => (r.property ? (r.property._id || r.property) : ''),
       },
-      { name: 'appraisalDate', label: 'Fecha de avalúo', type: 'date', required: true, value: (r) => (r.appraisalDate ? String(r.appraisalDate).slice(0, 10) : '') },
+      { name: 'appraisalDate', label: 'Fecha de avalúo', type: 'date', required: true, value: (r) => (r.appraisalDate ? Format.toDateInput(r.appraisalDate) : '') },
       { name: 'appraiser', label: 'Valuador', type: 'text', required: true, value: (r) => r.appraiser || '' },
       { name: 'appraiserCP', label: 'Código postal del valuador', type: 'text', placeholder: '5 dígitos', value: (r) => r.appraiserCP || '' },
       { name: 'constructionM2', label: 'm² de construcción', type: 'number', value: (r) => numberOrEmpty(r.constructionM2) },
@@ -222,7 +222,7 @@ window.Pages.avaluo = {
         if (cp && !/^\d{5}$/.test(cp)) throw new Error('El código postal del valuador debe tener 5 dígitos.');
         const body = {
           property: values.property || null,
-          appraisalDate: values.appraisalDate,
+          appraisalDate: Format.fromDateInput(values.appraisalDate),
           appraiser: values.appraiser,
           appraiserCP: values.appraiserCP,
           constructionM2: Number(values.constructionM2) || 0,

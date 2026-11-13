@@ -249,7 +249,10 @@ window.PropiedadesPage = (() => {
           UI.toast('Completa tu nombre, fecha y hora.', 'warning');
           return;
         }
-        const when = `${new Date(date + 'T' + time).toLocaleString('es-MX', { timeZone: 'America/Hermosillo', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`;
+        const parsed = Format.fromLocalInput(`${date}T${time}`);
+        const when = parsed
+          ? new Date(parsed).toLocaleString('es-MX', { timeZone: 'America/Hermosillo', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+          : `${date} ${time}`;
         const msg = `Hola, quiero AGENDAR una visita para ver: ${type} en ${place} (${op}).\n\nMi nombre: ${name}\nFecha y hora: ${when}\nPrecio publicado: ${Format.currency(record.price)}\n\n¿Está disponible?`;
 
         // Registra la cita en el sistema (cualquier visitante, sin necesidad de usuario)

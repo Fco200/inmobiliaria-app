@@ -2,6 +2,7 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const { Property, Inventory, User, Role, Newsletter, Client, Appointment } = require('../models');
+const { parseLocalDateTime } = require('../utils/datetime');
 const { queueWelcome } = require('../services/welcome.service');
 
 const PUBLIC_FIELDS =
@@ -351,7 +352,7 @@ const createAppointment = asyncHandler(async (req, res) => {
   if (!cleanName) {
     return res.status(400).json({ success: false, message: 'Escribe tu nombre para agendar la cita.' });
   }
-  if (!date || isNaN(new Date(date).getTime())) {
+  if (!date || !parseLocalDateTime(date)) {
     return res.status(400).json({ success: false, message: 'Indica una fecha y hora válidas.' });
   }
 
@@ -416,7 +417,7 @@ const createAppointment = asyncHandler(async (req, res) => {
     client: client ? client._id : null,
     user: responsibleUser,
     property: propertyRecord._id,
-    date: new Date(date),
+    date: parseLocalDateTime(date),
     type: cleanType,
     notes: String(notes || '').trim(),
     status: 'pendiente',

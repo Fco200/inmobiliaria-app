@@ -172,11 +172,19 @@ window.Pages.clients = {
       const id = `fld-${name}`;
       const otrosId = `otros-${id}`;
       const isOtro = otroWhen.includes(value);
-      const opts = options.map((o) => {
+      const optionValues = options.map((o) => String(typeof o === 'object' ? o.value : o));
+      const optsArray = options.map((o) => {
         const optValue = typeof o === 'object' ? o.value : o;
         const optLabel = typeof o === 'object' ? o.label : o;
         return `<option value="${esc(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
-      }).join('');
+      });
+      // Si el dato guardado no está en el catálogo actual (p. ej. un valor
+      // legado), se agrega como opción seleccionada para que al editar no se
+      // muestre otro valor y luego se sobrescriba el original.
+      if (value && !optionValues.includes(String(value))) {
+        optsArray.unshift(`<option value="${esc(value)}" selected>${esc(value)}</option>`);
+      }
+      const opts = optsArray.join('');
       return `
         <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
           <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>

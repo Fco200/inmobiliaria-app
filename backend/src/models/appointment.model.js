@@ -55,5 +55,8 @@ appointmentSchema.index({ user: 1, date: 1 });
 appointmentSchema.index({ client: 1 });
 appointmentSchema.index({ business: 1, property: 1 });
 appointmentSchema.index({ status: 1 });
+// El job de recordatorios personales consulta cada minuto por rango de
+// `reminder`; sin este índice la consulta recorrería toda la colección.
+appointmentSchema.index({ reminder: 1 });
 
 module.exports = mongoose.model('Appointment', appointmentSchema);

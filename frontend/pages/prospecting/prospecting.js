@@ -199,7 +199,7 @@ window.Pages.prospecting = {
       if (form) form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const values = UI.collectForm(e.target);
-        const body = { ...values, date: new Date(values.date).toISOString() };
+        const body = { ...values, date: Format.fromLocalInput(values.date) };
         try {
           if (isEdit) {
             await API.prospecting.update(record._id, body);

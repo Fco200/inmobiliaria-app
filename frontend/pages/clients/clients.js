@@ -161,6 +161,11 @@ window.Pages.clients = {
     const fClear = container.querySelector('#clients-f-clear');
 
     const esc = (v) => UI.escapeHtml(v == null ? '' : v);
+    // Para valores dentro de atributos HTML. escapeHtml NO escapa comillas y
+    // los data-* de abajo llevan JSON con comillas: sin esto el navegador corta
+    // el atributo en la primera comilla (`data-otro-when="["`), parseWhen falla
+    // y "Recomendación" no coincide con el valor por defecto ['Otro'].
+    const escAttr = (v) => esc(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     // Select con opción "Otro" y campo de texto condicional PROPIO. No se usa
     // el "Otros (especificar)" genérico de UI.field porque aquí el texto vive
@@ -176,13 +181,13 @@ window.Pages.clients = {
       const optsArray = options.map((o) => {
         const optValue = typeof o === 'object' ? o.value : o;
         const optLabel = typeof o === 'object' ? o.label : o;
-        return `<option value="${esc(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
+        return `<option value="${escAttr(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
       });
       // Si el dato guardado no está en el catálogo actual (p. ej. un valor
       // legado), se agrega como opción seleccionada para que al editar no se
       // muestre otro valor y luego se sobrescriba el original.
       if (value && !optionValues.includes(String(value))) {
-        optsArray.unshift(`<option value="${esc(value)}" selected>${esc(value)}</option>`);
+        optsArray.unshift(`<option value="${escAttr(value)}" selected>${esc(value)}</option>`);
       }
       const opts = optsArray.join('');
       // Etiqueta PROPIA del campo condicional. Al elegir "Recomendación" debe
@@ -192,10 +197,10 @@ window.Pages.clients = {
       return `
         <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
           <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>
-          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${esc(JSON.stringify(otroWhen))}" data-required-when="${esc(JSON.stringify(requiredWhen))}" data-otro-labels="${esc(JSON.stringify(otroLabels))}" data-otro-placeholders="${esc(JSON.stringify(otroPlaceholders))}"${required ? ' required' : ''}>${opts}</select>
+          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${escAttr(JSON.stringify(otroWhen))}" data-required-when="${escAttr(JSON.stringify(requiredWhen))}" data-otro-labels="${escAttr(JSON.stringify(otroLabels))}" data-otro-placeholders="${escAttr(JSON.stringify(otroPlaceholders))}"${required ? ' required' : ''}>${opts}</select>
           <div data-otro-box style="display:${isOtro ? 'block' : 'none'};margin-top:10px;">
             <label data-otro-label for="${otrosId}" style="display:${isOtro ? 'block' : 'none'};font-size:13px;font-weight:600;margin-bottom:4px;color:var(--warning,#b45309);">${esc(otroLabelText || 'Especifica *')}</label>
-            <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${esc(otroValue)}" placeholder="${esc(placeholder)}" style="display:${isOtro ? 'block' : 'none'};">
+            <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${escAttr(otroValue)}" placeholder="${escAttr(placeholder)}" style="display:${isOtro ? 'block' : 'none'};">
           </div>
         </div>`;
     }

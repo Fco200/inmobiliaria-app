@@ -40,6 +40,11 @@ test('al elegir "Recomendación" aparece de inmediato la pregunta ¿Quién te re
   assert.match(clients, /labelEl\.textContent = otroLabels\[select\.value\]/, 'el label debe cambiar según la opción');
   assert.match(clients, /box\.style\.display = show \? 'block' : 'none'/, 'el bloque debe mostrarse al seleccionar la opción');
   assert.match(clients, /¿Quién te recomendó\? \*/, 'el texto debe preguntar quién recomendó');
+  // Los data-* llevan JSON con comillas: deben escaparse para atributo o el
+  // navegador corta el valor y "Recomendación" deja de coincidir con ['Otro'].
+  assert.match(clients, /const escAttr = .*replace\(\/"\/g, '&quot;'\)/, 'debe existir un escape para atributos con comillas');
+  assert.match(clients, /data-otro-when="\$\{escAttr\(JSON\.stringify\(otroWhen\)\)\}"/, 'data-otro-when debe usar escAttr');
+  assert.doesNotMatch(clients, /data-otro-when="\$\{esc\(JSON\.stringify/, 'esc() no escapa comillas y rompe el atributo');
 });
 
 test('el reporte de gerencia filtra tickets por fechas y entrega la relación de tickets y gastos', () => {

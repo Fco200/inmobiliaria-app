@@ -259,7 +259,11 @@ function crudPage(container, config) {
     el.querySelector('[data-export-xls]').addEventListener('click', () => exportXls());
     el.querySelector('[data-export-pdf]').addEventListener('click', () => exportPdf());
     const csvEl = el.querySelector('[data-export-csv]');
-    if (csvEl) csvEl.addEventListener('click', () => config.csvExport());
+    if (csvEl) csvEl.addEventListener('click', () => config.csvExport({
+      ...state.filters,
+      q: state.q,
+      status: state.status,
+    }));
     return el;
   }
 

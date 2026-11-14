@@ -31,20 +31,52 @@ window.Pages.reports = {
       <div class="page-header">
         <h2>Mis reportes</h2>
       </div>
-      ${isGerencia ? `
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
-          <label style="font-weight:600;">Asesor:</label>
-          <select class="form-control" id="report-user" style="max-width:280px;">
-            <option value="me">Mis indicadores</option>
-            ${userOptions.map((u) => `<option value="${u.value}">${UI.escapeHtml(u.label)}</option>`).join('')}
-          </select>
-        </div>` : ''}
+      <div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:16px;">
+        ${isGerencia ? `
+          <div>
+            <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Asesor</label>
+            <select class="form-control" id="report-user" style="min-width:240px;">
+              <option value="me">Mis indicadores</option>
+              ${userOptions.map((u) => `<option value="${u.value}">${UI.escapeHtml(u.label)}</option>`).join('')}
+            </select>
+          </div>` : ''}
+        <div>
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Desde</label>
+          <input class="form-control" id="report-from" type="date">
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">Hasta</label>
+          <input class="form-control" id="report-to" type="date">
+        </div>
+        <div>
+          <button class="btn btn-secondary" type="button" id="report-clear-dates">Limpiar fechas</button>
+        </div>
+      </div>
       <div id="report-content"><div class="loading">Cargando reporte...</div></div>
     `;
 
     const content = container.querySelector('#report-content');
     const userSel = container.querySelector('#report-user');
+    const fromEl = container.querySelector('#report-from');
+    const toEl = container.querySelector('#report-to');
+
+    function reportParams() {
+      const params = {};
+      if (fromEl && fromEl.value) params.from = Format.fromLocalInput(`${fromEl.value}T00:00`);
+      if (toEl && toEl.value) params.to = Format.fromLocalInput(`${toEl.value}T23:59`);
+      return params;
+    }
+
     if (userSel) userSel.addEventListener('change', () => loadReport(userSel.value));
+    [fromEl, toEl].forEach((el) => {
+      if (el) el.addEventListener('change', () => loadReport(userSel ? userSel.value : 'me'));
+    });
+    const clearDates = container.querySelector('#report-clear-dates');
+    if (clearDates) clearDates.addEventListener('click', () => {
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      loadReport(userSel ? userSel.value : 'me');
+    });
 
     const FUNNEL_STAGES = [
       { key: 'prospecto', label: 'Prospectos' },
@@ -58,7 +90,7 @@ window.Pages.reports = {
     async function loadReport(userId) {
       content.innerHTML = '<div class="loading">Cargando reporte...</div>';
       try {
-        const d = await API.dashboard.userReport(userId || 'me');
+        const d = await API.dashboard.userReport(userId || 'me', reportParams());
 
         const card = (label, value, sub) => `
           <div class="card stat-card">
@@ -80,14 +112,14 @@ window.Pages.reports = {
           <div class="grid grid-4 mt-1">
             ${card('Concluidos', d.concludedBusinesses, 'Operaciones cerradas')}
             ${card('Cancelados', d.cancelledBusinesses)}
-            ${card('Tickets generados', Format.currency(d.ticketsGenerated))}
-            ${card('Tickets cobrados', Format.currency(d.ticketsCollected), 'Ingreso registrado')}
+            ${card('Tickets cobrados', d.ticketsCollectedCount || 0, `Monto: ${Format.currency(d.ticketsCollected)}`)}
+            ${card('Tickets por cobrar', d.ticketsPending || 0, `Monto: ${Format.currency(d.ticketsNegotiating || 0)}`)}
           </div>
           <div class="grid grid-4 mt-1">
             ${card('En negociación', d.negotiations, `Tickets en negociación: ${Format.currency(d.ticketsNegotiating || 0)}`)}
-            ${card('Valor de cierres', Format.currency(d.closureValue))}
-            ${card('Comisiones', Format.currency(d.commission))}
-            ${card('Gastos / inversión', Format.currency(d.expenses))}
+            ${card('Valor de cierres', Format.currency(d.closureValue), 'Venta / renta / compra localizada')}
+            ${card('Total de tickets', d.ticketsCount || 0, `Monto: ${Format.currency(d.ticketsGenerated)}`)}
+            ${card('Gastos / inversión', Format.currency(d.expenses), 'Gastos del periodo')}
           </div>
           <div class="card mt-2">
             <h3 style="margin-top:0;">Embudo de ventas (${d.goals} metas registradas)</h3>

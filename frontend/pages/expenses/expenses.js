@@ -37,10 +37,12 @@ window.Pages.expenses = {
         update: async (id, body) => { await uploadReceipt(body); return API.expenses.update(id, body); },
         remove: (id) => API.expenses.remove(id),
       },
-      csvExport: () => API.expenses.exportCsv(),
+      csvExport: (params) => API.expenses.exportCsv(params),
       filters: [
         { key: 'business', label: 'Negocio', searchSource: UI.remoteSources.business, placeholder: 'Todos los negocios' },
         { key: 'category', label: 'Categoría', placeholder: 'Todas las categorías', options: ['gasolina', 'publicidad', 'lonas', 'tarjetas', 'volantes', 'imagen', 'traslados', 'material', 'impresiones', 'otros'] },
+        { key: 'dateFrom', label: 'Desde', type: 'date' },
+        { key: 'dateTo', label: 'Hasta', type: 'date' },
       ],
       columns: [
         { key: 'concept', label: 'Concepto', render: (r) => `<strong>${UI.escapeHtml(r.concept)}</strong><br><small class="text-muted">${UI.escapeHtml(r.activity || '')}</small>` },

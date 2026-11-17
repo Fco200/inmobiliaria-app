@@ -24,26 +24,14 @@ test('el módulo Avalúo usa la misma bitácora, checklist e impresión que Nego
   assert.match(avaluo, /win\.print\(\)/);
 });
 
-test('la bitácora de Avalúo permite editar y eliminar notas', () => {
+test('la bitácora de Avalúo ya no muestra opciones de editar ni eliminar notas', () => {
   const avaluo = read('frontend', 'pages', 'avaluo', 'avaluo.js');
-  const services = read('frontend', 'js', 'services', 'index.js');
-  const routes = read('backend', 'src', 'routes', 'appraisal.routes.js');
-  const controller = read('backend', 'src', 'controllers', 'appraisal.controller.js');
 
-  assert.match(avaluo, /data-bitacora-edit=/);
-  assert.match(avaluo, /data-bitacora-delete=/);
-  assert.match(avaluo, /API\.avaluos\.updateBitacora\(recordId, entryId, message\)/);
-  assert.match(avaluo, /API\.avaluos\.removeBitacora\(recordId, entryId\)/);
-
-  assert.match(services, /updateBitacora: \(id, entryId, message\) => ApiClient\.patch\(`\/avaluos\/\$\{id\}\/bitacora\/\$\{entryId\}`/);
-  assert.match(services, /removeBitacora: \(id, entryId\) => ApiClient\.remove\(`\/avaluos\/\$\{id\}\/bitacora\/\$\{entryId\}`/);
-
-  assert.match(routes, /router\.patch\('\/:id\/bitacora\/:entryId'/);
-  assert.match(routes, /router\.delete\('\/:id\/bitacora\/:entryId'/);
-  assert.match(controller, /const updateBitacora = asyncHandler/);
-  assert.match(controller, /const removeBitacora = asyncHandler/);
-  // Los movimientos automáticos se conservan: sólo las notas manuales se tocan.
-  assert.match(controller, /entry\.action !== 'nota'/);
+  assert.doesNotMatch(avaluo, /data-bitacora-edit=/, 'no debe existir el botón Editar');
+  assert.doesNotMatch(avaluo, /data-bitacora-delete=/, 'no debe existir el botón Eliminar');
+  assert.doesNotMatch(avaluo, /API\.avaluos\.updateBitacora\(/, 'la vista no debe llamar a actualizar notas');
+  assert.doesNotMatch(avaluo, /API\.avaluos\.removeBitacora\(/, 'la vista no debe llamar a eliminar notas');
+  assert.match(avaluo, /data-add-bitacora/, 'seguir permitiendo agregar notas');
 });
 
 test('el checklist de Avalúo permite agregar, marcar, editar y quitar', () => {

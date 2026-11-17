@@ -281,12 +281,12 @@ window.API = {
     create: (body) => ApiClient.post('/expenses', body),
     update: (id, body) => ApiClient.put(`/expenses/${id}`, body),
     remove: (id) => ApiClient.remove(`/expenses/${id}`),
-    exportCsv: () => API.downloadCsv('/expenses/export', 'gastos.csv'),
+    exportCsv: (params) => API.downloadCsv('/expenses/export', 'gastos.csv', params),
   },
 
   dashboard: {
     summary: () => ApiClient.get('/dashboard/summary'),
-    userReport: (userId) => ApiClient.get(`/dashboard/user/${userId}`),
+    userReport: (userId, params) => ApiClient.get(`/dashboard/user/${userId}`, params),
     executive: () => ApiClient.get('/dashboard/executive'),
   },
 

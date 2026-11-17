@@ -11,6 +11,30 @@ function seesAllDashboard(req) {
   return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'reports_gerencia'));
 }
 
+// Rango inclusivo para los reportes por asesor ("Desde / Hasta").
+function buildPeriodFilter(from, to, field = 'date') {
+  const filter = {};
+  if (from || to) {
+    filter[field] = {};
+    if (from) filter[field].$gte = new Date(from);
+    if (to) filter[field].$lte = new Date(to);
+  }
+  return filter;
+}
+
+// La fecha del ticket puede ser generadoAt/collectedAt; los registros viejos
+// sin esa fecha caen a createdAt.
+function ticketDateExpr(field, from, to) {
+  if (!from && !to) return {};
+  const effective = { $ifNull: [`$${field}`, '$createdAt'] };
+  const conditions = [];
+  if (from) conditions.push({ $gte: [effective, new Date(from)] });
+  if (to) conditions.push({ $lte: [effective, new Date(to)] });
+  return { $expr: { $and: conditions } };
+}
+
+const CLOSURE_OPERATIONS = ['venta', 'renta', 'compra_localizada'];
+
 const summary = asyncHandler(async (req, res) => {
   const user = req.user;
   updateGoalsAuto().catch(() => {});
@@ -66,7 +90,7 @@ const summary = asyncHandler(async (req, res) => {
         generated: { $sum: '$generatedAmount' },
         collected: { $sum: '$collectedAmount' },
         negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } },
-        pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'generado'] }, 1, 0] } },
+        pendingCount: { $sum: { $cond: [{ $and: [{ $ne: ['$status', 'cobrado'] }, { $ne: ['$status', 'cancelado'] }] }, 1, 0] } },
         totalCount: { $sum: { $cond: [{ $ne: ['$status', 'cancelado'] }, 1, 0] } },
       },
     },
@@ -145,35 +169,78 @@ const summary = asyncHandler(async (req, res) => {
 const userReport = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const target = userId === 'me' ? req.user._id : userId;
+  const { from, to } = req.query;
+
+  // Fechas de alta (clientes, citas, gastos…) y de cierre (negocios
+  // concluidos) para que "Desde/Hasta" aplique a todo el reporte.
+  const period = buildPeriodFilter(from, to);
+  const createdPeriod = buildPeriodFilter(from, to, 'createdAt');
+  const finishedPeriod = buildPeriodFilter(from, to, 'finishedAt');
+
+  const generatedMatch = { user: target, status: { $ne: 'cancelado' }, ...ticketDateExpr('generatedAt', from, to) };
+  const collectedMatch = { user: target, collectedAmount: { $gt: 0 }, ...ticketDateExpr('collectedAt', from, to) };
 
   const [clients, activeBusinesses, concludedBusinesses, cancelledBusinesses, tasks, goals, tickets, expenses, funnelAgg] =
     await Promise.all([
-      Client.countDocuments({ asesorAsignado: target }),
-      Business.countDocuments({ mainAdvisor: target, status: 'activo' }),
-      Business.countDocuments({ mainAdvisor: target, status: 'concluido' }),
-      Business.countDocuments({ mainAdvisor: target, status: 'cancelado' }),
-      Task.countDocuments({ assignedTo: target }),
+      Client.countDocuments({ ...period, asesorAsignado: target }),
+      Business.countDocuments({ ...createdPeriod, mainAdvisor: target, status: 'activo' }),
+      Business.countDocuments({ ...finishedPeriod, mainAdvisor: target, status: 'concluido' }),
+      Business.countDocuments({ ...createdPeriod, mainAdvisor: target, status: 'cancelado' }),
+      Task.countDocuments({ ...createdPeriod, assignedTo: target }),
       Goal.countDocuments({ user: target }),
-      Ticket.aggregate([
-        { $match: { user: target } },
-        { $group: { _id: null, generated: { $sum: '$generatedAmount' }, collected: { $sum: '$collectedAmount' }, negotiating: { $sum: { $subtract: ['$generatedAmount', '$collectedAmount'] } } } },
-      ]),
+      Promise.all([
+        Ticket.aggregate([
+          { $match: generatedMatch },
+          {
+            $group: {
+              _id: null,
+              generated: { $sum: '$generatedAmount' },
+              count: { $sum: 1 },
+              pendingCount: { $sum: { $cond: [{ $ne: ['$status', 'cobrado'] }, 1, 0] } },
+            },
+          },
+        ]),
+        Ticket.aggregate([
+          { $match: collectedMatch },
+          { $group: { _id: null, collected: { $sum: '$collectedAmount' }, count: { $sum: 1 } } },
+        ]),
+      ]).then(([generatedAgg, collectedAgg]) => ({
+        generated: generatedAgg[0] || {},
+        collected: collectedAgg[0] || {},
+      })),
       Expense.aggregate([
-        { $match: { user: target } },
+        { $match: { user: target, ...period } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       Client.aggregate([
-        { $match: { asesorAsignado: target } },
+        { $match: { asesorAsignado: target, ...period } },
         { $group: { _id: '$funnelStage', count: { $sum: 1 } } },
       ]),
     ]);
 
   const [appointments, prospects, negotiations, closuresAgg] = await Promise.all([
-    Appointment.countDocuments({ user: target }),
-    Client.countDocuments({ asesorAsignado: target, status: 'activo' }),
-    Business.countDocuments({ mainAdvisor: target, currentStage: { $in: ['negociacion', 'promesa'] } }),
+    Appointment.countDocuments({ ...period, user: target }),
+    Client.countDocuments({ ...period, asesorAsignado: target, status: 'activo' }),
+    Business.countDocuments({ ...createdPeriod, mainAdvisor: target, currentStage: { $in: ['negociacion', 'promesa'] } }),
     Business.aggregate([
-      { $match: { mainAdvisor: target, status: 'concluido' } },
+      { $match: { ...finishedPeriod, mainAdvisor: target, status: 'concluido' } },
+      {
+        $lookup: {
+          from: 'properties',
+          localField: 'property',
+          foreignField: '_id',
+          as: 'propertyDoc',
+        },
+      },
+      { $unwind: { path: '$propertyDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          $or: [
+            { 'propertyDoc.operationType': { $in: CLOSURE_OPERATIONS } },
+            { propertyDoc: null },
+          ],
+        },
+      },
       { $group: { _id: null, value: { $sum: '$valueOperation' }, commission: { $sum: '$closing.commission' } } },
     ]),
   ]);
@@ -186,6 +253,8 @@ const userReport = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
+      from: from || null,
+      to: to || null,
       clients,
       prospects,
       appointments,
@@ -196,9 +265,12 @@ const userReport = asyncHandler(async (req, res) => {
       negotiations,
       closureValue: closuresAgg[0] ? closuresAgg[0].value : 0,
       commission: closuresAgg[0] ? closuresAgg[0].commission : 0,
-      ticketsGenerated: tickets[0] ? tickets[0].generated : 0,
-      ticketsCollected: tickets[0] ? tickets[0].collected : 0,
-      ticketsNegotiating: tickets[0] ? tickets[0].negotiating : 0,
+      ticketsGenerated: tickets.generated.generated || 0,
+      ticketsCollected: tickets.collected.collected || 0,
+      ticketsNegotiating: Math.max(0, (tickets.generated.generated || 0) - (tickets.collected.collected || 0)),
+      ticketsCount: tickets.generated.count || 0,
+      ticketsPending: tickets.generated.pendingCount || 0,
+      ticketsCollectedCount: tickets.collected.count || 0,
       expenses: expenses[0] ? expenses[0].total : 0,
       goals,
       funnel: funnelMap,

@@ -236,11 +236,11 @@ window.Pages.management = {
               <div class="grid grid-4 mt-1">
                 ${stat('Concluidos', report.concludedBusinesses, 'Operaciones cerradas')}
                 ${stat('Cancelados', report.cancelledBusinesses)}
-                ${stat('Ingresos', Format.currency(report.ticketsCollected), 'Tickets cobrados')}
-                ${stat('Comisiones', Format.currency(report.commission))}
+                ${stat('Tickets cobrados', report.ticketsCollectedCount || 0, `Monto: ${Format.currency(report.ticketsCollected)}`)}
+                ${stat('Tickets por cobrar', report.ticketsPending || 0, `Monto: ${Format.currency(report.ticketsNegotiating || 0)}`)}
               </div>
               <div class="grid grid-4 mt-1">
-                ${stat('Valor de cierres', Format.currency(report.closureValue))}
+                ${stat('Valor de cierres', Format.currency(report.closureValue), 'Venta / renta / compra localizada')}
                 ${stat('Gastos / inversión', Format.currency(report.expenses))}
                 ${stat('En negociación', report.negotiations, `Tickets en negociación: ${Format.currency(report.ticketsNegotiating || 0)}`)}
                 ${stat('Metas totales', report.goals)}
@@ -354,9 +354,9 @@ window.Pages.management = {
             ${stat('Ingresos', Format.currency(t.ticketsCollected), 'Tickets cobrados')}
           </div>
           <div class="grid grid-4 mt-1">
-            ${stat('Tickets generados', Format.currency(t.ticketsGenerated), `En negociación: ${Format.currency(t.ticketsNegotiating || 0)}`)}
-            ${stat('Valor de cierres', Format.currency(t.closureValue))}
-            ${stat('Comisiones', Format.currency(t.commission))}
+            ${stat('Total de tickets', t.ticketsCount || 0, `Monto: ${Format.currency(t.ticketsGenerated)}`)}
+            ${stat('Valor de cierres', Format.currency(t.closureValue), 'Venta / renta / compra localizada')}
+            ${stat('Tickets por cobrar', t.ticketsPending || 0, `Monto: ${Format.currency(t.ticketsNegotiating || 0)}`)}
             ${stat('Conversión', `${t.conversion}%`, 'Concluidos / total')}
           </div>
 
@@ -365,7 +365,7 @@ window.Pages.management = {
             <table class="table">
               <thead><tr>
                 <th>Asesor</th><th>Prospectos</th><th>Contactos</th><th>Citas</th><th>Negoc.</th><th>Promesas</th>
-                <th>Cierres</th><th>Cancel.</th><th>Inversión</th><th>Ingresos</th><th>Comisión</th><th>Conv.</th><th></th>
+                <th>Cierres</th><th>Cancel.</th><th>Inversión</th><th>Tickets gen.</th><th>Por cobrar</th><th>Cobrados</th><th>Conv.</th><th></th>
               </tr></thead>
               <tbody>
                 ${(r.byUser || []).map((u) => `
@@ -379,11 +379,53 @@ window.Pages.management = {
                     <td>${u.closures}</td>
                     <td>${u.cancellations}</td>
                     <td>${Format.currency(u.investment)}</td>
+                    <td>${Format.currency(u.ticketsGenerated)}</td>
+                    <td>${Format.currency(u.ticketsNegotiating)}</td>
                     <td>${Format.currency(u.ticketsCollected)}</td>
-                    <td>${Format.currency(u.commission)}</td>
                     <td>${u.conversion}%</td>
                     <td><button class="btn btn-secondary btn-sm" type="button" data-row-detail="${u.userId}">Ver</button></td>
-                  </tr>`).join('') || '<tr><td colspan="13" class="text-muted">Sin datos en el periodo.</td></tr>'}
+                  </tr>`).join('') || '<tr><td colspan="14" class="text-muted">Sin datos en el periodo.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrapper card mt-2">
+            <h3 style="margin-top:0;">Tickets de los asesores <small class="text-muted" style="font-weight:400;">(${(r.tickets || []).length} en el periodo)</small></h3>
+            <table class="table">
+              <thead><tr>
+                <th>Asesor</th><th>Negocio</th><th>Valor de operación</th><th>Ticket</th><th>Estado</th><th>Generado</th><th>Cobrado</th>
+              </tr></thead>
+              <tbody>
+                ${(r.tickets || []).map((tk) => `
+                  <tr>
+                    <td>${UI.escapeHtml(tk.user ? tk.user.name : '—')}</td>
+                    <td>${UI.escapeHtml(tk.business ? tk.business.name : '—')}</td>
+                    <td>${Format.currency(tk.business ? tk.business.valueOperation : 0)}</td>
+                    <td>${Format.currency(tk.value)}</td>
+                    <td>${UI.badge(String(tk.status || '').replace(/_/g, ' '), tk.status === 'cobrado' ? 'success' : tk.status === 'cancelado' ? 'danger' : 'info')}</td>
+                    <td>${tk.generatedAt ? Format.date(tk.generatedAt) : '—'}</td>
+                    <td>${tk.collectedAt ? Format.date(tk.collectedAt) : '—'}</td>
+                  </tr>`).join('') || '<tr><td colspan="7" class="text-muted">Sin tickets en el periodo.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-wrapper card mt-2">
+            <h3 style="margin-top:0;">Relación de gastos hechos <small class="text-muted" style="font-weight:400;">(${(r.expenses || []).length} en el periodo)</small></h3>
+            <table class="table">
+              <thead><tr>
+                <th>Fecha</th><th>Asesor</th><th>Concepto</th><th>Categoría</th><th>Negocio</th><th>Monto</th>
+              </tr></thead>
+              <tbody>
+                ${(r.expenses || []).map((e) => `
+                  <tr>
+                    <td>${e.date ? Format.date(e.date) : '—'}</td>
+                    <td>${UI.escapeHtml(e.user ? e.user.name : '—')}</td>
+                    <td>${UI.escapeHtml(e.concept || '')}</td>
+                    <td>${UI.badge(String(e.category || '').replace(/_/g, ' '), 'info')}</td>
+                    <td>${UI.escapeHtml(e.business ? e.business.name : '—')}</td>
+                    <td>${Format.currency(e.amount)}</td>
+                  </tr>`).join('') || '<tr><td colspan="6" class="text-muted">Sin gastos en el periodo.</td></tr>'}
               </tbody>
             </table>
           </div>

@@ -24,18 +24,14 @@ test('los botones del embudo de Negocios aplican el filtro de etapa', () => {
   assert.match(crud, /return \{ reload: load, setFilter, getFilters: currentFilters \}/);
 });
 
-test('la bitácora permite editar y eliminar notas', () => {
+test('la bitácora ya no muestra opciones de editar ni eliminar notas', () => {
   const businesses = read('frontend', 'pages', 'businesses', 'businesses.js');
-  const services = read('frontend', 'js', 'services', 'index.js');
-  const routes = read('backend', 'src', 'routes', 'business.routes.js');
-  const controller = read('backend', 'src', 'controllers', 'business.controller.js');
 
-  assert.match(businesses, /data-note-edit=/);
-  assert.match(businesses, /data-note-delete=/);
-  assert.match(businesses, /notesApi\.update\(record\._id, noteId/);
-  assert.match(services, /update: \(id, noteId, body\) => ApiClient\.patch\(`\/businesses\/\$\{id\}\/notes\/\$\{noteId\}`/);
-  assert.match(routes, /router\.patch\('\/:id\/notes\/:noteId'/);
-  assert.match(controller, /const updateNote = asyncHandler/);
+  assert.doesNotMatch(businesses, /data-note-edit=/, 'no debe existir el botón Editar');
+  assert.doesNotMatch(businesses, /data-note-delete=/, 'no debe existir el botón Eliminar');
+  assert.doesNotMatch(businesses, /notesApi\.update\(/, 'la vista no debe llamar a actualizar notas');
+  assert.doesNotMatch(businesses, /notesApi\.remove\(/, 'la vista no debe llamar a eliminar notas');
+  assert.match(businesses, /id="add-note-form"/, 'seguir permitiendo agregar notas');
 });
 
 test('imprimir bitácora incluye el checklist y lanza la impresión', () => {

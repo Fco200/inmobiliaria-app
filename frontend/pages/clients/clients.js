@@ -161,6 +161,11 @@ window.Pages.clients = {
     const fClear = container.querySelector('#clients-f-clear');
 
     const esc = (v) => UI.escapeHtml(v == null ? '' : v);
+    // Para valores dentro de atributos HTML. escapeHtml NO escapa comillas y
+    // los data-* de abajo llevan JSON con comillas: sin esto el navegador corta
+    // el atributo en la primera comilla (`data-otro-when="["`), parseWhen falla
+    // y "Recomendación" no coincide con el valor por defecto ['Otro'].
+    const escAttr = (v) => esc(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     // Select con opción "Otro" y campo de texto condicional PROPIO. No se usa
     // el "Otros (especificar)" genérico de UI.field porque aquí el texto vive
@@ -176,20 +181,27 @@ window.Pages.clients = {
       const optsArray = options.map((o) => {
         const optValue = typeof o === 'object' ? o.value : o;
         const optLabel = typeof o === 'object' ? o.label : o;
-        return `<option value="${esc(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
+        return `<option value="${escAttr(optValue)}"${String(optValue) === String(value) ? ' selected' : ''}>${esc(optLabel)}</option>`;
       });
       // Si el dato guardado no está en el catálogo actual (p. ej. un valor
       // legado), se agrega como opción seleccionada para que al editar no se
       // muestre otro valor y luego se sobrescriba el original.
       if (value && !optionValues.includes(String(value))) {
-        optsArray.unshift(`<option value="${esc(value)}" selected>${esc(value)}</option>`);
+        optsArray.unshift(`<option value="${escAttr(value)}" selected>${esc(value)}</option>`);
       }
       const opts = optsArray.join('');
+      // Etiqueta PROPIA del campo condicional. Al elegir "Recomendación" debe
+      // aparecer de inmediato "¿Quién te recomendó?" (no sólo un placeholder
+      // suelto debajo del select), por eso el texto vive en su propio <label>.
+      const otroLabelText = otroLabels[value] || (value ? '' : '');
       return `
         <div style="${full ? 'grid-column:1/-1;' : ''}margin-bottom:16px;">
           <label for="${id}" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">${esc(label)}${required ? ' *' : ''}</label>
-          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${esc(JSON.stringify(otroWhen))}" data-required-when="${esc(JSON.stringify(requiredWhen))}" data-otro-labels="${esc(JSON.stringify(otroLabels))}" data-otro-placeholders="${esc(JSON.stringify(otroPlaceholders))}"${required ? ' required' : ''}>${opts}</select>
-          <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${esc(otroValue)}" placeholder="${esc(placeholder)}" style="display:${isOtro ? 'block' : 'none'};margin-top:8px;">
+          <select class="form-control" id="${id}" name="${name}" data-otro-input="${otrosId}" data-otro-when="${escAttr(JSON.stringify(otroWhen))}" data-required-when="${escAttr(JSON.stringify(requiredWhen))}" data-otro-labels="${escAttr(JSON.stringify(otroLabels))}" data-otro-placeholders="${escAttr(JSON.stringify(otroPlaceholders))}"${required ? ' required' : ''}>${opts}</select>
+          <div data-otro-box style="display:${isOtro ? 'block' : 'none'};margin-top:10px;">
+            <label data-otro-label for="${otrosId}" style="display:${isOtro ? 'block' : 'none'};font-size:13px;font-weight:600;margin-bottom:4px;color:var(--warning,#b45309);">${esc(otroLabelText || 'Especifica *')}</label>
+            <input class="form-control" id="${otrosId}" name="${name}Otro" type="text" value="${escAttr(otroValue)}" placeholder="${escAttr(placeholder)}" style="display:${isOtro ? 'block' : 'none'};">
+          </div>
         </div>`;
     }
 
@@ -207,22 +219,25 @@ window.Pages.clients = {
         const requiredWhen = parseWhen(select.dataset.requiredWhen, ['Otro']);
         const otroLabels = parseWhen(select.dataset.otroLabels, {});
         const otroPlaceholders = parseWhen(select.dataset.otroPlaceholders, {});
-        // Guarda el label del campo para restaurarlo cuando el select no va
-        // acompañado de un texto libre por opción.
-        const labelEl = select.previousElementSibling;
-        const baseLabel = labelEl ? labelEl.textContent : '';
+        // El campo condicional tiene su PROPIO label ("¿Quién te recomendó?").
+        // Antes se reutilizaba el label principal del select y el aviso quedaba
+        // poco claro: el usuario veía un input sin pregunta hasta guardar.
+        const box = input.closest('[data-otro-box]');
+        const labelEl = box ? box.querySelector('[data-otro-label]') : null;
+        const baseLabel = labelEl ? labelEl.textContent : 'Especifica *';
         const basePlaceholder = input.getAttribute('placeholder') || '';
         const sync = () => {
           const show = otroWhen.includes(select.value);
+          if (box) box.style.display = show ? 'block' : 'none';
           input.style.display = show ? 'block' : 'none';
+          if (labelEl) labelEl.style.display = show ? 'block' : 'none';
           input.required = show && requiredWhen.includes(select.value) && select.required;
-          // Texto y label específicos por opción: en "Recomendación" el campo
-          // pregunta claramente QUIÉN recomendó; en "Otro" pide especificar.
+          // Texto y placeholder específicos por opción: en "Recomendación" el
+          // campo pregunta claramente QUIÉN recomendó; en "Otro" pide
+          // especificar cómo se enteró.
           const key = otroLabels[select.value] || otroPlaceholders[select.value] ? select.value : (select.value === 'Recomendacion' ? 'Recomendación' : select.value);
-          if (labelEl && (otroLabels[select.value] || otroLabels[key])) {
-            labelEl.textContent = otroLabels[select.value] || otroLabels[key];
-          } else if (labelEl) {
-            labelEl.textContent = baseLabel;
+          if (labelEl) {
+            labelEl.textContent = otroLabels[select.value] || otroLabels[key] || baseLabel;
           }
           if (otroPlaceholders[select.value] || otroPlaceholders[key]) {
             input.setAttribute('placeholder', otroPlaceholders[select.value] || otroPlaceholders[key]);
@@ -260,6 +275,10 @@ window.Pages.clients = {
       if (!root) return;
       const input = root.querySelector(`[name="${name}Otro"]`);
       if (!input) return;
+      const box = input.closest('[data-otro-box]');
+      if (box) box.style.display = 'block';
+      const labelEl = box ? box.querySelector('[data-otro-label]') : null;
+      if (labelEl) labelEl.style.display = 'block';
       input.style.display = 'block';
       try { input.focus(); } catch (error) { /* noop */ }
     }

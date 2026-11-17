@@ -216,7 +216,6 @@ window.Pages.avaluo = {
           <div style="max-height:420px;overflow-y:auto;padding-right:4px;">
             ${entries.length ? entries.map((entry) => {
               const id = String(entry._id || '');
-              const editable = canManage && entry.action === 'nota';
               return `
                 <div data-bitacora-card="${UI.escapeHtml(id)}" style="padding:10px;margin-bottom:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;background:var(--bg-card,#fff);">
                   <div data-bitacora-view>
@@ -224,20 +223,8 @@ window.Pages.avaluo = {
                     <div style="font-size:13px;margin-bottom:4px;white-space:pre-wrap;overflow-wrap:anywhere;">${UI.escapeHtml(entry.message || '')}</div>
                     <div class="text-muted" style="font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                       <span>${UI.escapeHtml(entry.userName || 'Sistema')} · ${fmtDateTime(entry.createdAt)}</span>
-                      ${editable ? `
-                        <span style="display:flex;gap:6px;flex-shrink:0;">
-                          <button class="btn btn-secondary btn-sm" type="button" data-bitacora-edit="${UI.escapeHtml(id)}">Editar</button>
-                          <button class="btn btn-danger btn-sm" type="button" data-bitacora-delete="${UI.escapeHtml(id)}">Eliminar</button>
-                        </span>` : ''}
                     </div>
                   </div>
-                  <form data-bitacora-edit-form="${UI.escapeHtml(id)}" style="display:none;flex-direction:column;gap:8px;margin-top:8px;">
-                    <textarea class="form-control" name="message" rows="3" maxlength="500" required>${UI.escapeHtml(entry.message || '')}</textarea>
-                    <div style="display:flex;gap:8px;justify-content:flex-end;">
-                      <button class="btn btn-secondary btn-sm" type="button" data-bitacora-cancel="${UI.escapeHtml(id)}">Cancelar</button>
-                      <button class="btn btn-primary btn-sm" type="submit">Guardar cambios</button>
-                    </div>
-                  </form>
                 </div>`;
             }).join('') : '<p class="text-muted">No hay registros en la bitácora.</p>'}
           </div>`;
@@ -258,66 +245,6 @@ window.Pages.avaluo = {
             }
           });
         }
-
-        el.querySelectorAll('[data-bitacora-edit]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const card = btn.closest('[data-bitacora-card]');
-            if (!card) return;
-            const view = card.querySelector('[data-bitacora-view]');
-            const form = card.querySelector('[data-bitacora-edit-form]');
-            if (!view || !form) return;
-            view.style.display = 'none';
-            form.style.display = 'flex';
-            const textarea = form.querySelector('textarea');
-            if (textarea) {
-              textarea.focus();
-              textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-            }
-          });
-        });
-
-        el.querySelectorAll('[data-bitacora-cancel]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const card = btn.closest('[data-bitacora-card]');
-            if (!card) return;
-            const view = card.querySelector('[data-bitacora-view]');
-            const form = card.querySelector('[data-bitacora-edit-form]');
-            if (view) view.style.display = '';
-            if (form) form.style.display = 'none';
-          });
-        });
-
-        el.querySelectorAll('[data-bitacora-edit-form]').forEach((form) => {
-          form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const entryId = form.dataset.bitacoraEditForm;
-            const message = String((form.querySelector('textarea') || {}).value || '').trim();
-            if (!entryId || !message) return;
-            try {
-              await API.avaluos.updateBitacora(recordId, entryId, message);
-              UI.toast('Nota actualizada', 'success');
-              await load();
-            } catch (error) {
-              UI.toast(error.message, 'error');
-            }
-          });
-        });
-
-        el.querySelectorAll('[data-bitacora-delete]').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            const entryId = btn.dataset.bitacoraDelete;
-            if (!entryId) return;
-            // confirm() nativo: el modal de UI reemplazaría la bitácora abierta.
-            if (!confirm('¿Eliminar esta nota de la bitácora?')) return;
-            try {
-              await API.avaluos.removeBitacora(recordId, entryId);
-              UI.toast('Nota eliminada', 'success');
-              await load();
-            } catch (error) {
-              UI.toast(error.message, 'error');
-            }
-          });
-        });
       }
 
       async function load() {

@@ -1122,10 +1122,6 @@ window.Pages.businesses = {
           const res = await notesApi.list(record._id);
           const notes = (res && res.data) || res || [];
           const lista = Array.isArray(notes) ? notes : [];
-          const puedeEditarNota = (n) => {
-            const authorId = n && n.createdBy ? (n.createdBy._id || n.createdBy) : '';
-            return canManage || Boolean(authorId && String(authorId) === String(currentUserId));
-          };
           containerEl.innerHTML = `
             ${canWriteNotes ? `
               <form id="add-note-form" style="margin-bottom:16px;display:flex;gap:8px;">
@@ -1144,21 +1140,8 @@ window.Pages.businesses = {
                     <div style="font-size:13px;margin-bottom:4px;white-space:pre-wrap;">${UI.escapeHtml(texto)}</div>
                     <div class="text-muted" style="font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
                       <span>${UI.escapeHtml(autor)} · ${Format.dateTime(n.createdAt || n.date)}</span>
-                      ${puedeEditarNota(n) ? `
-                        <span style="display:flex;gap:6px;flex-shrink:0;">
-                          <button class="btn btn-secondary btn-sm" type="button" data-note-edit="${UI.escapeHtml(id)}">Editar</button>
-                          <button class="btn btn-danger btn-sm" type="button" data-note-delete="${UI.escapeHtml(id)}">Eliminar</button>
-                        </span>
-                      ` : ''}
                     </div>
                   </div>
-                  <form data-note-edit-form="${UI.escapeHtml(id)}" style="display:none;flex-direction:column;gap:8px;">
-                    <textarea class="form-control" name="text" rows="3" required>${UI.escapeHtml(texto)}</textarea>
-                    <div style="display:flex;gap:8px;justify-content:flex-end;">
-                      <button class="btn btn-secondary btn-sm" type="button" data-note-cancel="${UI.escapeHtml(id)}">Cancelar</button>
-                      <button class="btn btn-primary btn-sm" type="submit">Guardar cambios</button>
-                    </div>
-                  </form>
                 </div>
               `;
               }).join('') : '<p class="text-muted">No hay notas registradas en la bitácora.</p>'}
@@ -1181,63 +1164,6 @@ window.Pages.businesses = {
             });
           }
 
-          containerEl.querySelectorAll('[data-note-edit]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-              const card = btn.closest('[data-note-card]');
-              if (!card) return;
-              const view = card.querySelector('[data-note-view]');
-              const form = card.querySelector('[data-note-edit-form]');
-              if (!view || !form) return;
-              view.style.display = 'none';
-              form.style.display = 'flex';
-              const textarea = form.querySelector('textarea');
-              if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
-            });
-          });
-
-          containerEl.querySelectorAll('[data-note-cancel]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-              const card = btn.closest('[data-note-card]');
-              if (!card) return;
-              const view = card.querySelector('[data-note-view]');
-              const form = card.querySelector('[data-note-edit-form]');
-              if (view) view.style.display = '';
-              if (form) form.style.display = 'none';
-            });
-          });
-
-          containerEl.querySelectorAll('[data-note-edit-form]').forEach((form) => {
-            form.addEventListener('submit', async (ev) => {
-              ev.preventDefault();
-              const noteId = form.dataset.noteEditForm;
-              const text = String((form.querySelector('textarea') || {}).value || '').trim();
-              if (!noteId || !text) return;
-              try {
-                await notesApi.update(record._id, noteId, { text });
-                UI.toast('Nota actualizada', 'success');
-                loadNotesContent();
-              } catch (err) {
-                UI.toast(err.message, 'error');
-              }
-            });
-          });
-
-          containerEl.querySelectorAll('[data-note-delete]').forEach((btn) => {
-            btn.addEventListener('click', async () => {
-              const noteId = btn.dataset.noteDelete;
-              if (!noteId) return;
-              // confirm() nativo: el modal de confirmación de UI reemplazaría
-              // la bitácora abierta y se perdería el contexto de la nota.
-              if (!confirm('¿Eliminar esta nota de la bitácora?')) return;
-              try {
-                await notesApi.remove(record._id, noteId);
-                UI.toast('Nota eliminada', 'success');
-                loadNotesContent();
-              } catch (err) {
-                UI.toast(err.message, 'error');
-              }
-            });
-          });
         } catch (err) {
           containerEl.innerHTML = UI.errorAlert(err.message);
         }

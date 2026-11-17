@@ -11,8 +11,9 @@ const expenseCrud = buildCrud(Expense, {
   searchFields: ['concept', 'activity', 'observations'],
   ownerField: 'user',
   widePermission: 'expenses_manage',
-  // La barra de filtros permite acotar por negocio y por categoría.
+  // La barra de filtros permite acotar por negocio, categoría y fechas.
   extraFilters: { business: 'business', category: 'category' },
+  dateField: 'date',
 });
 
 function seesAllExpenses(req) {
@@ -28,6 +29,22 @@ const exportCsv = asyncHandler(async (req, res) => {
     filter.user = req.user._id;
   } else if (req.query.user) {
     filter.user = req.query.user;
+  }
+  // Mismos filtros de fecha/búsqueda que el listado: la "relación de gastos"
+  // exportada debe coincidir con lo que el usuario ve en pantalla.
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateFrom || '') ? new Date(`${req.query.dateFrom}T00:00:00`) : null;
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateTo || '') ? new Date(`${req.query.dateTo}T23:59:59.999`) : null;
+  if (from || to) {
+    filter.date = {};
+    if (from) filter.date.$gte = from;
+    if (to) filter.date.$lte = to;
+  }
+  const term = String(req.query.q || '').trim();
+  if (term) {
+    const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = ['concept', 'activity', 'observations'].map((field) => ({
+      [field]: { $regex: safe, $options: 'i' },
+    }));
   }
 
   const items = await Expense.find(filter)

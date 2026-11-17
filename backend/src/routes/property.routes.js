@@ -5,7 +5,7 @@ const propertyController = require('../controllers/property.controller');
 const { protect } = require('../middlewares/auth');
 const { bossOnly } = require('../utils/scope');
 const uploadMw = require('../middlewares/upload');
-const { propertyRules, propertyIdParam } = require('../validators/property.validators');
+const { propertyRules, propertyUpdateRules, propertyIdParam } = require('../validators/property.validators');
 
 const router = Router();
 
@@ -28,7 +28,10 @@ router.post(
   uploadMw.verifyUploads,
   propertyController.uploadPhotos
 );
-router.put('/:id', propertyIdParam, propertyRules, propertyController.update);
+// Edición parcial: solo se validan los campos que vienen en el body. El
+// formulario envía únicamente lo que cambió, así que exigir tipo/operación
+// aquí hacía imposible guardar (p. ej.) un cambio de dirección.
+router.put('/:id', propertyIdParam, propertyUpdateRules, propertyController.update);
 router.delete('/:id', propertyIdParam, propertyController.remove);
 router.patch('/:id/publish', propertyIdParam, propertyController.togglePublish);
 

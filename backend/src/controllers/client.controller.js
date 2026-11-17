@@ -507,10 +507,19 @@ const registrarLlamada = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
   }
 
-  client.totalLlamadas = (client.totalLlamadas || 0) + 1;
+  const numeroLlamada = (client.totalLlamadas || 0) + 1;
+  client.totalLlamadas = numeroLlamada;
   client.ultVez = new Date();
+  // Asiento legible en la bitácora del cliente ("Llamada registrada: Llamada
+  // #1 al 612…"), en vez del críptico "Llamadas: 0 → 1" de antes. El contador
+  // sigue actualizándose para la tarjeta y las estadísticas.
   registrarCambios(client, req.user._id, [
-    { campo: 'totalLlamadas', campoLabel: 'Llamadas', anterior: client.totalLlamadas - 1, nuevo: client.totalLlamadas },
+    {
+      campo: 'llamada',
+      campoLabel: 'Llamada registrada',
+      anterior: numeroLlamada === 1 ? 'Sin llamadas' : `Llamada #${numeroLlamada - 1}`,
+      nuevo: `Llamada #${numeroLlamada}${client.telefono ? ` al ${client.telefono}` : ''}`,
+    },
   ]);
   await client.save();
   await client.populate('asesorAsignado');

@@ -551,7 +551,7 @@ window.Pages.clients = {
               ? `<button class="btn btn-secondary btn-sm" type="button" data-action="reactivate" data-record="${c._id}" title="Reactivar el cliente">↻ Reactivar</button>`
               : `<button class="btn btn-secondary btn-sm" type="button" data-action="discard" data-record="${c._id}" title="Descartar cliente">✕ Descartar</button>`}
             ${whatsapp ? `<a class="btn btn-sm crm-btn-wa" href="${whatsapp}" target="_blank" rel="noopener" title="Enviar WhatsApp">WhatsApp</a>` : ''}
-            <button class="btn btn-secondary btn-sm" type="button" data-action="llamada" data-record="${c._id}" title="Registrar una llamada">+1 Llamada</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-action="llamada" data-record="${c._id}" title="Marcar el teléfono del cliente y registrar la llamada en su bitácora">&#128222; Llamar</button>
             <button class="btn btn-secondary btn-sm" type="button" data-action="perfil" data-record="${c._id}" title="Editar perfil inmobiliario">Editar Perfil</button>
             <button class="btn btn-secondary btn-sm" type="button" data-action="historial" data-record="${c._id}" title="Ver bitácora de etapas">Ver Bitácora</button>
             ${c.ultimaCitaId ? `<button class="btn btn-secondary btn-sm" type="button" data-action="cita" data-record="${c._id}" title="Abrir la cita vinculada">Ver Cita</button>` : ''}
@@ -565,9 +565,25 @@ window.Pages.clients = {
     async function onAction(action, record) {
       if (!record) return;
       if (action === 'llamada') {
+        // Normaliza el número a formato internacional (52 + 10 dígitos) para
+        // que el marcador lo marque bien aunque el asesor esté en otra lada.
+        const numero = Format.waNumber(record.telefono);
+        if (!numero) {
+          UI.toast('Este cliente no tiene un teléfono registrado.', 'warning');
+          return;
+        }
+        // Se abre DENTRO del gesto del clic (antes de cualquier await): en
+        // móvil, si se lanza el esquema tel: después de la petición, algunos
+        // navegadores no abren el marcador por haber perdido ese gesto.
+        const link = document.createElement('a');
+        link.href = `tel:+${numero}`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        try { link.click(); } catch (error) { /* en escritorio puede no haber app de llamadas */ }
+        link.remove();
         try {
           await API.clients.registrarLlamada(record._id);
-          UI.toast('Llamada registrada', 'success');
+          UI.toast('Llamada registrada en la bitácora del cliente', 'success');
           load();
           loadCounts();
         } catch (error) {

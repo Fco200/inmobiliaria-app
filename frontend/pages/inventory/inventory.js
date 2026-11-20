@@ -77,8 +77,9 @@ window.Pages.inventory = {
       (u) => u.name
     );
     // `auth.me` y el usuario guardado pueden traer `id` (respuesta de auth) o
-    // `_id` (resto de endpoints). Se aceptan ambos para que la cita y el
-    // negocio siempre queden asignados al asesor de la sesión.
+    // `_id` (resto de endpoints). Se aceptan ambos para que el negocio quede
+    // asignado al asesor de la sesión; las citas ya se asignan en el backend
+    // desde la sesión, sin depender de lo que envíe el formulario.
     const myId = (me && (me._id || me.id)) || (stored && (stored._id || stored.id)) || '';
 
     const propertyLabel = (prop) => {
@@ -203,8 +204,8 @@ window.Pages.inventory = {
                         <button type="button" class="pc-nav pc-prev" data-pc-prev aria-label="Foto anterior" title="Foto anterior">&#8249;</button>
                         <button type="button" class="pc-nav pc-next" data-pc-next aria-label="Foto siguiente" title="Foto siguiente">&#8250;</button>` : ''}
                       <span class="pc-counter" data-pc-counter>${photoIndex + 1} / ${photos.length}</span>
-                      <button type="button" class="pc-download" data-pc-download title="Descargar esta foto">
-                        <span aria-hidden="true">&#8681;</span> Descargar
+                      <button type="button" class="pc-download" data-pc-download title="Guardar esta foto en la galería del celular">
+                        <span aria-hidden="true">&#128190;</span> Guardar en Fotos
                       </button>
                       ${canEditPhotos ? `<button type="button" class="pc-remove" data-pc-remove title="Quitar esta foto" aria-label="Quitar esta foto">&times;</button>` : ''}
                     </div>
@@ -220,7 +221,7 @@ window.Pages.inventory = {
                 : `<div class="pc-empty">Sin fotos todavía.${canEditPhotos ? ' Usa “Añadir fotos” para cargar la primera.' : ''}</div>`}
               <div class="pc-toolbar">
                 ${photos.length ? `<button class="btn btn-secondary btn-sm" type="button" data-gallery>Abrir visor (${photos.length})</button>` : ''}
-                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-download-all>Descargar todas</button>` : ''}
+                ${photos.length > 1 ? `<button class="btn btn-secondary btn-sm" type="button" data-download-all title="Guardar todas en Fotos/Galería">&#128190; Guardar todas</button>` : ''}
                 ${canEditPhotos ? `<label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;">+ Añadir fotos<input type="file" accept="image/*" multiple style="display:none" data-photos-input></label>` : ''}
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
@@ -267,6 +268,17 @@ window.Pages.inventory = {
           const thumbEls = Array.from(modal.bodyEl.querySelectorAll('[data-pc-thumb]'));
           const stageEl = modal.bodyEl.querySelector('[data-pc-stage]');
 
+          // Precarga TODOS los Blobs para que en iPhone se puedan guardar una
+          // o todas las fotos desde el gesto del botón.
+          const gallery = window.PhotoGallery || null;
+          const blobFor = (src) => {
+            if (!gallery || typeof gallery.preload !== 'function') return Promise.resolve(null);
+            return gallery.preload(window.AppConfig.resolveUrl(src));
+          };
+          if (gallery && typeof gallery.preloadAll === 'function') {
+            gallery.preloadAll(photos.map((src) => window.AppConfig.resolveUrl(src)));
+          }
+
           const setIndex = (next, scrollThumb) => {
             if (!photos.length) return;
             photoIndex = ((next % photos.length) + photos.length) % photos.length;
@@ -275,6 +287,8 @@ window.Pages.inventory = {
               photoEl.alt = `Foto ${photoIndex + 1} de ${photos.length}`;
             }
             if (counterEl) counterEl.textContent = `${photoIndex + 1} / ${photos.length}`;
+            blobFor(photos[photoIndex]);
+            if (photos.length > 1) blobFor(photos[(photoIndex + 1) % photos.length]);
             thumbEls.forEach((thumb, i) => thumb.classList.toggle('is-active', i === photoIndex));
             if (scrollThumb !== false && thumbEls[photoIndex] && thumbEls[photoIndex].scrollIntoView) {
               try {
@@ -284,6 +298,8 @@ window.Pages.inventory = {
           };
 
           const openViewer = () => UI.showImages(photos, `Fotos — ${propertyLabel(prop)}`, { startIndex: photoIndex });
+          // Primera precarga del Blob de la foto inicial.
+          setIndex(photoIndex, false);
 
           // Al deslizar con el dedo el navegador también dispara un "click" al
           // soltar; sin este candado se abría el visor a pantalla completa justo
@@ -314,16 +330,40 @@ window.Pages.inventory = {
 
           const downloadBtn = modal.bodyEl.querySelector('[data-pc-download]');
           if (downloadBtn) {
-            downloadBtn.addEventListener('click', () => {
-              UI.downloadImage(
-                photos[photoIndex],
-                UI.imageFileName(photos[photoIndex], photoIndex, propertyLabel(prop))
-              );
+            downloadBtn.addEventListener('click', async () => {
+              const src = photos[photoIndex];
+              const name = UI.imageFileName(src, photoIndex, propertyLabel(prop));
+              if (!gallery || typeof gallery.save !== 'function') {
+                await UI.downloadImage(src, name);
+                UI.toast('En iPhone mantén pulsada la imagen y elige “Guardar imagen”.', 'info');
+                return;
+              }
+              try {
+                const blob = await blobFor(src);
+                const result = await gallery.save(blob || src, name);
+                gallery.toastResult(result);
+              } catch (error) {
+                UI.toast((error && error.message) || 'No se pudo guardar la foto en la galería.', 'error');
+              }
             });
           }
           const downloadAllBtn = modal.bodyEl.querySelector('[data-download-all]');
           if (downloadAllBtn) {
-            downloadAllBtn.addEventListener('click', () => UI.downloadImages(photos, propertyLabel(prop)));
+            downloadAllBtn.addEventListener('click', async () => {
+              const baseName = propertyLabel(prop);
+              const names = photos.map((src, i) => UI.imageFileName(src, i, baseName));
+              if (gallery && typeof gallery.saveMany === 'function') {
+                try {
+                  const result = await gallery.saveMany(photos, { names, baseName });
+                  gallery.toastResult(result, photos.length);
+                  return;
+                } catch (error) {
+                  UI.toast((error && error.message) || 'No se pudieron guardar las fotos.', 'error');
+                  return;
+                }
+              }
+              await UI.downloadImages(photos, baseName);
+            });
           }
 
           // Deslizar con el dedo en el celular.
@@ -460,9 +500,8 @@ window.Pages.inventory = {
           const notesEl = overlay.querySelector('[data-notes]');
           const type = typeEl ? typeEl.value : 'visita_propiedad';
           const specify = UI.otrosText ? UI.otrosText(typeEl) : '';
-          if (type === 'otro' && !String(specify).trim()) return UI.toast('Especifica el tipo de cita', 'warning');
+          // "Otro (especificar)" es opcional: no impedir agendar la cita.
           await API.appointments.create({
-            user: myId,
             client,
             property: prop._id,
             date: Format.fromLocalInput(date),

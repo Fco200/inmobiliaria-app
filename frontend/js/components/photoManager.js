@@ -23,6 +23,33 @@ window.PhotoManager = (() => {
     return fileUrls.get(file);
   }
 
+  function resolveSrc(src) {
+    return window.AppConfig ? window.AppConfig.resolveUrl(src) : src;
+  }
+
+  // iOS sólo muestra "Guardar imagen" si navigator.share se llama dentro del
+  // gesto del usuario. Por eso las fotos ya subidas se convierten a Blob ANTES
+  // (al crear el editor) y aquí sólo se consume el resultado precargado.
+  const urlBlobs = new Map();
+
+  function blobFor(src) {
+    const url = resolveSrc(src);
+    if (!urlBlobs.has(url)) {
+      const gallery = window.PhotoGallery;
+      const pending = gallery && gallery.ensureBlob
+        ? gallery.ensureBlob(url).catch(() => null)
+        : Promise.resolve(null);
+      urlBlobs.set(url, pending);
+    }
+    return urlBlobs.get(url);
+  }
+
+  function saveNameFromUrl(url, index) {
+    const gallery = window.PhotoGallery;
+    const raw = gallery && gallery.fileNameFrom ? gallery.fileNameFrom(url) : '';
+    return /\.[a-z0-9]{2,5}$/i.test(raw) ? raw : `foto-propiedad-${index + 1}.jpg`;
+  }
+
   function create(options = {}) {
     const state = {
       photos: (Array.isArray(options.photos) ? options.photos : []).filter(Boolean).slice(),
@@ -30,6 +57,10 @@ window.PhotoManager = (() => {
       removed: [],
     };
     const onChange = typeof options.onChange === 'function' ? options.onChange : () => {};
+
+    // Precarga de las fotos existentes: cuando el usuario toque "Guardar en
+    // galería" el Blob ya estará listo y la compartición conservará el gesto.
+    state.photos.forEach((src) => { if (src) blobFor(src); });
 
     const root = document.createElement('div');
     root.className = 'photo-manager';
@@ -39,6 +70,13 @@ window.PhotoManager = (() => {
     input.accept = ACCEPT;
     input.multiple = true;
     input.style.display = 'none';
+
+    // Entrada específica para la cámara del celular (capture="environment").
+    const captureInput = document.createElement('input');
+    captureInput.type = 'file';
+    captureInput.accept = 'image/*';
+    captureInput.setAttribute('capture', 'environment');
+    captureInput.style.display = 'none';
 
     const grid = document.createElement('div');
     grid.className = 'pm-grid';
@@ -51,10 +89,15 @@ window.PhotoManager = (() => {
     addBtn.className = 'btn btn-secondary btn-sm';
     addBtn.innerHTML = '&#128247;&nbsp; Agregar fotos';
 
+    const cameraBtn = document.createElement('button');
+    cameraBtn.type = 'button';
+    cameraBtn.className = 'btn btn-secondary btn-sm';
+    cameraBtn.innerHTML = '&#128250;&nbsp; Tomar foto';
+
     let dragSrc = null;
 
     function resolve(src) {
-      return window.AppConfig ? window.AppConfig.resolveUrl(src) : src;
+      return resolveSrc(src);
     }
 
     function allSources() {
@@ -77,6 +120,7 @@ window.PhotoManager = (() => {
         tile.innerHTML = `
           <img src="${String(resolve(src)).replace(/"/g, '&quot;')}" alt="" loading="lazy">
           ${tileIndex === coverIndex ? '<span class="pm-cover">Portada</span>' : ''}
+          <button type="button" class="pm-save" data-save title="Guardar en la galería del celular">&#128190;</button>
           ${tileIndex === coverIndex ? '' : '<button type="button" class="pm-cover-btn" data-cover title="Hacer portada">&#9733;</button>'}
           <button type="button" class="pm-x" data-remove title="Quitar foto">&times;</button>
         `;
@@ -94,6 +138,7 @@ window.PhotoManager = (() => {
           ${u ? `<img src="${u}" alt="" loading="lazy">` : '<div class="pm-noimg">&#128247;</div>'}
           <span class="pm-new-badge">Nueva</span>
           ${tileIndex === coverIndex ? '<span class="pm-cover">Portada</span>' : ''}
+          <button type="button" class="pm-save" data-save title="Guardar en la galería del celular">&#128190;</button>
           ${tileIndex === coverIndex || state.photos.length ? '' : '<button type="button" class="pm-cover-btn" data-cover title="Hacer portada">&#9733;</button>'}
           <button type="button" class="pm-x" data-remove title="Quitar foto">&times;</button>
         `;
@@ -106,8 +151,8 @@ window.PhotoManager = (() => {
       }
 
       hint.textContent = tileIndex
-        ? 'Arrastra para reordenar, o toca ★ para hacer portada. La primera foto es la portada. Toca una foto para verla.'
-        : 'Agrega las fotos de la propiedad (JPG, PNG, GIF, WebP…).';
+        ? 'Arrastra para reordenar, ★ para hacer portada y 💾 para guardar cada foto en la galería del celular. Toca una foto para verla.'
+        : 'Agrega fotos desde el celular: toma una con “Tomar foto” o elige varias con “Agregar fotos”.';
     }
 
     // Mueve la foto elegida al inicio: la primera posición define la portada
@@ -125,7 +170,45 @@ window.PhotoManager = (() => {
       onChange();
     }
 
+    // Envía la foto al menú compartir de iOS/Android (opción "Guardar imagen")
+    // o, si el dispositivo no lo permite, la descarga como último recurso.
+    async function savePhoto(kind, index) {
+      const gallery = window.PhotoGallery;
+      if (!gallery || typeof gallery.save !== 'function') {
+        if (window.UI) window.UI.toast('La función de galería no está disponible en esta versión.', 'error');
+        return;
+      }
+      try {
+        let source;
+        let filename;
+        if (kind === 'file') {
+          source = state.files[index];
+          if (!source) return;
+          filename = source.name || gallery.fileNameFrom(source);
+        } else {
+          const src = state.photos[index];
+          if (!src) return;
+          const url = resolveSrc(src);
+          source = await blobFor(src);
+          filename = saveNameFromUrl(url, index);
+          if (!source) source = url; // fallback si falló la precarga
+        }
+        const result = await gallery.save(source, filename);
+        if (typeof gallery.toastResult === 'function') gallery.toastResult(result);
+        else if (window.UI) window.UI.toast('Foto guardada.', 'success');
+      } catch (error) {
+        if (window.UI) window.UI.toast((error && error.message) || 'No se pudo guardar la foto.', 'error');
+      }
+    }
+
     grid.addEventListener('click', (e) => {
+      const saveBtn = e.target.closest('[data-save]');
+      if (saveBtn) {
+        e.stopPropagation();
+        const tile = saveBtn.closest('.pm-tile');
+        savePhoto(tile.dataset.kind, Number(tile.dataset.index));
+        return;
+      }
       const coverBtn = e.target.closest('[data-cover]');
       if (coverBtn) {
         e.stopPropagation();
@@ -194,21 +277,30 @@ window.PhotoManager = (() => {
       grid.querySelectorAll('.pm-dragging, .pm-dragover').forEach((t) => t.classList.remove('pm-dragging', 'pm-dragover'));
     });
 
+    function addFiles(files) {
+      if (!files.length) return;
+      state.files = state.files.concat(files);
+      render();
+      onChange();
+    }
+
     addBtn.addEventListener('click', () => input.click());
     input.addEventListener('change', () => {
-      const files = Array.from(input.files || []);
-      if (files.length) {
-        state.files = state.files.concat(files);
-        render();
-        onChange();
-      }
+      addFiles(Array.from(input.files || []));
       input.value = '';
+    });
+    cameraBtn.addEventListener('click', () => captureInput.click());
+    captureInput.addEventListener('change', () => {
+      addFiles(Array.from(captureInput.files || []));
+      captureInput.value = '';
     });
 
     const actions = document.createElement('div');
     actions.className = 'pm-actions';
     actions.appendChild(addBtn);
+    actions.appendChild(cameraBtn);
     actions.appendChild(input);
+    actions.appendChild(captureInput);
 
     root.appendChild(grid);
     root.appendChild(actions);

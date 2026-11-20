@@ -43,11 +43,11 @@ window.Pages.calendar = (() => {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
   }
 
-  // Rango de fechas a consultar según la vista actual. Se envían instantes ISO
-  // completos calculados en la zona del navegador (inicio y fin del día local),
-  // para que el servidor no tenga que adivinar la zona y no se pierdan eventos
-  // del borde del rango.
-  function rangeForView() {
+  // Rango LOCAL (fechas Date de la zona del navegador) según la vista actual.
+  // Se mantiene aparte del rango ISO que se envía a la API para que los
+  // encabezados y las celdas no tengan que volver a parsear strings ISO (eso
+  // desfasaba la semana al navegar).
+  function localRangeForView() {
     const anchor = state.anchor;
     let from;
     let to;
@@ -62,6 +62,12 @@ window.Pages.calendar = (() => {
       from = startOfDay(anchor);
       to = startOfDay(anchor);
     }
+    return { from, to };
+  }
+
+  // Rango que consume la API: instantes ISO calculados desde las fechas locales.
+  function rangeForView() {
+    const { from, to } = localRangeForView();
     return { start: from.toISOString(), end: endOfDay(to).toISOString() };
   }
 
@@ -106,8 +112,7 @@ window.Pages.calendar = (() => {
     if (state.view === 'month') {
       label = `${MONTH_NAMES[state.anchor.getMonth()]} ${state.anchor.getFullYear()}`;
     } else if (state.view === 'week') {
-      const start = keyToDate(range.start);
-      const end = keyToDate(range.end);
+      const { from: start, to: end } = localRangeForView();
       if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
         label = `${start.getDate()} – ${end.getDate()} ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
       } else {
@@ -299,8 +304,7 @@ window.Pages.calendar = (() => {
     if (state.view === 'day') {
       targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
     } else if (state.view === 'week') {
-      const range = rangeForView();
-      targetDate = keyToDate(range.start);
+      targetDate = localRangeForView().from;
     } else {
       targetDate = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), state.anchor.getDate());
     }
@@ -352,8 +356,23 @@ window.Pages.calendar = (() => {
 
   function eventChip(e, small) {
     const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
-    const color = meta.color || TYPES[e.type].color || '#64748b';
+    const color = meta.color || (TYPES[e.type] && TYPES[e.type].color) || '#64748b';
     return `<button class="cal-event ${small ? 'cal-event-sm' : ''}" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">${UI.escapeHtml(e.title)}</button>`;
+  }
+
+  // En la vista semana cada evento lleva hora, título y contexto (cliente o
+  // tipo), para que se distingan de un vistazo sin abrir el detalle.
+  function weekEventChip(e) {
+    const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+    const color = meta.color || (TYPES[e.type] && TYPES[e.type].color) || '#64748b';
+    const client = e.client && (e.client.nombre || e.client.name) ? (e.client.nombre || e.client.name) : '';
+    const context = [meta.label || e.type, client].filter(Boolean).join(' · ');
+    return `
+      <button class="cal-event cal-event-week" type="button" data-event-id="${UI.escapeHtml(e.id)}" style="--ev-color:${color};">
+        <span class="cal-event-week-time">${e.start ? UI.escapeHtml(Format.time(e.start)) : ''}</span>
+        <span class="cal-event-week-title">${UI.escapeHtml(e.title)}</span>
+        <span class="cal-event-week-meta">${UI.escapeHtml(context)}</span>
+      </button>`;
   }
 
   function eventsOnDay(date) {
@@ -413,8 +432,7 @@ window.Pages.calendar = (() => {
   }
 
   function renderWeek() {
-    const range = rangeForView();
-    const start = keyToDate(range.start);
+    const start = localRangeForView().from;
     const today = new Date();
     const todayKey = dateKey(today);
     const days = [];
@@ -432,8 +450,13 @@ window.Pages.calendar = (() => {
 
     const colBody = days
       .map((d) => {
-        const events = eventsOnDay(d);
-        return `<div class="cal-weekcol" style="width:${colWidth}%" data-date="${dateKey(d)}">${events.map((e) => eventChip(e)).join('')}</div>`;
+        const events = eventsOnDay(d)
+          .slice()
+          .sort((a, b) => new Date(a.start) - new Date(b.start));
+        const chips = events.length
+          ? events.map((e) => weekEventChip(e)).join('')
+          : '<div class="cal-week-empty">Sin eventos</div>';
+        return `<div class="cal-weekcol" style="width:${colWidth}%" data-date="${dateKey(d)}">${chips}</div>`;
       })
       .join('');
 
@@ -469,8 +492,16 @@ window.Pages.calendar = (() => {
     `;
   }
 
-  function refreshView() {
+  async function refreshView() {
     if (!rootEl) return;
+    // Al cambiar de mes/semana/día (o de asesor) hay que volver a pedir los
+    // eventos del NUEVO rango: antes sólo se repintaba el toolbar con los
+    // eventos del rango anterior y la semana salía vacía/desfasada.
+    try {
+      await loadEvents();
+    } catch (error) {
+      // Se mantiene la última vista cargada si falla la petición.
+    }
     renderToolbar();
   }
 
@@ -543,7 +574,7 @@ window.Pages.calendar = (() => {
         const [y, m, d] = key.split('-').map(Number);
         state.anchor = new Date(y, m - 1, d);
         state.view = 'day';
-        renderToolbar();
+        refreshView();
       }
     });
   }

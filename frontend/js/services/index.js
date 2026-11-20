@@ -67,7 +67,8 @@ window.API = {
     create: (body) => ApiClient.post('/users', body),
     update: (id, body) => ApiClient.put(`/users/${id}`, body),
     resetPassword: (id) => ApiClient.post(`/users/${id}/reset-password`, {}),
-    remove: (id) => ApiClient.remove(`/users/${id}`),
+    impact: (id) => ApiClient.get(`/users/${id}/impact`),
+    remove: (id, body) => ApiClient.remove(`/users/${id}`, body),
   },
 
   roles: {
@@ -96,6 +97,8 @@ window.API = {
     registrarLlamada: (id) => ApiClient.post(`/clients/${id}/registrar-llamada`),
     historial: (id) => ApiClient.get(`/clients/${id}/historial`),
     historialCambios: (id) => ApiClient.get(`/clients/${id}/historial-cambios`),
+    historialCompleto: (id) => ApiClient.get(`/clients/${id}/historial-completo`),
+    addNota: (id, nota) => ApiClient.post(`/clients/${id}/notas`, { nota }),
     conteoEtapas: () => ApiClient.get('/clients/conteo-etapas'),
     exportCsv: () => API.downloadCsv('/clients/export', 'clientes.csv'),
   },

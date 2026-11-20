@@ -20,6 +20,7 @@ const notificationSchema = new mongoose.Schema(
         'cita_recordatorio_24h',
         'cita_recordatorio_1h',
         'cita_recordatorio_personal',
+        'cita_propiedad_captador',
         'propiedad_sin_publicar',
         'documento_pendiente',
         'documento_rechazado',

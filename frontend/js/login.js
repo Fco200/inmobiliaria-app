@@ -887,12 +887,10 @@ window.LoginPage = (() => {
     });
   }
 
-  // ---- Aviso de nueva versión (pantalla de inicio de sesión) ----
-  // Consulta la versión publicada en el servidor y avisa cuando hay una nueva
-  // disponible. Es el aviso "al iniciar sesión" que complementaba al banner y
-  // al botón de Actualizaciones que ya se muestran dentro de la app.
+  // ---- Aviso de seguridad (pantalla de inicio de sesión) ----
+  // Sin modal de novedades: si hay una versión nueva se muestra un aviso
+  // inline únicamente con "ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD".
   const SEEN_VERSION_KEY = 'crm_app_version_seen';
-  const MODAL_VERSION_KEY = 'crm_update_modal_shown';
 
   function readStorage(key) {
     try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
@@ -929,6 +927,8 @@ window.LoginPage = (() => {
 
   async function versionNotice() {
     const label = document.getElementById('login-version');
+    const notice = document.getElementById('login-security-notice');
+    const updateBtn = document.getElementById('btn-login-update');
     let data = null;
     try {
       data = await window.API.config.version();
@@ -947,37 +947,14 @@ window.LoginPage = (() => {
       return;
     }
     if (!data.hash || String(data.hash) === String(seen)) return;
-    if (readStorage(MODAL_VERSION_KEY) === String(data.hash)) return;
-    writeStorage(MODAL_VERSION_KEY, data.hash);
+    if (!notice) return;
 
-    const notes = Array.isArray(data.notes) ? data.notes.filter(Boolean).slice(0, 4) : [];
-    const versionText = data.version ? ` — v${data.version}` : '';
-    const modal = UI.openModal({
-      title: `&#127881;&nbsp; Nueva versión disponible${versionText}`,
-      size: 520,
-      body: `
-        <p style="margin-top:0;">Tu aplicación se ha actualizado. Estas son algunas de las novedades:</p>
-        ${notes.length
-          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;">
-              ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
-             </ul>`
-          : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
-        <h4 class="update-modal-title">Actualiza tu app desde el módulo de Actualizaciones y da clic en “Actualizar ahora”.</h4>
-      `,
-      footer: `
-        <button class="btn btn-secondary" type="button" data-update-later>Entrar sin actualizar</button>
-        <button class="btn btn-primary" type="button" data-update-now>&#128260;&nbsp; Actualizar ahora</button>
-      `,
-    });
-    const overlay = modal && modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
-    if (!overlay) return;
-    const laterBtn = overlay.querySelector('[data-update-later]');
-    if (laterBtn) laterBtn.addEventListener('click', () => UI.closeModal());
-    const nowBtn = overlay.querySelector('[data-update-now]');
-    if (nowBtn) {
-      nowBtn.addEventListener('click', async () => {
-        nowBtn.disabled = true;
-        nowBtn.textContent = 'Actualizando…';
+    notice.classList.remove('hide');
+    if (updateBtn && !updateBtn.dataset.bound) {
+      updateBtn.dataset.bound = '1';
+      updateBtn.addEventListener('click', async () => {
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Actualizando…';
         await applyUpdate();
       });
     }

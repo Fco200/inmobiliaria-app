@@ -93,7 +93,7 @@ window.Pages.appointments = {
         { name: 'client', label: 'Cliente', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Sin cliente —' }, ...UI.sortByLabel(clients, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))] },
         { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...UI.sortByLabel(properties, UI.propertyOptionLabel).map((x) => ({ value: x._id, label: UI.propertyOptionLabel(x) }))] },
         { name: 'business', label: 'Negocio', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.business, options: [{ value: '', label: '— Sin negocio —' }, ...UI.sortByLabel(businesses, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))] },
-        { name: 'user', label: 'Asesor', type: 'select', sinOtros: true, value: currentUserId, options: userOptions },
+        { name: 'user', label: 'Asesor (se asigna automáticamente)', type: 'select', sinOtros: true, value: (r) => (r && r.user && (r.user._id || r.user)) || currentUserId, options: userOptions, hint: 'Al agendar, la cita queda asignada al asesor de la sesión.' },
         { name: 'type', label: 'Tipo de cita', type: 'select', sinOtros: true, options: APPOINTMENT_TYPES, value: (r) => (r.type === 'firma' ? 'firma_notario' : r.type) },
         { name: 'typeOther', label: 'Especifica el tipo de cita', type: 'text', placeholder: 'Ej. Revisión de escrituras…' },
         { name: 'status', label: 'Estado', type: 'select', sinOtros: true, options: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'], value: (r) => r.status || 'pendiente' },
@@ -103,15 +103,17 @@ window.Pages.appointments = {
         { name: 'place', label: 'Lugar', type: 'text', full: true },
         { name: 'notes', label: 'Notas', type: 'textarea', full: true },
       ],
-      formData(values) {
+      formData(values, record) {
         const { reminder, typeOther, ...rest } = values;
         const type = values.type || 'visita_propiedad';
-        // "Otro (especificar)": exige el texto y lo guarda aparte del enum.
-        if (type === 'otro' && !String(typeOther || '').trim()) {
-          throw new Error('Especifica el tipo de cita.');
-        }
+        // "Otro (especificar)" ya NO bloquea el guardado: si el usuario no
+        // escribe el detalle, se conserva el texto opcional vacío y la cita
+        // se crea con el tipo genérico "otro".
         return {
           ...rest,
+          // Sólo al CREAR se fuerza al asesor de la sesión (el backend también
+          // lo impone). Al editar se conserva el responsable original.
+          ...(record ? {} : { user: currentUserId }),
           type,
           typeOther: type === 'otro' ? String(typeOther).trim() : '',
           date: Format.fromLocalInput(values.date),
@@ -119,6 +121,14 @@ window.Pages.appointments = {
         };
       },
       onFormMount(form) {
+        // El asesor no se elige a mano: se asigna desde la sesión al crear.
+        const userSel = form.querySelector('#fld-user');
+        if (userSel) {
+          userSel.disabled = true;
+          userSel.style.opacity = '0.75';
+          userSel.style.cursor = 'not-allowed';
+        }
+
         // El campo "especificar" sólo se muestra con el tipo "Otro".
         const typeSel = form.querySelector('#fld-type');
         const otherWrap = (() => {

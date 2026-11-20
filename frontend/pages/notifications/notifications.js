@@ -60,6 +60,7 @@ window.Pages.notifications = {
       cita_proxima: '&#128197;',
       cita_recordatorio_24h: '&#128197;',
       cita_recordatorio_1h: '&#9200;',
+      cita_propiedad_captador: '&#128197;',
       tarea_vencida: '&#9203;',
       documento_pendiente: '&#128196;',
       avaluo_pendiente: '&#128214;',

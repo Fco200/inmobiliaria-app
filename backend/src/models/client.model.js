@@ -112,6 +112,17 @@ const clientSchema = new Schema(
       },
     ],
 
+    // Bitácora de NOTAS del cliente. Junto con historialEtapas (movimientos
+    // antiguos) e historialCambios (ediciones/llamadas) alimenta la tabla
+    // única de historial que se muestra en el módulo Clientes.
+    historialNotas: [
+      {
+        nota: { type: String, trim: true, required: true },
+        usuario: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+        fecha: { type: Date, default: Date.now },
+      },
+    ],
+
     // ── Estado del embudo y del expediente ──────────────────────────────
     status: {
       type: String,

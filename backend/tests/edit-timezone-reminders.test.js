@@ -73,5 +73,6 @@ test('el aviso de nueva versión no usa correo', () => {
   const source = read('backend', 'src', 'services', 'version-notice.service.js');
   assert.match(source, /io\.emit\('nueva-version'/);
   assert.match(source, /actualizaciones\.html/);
+  assert.match(source, /ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD/);
   assert.doesNotMatch(source, /sendMail|mail\.service|enviarCorreo/);
 });

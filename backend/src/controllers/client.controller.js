@@ -567,6 +567,86 @@ const historialCambios = asyncHandler(async (req, res) => {
   res.json({ success: true, data: items });
 });
 
+// Agrega una nota suelta a la bitácora del cliente (sin cambiar de etapa).
+const addNota = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id);
+  if (!client) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+  if (!assertOwnership(req, client)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
+  }
+  const nota = String((req.body && req.body.nota) || '').trim();
+  if (!nota) return res.status(400).json({ success: false, message: 'Escribe una nota.' });
+
+  client.historialNotas.push({ nota, usuario: req.user._id, fecha: new Date() });
+  client.ultVez = new Date();
+  await client.save();
+  await client.populate('historialNotas.usuario', 'name');
+
+  await logActivity({
+    entityType: 'Client',
+    entityId: client._id,
+    user: req.user._id,
+    action: 'nota',
+    message: `Nota agregada al cliente ${client.nombre}`,
+  });
+
+  const item = client.historialNotas[client.historialNotas.length - 1];
+  res.status(201).json({ success: true, data: item });
+});
+
+// Historial COMPLETO en una sola tabla: notas, llamadas, cambios de perfil y
+// movimientos de etapa heredados. Las etapas ya no se operan en el módulo de
+// clientes, pero sus asientos antiguos siguen siendo parte de la bitácora.
+const historialCompleto = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id);
+  if (!client) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+  if (!assertOwnership(req, client)) {
+    return res.status(403).json({ success: false, message: 'No tienes acceso a este cliente.' });
+  }
+
+  await Promise.all([
+    client.populate('historialNotas.usuario', 'name'),
+    client.populate('historialCambios.usuario', 'name'),
+    client.populate('historialEtapas.usuario', 'name'),
+  ]);
+
+  const userName = (u) => (u && (u.name || u.username)) || '—';
+  const items = [];
+
+  (client.historialNotas || []).forEach((n) => items.push({
+    tipo: 'nota',
+    fecha: n.fecha,
+    titulo: 'Nota',
+    detalle: n.nota,
+    nota: n.nota,
+    usuario: userName(n.usuario),
+  }));
+  (client.historialCambios || []).forEach((c) => {
+    const esLlamada = c.campo === 'llamada';
+    const anterior = c.anterior == null || c.anterior === '' ? '—' : String(c.anterior);
+    const nuevo = c.nuevo == null || c.nuevo === '' ? '—' : String(c.nuevo);
+    items.push({
+      tipo: esLlamada ? 'llamada' : 'cambio',
+      fecha: c.fecha,
+      titulo: c.campoLabel || (esLlamada ? 'Llamada registrada' : c.campo),
+      detalle: esLlamada ? nuevo : `${anterior} → ${nuevo}`,
+      nota: '',
+      usuario: userName(c.usuario),
+    });
+  });
+  (client.historialEtapas || []).forEach((e) => items.push({
+    tipo: 'etapa',
+    fecha: e.fecha,
+    titulo: 'Etapa (historial)',
+    detalle: `${e.etapaAnterior || '—'} → ${e.etapaNueva}${e.nota ? ` · ${e.nota}` : ''}`,
+    nota: e.nota || '',
+    usuario: userName(e.usuario),
+  }));
+
+  items.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  res.json({ success: true, data: items });
+});
+
 const remove = asyncHandler(async (req, res) => {
   const client = await Client.findById(req.params.id);
   if (!client) return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
@@ -637,4 +717,7 @@ const exportCsv = asyncHandler(async (req, res) => {
   ]));
 });
 
-module.exports = { list, get, options, create, update, remove, cambiarEtapa, registrarLlamada, historial, historialCambios, conteoEtapas, exportCsv };
+module.exports = {
+  list, get, options, create, update, remove, cambiarEtapa, registrarLlamada,
+  historial, historialCambios, historialCompleto, addNota, conteoEtapas, exportCsv,
+};

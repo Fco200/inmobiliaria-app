@@ -73,6 +73,14 @@ function canManageBusiness(req) {
     || (isCustomRole(req) && hasPermission(req, 'businesses_manage'));
 }
 
+// Escrituración puede gestionar etapas, notas y documentos, pero NO debe
+// poder borrar negocios: el borrado queda reservado a Dirección,
+// Administración, Gerencia y Asistencia (o permiso explícito personalizado).
+function canDeleteBusiness(req) {
+  if (hasRole(req, ['escrituracion'])) return false;
+  return canManageBusiness(req);
+}
+
 // Escrituración cambia etapas, concluye negocios, agrega notas/checklist y
 // sube documentos. Gerencia (jefe) también puede cancelar/concluir.
 // Dirección, administración y soporte pueden saltarse las reglas del flujo.
@@ -674,10 +682,10 @@ const remove = asyncHandler(async (req, res) => {
   if (!assertOwnership(req, business)) {
     return res.status(403).json({ success: false, message: 'No tienes acceso a este negocio.' });
   }
-  if (!canManageBusiness(req)) {
+  if (!canDeleteBusiness(req)) {
     return res.status(403).json({
       success: false,
-      message: 'Solo Dirección, Administración, Gerencia o Asistencia pueden eliminar negocios.',
+      message: 'Escrituración no puede eliminar negocios. Solo Dirección, Administración, Gerencia o Asistencia pueden hacerlo.',
     });
   }
 

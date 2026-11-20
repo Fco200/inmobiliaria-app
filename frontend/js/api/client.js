@@ -176,7 +176,9 @@ window.ApiClient = (() => {
     post: (path, body) => request(path, { method: 'POST', body }),
     put: (path, body) => request(path, { method: 'PUT', body }),
     patch: (path, body) => request(path, { method: 'PATCH', body }),
-    remove: (path) => request(path, { method: 'DELETE' }),
+    // `body` permite enviar datos en el borrado (p. ej. el asesor al que se
+    // reasignan los registros cuando se elimina a otro asesor).
+    remove: (path, body) => request(path, { method: 'DELETE', body }),
     postMultipart: (path, form, method = 'POST') => {
       const config = { method, body: form };
       const token = getToken();

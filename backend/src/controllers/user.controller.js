@@ -2,7 +2,21 @@
 
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
-const { User, Role, Permission } = require('../models');
+const {
+  User,
+  Role,
+  Permission,
+  Business,
+  Property,
+  Client,
+  Appointment,
+  Task,
+  Goal,
+  ProspectingActivity,
+  Document,
+  Appraisal,
+  Inventory,
+} = require('../models');
 const { logActivity, logAudit } = require('../services/log.service');
 const sessionService = require('../services/session.service');
 const { isAssignableRoleCode } = require('../constants/roles');
@@ -247,6 +261,64 @@ const resetUserPassword = asyncHandler(async (req, res) => {
   });
 });
 
+// Campos donde un asesor puede aparecer como responsable. Se usan tanto para
+// contar el impacto antes de borrarlo como para reasignar los registros al
+// asesor que elija el administrador.
+const ASSIGNMENT_MAP = [
+  {
+    key: 'negocios',
+    label: 'Negocios',
+    model: Business,
+    fields: ['mainAdvisor', 'partnerAdvisor', 'asesor_captador_id', 'asesor_cliente_id', 'checklist.user'],
+  },
+  { key: 'propiedades', label: 'Propiedades', model: Property, fields: ['responsibleUser', 'history.user'] },
+  { key: 'inventario', label: 'Inventario / publicaciones', model: Inventory, fields: ['assignedAgent'] },
+  { key: 'avaluos', label: 'Avalúos', model: Appraisal, fields: ['createdBy', 'checklist.createdBy', 'bitacora.user'] },
+  { key: 'clientes', label: 'Clientes', model: Client, fields: ['asesorAsignado', 'responsibleUser', 'historialEtapas.usuario', 'historialCambios.usuario', 'historialNotas.usuario'] },
+  { key: 'citas', label: 'Citas', model: Appointment, fields: ['user'] },
+  { key: 'tareas', label: 'Tareas', model: Task, fields: ['assignedTo'] },
+  { key: 'metas', label: 'Metas', model: Goal, fields: ['user'] },
+  { key: 'prospeccion', label: 'Prospección', model: ProspectingActivity, fields: ['user'] },
+  { key: 'documentos', label: 'Documentos', model: Document, fields: ['uploadedBy'] },
+];
+
+function assignmentFilter(userId, fields) {
+  return { $or: fields.map((field) => ({ [field]: userId })) };
+}
+
+// Los campos con punto del mapa viven dentro de arreglos de subdocumentos
+// (checklist, history, historial…). En $set hay que usar el operador "$[]"
+// para actualizar TODOS los elementos; sin él MongoDB rechaza la escritura.
+function assignmentSetPath(field) {
+  const parts = field.split('.');
+  return parts.length === 1 ? field : `${parts[0]}.$[].${parts.slice(1).join('.')}`;
+}
+
+// GET /api/users/:id/impact — resumen de lo que quedaría huérfano al eliminar.
+// El frontend lo usa para obligar a elegir un asesor de reemplazo.
+const userImpact = asyncHandler(async (req, res) => {
+  const target = await User.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+  const counts = {};
+  let total = 0;
+  for (const entry of ASSIGNMENT_MAP) {
+    const count = await entry.model.countDocuments(assignmentFilter(target._id, entry.fields));
+    counts[entry.key] = count;
+    total += count;
+  }
+  res.json({
+    success: true,
+    data: {
+      userId: target._id,
+      name: target.name,
+      counts,
+      total,
+      entries: ASSIGNMENT_MAP.map(({ key, label }) => ({ key, label, count: counts[key] })),
+    },
+  });
+});
+
 const removeUser = asyncHandler(async (req, res) => {
   const target = await User.findById(req.params.id).populate('role');
   if (!target) {
@@ -263,9 +335,99 @@ const removeUser = asyncHandler(async (req, res) => {
     });
   }
 
+  // Reasignación OBLIGATORIA. El frontend pregunta por cada categoría con
+  // registros (propiedades, negocios, avalúos, clientes, etc.) y envía
+  // `reassignments: { propiedades: id, negocios: id, avaluos: id, ... }`.
+  // `reassignTo` se acepta como opción global / compatibilidad.
+  const body = req.body || {};
+  const globalTarget = String(body.reassignTo || '').trim();
+  const perEntity = body.reassignments && typeof body.reassignments === 'object' && !Array.isArray(body.reassignments)
+    ? body.reassignments
+    : {};
+
+  const counts = {};
+  let grandTotal = 0;
+  for (const entry of ASSIGNMENT_MAP) {
+    counts[entry.key] = await entry.model.countDocuments(assignmentFilter(target._id, entry.fields));
+    grandTotal += counts[entry.key];
+  }
+
+  const replacements = new Map();
+  const targets = {};
+  for (const entry of ASSIGNMENT_MAP) {
+    if (!counts[entry.key]) continue;
+    const id = String(perEntity[entry.key] || globalTarget || '').trim();
+    if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: `Selecciona a qué asesor se transferirán: ${entry.label.toLowerCase()}.`,
+      });
+    }
+    if (id === String(target._id)) {
+      return res.status(400).json({ success: false, message: 'El asesor de reemplazo debe ser distinto.' });
+    }
+    if (!replacements.has(id)) {
+      const user = await User.findById(id);
+      if (!user) {
+        return res.status(400).json({ success: false, message: 'Uno de los asesores de reemplazo no existe.' });
+      }
+      replacements.set(id, user);
+    }
+    targets[entry.key] = replacements.get(id);
+  }
+
+  const reassigned = {};
+  for (const entry of ASSIGNMENT_MAP) {
+    const replacement = targets[entry.key];
+    if (!replacement) { reassigned[entry.key] = 0; continue; }
+    let modified = 0;
+    // Un update por campo: así un arreglo inexistente (p. ej. un cliente sin
+    // notas) nunca hace fallar la reasignación de sus campos escalares.
+    for (const field of entry.fields) {
+      const result = await entry.model.updateMany(
+        { [field]: target._id },
+        { $set: { [assignmentSetPath(field)]: replacement._id } }
+      );
+      modified += result.modifiedCount || 0;
+    }
+    reassigned[entry.key] = modified;
+  }
+
+  const detalle = ASSIGNMENT_MAP
+    .filter((entry) => targets[entry.key])
+    .map((entry) => `${entry.label} → ${targets[entry.key].name}`)
+    .join(', ');
+  const resumen = detalle
+    ? `Sus registros se reasignaron (${detalle}).`
+    : 'No tenía registros asignados que transferir.';
+
+  await logActivity({
+    entityType: 'User',
+    entityId: target._id,
+    user: req.user._id,
+    action: 'eliminacion',
+    message: `Se eliminó al usuario ${target.name}. ${resumen}`,
+  });
+  await logAudit({
+    user: req.user._id,
+    action: 'eliminacion',
+    entity: 'User',
+    entityId: target._id,
+    previousValue: `asesor: ${target.name}`,
+    newValue: resumen,
+  });
+
   await target.deleteOne();
   await sessionService.revokeUserSessions(target._id, 'USER_DEACTIVATED');
-  res.json({ success: true, message: 'Registro eliminado' });
+  res.json({
+    success: true,
+    message: grandTotal ? 'Registro eliminado y reasignado' : 'Registro eliminado',
+    data: {
+      reassignTo: globalTarget || (targets[Object.keys(targets)[0]] || {})._id || null,
+      reassignments: Object.fromEntries(Object.entries(targets).map(([key, user]) => [key, user._id])),
+      reassigned,
+    },
+  });
 });
 
 const listRoles = asyncHandler(async (req, res) => {
@@ -305,6 +467,7 @@ module.exports = {
   createUser,
   updateUser,
   resetUserPassword,
+  userImpact,
   removeUser,
   listRoles,
   createRole,

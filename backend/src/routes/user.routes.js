@@ -7,6 +7,7 @@ const {
   createUser,
   updateUser,
   resetUserPassword,
+  userImpact,
   removeUser,
   listRoles,
   createRole,
@@ -25,6 +26,8 @@ router.use(protect);
 router.get('/', listUsers);
 router.get('/permissions', listPermissions);
 router.get('/roles', listRoles);
+// Impacto de borrar un asesor (ANTES de /:id para que "impact" no se tome como ID).
+router.get('/:id/impact', userIdParam, userImpact);
 router.get('/:id', userIdParam, getUser);
 
 // Dirección y asistencia pueden crear/editar/desactivar usuarios. La gestión de

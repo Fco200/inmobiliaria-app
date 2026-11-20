@@ -41,6 +41,13 @@
       En línea
     </div>
 
+    <!-- Aviso de seguridad (sin modal): solo texto y acción de actualizar -->
+    <div id="login-security-notice" class="security-notice hide" role="status">
+      <span class="security-notice-icon" aria-hidden="true">&#128274;</span>
+      <strong>ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD</strong>
+      <button class="btn btn-primary btn-sm" id="btn-login-update" type="button">Actualizar</button>
+    </div>
+
     <!-- Formulario -->
     <form id="login-form" class="login-form" novalidate>
       <div class="form-group">
@@ -182,6 +189,7 @@
   <script src="js/utils/format.js"></script>
   <script src="js/utils/sounds.js"></script>
   <script src="js/components/ui.js"></script>
+  <script src="js/components/photoGallery.js"></script>
   <script src="js/components/crudPage.js"></script>
   <script src="js/services/index.js"></script>
   <script src="js/install.js"></script>

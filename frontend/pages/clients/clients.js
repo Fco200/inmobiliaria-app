@@ -2,20 +2,6 @@
 
 window.Pages = window.Pages || {};
 
-// Etapas del embudo inmobiliario con su etiqueta y color de tarjeta.
-// "Perfilado" se recorre ANTES de la cita: primero se perfila al cliente
-// (operación, presupuesto, zona) y sólo después se agenda.
-const CLIENT_STAGES = [
-  { key: 'PROSPECTO', label: 'Prospecto', color: '#64748b' },
-  { key: 'PERFILADO', label: 'Perfilado', color: '#5B2D8E' },
-  { key: 'CITA', label: 'Cita', color: '#d97706' },
-  { key: 'SEGUIMIENTO', label: 'Seguimiento', color: '#0ea5e9' },
-  { key: 'NEGOCIACION_CIERRE', label: 'Negociación / Cierre', color: '#1f9d55' },
-  { key: 'POSTVENTA', label: 'Postventa', color: '#9333ea' },
-  { key: 'DESCARTADO', label: 'Descartado', color: '#dc2626' },
-];
-
-const FLOW_ORDER = ['PROSPECTO', 'PERFILADO', 'CITA', 'SEGUIMIENTO', 'NEGOCIACION_CIERRE', 'POSTVENTA'];
 // Medios en el MISMO orden y con los MISMOS valores que el enum del backend
 // (models/client.model.js) para que ningún valor caiga fuera del enum.
 const CLIENT_MEDIOS = ['WhatsApp', 'Facebook', 'Llamada', 'Portal', 'Portal Inmobiliario', 'Lona', 'Lona/Rótulo', 'Recomendación', 'Otro'];
@@ -46,27 +32,6 @@ function opcionesFormaPago(current) {
   return list.map((f) => ({ value: f, label: FORMA_PAGO_LABELS[f] || f }));
 }
 const CLIENT_TIPOS_PROPIEDAD = ['Casa', 'Departamento', 'Terreno', 'Local', 'Bodega', 'Rancho', 'Playa', 'Otro'];
-// Sin alias de etapa: "PERFILADO" volvió a ser una etapa real del embudo.
-const STAGE_ALIASES = {};
-
-function stageInfo(key) {
-  const normalized = STAGE_ALIASES[key] || key;
-  return CLIENT_STAGES.find((s) => s.key === normalized) || { key: normalized || 'PROSPECTO', label: normalized || 'Prospecto', color: '#64748b' };
-}
-
-function flowIndexOf(key) {
-  return FLOW_ORDER.indexOf(STAGE_ALIASES[key] || key);
-}
-
-function previousOf(key) {
-  const i = flowIndexOf(key);
-  return i > 0 ? FLOW_ORDER[i - 1] : null;
-}
-
-function nextOf(key) {
-  const i = flowIndexOf(key);
-  return i >= 0 && i < FLOW_ORDER.length - 1 ? FLOW_ORDER[i + 1] : null;
-}
 
 function isBossUser() {
   const user = ApiClient.getStoredUser();
@@ -81,14 +46,12 @@ window.Pages.clients = {
     const state = {
       q: '',
       page: 1,
-      etapaActual: '',
       servicio: '',
       tipoPropiedad: '',
       zona: '',
       minCapacity: '',
       maxCapacity: '',
       loading: false,
-      counts: {},
     };
     let users = [];
     if (isBossUser()) {
@@ -103,7 +66,6 @@ window.Pages.clients = {
       .map((u) => ({ value: u._id, label: u.name }));
 
     container.innerHTML = `
-      <div class="pipeline-strip" id="clients-pipeline">${pipelineHTML()}</div>
       <div class="clients-toolbar">
         <input class="form-control" id="clients-search" type="search" placeholder="Buscar por nombre, teléfono o correo…">
         <button class="btn btn-primary" id="clients-add" type="button">+ Nuevo cliente</button>
@@ -151,7 +113,6 @@ window.Pages.clients = {
     const paginationEl = container.querySelector('#clients-pagination');
     const searchEl = container.querySelector('#clients-search');
     const addBtn = container.querySelector('#clients-add');
-    const pipelineEl = container.querySelector('#clients-pipeline');
     const filtersBox = container.querySelector('#clients-filters-box');
     const fServicio = container.querySelector('#clients-f-servicio');
     const fTipo = container.querySelector('#clients-f-tipo');
@@ -330,27 +291,6 @@ window.Pages.clients = {
       return medio;
     }
 
-    function pipelineHTML() {
-      return `
-        <button class="pipeline-step pipeline-all${state.etapaActual === '' ? ' is-active' : ''}" data-stage="" type="button" style="--pipeline-color:var(--primary);">
-          <span class="pipeline-label">Ver Todos</span>
-          <span class="pipeline-count" data-count="total">0</span>
-        </button>
-        ${CLIENT_STAGES.map((s) => `
-          <button class="pipeline-step${state.etapaActual === s.key ? ' is-active' : ''}" data-stage="${s.key}" type="button" style="--pipeline-color:${s.color};">
-            <span class="pipeline-label">${s.label}</span>
-            <span class="pipeline-count" data-count="${s.key}">0</span>
-          </button>`).join('')}
-      `;
-    }
-
-    function renderPipelineActive() {
-      pipelineEl.querySelectorAll('.pipeline-step').forEach((btn) => {
-        const active = btn.dataset.stage === state.etapaActual;
-        btn.classList.toggle('is-active', active);
-      });
-    }
-
     function hasAdvancedFilters() {
       return Boolean(state.servicio || state.tipoPropiedad || state.zona || state.minCapacity || state.maxCapacity);
     }
@@ -371,31 +311,6 @@ window.Pages.clients = {
       summary.textContent = activos.length ? `Filtros avanzados (${activos.length}) — ${activos.join(' · ')}` : 'Filtros avanzados';
     }
 
-    // Los contadores ya llegan "desenvueltos" desde el cliente HTTP: el
-    // endpoint responde { success, data: counts } y unwrap() devuelve ese
-    // objeto. Antes se leía result.data y por eso todos mostraban 0.
-    async function loadCounts() {
-      try {
-        const result = await API.clients.conteoEtapas();
-        // El endpoint responde { success, data: counts } y `unwrap()` ya devuelve
-        // ese objeto plano. Se acepta también la forma envuelta para que un
-        // cambio en el cliente HTTP nunca deje el embudo entero en cero.
-        const counts = result && typeof result === 'object' && !Array.isArray(result)
-          ? (result.data && typeof result.data === 'object' && !Array.isArray(result.data) ? result.data : result)
-          : {};
-        state.counts = counts;
-      } catch (error) {
-        state.counts = {};
-      }
-      const total = state.counts.total
-        || CLIENT_STAGES.reduce((sum, s) => sum + (Number(state.counts[s.key]) || 0), 0);
-      pipelineEl.querySelectorAll('.pipeline-count').forEach((el) => {
-        el.textContent = el.dataset.count === 'total'
-          ? String(total)
-          : String(Number(state.counts[el.dataset.count]) || 0);
-      });
-    }
-
     let searchTimer = null;
     if (searchEl) searchEl.addEventListener('input', () => {
       clearTimeout(searchTimer);
@@ -412,15 +327,6 @@ window.Pages.clients = {
         UI.toast(error.message, 'error');
       }
     });
-    if (pipelineEl) pipelineEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('.pipeline-step');
-      if (!btn || !pipelineEl.contains(btn)) return;
-      state.etapaActual = btn.dataset.stage || '';
-      state.page = 1;
-      renderPipelineActive();
-      load();
-    });
-
     function applyFilters() {
       state.servicio = fServicio ? fServicio.value : '';
       state.tipoPropiedad = fTipo ? fTipo.value : '';
@@ -466,7 +372,6 @@ window.Pages.clients = {
           q: state.q || undefined,
           page: state.page,
           limit: 16,
-          etapaActual: state.etapaActual || undefined,
           servicio: state.servicio || undefined,
           tipoPropiedad: state.tipoPropiedad || undefined,
           zona: state.zona || undefined,
@@ -480,7 +385,7 @@ window.Pages.clients = {
         if (!items.length) {
           gridEl.innerHTML = `
             <div class="clients-empty">
-              ${state.q || state.etapaActual || hasAdvancedFilters()
+              ${state.q || hasAdvancedFilters()
                 ? '<p class="text-muted">Sin resultados para los filtros actuales.</p>'
                 : '<p class="text-muted">Sin clientes aún. Registra tu primer cliente.</p>'}
             </div>`;
@@ -515,12 +420,8 @@ window.Pages.clients = {
     }
 
     function cardHTML(c) {
-      const stage = stageInfo(c.etapaActual);
       const telefono = Format.digits(c.telefono || '');
       const whatsapp = telefono ? Format.whatsappLink(telefono) : '';
-      const discarded = c.etapaActual === 'DESCARTADO';
-      const canBack = previousOf(c.etapaActual);
-      const canNext = nextOf(c.etapaActual);
       // Forma de pago y capacidad de pago solo aplican a quien COMPRA. En un
       // cliente que viene a VENDER no se muestran (aunque un registro viejo
       // los conserve), para no confundir al asesor.
@@ -533,7 +434,7 @@ window.Pages.clients = {
         aplicaPago && c.formaPago ? { label: 'Pago', value: c.formaPago === 'Otro' ? (c.formaPagoOtro || 'Otro') : c.formaPago } : null,
       ].filter(Boolean);
       return `
-        <article class="client-card" style="--stage-color:${stage.color};">
+        <article class="client-card">
           <div class="client-card-head">
             <div class="client-card-title">
               <strong>${esc(c.nombre)}</strong>
@@ -541,7 +442,6 @@ window.Pages.clients = {
                 ${[c.email, c.asesorAsignado ? `Asesor: ${c.asesorAsignado.name || ''}` : ''].filter(Boolean).map((v) => esc(v)).join(' · ') || '—'}
               </div>
             </div>
-            <span class="stage-badge" style="background:${stage.color}22;color:${stage.color};border:1px solid ${stage.color}55;">${esc(stage.label)}</span>
           </div>
 
           <div class="client-card-line">
@@ -559,20 +459,12 @@ window.Pages.clients = {
           ${perfil.length ? `<div class="client-card-profile">${perfil.map((p) => `<span><small>${esc(p.label)}</small> ${esc(p.value)}</span>`).join('')}</div>` : ''}
           ${c.notasGenerales ? `<div class="client-card-notes">${esc(c.notasGenerales)}</div>` : ''}
 
-          ${discarded ? '' : `
-          <div class="client-card-nav">
-            ${canBack ? `<button class="btn btn-secondary btn-sm" type="button" data-action="back" data-record="${c._id}" title="Regresar a ${esc(stageInfo(canBack).label)}">◀ Regresar</button>` : ''}
-            ${canNext ? `<button class="btn btn-primary btn-sm" type="button" data-action="next" data-record="${c._id}" title="Avanzar a ${esc(stageInfo(canNext).label)}">Avanzar ▶</button>` : ''}
-          </div>`}
-
           <div class="client-card-actions">
-            ${discarded
-              ? `<button class="btn btn-secondary btn-sm" type="button" data-action="reactivate" data-record="${c._id}" title="Reactivar el cliente">↻ Reactivar</button>`
-              : `<button class="btn btn-secondary btn-sm" type="button" data-action="discard" data-record="${c._id}" title="Descartar cliente">✕ Descartar</button>`}
             ${whatsapp ? `<a class="btn btn-sm crm-btn-wa" href="${whatsapp}" target="_blank" rel="noopener" title="Enviar WhatsApp">WhatsApp</a>` : ''}
             <button class="btn btn-secondary btn-sm" type="button" data-action="llamada" data-record="${c._id}" title="Marcar el teléfono del cliente y registrar la llamada en su bitácora">&#128222; Llamar</button>
             <button class="btn btn-secondary btn-sm" type="button" data-action="perfil" data-record="${c._id}" title="Editar perfil inmobiliario">Editar Perfil</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-action="historial" data-record="${c._id}" title="Ver bitácora de etapas">Ver Bitácora</button>
+            <button class="btn btn-primary btn-sm" type="button" data-action="nota" data-record="${c._id}" title="Agregar una nota al historial">+ Nota</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-action="historial" data-record="${c._id}" title="Ver historial completo">Ver Historial</button>
             ${c.ultimaCitaId ? `<button class="btn btn-secondary btn-sm" type="button" data-action="cita" data-record="${c._id}" title="Abrir la cita vinculada">Ver Cita</button>` : ''}
             ${c.negocioId ? `<button class="btn btn-secondary btn-sm" type="button" data-action="negocio" data-record="${c._id}" title="Abrir el negocio vinculado">Ver Negocio</button>` : ''}
             <button class="icon-btn" type="button" data-action="eliminar" data-record="${c._id}" title="Eliminar cliente">&times;</button>
@@ -602,19 +494,18 @@ window.Pages.clients = {
         link.remove();
         try {
           await API.clients.registrarLlamada(record._id);
-          UI.toast('Llamada registrada en la bitácora del cliente', 'success');
+          UI.toast('Llamada registrada en el historial del cliente', 'success');
           load();
-          loadCounts();
         } catch (error) {
           UI.toast(error.message, 'error');
         }
         return;
       }
       if (action === 'perfil') return openProfileModal(record);
+      if (action === 'nota') return openNotaModal(record);
       if (action === 'historial') return openHistorialModal(record);
       if (action === 'cita') { window.location.href = 'appointments.html'; return; }
       if (action === 'negocio') { window.location.href = 'businesses.html'; return; }
-      if (['next', 'back', 'discard', 'reactivate'].includes(action)) return openTransition(record, action);
       if (action === 'eliminar') {
         const ok = await UI.confirm(`¿Eliminar al cliente "${record.nombre}"?`);
         if (!ok) return;
@@ -622,7 +513,6 @@ window.Pages.clients = {
           await API.clients.remove(record._id);
           UI.toast('Cliente eliminado', 'success');
           load();
-          loadCounts();
         } catch (error) {
           UI.toast(error.message, 'error');
         }
@@ -742,12 +632,10 @@ window.Pages.clients = {
           limpiarPagoSiVende(values);
           limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad', 'medio'], e.target);
           try {
-            const created = await API.clients.create(values);
+            await API.clients.create(values);
             UI.closeModal();
+            UI.toast('Cliente registrado', 'success');
             load();
-            loadCounts();
-            const nombre = (created && created.data && created.data.nombre) || 'El cliente';
-            verifyCenter({ title: 'Cliente registrado', message: `${esc(nombre)} quedó como <strong>Prospecto</strong>. El siguiente paso es <strong>Perfilarlo</strong> antes de agendar la cita.` });
           } catch (error) {
             UI.toast(error.message, 'error');
           }
@@ -840,254 +728,108 @@ window.Pages.clients = {
       }
     }
 
-    /* ── Transición de etapa (avanzar / regresar / descartar / reactivar) ── */
-    function openTransition(record, direction) {
-      const current = STAGE_ALIASES[record.etapaActual] || record.etapaActual || 'PROSPECTO';
-      let target = '';
-      if (direction === 'next') target = nextOf(current);
-      else if (direction === 'back') target = previousOf(current);
-      else if (direction === 'discard') target = 'DESCARTADO';
-      else if (direction === 'reactivate') {
-        const hist = Array.isArray(record.historialEtapas) ? record.historialEtapas : [];
-        const last = hist[hist.length - 1];
-        target = (last && last.etapaAnterior) || 'PROSPECTO';
-      }
-      if (!target) {
-        UI.toast('No hay un destino válido para esta etapa', 'warning');
-        return;
-      }
-
-      const targetInfo = stageInfo(target);
-      const notaHint = direction === 'discard'
-        ? 'Ej. No es viable por ahora, se descarta el seguimiento…'
-        : direction === 'reactivate'
-          ? 'Ej. Retomó contacto, reactivamos su seguimiento…'
-          : direction === 'back'
-            ? 'Ej. Necesita más tiempo, regresamos a esta etapa…'
-            : (target === 'PERFILADO'
-                ? 'Ej. Se perfila al cliente: operación, presupuesto, zona y tipo de propiedad…'
-                : target === 'SEGUIMIENTO'
-                  ? 'Ej. Asistió a la cita, seguimos en contacto con opciones…'
-                  : target === 'CITA'
-                    ? 'Ej. Agendó visita para revisar las opciones disponibles…'
-                    : 'Ej. Aceptó la propuesta, se inicia la formalización…');
-
-      let extraFields = '';
-      let notice = '';
-      if (target === 'PERFILADO') {
-        notice = '<div class="stage-notice">📋 Aquí se perfila al cliente antes de agendar. Puedes dejar campos en blanco y completarlos luego con <strong>Editar Perfil</strong>.</div>';
-        extraFields = `
-          <div class="stage-input-grid">
-            ${fieldConOtro('servicio', 'Operación', { value: record.servicio || '', otroValue: record.servicioOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_SERVICIOS.map((s) => ({ value: s, label: s }))], placeholder: 'Ej. Permuta, herencia…' })}
-            <div id="pago-compra-box" style="display:contents;">
-              ${fieldConOtro('formaPago', 'Forma de compra (opcional)', { value: record.formaPago || '', otroValue: record.formaPagoOtro || '', options: [{ value: '', label: '— Pendiente (por confirmar) —' }, ...opcionesFormaPago(record.formaPago)], placeholder: 'Ej. Pago mixto, préstamo familiar…' })}
-              ${UI.field('capacidad', 'Capacidad de pago', { type: 'money', value: record.capacidad || '', placeholder: 'Pendiente / por confirmar' })}
-            </div>
-            ${fieldConOtro('tipoPropiedad', 'Tipo de propiedad', { value: record.tipoPropiedad || '', otroValue: record.tipoPropiedadOtro || '', options: [{ value: '', label: '— Sin especificar —' }, ...CLIENT_TIPOS_PROPIEDAD.map((t) => ({ value: t, label: t }))], placeholder: 'Ej. Penthouse, predio industrial…' })}
-            ${UI.field('zona', 'Zona deseada', { value: record.zona || '' })}
-            ${UI.field('queBusca', '¿Qué busca?', { type: 'textarea', rows: 3, value: record.queBusca || '', full: true, placeholder: 'Ej. casa de 2 recámaras con cochera en zona norte' })}
-          </div>`;
-      } else if (target === 'SEGUIMIENTO') {
-        notice = '<div class="stage-notice">🙋 <strong>Una sola nota</strong> es obligatoria. Si necesitas ajustar el perfil inmobiliario, usa <strong>Editar Perfil</strong> en la tarjeta.</div>';
-        extraFields = '';
-      } else if (target === 'CITA') {
-        const today = new Date();
-        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        notice = '<div class="stage-notice">📅 La cita se registrará y se sincronizará automáticamente con tu <strong>Calendario</strong>.</div>';
-        extraFields = `
-          <div class="stage-input-grid">
-            ${UI.field('fechaCita', 'Fecha de la cita', { type: 'date', value: dateStr, required: true })}
-            ${UI.field('horaCita', 'Hora', { type: 'time', value: '12:00' })}
-            ${UI.field('lugarPropiedad', 'Ubicación / referencia', { value: record.zona || '', placeholder: 'Ej. Oficina central o dirección de la propiedad' })}
-            ${UI.field('asunto', 'Asunto', { value: '', placeholder: 'Ej. Visita a casa modelo' })}
-          </div>`;
-      } else if (target === 'NEGOCIACION_CIERRE') {
-        notice = record.negocioId
-          ? '<div class="stage-notice">⚠️ Este cliente ya tiene un negocio vinculado en <strong>Negocios</strong>.</div>'
-          : '<div class="stage-notice">💼 Los negocios se crean <strong>únicamente de forma manual</strong> desde el módulo <strong>Negocios</strong>: avanzar de etapa ya no genera ninguno automáticamente.</div>';
-        extraFields = `
-          <div class="stage-input-grid">
-            ${UI.field('capacidad', 'Confirma monto / presupuesto de la operación', { type: 'money', value: record.capacidad || 0, required: true })}
-          </div>`;
-      }
-
+    /* ── Notas e historial único ────────────────────────────────────────── */
+    function openNotaModal(record, onSaved) {
       const modal = UI.openModal({
-        title: `${direction === 'next' ? 'Avanzar' : direction === 'back' ? 'Regresar' : direction === 'discard' ? 'Descartar' : 'Reactivar'} de etapa — ${esc(record.nombre)}`,
+        title: `Agregar nota — ${esc(record.nombre)}`,
         body: `
-          <p class="text-muted" style="margin-top:0;">${esc(stageInfo(current).label)} → <strong>${esc(targetInfo.label)}</strong></p>
-          ${notice}
-          <form id="client-stage-form" novalidate>
-            ${extraFields}
-            ${UI.field('nota', 'Nota del cambio (obligatoria)', { type: 'textarea', required: true, full: true, placeholder: notaHint })}
-          </form>
-        `,
+          <form id="client-nota-form" novalidate>
+            <div class="form-group">
+              <label for="nota-texto">Nota</label>
+              <textarea class="form-control" id="nota-texto" name="nota" rows="4" required placeholder="Escribe aquí la nota, novedad o seguimiento del cliente…"></textarea>
+            </div>
+          </form>`,
         footer: `
           <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="submit" form="client-stage-form">Confirmar cambio</button>
-        `,
-        size: 620,
+          <button class="btn btn-primary" type="submit" form="client-nota-form">Guardar nota</button>`,
+        size: 520,
       });
-
       const overlay = modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
-      const cancelBtn = overlay ? overlay.querySelector('[data-cancel]') : null;
-      if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-
-      const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-stage-form') : null;
-      if (form) {
-        wireOtros(form);
-        wirePagoPorServicio(form);
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const values = UI.collectForm(e.target);
-          const nota = String(values.nota || '').trim();
-          if (!nota) {
-            UI.toast('La nota es obligatoria para mover de etapa', 'warning');
-            return;
-          }
-          const payload = { etapaNueva: target, nota };
-          const datosEtapa = {};
-          const putIfFilled = (key) => {
-            const value = values[key];
-            if (value !== null && value !== undefined && String(value).trim() !== '') datosEtapa[key] = value;
-          };
-          if (target === 'PERFILADO') {
-            limpiarPagoSiVende(values);
-            limpiarOtros(values, ['servicio', 'formaPago', 'tipoPropiedad'], e.target);
-            ['servicio', 'servicioOtro', 'formaPago', 'formaPagoOtro', 'tipoPropiedad', 'tipoPropiedadOtro', 'zona', 'capacidad', 'queBusca'].forEach(putIfFilled);
-          } else if (target === 'CITA') {
-            ['fechaCita', 'horaCita', 'lugarPropiedad', 'asunto'].forEach(putIfFilled);
-          } else if (target === 'NEGOCIACION_CIERRE' && values.capacidad !== undefined && values.capacidad !== null && String(values.capacidad).trim() !== '') {
-            datosEtapa.capacidad = values.capacidad;
-          }
-          if (Object.keys(datosEtapa).length) payload.datosEtapa = datosEtapa;
-          try {
-            const result = await API.clients.changeEtapa(record._id, payload);
-            UI.closeModal();
-            load();
-            loadCounts();
-            showVerify(record, target, result, direction);
-          } catch (error) {
-            UI.toast(error.message, 'error');
-          }
-        });
-      }
-    }
-
-    /* ── Confirmación / verificación centrada en pantalla ────────────── */
-    function showVerify(record, target, result, direction) {
-      const targetInfo = stageInfo(target);
-      const lines = [];
-      if (direction === 'discard') lines.push(`"${esc(record.nombre)}" quedó en la etapa <strong>Descartado</strong>.`);
-      else lines.push(`"${esc(record.nombre)}" ${direction === 'back' ? 'regresó a la etapa' : 'avanzó a la etapa'} <strong>«${esc(targetInfo.label)}»</strong>.`);
-      lines.push('La nota del cambio quedó registrada en la bitácora del cliente.');
-
-      const actions = [];
-      if (result && result.newCita) {
-        const d = new Date(result.newCita.date);
-        const fechaTxt = isNaN(d.getTime()) ? 'fecha programada' : Format.dateTime(d);
-        lines.push(`📅 Cita agendada: <strong>${esc(fechaTxt)}</strong>${result.newCita.place ? ` — ${esc(result.newCita.place)}` : ''} y sincronizada con tu Calendario.`);
-        actions.push({ label: 'Ver mis Citas', href: 'appointments.html' });
-        actions.push({ label: 'Ver Calendario', href: 'calendar.html' });
-      }
-      if (target === 'NEGOCIACION_CIERRE') {
-        lines.push('💼 Recuerda: el negocio se crea <strong>manualmente</strong> desde <strong>Negocios</strong>; avanzar de etapa no lo genera solo.');
-      }
-      if (result && result.newNegocioId) {
-        lines.push('💼 Negocio ya vinculado a este cliente.');
-        actions.push({ label: 'Ver Negocio', href: 'businesses.html' });
-      }
-
-      verifyCenter({
-        title: direction === 'discard' ? 'Cliente descartado' : 'Cambio de etapa confirmado',
-        message: lines.join('<br>'),
-        actions,
+      const cancel = overlay ? overlay.querySelector('[data-cancel]') : null;
+      if (cancel) cancel.addEventListener('click', () => UI.closeModal());
+      const form = modal.bodyEl ? modal.bodyEl.querySelector('#client-nota-form') : null;
+      const input = form ? form.querySelector('#nota-texto') : null;
+      if (input) setTimeout(() => { try { input.focus(); } catch (e) { /* noop */ } }, 50);
+      if (form) form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const nota = input ? input.value.trim() : '';
+        if (!nota) { UI.toast('Escribe una nota antes de guardar.', 'warning'); return; }
+        try {
+          await API.clients.addNota(record._id, nota);
+          UI.closeModal();
+          UI.toast('Nota agregada al historial', 'success');
+          if (typeof onSaved === 'function') await onSaved();
+          else load();
+        } catch (error) {
+          UI.toast(error.message, 'error');
+        }
       });
     }
 
-    function verifyCenter({ title = 'Confirmado', message = '', actions = [] }) {
-      const prev = document.querySelector('.verify-overlay');
-      if (prev) prev.remove();
-      const overlay = document.createElement('div');
-      overlay.className = 'verify-overlay';
-      const actionButtons = actions.map((a) => `<a class="btn btn-primary" href="${a.href}">${esc(a.label)}</a>`).join('');
-      overlay.innerHTML = `
-        <div class="verify-panel" role="dialog" aria-modal="true" tabindex="-1">
-          <div class="verify-icon success">✔</div>
-          <h3>${esc(title)}</h3>
-          <p>${message}</p>
-          <div class="verify-actions">
-            ${actionButtons}
-            <button class="btn btn-secondary" data-close type="button">Entendido</button>
-          </div>
-        </div>`;
-      document.body.appendChild(overlay);
-      const close = () => overlay.remove();
-      const okBtn = overlay.querySelector('[data-close]');
-      if (okBtn) okBtn.addEventListener('click', close);
-      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-      const panel = overlay.querySelector('.verify-panel');
-      if (panel) { panel.focus(); panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); }); }
-      return { overlay, close };
-    }
-
-    /* ── Bitácora de etapas ───────────────────────────────────────────── */
+    /* ── Historial completo: notas, llamadas, cambios y etapas antiguas ── */
     async function openHistorialModal(record) {
       const modal = UI.openModal({
         title: `Historial — ${esc(record.nombre)}`,
         body: '<div class="loading">Cargando historial…</div>',
-        size: 680,
-      });
-      const bodyEl = modal.bodyEl;
-      try {
-        const [etapas, cambios] = await Promise.all([
-          API.clients.historial(record._id).catch(() => []),
-          API.clients.historialCambios(record._id).catch(() => []),
-        ]);
-        const etapasArr = Array.isArray(etapas) ? etapas : [];
-        const cambiosArr = Array.isArray(cambios) ? cambios : [];
+        size: 860,
+      })
+      const bodyEl = modal.bodyEl
+      let items = []
 
-        if (!etapasArr.length && !cambiosArr.length) {
-          bodyEl.innerHTML = '<p class="text-muted">Aún no hay movimientos en el historial.</p>';
-          return;
-        }
-
-        const etapaItems = etapasArr.map((h) => {
-          const who = h.usuario && typeof h.usuario === 'object' && h.usuario.name ? h.usuario.name : (h.usuario ? h.usuario : 'Admin');
-          return `
-            <li>
-              <strong>${esc(h.etapaAnterior ? `${stageInfo(h.etapaAnterior).label} → ${stageInfo(h.etapaNueva || h.etapa).label}` : `Registro en ${stageInfo(h.etapaNueva || h.etapa).label}`)}</strong>
-              <div class="text-muted" style="font-size:12px;">${Format.dateTime(h.fecha)} · ${esc(who)}</div>
-              <div style="font-size:13px;">${esc(h.nota || '')}</div>
-            </li>`;
-        });
-
-        const cambioItems = cambiosArr.map((c) => {
-          const who = c.usuario && typeof c.usuario === 'object' && c.usuario.name ? c.usuario.name : (c.usuario ? c.usuario : 'Admin');
-          const anterior = c.anterior === null || c.anterior === undefined || c.anterior === '' ? '<em class="text-muted">vacío</em>' : esc(String(c.anterior));
-          const nuevo = c.nuevo === null || c.nuevo === undefined || c.nuevo === '' ? '<em class="text-muted">vacío</em>' : esc(String(c.nuevo));
-          return `
-            <li>
-              <strong>${esc(c.campoLabel || c.campo)}</strong>: ${anterior} <span class="text-muted">→</span> ${nuevo}
-              <div class="text-muted" style="font-size:12px;">${Format.dateTime(c.fecha)} · ${esc(who)}</div>
-            </li>`;
-        });
-
-        bodyEl.innerHTML = `
-          ${cambioItems.length ? `
-            <h4 style="margin:0 0 10px;color:var(--primary);">✎ Cambios de perfil</h4>
-            <ul class="timeline" style="margin-bottom:22px;">${cambioItems.join('')}</ul>
-          ` : ''}
-          ${etapaItems.length ? `
-            <h4 style="margin:0 0 10px;color:var(--primary);">🔀 Movimientos de etapa</h4>
-            <ul class="timeline">${etapaItems.join('')}</ul>
-          ` : ''}
-        `;
-      } catch (error) {
-        bodyEl.innerHTML = UI.errorAlert(error.message);
+      const TYPE_BADGES = {
+        nota: { label: 'Nota', color: '#5B2D8E', bg: '#5B2D8E22' },
+        llamada: { label: 'Llamada', color: '#0ea5e9', bg: '#0ea5e922' },
+        cambio: { label: 'Cambio', color: '#d97706', bg: '#d9770622' },
+        etapa: { label: 'Etapa (antigua)', color: '#64748b', bg: '#64748b22' },
       }
-    }
 
-    loadCounts();
+      const render = () => {
+        const addBtnHtml = '<button class="btn btn-primary btn-sm" type="button" data-add-nota>+ Agregar nota</button>'
+        if (!items.length) {
+          bodyEl.innerHTML = `
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">${addBtnHtml}</div>
+            <p class="text-muted">Aún no hay movimientos en el historial de este cliente.</p>`
+        } else {
+          bodyEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+              <span class="text-muted">${items.length} registro${items.length === 1 ? '' : 's'} · más reciente primero</span>
+              ${addBtnHtml}
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="table" style="min-width:660px;">
+                <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Nota</th><th>Registró</th></tr></thead>
+                <tbody>
+                  ${items.map((it) => {
+                    const badge = TYPE_BADGES[it.tipo] || TYPE_BADGES.cambio
+                    return `<tr>
+                      <td data-label="Fecha" style="white-space:nowrap;">${esc(Format.dateTime(it.fecha))}</td>
+                      <td data-label="Tipo"><span class="badge" style="background:${badge.bg};color:${badge.color};">${esc(badge.label)}</span></td>
+                      <td data-label="Detalle"><strong>${esc(it.titulo || '—')}</strong>${it.detalle ? `<div class="text-muted" style="font-size:12.5px;">${esc(it.detalle)}</div>` : ''}</td>
+                      <td data-label="Nota">${esc(it.nota || '—')}</td>
+                      <td data-label="Registró">${esc(it.usuario || '—')}</td>
+                    </tr>`
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>`
+        }
+        const addBtn = bodyEl.querySelector('[data-add-nota]')
+        // openModal() reemplaza el modal abierto: al guardar la nota volvemos a
+        // abrir el historial para que el usuario vea el nuevo renglón.
+        if (addBtn) addBtn.addEventListener('click', () => openNotaModal(record, () => openHistorialModal(record)))
+      }
+
+      const refresh = async () => {
+        try {
+          const res = await API.clients.historialCompleto(record._id)
+          items = Array.isArray(res) ? res : ((res && res.data) || [])
+          render()
+        } catch (error) {
+          bodyEl.innerHTML = UI.errorAlert(error.message)
+        }
+      }
+      await refresh()
+    }
     load();
   },
 };

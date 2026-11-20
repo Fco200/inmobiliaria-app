@@ -3,7 +3,7 @@
 const asyncHandler = require('../middlewares/asyncHandler');
 const buildCrud = require('../utils/crud');
 const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
-const { Appointment, Task, User } = require('../models');
+const { Appointment, Task, User, Property } = require('../models');
 const { googleCreateEvent } = require('./calendar.controller');
 const { ensure } = require('../services/notification.service');
 const { formatFechaHora } = require('../utils/datetime');
@@ -40,24 +40,46 @@ const appointmentCrud = buildCrud(Appointment, {
   // Permite filtrar el listado por cliente, propiedad o negocio desde la barra
   // de filtros (los selects con búsqueda remota envían ?client=…).
   extraFilters: { client: 'client', property: 'property', business: 'business', type: 'type' },
-  // Toda cita pertenece a un asesor. Si el formulario no envía `user` (p. ej.
-  // la cita se agenda desde el inventario general), se asigna al usuario de la
-  // sesión en lugar de rechazarla por validación.
+  // La cita SIEMPRE pertenece al asesor de la sesión, aunque el formulario
+  // (o una llamada externa) intente enviar otro `user`: el asesor se asigna
+  // automáticamente y no se puede delegar la cita a otro desde el alta.
   beforeCreate: (body, req) => {
-    if (!body.user && req.user && req.user._id) body.user = req.user._id;
+    if (req.user && req.user._id) body.user = req.user._id;
     return body;
   },
   afterCreate: async (doc, req) => {
     await syncToGoogle(doc, req, 'appointment').catch(() => {});
     const ownerId = doc.user && (doc.user._id || doc.user);
-    if (!ownerId) return;
+    if (ownerId) {
+      await ensure({
+        type: 'cita_proxima',
+        key: `appointment-${doc._id}`,
+        title: 'Cita agendada',
+        message: `Tienes una cita${doc.type ? ` (${doc.type.replace(/_/g, ' ')})` : ''} el ${formatFechaHora(doc.date)}.`,
+        userId: ownerId,
+        data: { entityId: doc._id, date: doc.date },
+      }).catch(() => {});
+    }
+
+    // Aviso al captador: el responsable de la propiedad seleccionada debe
+    // enterarse de que se agendó una visita, aunque la cita la haya creado
+    // otro asesor (por ejemplo desde el inventario general).
+    const propertyId = doc.property && (doc.property._id || doc.property);
+    if (!propertyId) return;
+    const property = await Property.findById(propertyId)
+      .select('responsibleUser title type zone city')
+      .populate('responsibleUser', 'name')
+      .lean()
+      .catch(() => null);
+    const captadorId = property && property.responsibleUser && (property.responsibleUser._id || property.responsibleUser);
+    if (!captadorId || String(captadorId) === String(ownerId)) return;
     await ensure({
-      type: 'cita_proxima',
-      key: `appointment-${doc._id}`,
-      title: 'Cita agendada',
-      message: `Tienes una cita${doc.type ? ` (${doc.type.replace(/_/g, ' ')})` : ''} el ${formatFechaHora(doc.date)}.`,
-      userId: ownerId,
-      data: { entityId: doc._id, date: doc.date },
+      type: 'cita_propiedad_captador',
+      key: `appointment-captador-${doc._id}`,
+      title: 'Cita en tu propiedad',
+      message: `Se agendó una cita en tu propiedad para el ${formatFechaHora(doc.date)}.`,
+      userId: captadorId,
+      data: { entityId: doc._id, propertyId, date: doc.date },
     }).catch(() => {});
   },
 });

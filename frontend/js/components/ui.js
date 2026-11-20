@@ -578,6 +578,19 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     return;
   }
 
+  // En iPhone, guardar en Fotos (una o todas) exige navigator.share({ files })
+  // DENTRO del clic. Por eso TODOS los Blobs se precargan al abrir el visor.
+  const gallery = window.PhotoGallery || null;
+  const isIOS = /iP(hone|ad|od)/.test(navigator.platform)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const resolveSource = (src) => (window.AppConfig && window.AppConfig.resolveUrl
+    ? window.AppConfig.resolveUrl(src)
+    : String(src));
+  function gallerySource(src) {
+    if (!gallery || typeof gallery.preload !== 'function') return Promise.resolve(null);
+    return gallery.preload(resolveSource(src));
+  }
+
   // Si ya había un visor abierto se cierra con su cleanup completo (no solo
   // con .remove()), porque de lo contrario el listener de teclado del visor
   // anterior quedaba enganchado y respondía sobre el visor nuevo.
@@ -600,11 +613,14 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
       <span class="lightbox-title"></span>
       <span class="lightbox-counter" aria-live="polite"></span>
       <div class="lightbox-actions">
+        <button type="button" class="lightbox-btn lightbox-btn-gallery" data-lb-gallery title="Guardar en Fotos/Galería" aria-label="Guardar en Fotos/Galería">
+          <span aria-hidden="true">&#128190;</span><span class="lightbox-btn-text">Guardar en Fotos</span>
+        </button>
         <button type="button" class="lightbox-btn" data-lb-download title="Descargar esta foto" aria-label="Descargar esta foto">
           <span aria-hidden="true">&#11015;</span><span class="lightbox-btn-text">Descargar</span>
         </button>
-        ${photos.length > 1 ? `<button type="button" class="lightbox-btn" data-lb-download-all title="Descargar todas las fotos" aria-label="Descargar todas las fotos">
-          <span aria-hidden="true">&#128229;</span><span class="lightbox-btn-text">Todas</span>
+        ${photos.length > 1 ? `<button type="button" class="lightbox-btn lightbox-btn-gallery" data-lb-download-all title="Guardar todas en Fotos/Galería" aria-label="Guardar todas en Fotos/Galería">
+          <span aria-hidden="true">&#128190;</span><span class="lightbox-btn-text">Guardar todas</span>
         </button>` : ''}
         <button type="button" class="icon-btn" data-lb-close title="Cerrar (Esc)" aria-label="Cerrar">&times;</button>
       </div>
@@ -631,6 +647,13 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
     counterEl.textContent = `${index + 1} / ${photos.length}`;
     titleEl.textContent = title;
     const single = photos.length < 2;
+    // Precarga TODAS las fotos: "Guardar en Fotos" y "Guardar todas" ya tienen
+    // los Blobs listos cuando el usuario toca el botón (clave en iOS).
+    if (gallery && typeof gallery.preloadAll === 'function') {
+      gallery.preloadAll(photos.map(resolveSource));
+    } else {
+      photos.forEach(gallerySource);
+    }
     box.querySelector('.lightbox-prev').style.display = single ? 'none' : '';
     box.querySelector('.lightbox-next').style.display = single ? 'none' : '';
     box.querySelectorAll('.lightbox-thumb').forEach((t, i) => {
@@ -675,12 +698,38 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
   // imagen el asesor se quedaba atrapado y tenía que cerrar la pestaña.
   box.addEventListener('click', (e) => {
     if (swiped) { swiped = false; return; }
-    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index], [data-lb-download], [data-lb-download-all]')) return;
+    if (e.target.closest('[data-lb-close], [data-lb-prev], [data-lb-next], [data-lb-index], [data-lb-gallery], [data-lb-download], [data-lb-download-all]')) return;
     closeLightbox();
   });
   box.querySelector('[data-lb-close]').addEventListener('click', closeLightbox);
   box.querySelector('[data-lb-prev]').addEventListener('click', () => go(-1));
   box.querySelector('[data-lb-next]').addEventListener('click', () => go(1));
+
+  const galleryBtn = box.querySelector('[data-lb-gallery]');
+  if (galleryBtn) {
+    // En iPhone el botón de descarga guarda en Archivos, no en Fotos. Se
+    // aclara el texto para que el asesor use el botón correcto.
+    if (isIOS) {
+      const downloadLabel = box.querySelector('[data-lb-download] .lightbox-btn-text');
+      if (downloadLabel) downloadLabel.textContent = 'Archivos';
+    }
+    galleryBtn.addEventListener('click', async () => {
+      const src = photos[index];
+      const name = imageFileName(src, index, title.replace(/^Fotos? — /, ''));
+      if (!gallery || typeof gallery.save !== 'function') {
+        await downloadImage(src, name);
+        toast('En iPhone mantén pulsada la imagen y elige “Guardar imagen”.', 'info');
+        return;
+      }
+      try {
+        const blob = await gallerySource(src);
+        const result = await gallery.save(blob || src, name);
+        gallery.toastResult(result);
+      } catch (error) {
+        toast((error && error.message) || 'No se pudo guardar la foto en la galería.', 'error');
+      }
+    });
+  }
 
   const downloadBtn = box.querySelector('[data-lb-download]');
   if (downloadBtn) {
@@ -693,8 +742,21 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
   }
   const downloadAllBtn = box.querySelector('[data-lb-download-all]');
   if (downloadAllBtn) {
-    downloadAllBtn.addEventListener('click', () => {
-      downloadImages(photos, title.replace(/^Fotos? — /, ''));
+    downloadAllBtn.addEventListener('click', async () => {
+      const baseName = title.replace(/^Fotos? — /, '');
+      const names = photos.map((src, i) => imageFileName(src, i, baseName));
+      if (gallery && typeof gallery.saveMany === 'function') {
+        try {
+          // Los Blobs ya están precargados; no se hace fetch dentro del clic.
+          const result = await gallery.saveMany(photos, { names, baseName });
+          gallery.toastResult(result, photos.length);
+          return;
+        } catch (error) {
+          toast((error && error.message) || 'No se pudieron guardar las fotos.', 'error');
+          return;
+        }
+      }
+      await downloadImages(photos, baseName);
     });
   }
 

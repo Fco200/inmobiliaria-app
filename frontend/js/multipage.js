@@ -481,6 +481,7 @@ window.AppShell = (() => {
     cita_recordatorio_24h: 'appointments.html',
     cita_recordatorio_1h: 'appointments.html',
     cita_recordatorio_personal: 'appointments.html',
+    cita_propiedad_captador: 'appointments.html',
     meta_proxima_vencer: 'goals.html',
     documento_pendiente: 'documents.html',
     documento_rechazado: 'documents.html',

@@ -5,9 +5,9 @@
 // Cada vez que se publica un commit nuevo, el backend devuelve un hash de
 // versión distinto en /api/config/version. Este módulo:
 //   - consulta la versión al abrir la app y cada pocos minutos,
-//   - si detecta que cambió, muestra una notificación (banner + punto en el
-//     botón superior) que lleva al módulo "Actualizaciones",
-//   - desde ese módulo el usuario ve las mejoras y aplica la actualización.
+//   - si detecta que cambió, muestra SOLO el aviso de seguridad
+//     "ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD" (banner + punto),
+//   - el botón "Actualizar ahora" aplica la actualización sin listados ni modales.
 //
 // Funciona para TODOS los roles: el botón y el módulo son visibles siempre.
 window.AppVersion = (() => {
@@ -72,59 +72,8 @@ window.AppVersion = (() => {
     if (el) el.remove();
   }
 
-  // Modal de aviso: se muestra al INICIAR SESIÓN la primera vez que aparece
-  // una versión nueva (saludo + novedades con acceso a Actualizaciones).
-  // Se registra en localStorage: si el usuario ya lo vio, o ya actualizó, el
-  // aviso NO se vuelve a mostrar en ninguna otra sesión. El banner de arriba
-  // y el punto del botón permanecen hasta que el usuario actualice.
-  const MODAL_SHOWN_KEY = 'crm_update_modal_shown';
-
-  function modalShown() {
-    try {
-      const hash = String(latest && latest.hash ? latest.hash : '');
-      return hash !== '' && localStorage.getItem(MODAL_SHOWN_KEY) === hash;
-    } catch (e) { return false; }
-  }
-
-  function markModalShown() {
-    try { localStorage.setItem(MODAL_SHOWN_KEY, String(latest && latest.hash ? latest.hash : '')); } catch (e) { /* noop */ }
-  }
-
-  function showUpdateModal() {
-    if (!isUpdateAvailable() || modalShown()) return;
-    if (!window.UI || typeof UI.openModal !== 'function') return;
-    markModalShown();
-
-    const notes = latest && Array.isArray(latest.notes) && latest.notes.length
-      ? latest.notes.filter(Boolean).slice(0, 4)
-      : [];
-    const versionText = latest && latest.version ? UI.escapeHtml(String(latest.version)) : '';
-
-    const modal = UI.openModal({
-      title: `🎉 Nueva versión disponible${versionText ? ` — v${versionText}` : ''}`,
-      body: `
-        <p style="margin-top:0;">Hola <strong>${UI.escapeHtml((window.ApiClient && ApiClient.getStoredUser() && ApiClient.getStoredUser().name) || '')}</strong>, hay una nueva actualización disponible. <strong>Puntos de la actualización:</strong></p>
-        ${notes.length
-          ? `<ul style="margin:0;padding-left:18px;display:grid;gap:8px;list-style-type:disc;">
-              ${notes.map((n) => `<li style="font-size:13px;">${UI.escapeHtml(n)}</li>`).join('')}
-             </ul>`
-          : '<p class="text-muted" style="margin:0;">Mejoras y correcciones generales de la aplicación.</p>'}
-        <h4 class="update-modal-title">Actualiza tu app desde el módulo de Actualizaciones y da clic en “Actualizar ahora”.</h4>
-      `,
-      footer: `
-        <button class="btn btn-secondary" type="button" data-update-later>Después</button>
-        <a class="btn btn-primary" href="actualizaciones.html" data-update-go>Ir a Actualizaciones</a>
-      `,
-    });
-
-    const overlay = modal && modal.bodyEl ? modal.bodyEl.closest('#modal-overlay') : null;
-    if (!overlay) return;
-    const laterBtn = overlay.querySelector('[data-update-later]');
-    if (laterBtn) laterBtn.addEventListener('click', () => UI.closeModal());
-    const goBtn = overlay.querySelector('[data-update-go]');
-    if (goBtn) goBtn.addEventListener('click', () => UI.closeModal());
-  }
-
+  // Sin modal de novedades: sólo un aviso de seguridad. El banner superior y
+  // el punto del botón permanecen hasta que el usuario aplique la actualización.
   function showBanner() {
     if (!isUpdateAvailable()) return;
     if (document.getElementById('version-banner')) return;
@@ -135,15 +84,16 @@ window.AppVersion = (() => {
     banner.id = 'version-banner';
     banner.className = 'version-banner';
     banner.innerHTML = `
-      <span class="version-banner-icon">&#128260;</span>
+      <span class="version-banner-icon">&#128274;</span>
       <div style="flex:1;min-width:0;">
-        <strong>Nueva versión disponible${latest && latest.version ? ` (${UI.escapeHtml(latest.version)})` : ''}</strong>
-        <div class="text-muted" style="font-size:12px;">Hay mejoras listas. Toca "Ver mejoras" para actualizar.</div>
+        <strong>ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD</strong>
       </div>
-      <a class="btn btn-primary btn-sm" href="actualizaciones.html">Ver mejoras</a>
+      <button class="btn btn-primary btn-sm" type="button" data-apply-version>Actualizar ahora</button>
       <button class="icon-btn" type="button" data-close-version aria-label="Cerrar aviso">&times;</button>
     `;
     banner.querySelector('[data-close-version]').addEventListener('click', () => banner.remove());
+    const applyBtn = banner.querySelector('[data-apply-version]');
+    if (applyBtn) applyBtn.addEventListener('click', () => applyUpdate());
 
     if (host.parentNode && host.parentNode.classList.contains('main')) {
       host.parentNode.insertBefore(banner, host);
@@ -152,14 +102,11 @@ window.AppVersion = (() => {
     }
   }
 
-  // Notifica al usuario que hay una versión nueva. La usa este módulo y el
-  // handler del Service Worker (SW_UPDATED). Muestra el modal de bienvenida
-  // (solo la primera vez que aparece la versión) + el banner y el punto del
-  // botón.
+  // Notifica al usuario que hay una versión nueva: sólo el banner de seguridad
+  // y el punto del botón. No se abre ningún modal con listados de cambios.
   function notifyUpdate() {
     updateBadge();
     showBanner();
-    showUpdateModal();
   }
 
   function markSeen() {

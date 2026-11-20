@@ -504,10 +504,9 @@ window.PropertyPdf = (() => {
     if (pagos) filas.push({ label: 'Se puede vender con', value: pagos });
     const propietario = (prop.owner && (prop.owner.nombre || prop.owner.name)) || prop.ownerName;
     if (propietario) filas.push({ label: 'Propietario', value: propietario });
-    const asesorResp = prop.responsibleUser && typeof prop.responsibleUser === 'object'
-      ? (prop.responsibleUser.name || prop.responsibleUser.username || '')
-      : '';
-    if (asesorResp) filas.push({ label: 'Asesor responsable', value: asesorResp });
+    // El PDF NO muestra al asesor responsable de la captación: el único
+    // asesor que debe aparecer es el que comparte la propiedad (bloque de
+    // contacto al final, generado con `asesor`/usuario de la sesión).
     if (prop.isExternal) {
       filas.push({ label: 'Origen', value: prop.externalAdvisor ? `Externa — ofrecida por ${prop.externalAdvisor}` : 'Externa (otra inmobiliaria)' });
     }

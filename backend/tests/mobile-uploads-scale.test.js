@@ -78,13 +78,26 @@ test('la configuración soporta más de 1000 peticiones', () => {
   assert.match(server, /server\.requestTimeout =/, 'falta requestTimeout');
 });
 
+test('guardar todas las fotos usa la galería del celular', () => {
+  const gallery = read('frontend', 'js', 'components', 'photoGallery.js');
+  const ui = read('frontend', 'js', 'components', 'ui.js');
+  const inventory = read('frontend', 'pages', 'inventory', 'inventory.js');
+
+  assert.match(gallery, /async function saveMany/, 'falta el guardado masivo');
+  assert.match(gallery, /navigator\.share\(\{ files \}\)/, 'no se comparte el jalón de fotos');
+  assert.match(ui, /gallery\.saveMany\(photos/, 'el visor no guarda todas');
+  assert.match(inventory, /gallery\.saveMany\(photos/, 'el inventario no guarda todas');
+  assert.doesNotMatch(ui, /Descargar todas las fotos/, 'el visor sigue diciendo "Descargar todas"');
+  assert.doesNotMatch(inventory, />Descargar todas</, 'el inventario sigue diciendo "Descargar todas"');
+});
+
 test('la versión y la caché del Service Worker se actualizan juntas', () => {
   const version = JSON.parse(read('backend', 'version.json'));
   const sw = read('frontend', 'sw.js');
   const swVersion = sw.match(/const VERSION = '([^']+)'/);
 
-  assert.equal(version.version, '2.33');
+  assert.equal(version.version, '2.36');
   assert.ok(swVersion, 'el Service Worker no declara VERSION');
   assert.equal(swVersion[1], version.version, 'la versión del SW no coincide con la del backend');
-  assert.match(sw, /const CACHE_NAME = 'crm-inmob-v64'/, 'no se cambió el nombre de la caché');
+  assert.match(sw, /const CACHE_NAME = 'crm-inmob-v67'/, 'no se cambió el nombre de la caché');
 });

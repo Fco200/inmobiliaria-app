@@ -7,7 +7,7 @@
 // en Config) y, si cambió:
 //   1. envía una notificación push a TODOS los dispositivos suscritos,
 //   2. emite un evento Socket.IO a las sesiones abiertas para que la app
-//      muestre su banner/modal de actualización.
+//      muestre únicamente el aviso de seguridad.
 //
 // NO envía correo: el usuario pidió expresamente que el aviso sea sólo dentro
 // de la app y por notificación push.
@@ -70,10 +70,12 @@ async function notifyNewVersion({ io } = {}) {
     }
 
     const payload = {
-      title: `Nueva versión ${version} disponible`,
-      body: 'Abre INMOBLES y toca "Ver mejoras" para actualizar la app.',
+      title: 'INMOBLES',
+      body: 'ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD',
       url: 'actualizaciones.html',
       tag: NOTICE_TAG,
+      icon: '/icons/logoconicono-192.png',
+      data: { key: 'actualizacion-seguridad', version },
     };
 
     const pushResult = await pushToSubscribedUsers(payload);
@@ -81,9 +83,6 @@ async function notifyNewVersion({ io } = {}) {
     const eventPayload = {
       version,
       hash: meta.hash || '',
-      title: meta.title || 'Nueva versión disponible',
-      notes: Array.isArray(meta.notes) ? meta.notes.slice(0, 6) : [],
-      date: meta.date || null,
     };
     try {
       if (io) io.emit('nueva-version', eventPayload);

@@ -90,6 +90,8 @@ window.Pages.businesses = {
 
     const roleCode = String((me && me.role && (me.role.code || me.role)) || '');
     const canManage = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
+    // Escrituración gestiona etapas/documentos, pero NO puede eliminar negocios.
+    const canDelete = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia'].includes(roleCode);
     const canChangeStage = ['admin', 'direccion', 'gerencia', 'superadmin', 'escrituracion'].includes(roleCode);
     const canChecklist = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'].includes(roleCode);
     // Asignar o reasignar asesores: además de quien edita, lo tiene escrituración.
@@ -856,7 +858,7 @@ window.Pages.businesses = {
         onEdit: (record, open) => (canManage
           ? open(record)
           : open(record, { allowedNames: CAMPOS_ASIGNACION, title: 'Asignar asesores' })),
-        onRemove: canManage,
+        onRemove: canDelete,
       });
 
       wireNotasEnVivo();

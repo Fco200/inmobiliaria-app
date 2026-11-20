@@ -318,8 +318,11 @@ window.CalendarView = (() => {
       `;
     }
 
-    function refreshView() {
+    async function refreshView() {
       if (!rootEl) return;
+      // Igual que en pages/calendar/calendar.js: recargar eventos del nuevo
+      // rango antes de repintar (el componente duplicado tenía el mismo bug).
+      try { await loadEvents(); } catch (error) { /* mantener vista previa */ }
       renderToolbar();
     }
 

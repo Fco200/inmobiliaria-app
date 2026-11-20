@@ -491,11 +491,20 @@ ${rowXml}
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const record = state.records.find((r) => r._id === btn.dataset.remove);
-        const ok = await UI.confirm(`¿Eliminar este registro?`);
-        if (!ok) return;
+        if (!record) return;
+        let removal = { ok: true };
+        if (typeof config.confirmRemove === 'function') {
+          // Los módulos con reglas especiales (p. ej. borrar un asesor con
+          // negocios/propiedades asignados) pueden pedir datos extra aquí.
+          removal = await config.confirmRemove(record);
+          if (!removal || !removal.ok) return;
+        } else {
+          const ok = await UI.confirm(`¿Eliminar este registro?`);
+          if (!ok) return;
+        }
         try {
-          await config.service.remove(record._id);
-          UI.toast('Registro eliminado', 'success');
+          await config.service.remove(record._id, removal.body);
+          UI.toast(removal.message || 'Registro eliminado', 'success');
           if (window.Sounds) window.Sounds.confirmation().catch(() => {});
           load();
         } catch (error) {

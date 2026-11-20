@@ -567,7 +567,7 @@ window.Pages.settings = {
             list: (params) => API.users.list(params),
             create: (body) => API.users.create(body),
             update: (id, body) => API.users.update(id, body),
-            remove: (id) => API.users.remove(id),
+            remove: (id, body) => API.users.remove(id, body),
           },
           statusOptions: ['activo', 'inactivo'],
           columns: [
@@ -765,6 +765,102 @@ window.Pages.settings = {
           // personalizado se puede ajustar sus datos.
           onEdit: true,
           onRemove: true,
+          // Al eliminar un asesor el cliente debe decidir QUIÉN retoma cada
+          // tipo de registro (propiedades, negocios, avalúos, clientes, etc.).
+          // Se muestra el impacto por categoría y un selector por cada una,
+          // con un atajo "aplicar a todos" cuando quiere un solo reemplazo.
+          async confirmRemove(record) {
+            let impact = null;
+            try { impact = await API.users.impact(record._id); } catch (e) { /* se maneja abajo */ }
+            let all = [];
+            try {
+              const res = await API.users.list({ limit: 200 });
+              all = Array.isArray(res) ? res : (res && res.data ? res.data : []);
+            } catch (e) { /* se maneja abajo */ }
+            const codeOf = (u) => String((u && u.role && (u.role.code || u.role)) || '');
+            const candidates = all.filter((u) => u && u._id
+              && String(u._id) !== String(record._id)
+              && !['admin', 'direccion', 'gerencia', 'superadmin'].includes(codeOf(u)));
+            if (!candidates.length) {
+              UI.toast('Necesitas otro asesor activo al que transferir los registros.', 'warning');
+              return { ok: false };
+            }
+            if (!impact || !impact.entries) {
+              UI.toast('No se pudo consultar el impacto de este asesor. Intenta de nuevo.', 'error');
+              return { ok: false };
+            }
+
+            const entries = impact.entries || [];
+            const withRecords = entries.filter((e) => Number(e.count) > 0);
+            const options = candidates.map((u) => `<option value="${UI.escapeHtml(String(u._id))}">${UI.escapeHtml(u.name || u.username || 'Asesor')}${u.phone ? ` — ${UI.escapeHtml(u.phone)}` : ''}</option>`).join('');
+            const impactHtml = withRecords.length
+              ? `<div class="alert alert-warning" style="margin:0 0 12px;"><strong>${UI.escapeHtml(record.name || 'Este asesor')}</strong> tiene ${Number(impact.total)} registros asignados. Indica quién los retoma:</div>`
+              : '<div class="alert alert-info" style="margin:0 0 12px;">Este asesor no tiene registros asignados. Aun así puedes indicar un reemplazo.</div>';
+
+            const rowsHtml = (withRecords.length ? withRecords : entries.slice(0, 1)).map((e) => `
+              <div class="form-group reassign-row" style="margin-bottom:10px;">
+                <label for="reassign-${UI.escapeHtml(e.key)}">
+                  ${UI.escapeHtml(e.label)} <span class="text-muted">(${Number(e.count)})</span>
+                </label>
+                <select class="form-control reassign-cat" id="reassign-${UI.escapeHtml(e.key)}" data-reassign="${UI.escapeHtml(e.key)}">
+                  <option value="">— Selecciona asesor —</option>
+                  ${options}
+                </select>
+              </div>`).join('');
+
+            UI.openModal({
+              title: `Eliminar a ${record.name || 'asesor'}`,
+              size: 620,
+              body: `
+                <p class="text-muted" style="margin:0 0 12px;">Cada categoría se transfiere al asesor que elijas. Esta acción no se puede deshacer.</p>
+                ${impactHtml}
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label for="reassign-all">Aplicar el mismo asesor a todo <span class="text-muted">(opcional)</span></label>
+                  <select class="form-control" id="reassign-all">
+                    <option value="">— Elegir uno por categoría —</option>
+                    ${options}
+                  </select>
+                </div>
+                <div style="max-height:46vh;overflow:auto;padding-right:4px;">${rowsHtml}</div>`,
+              footer: `
+                <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
+                <button class="btn btn-danger" type="button" data-confirm>Eliminar y transferir</button>`,
+            });
+            const overlay = document.getElementById('modal-overlay');
+            if (!overlay) return { ok: false };
+            const allSel = overlay.querySelector('#reassign-all');
+            const catSels = Array.from(overlay.querySelectorAll('.reassign-cat'));
+            if (allSel) allSel.addEventListener('change', () => {
+              catSels.forEach((s) => { s.value = allSel.value; });
+            });
+            return new Promise((resolve) => {
+              const finish = (result) => { UI.closeModal(); resolve(result); };
+              const cancelBtn = overlay.querySelector('[data-cancel]');
+              const confirmBtn = overlay.querySelector('[data-confirm]');
+              if (cancelBtn) cancelBtn.addEventListener('click', () => finish({ ok: false }));
+              if (confirmBtn) confirmBtn.addEventListener('click', () => {
+                const reassignments = {};
+                const missing = [];
+                catSels.forEach((s) => {
+                  const to = s.value;
+                  if (to) reassignments[s.dataset.reassign] = to;
+                  else if (Number((withRecords.find((e) => e.key === s.dataset.reassign) || {}).count) > 0) {
+                    missing.push(s.closest('.reassign-row').querySelector('label').textContent.trim());
+                  }
+                });
+                if (missing.length) {
+                  UI.toast(`Indica quién recibe: ${missing.join(', ')}`, 'warning');
+                  return;
+                }
+                const first = Object.values(reassignments)[0] || (allSel && allSel.value) || '';
+                finish({
+                  ok: true,
+                  body: { reassignTo: first, reassignments },
+                  message: 'Asesor eliminado y registros transferidos',
+                });
+              });
+            });
+          },
           canEdit(record) {
             if (isAdmin) return true;
             const code = record && record.role && record.role.code ? record.role.code : '';

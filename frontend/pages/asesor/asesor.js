@@ -1,7 +1,7 @@
 'use strict';
 
 // Página pública por asesor (asesor.html?id=): perfil, carta de presentación
-// digital (PDF/WhatsApp) y su catálogo de propiedades.
+// digital (PDF/WhatsApp) y su catálogo de propiedades (sin enlaces de compartir).
 window.AsesorPage = (() => {
   const PS = window.PublicSite;
 
@@ -33,7 +33,6 @@ window.AsesorPage = (() => {
           ${PS.characteristicsText(record) ? `<p class="text-muted landing-card-chars">${UI.escapeHtml(PS.characteristicsText(record))}</p>` : ''}
           <div class="landing-card-actions">
             <button class="btn btn-primary btn-sm" type="button" data-detail data-id="${record._id}">Ver detalle</button>
-            <button class="btn btn-secondary btn-sm" type="button" data-share data-id="${record._id}" title="Copiar enlace directo">&#128279;</button>
             ${waPhone
               ? `<a class="btn btn-secondary btn-sm" href="${PS.whatsappLink(`Hola, me interesa esta propiedad: ${type} en ${place} (${record.operationType || ''}). ¿Pueden darme más información?`, waPhone)}" target="_blank" rel="noopener">WhatsApp</a>`
               : ''}
@@ -54,10 +53,6 @@ window.AsesorPage = (() => {
     el.querySelectorAll('[data-detail]').forEach((btn) => {
       btn.addEventListener('click', () => openDetail(list.find((p) => p._id === btn.dataset.id)));
     });
-    el.querySelectorAll('[data-share]').forEach((btn) => {
-      const rec = list.find((p) => p._id === btn.dataset.id);
-      btn.addEventListener('click', () => PS.copyText(PS.propertyLink(rec)));
-    });
   }
 
   function openDetail(record) {
@@ -71,8 +66,6 @@ window.AsesorPage = (() => {
     const waPhone = state.asesor && state.asesor.phone;
     const waMsg = `Hola, me interesa: ${type} en ${place} (${op}). Precio publicado: ${Format.currency(record.price)}`;
     const ownWa = waPhone ? PS.whatsappLink(waMsg, waPhone) : '';
-    const share = `${window.location.origin || ''}/propiedades.html?prop=${encodeURIComponent(String(record._id))}`;
-    const shareWa = waPhone ? PS.whatsappLink(`${waMsg} Ver: ${share}`, waPhone) : '';
 
     UI.openModal({
       title: `${type} en ${op.toLowerCase()}`,
@@ -107,16 +100,6 @@ window.AsesorPage = (() => {
             </div>
             <div class="text-muted" id="asesor-calc-result" style="margin-top:10px;font-size:14px;"></div>
           </div>
-
-          <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-            <img src="${PS.qrDataUrl(share, 120)}" alt="QR de la propiedad" style="width:120px;height:120px;border-radius:8px;" />
-            <div style="flex:1;min-width:200px;">
-              <p style="margin:0 0 6px;font-weight:700;">&#128279;&nbsp; Comparte esta propiedad</p>
-              <p class="text-muted" style="font-size:13px;margin:0 0 10px;overflow-wrap:break-word;">${UI.escapeHtml(share)}</p>
-              <button class="btn btn-secondary btn-sm" type="button" id="asesor-copy-link">&#128203;&nbsp; Copiar enlace</button>
-              ${shareWa ? `<a class="btn btn-wa btn-sm" href="${shareWa}" target="_blank" rel="noopener">&#128172;&nbsp; Compartir por WhatsApp</a>` : ''}
-            </div>
-          </div>
         </div>
       `,
       footer: waPhone
@@ -142,9 +125,6 @@ window.AsesorPage = (() => {
         window.open(PS.whatsappLink(msg, waPhone), '_blank', 'noopener');
       });
     }
-
-    const copyLink = document.getElementById('asesor-copy-link');
-    if (copyLink) copyLink.addEventListener('click', () => PS.copyText(share));
 
     for (const id of ['asesor-calc-price', 'asesor-calc-down', 'asesor-calc-rate', 'asesor-calc-years']) {
       const input = document.getElementById(id);

@@ -33,12 +33,6 @@ const {
   estadoMantenimiento,
   cambiarMantenimiento,
   generarRespaldo,
-  listarPlantillas,
-  subirPlantilla,
-  renombrarPlantilla,
-  eliminarPlantilla,
-  descargarPlantillaSoporte,
-  plantillaUpload,
   listarChatsSoporte,
   generalSoporte,
   verChatSoporte,
@@ -129,13 +123,6 @@ router.delete('/logs/sistema', requireSoporte, limpiarLogsSistema);
 
 // Respaldos
 router.get('/respaldo', requireSoporte, generarRespaldo);
-
-// Plantillas PDF
-router.get('/plantillas', requireSoporte, listarPlantillas);
-router.post('/plantillas', requireSoporte, plantillaUpload.single('plantilla'), subirPlantilla);
-router.patch('/plantillas/:archivo', requireSoporte, renombrarPlantilla);
-router.delete('/plantillas/:archivo', requireSoporte, eliminarPlantilla);
-router.get('/plantillas/:archivo/descargar', requireSoporte, descargarPlantillaSoporte);
 
 // Chat interno (soporte ve y responde los mensajes del equipo)
 router.get('/chat', requireSoporte, listarChatsSoporte);

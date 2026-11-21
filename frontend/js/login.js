@@ -887,77 +887,16 @@ window.LoginPage = (() => {
     });
   }
 
-  // ---- Aviso de seguridad (pantalla de inicio de sesión) ----
-  // Sin modal de novedades: si hay una versión nueva se muestra un aviso
-  // inline únicamente con "ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD".
-  const SEEN_VERSION_KEY = 'crm_app_version_seen';
-
-  function readStorage(key) {
-    try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
-  }
-
-  function writeStorage(key, value) {
-    try { localStorage.setItem(key, String(value || '')); } catch (e) { /* sin almacenamiento */ }
-  }
-
-  // Hash de la versión que se acaba de aplicar: al recargar, la app ya
-  // considerará esa versión como vista (nada de banner ni botón parpadeando).
-  let latestVersionHash = '';
-
-  // Aplica la actualización: borra la caché del service worker, lo da de baja
-  // y recarga la página para tomar los archivos nuevos.
-  async function applyUpdate() {
-    try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-    } catch (e) { /* seguir */ }
-    try {
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-    } catch (e) { /* seguir */ }
-    // La versión recién aplicada queda marcada como vista: al recargar no debe
-    // volver a salir el aviso ni quedar el botón "Actualizaciones" con el punto.
-    if (latestVersionHash) writeStorage(SEEN_VERSION_KEY, latestVersionHash);
-    window.location.reload();
-  }
-
-  async function versionNotice() {
+  // ---- Versión en el login (sin avisos de actualización) ----
+  // Sólo muestra el número de versión. Los avisos y la actualización se
+  // gestionan dentro de la aplicación, nunca en la pantalla de ingreso.
+  async function showVersion() {
     const label = document.getElementById('login-version');
-    const notice = document.getElementById('login-security-notice');
-    const updateBtn = document.getElementById('btn-login-update');
-    let data = null;
+    if (!label || !window.API || !window.API.config || !window.API.config.version) return;
     try {
-      data = await window.API.config.version();
-    } catch (e) {
-      return;
-    }
-    if (!data) return;
-    if (label && data.version) label.textContent = `Versión ${data.version}`;
-    latestVersionHash = data.hash || '';
-
-    const seen = readStorage(SEEN_VERSION_KEY);
-    if (!seen) {
-      // Primer uso en este dispositivo: se registra la versión actual sin
-      // molestar al usuario. A partir de aquí, cualquier cambio avisa.
-      writeStorage(SEEN_VERSION_KEY, data.hash || '');
-      return;
-    }
-    if (!data.hash || String(data.hash) === String(seen)) return;
-    if (!notice) return;
-
-    notice.classList.remove('hide');
-    if (updateBtn && !updateBtn.dataset.bound) {
-      updateBtn.dataset.bound = '1';
-      updateBtn.addEventListener('click', async () => {
-        updateBtn.disabled = true;
-        updateBtn.textContent = 'Actualizando…';
-        await applyUpdate();
-      });
-    }
+      const data = await window.API.config.version();
+      if (data && data.version) label.textContent = `Versión ${data.version}`;
+    } catch (e) { /* sin versión disponible */ }
   }
 
   function setup() {
@@ -1015,8 +954,7 @@ window.LoginPage = (() => {
 
     resetAppFlow();
 
-    // Aviso de nueva versión (no bloquea el inicio de sesión).
-    versionNotice();
+    showVersion();
   }
 
   function init() {

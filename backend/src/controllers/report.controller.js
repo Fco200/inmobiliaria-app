@@ -5,6 +5,15 @@ const { toCsv, sendCsv } = require('../utils/csv');
 const {
   Client, Appointment, Business, Expense, Ticket, User, Task, Goal,
 } = require('../models');
+const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
+
+// Mismos códigos canónicos que usa el módulo de Negocios (PROMESA, FIRMA…).
+const NEGOTIATION_STAGES = ['negociacion', 'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'NOTARIA', 'DICTAMEN_PRESUPUESTO'];
+const PROMESA_STAGES = ['promesa', 'PROMESA', 'FIRMA', 'PAGO', 'ENTREGA'];
+
+function canViewManagement(req) {
+  return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'reports_gerencia'));
+}
 
 function buildPeriodFilter(from, to, field = 'date') {
   const f = {};
@@ -51,7 +60,7 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
   const [prospects, contacts, appointments, tasks, activeBusinesses, concludedBusinesses, cancelledBusinesses, expenses, goals] =
     await Promise.all([
       Client.countDocuments({ ...period, asesorAsignado: userId, status: 'activo' }),
-      Client.countDocuments({ ...period, asesorAsignado: userId, funnelStage: { $in: ['contacto', 'cita', 'negociacion', 'promesa'] } }),
+      Client.countDocuments({ ...period, asesorAsignado: userId, funnelStage: { $in: ['contacto', 'perfilado', 'cita', 'negociacion', 'promesa', 'cierre'] } }),
       Appointment.countDocuments({ ...period, user: userId }),
       Task.countDocuments({ assignedTo: userId }),
       Business.countDocuments({ ...businessPeriod, mainAdvisor: userId, status: 'activo' }),
@@ -76,8 +85,8 @@ async function advisorIndicators(userId, { from, to, propertyType, operationType
   if (operationType) propertyStages.push({ $match: { 'propertyDoc.operationType': operationType } });
 
   const [negotiations, promises, concludedAgg, cancelledAgg] = await Promise.all([
-    Business.countDocuments({ ...businessMatch, currentStage: { $in: ['negociacion', 'promesa'] } }),
-    Business.countDocuments({ ...businessMatch, currentStage: 'promesa' }),
+    Business.countDocuments({ ...businessMatch, currentStage: { $in: [...NEGOTIATION_STAGES, ...PROMESA_STAGES] } }),
+    Business.countDocuments({ ...businessMatch, currentStage: { $in: PROMESA_STAGES } }),
     Business.aggregate([
       { $match: { mainAdvisor: userId, ...finishedPeriod, status: 'concluido' } },
       {
@@ -185,10 +194,10 @@ async function buildManagementData(req) {
     .sort({ name: 1 });
 
   const selected = userId && userId !== 'all' ? [userId] : null;
-  const targets = advisors.filter((u) => {
-    if (selected && !selected.includes(String(u._id))) return false;
-    return u.role && ['admin', 'gerencia', 'asesor'].includes(u.role.code);
-  });
+  // Antes se excluía a dirección, superadmin y roles personalizados, por lo que
+  // sus tickets nunca aparecían en la relación. Ahora se incluye a todo el
+  // equipo activo (o solo al asesor elegido en el filtro).
+  const targets = advisors.filter((u) => !selected || selected.includes(String(u._id)));
 
   const rows = await Promise.all(
     targets.map((u) =>
@@ -273,8 +282,8 @@ async function buildManagementData(req) {
 }
 
 const management = asyncHandler(async (req, res) => {
-  if (!['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code)) {
-    return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
+  if (!canViewManagement(req)) {
+    return res.status(403).json({ success: false, message: 'Solo gerencia, dirección o administración pueden ver este reporte' });
   }
 
   const data = await buildManagementData(req);
@@ -282,8 +291,8 @@ const management = asyncHandler(async (req, res) => {
 });
 
 const managementCsv = asyncHandler(async (req, res) => {
-  if (!['admin', 'direccion', 'gerencia', 'superadmin'].includes(req.user.role.code)) {
-    return res.status(403).json({ success: false, message: 'Solo gerencia o administrador pueden ver este reporte' });
+  if (!canViewManagement(req)) {
+    return res.status(403).json({ success: false, message: 'Solo gerencia, dirección o administración pueden ver este reporte' });
   }
 
   const { byUser } = await buildManagementData(req);

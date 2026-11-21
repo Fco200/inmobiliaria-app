@@ -267,7 +267,7 @@ const UI = (() => {
       // el centinela "__ui_otros__" al servidor.
       const otrosId = `otros-${id}`;
       control = sinOtros
-        ? `<select class="form-control" id="${id}" name="${name}" ${req}>${opts}</select>`
+        ? `<select class="form-control" id="${id}" name="${name}" data-ui-sin-otros ${req}>${opts}</select>`
         : `
         <select class="form-control" id="${id}" name="${name}" ${req} data-ui-otros>${opts}
           <option value="__ui_otros__">Otros (especificar)</option>
@@ -362,6 +362,10 @@ const UI = (() => {
     // ese mecanismo conoce opciones como "Recomendación" y no debe ser
     // ocultado ni vaciado por el manejador genérico de "Otros".
     if (select.dataset && select.dataset.otroInput) return;
+    // Los selects con su propia opción "Otro" (sinOtros) ya tienen un campo de
+    // texto dedicado: el manejador genérico no debe crear otro ni reemplazar el
+    // valor del catálogo por texto libre (p. ej. el tipo de cita "otro").
+    if (select.hasAttribute && select.hasAttribute('data-ui-sin-otros')) return;
     const isOther = isOtherValue(select.value);
     // Se auto-crea el input dentro de un formulario: modal o <form> inline.
     // Los selects de filtros/barras sin <form> no generan casillas espurias.
@@ -437,6 +441,7 @@ const UI = (() => {
     Object.keys(others).forEach((name) => {
       const select = form.querySelector(`select[name="${name}"]`);
       if (!select || !isOtherValue(select.value)) return;
+      if (select.hasAttribute('data-ui-sin-otros')) return;
       const text = String(others[name] || '').trim();
       if (text) {
         data[name] = text;
@@ -917,7 +922,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
   //   ${UI.searchSelect('owner', 'Propietario', { options, value, placeholder })}
   //   ${UI.searchSelect('owner', 'Propietario', { source: { url: '/clients/options', label: … } })}
   //   UI.wireSearchSelects(form);   // una sola vez tras montar el modal
-  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false, source = null } = {}) {
+  function searchSelect(name, label, { options = [], value = '', full = false, placeholder = 'Buscar…', hint = '', required = false, source = null, sinOtros = false } = {}) {
     const id = `fld-${name}`;
     const searchId = `search-${id}`;
     // Al EDITAR, el registro trae el dato ya "poblado" ({ _id, name, … }).
@@ -967,7 +972,7 @@ function showImages(images, title = 'Galería de imágenes', options = {}) {
         <label class="form-label" for="${id}">${escapeHtml(label)}${required ? ' *' : ''}</label>
         <input class="form-control form-control-search" id="${searchId}" type="search" placeholder="${escapeHtml(searchPlaceholder)}" autocomplete="off">
         <div class="form-legend" data-search-legend>${escapeHtml(legendText)}</div>
-        <select class="form-control" id="${id}" name="${name}" ${required ? 'required' : ''}>${opts}</select>
+        <select class="form-control" id="${id}" name="${name}" ${sinOtros ? 'data-ui-sin-otros' : ''} ${required ? 'required' : ''}>${opts}</select>
         ${hint ? `<small class="text-muted">${escapeHtml(hint)}</small>` : ''}
       </div>`;
   }

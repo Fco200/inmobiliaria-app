@@ -402,7 +402,7 @@ window.Pages.ayuda = {
               <li>Deja documentos en estado <em>pendiente</em> para su validación; el responsable los revisa.</li>
               <li>Un documento pendiente por mucho tiempo genera un <strong>aviso</strong> de recordatorio.</li>
             </ul>
-            <p>Utiliza las <strong>plantillas y formatos rápidos</strong> (por ejemplo, la <strong>Hoja de Visita</strong>) y genera documentos oficiales con tu firma digital.</p>
+            <p>Sube tus archivos en la única sección de <strong>Formatos compartidos</strong> y usa la <strong>Hoja de Visita</strong> para generar un PDF con tu firma digital.</p>
           `,
         },
         {

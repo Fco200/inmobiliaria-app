@@ -394,26 +394,6 @@ window.API = {
     },
     descargarCompartido: (id) => ApiClient.getBlob(`/formatos/compartidos/${encodeURIComponent(id)}/descargar`),
     eliminarCompartido: (id) => ApiClient.remove(`/formatos/compartidos/${encodeURIComponent(id)}`),
-    renombrarPlantilla: (id, nuevoNombre) => ApiClient.patch(`/formatos/plantillas/${encodeURIComponent(id)}`, { nuevoNombre }),
-    listarPlantillas: () => ApiClient.get('/formatos/plantillas'),
-    obtenerCampos: (id) => ApiClient.get(`/formatos/plantillas/${encodeURIComponent(id)}/campos`),
-    generar: (plantillaId, data) => ApiClient.postBlob(`/formatos/generar/${encodeURIComponent(plantillaId)}`, data),
-    // Sube un PDF compartido visible para todos los asesores.
-    subirPlantilla: (file) => {
-      const form = new FormData();
-      form.append('plantilla', file);
-      return ApiClient.postMultipart('/formatos/plantillas', form);
-    },
-    eliminarPlantilla: (id) => ApiClient.remove(`/formatos/plantillas/${encodeURIComponent(id)}`),
-    descargar: (id) => {
-      const token = localStorage.getItem('crm_token');
-      return fetch(`${window.AppConfig.API_URL}/formatos/plantillas/${encodeURIComponent(id)}/descargar`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }).then((r) => {
-        if (!r.ok) throw new Error('Error al descargar');
-        return r.blob();
-      });
-    },
   },
 
   notifications: {
@@ -567,33 +547,6 @@ window.API = {
           blob,
           filename: (r.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/)?.[1] || 'respaldo.json',
         };
-      });
-    },
-
-    plantillas: () => soporteJson('/soporte/plantillas'),
-    subirPlantilla: (file) => {
-      const form = new FormData();
-      form.append('plantilla', file);
-      const token = localStorage.getItem('soporte_token');
-      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      }).then(async (r) => {
-        const data = await r.json();
-        if (!r.ok) throw new Error((data && data.message) || 'Error al subir');
-        return data;
-      });
-    },
-    eliminarPlantilla: (archivo) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'DELETE' }),
-    renombrarPlantilla: (archivo, nuevoNombre) => soporteJson(`/soporte/plantillas/${encodeURIComponent(archivo)}`, { method: 'PATCH', body: { nuevoNombre } }),
-    descargarPlantilla: (archivo) => {
-      const token = localStorage.getItem('soporte_token');
-      return fetch(`${window.AppConfig.API_URL}/soporte/plantillas/${encodeURIComponent(archivo)}/descargar`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }).then((r) => {
-        if (!r.ok) throw new Error('Error al descargar');
-        return r.blob();
       });
     },
 

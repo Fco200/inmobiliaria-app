@@ -5,9 +5,16 @@ const asyncHandler = require('../middlewares/asyncHandler');
 const { SharedFormat } = require('../models');
 const storage = require('../services/storage.service');
 const { logActivity } = require('../services/log.service');
-const { isBoss } = require('../utils/scope');
+const { isBoss, hasRole, hasPermission } = require('../utils/scope');
 
 const MAX_NAME = 160;
+
+// Quien puede subir (ver ruta /formatos/compartidos) también puede editar y
+// borrar; el propietario siempre puede administrar lo que subió.
+const canManageSharedFormat = (req) =>
+  isBoss(req)
+  || hasRole(req, ['asistencia', 'escrituracion'])
+  || hasPermission(req, 'documents_manage');
 
 // GET /api/formatos/compartidos — lo ven todos los usuarios autenticados.
 const listSharedFormats = asyncHandler(async (req, res) => {
@@ -81,8 +88,8 @@ const updateSharedFormat = asyncHandler(async (req, res) => {
   if (!item) return res.status(404).json({ success: false, message: 'Formato no encontrado.' });
 
   const isOwner = String(item.uploadedBy) === String(req.user._id);
-  if (!isBoss(req) && !isOwner) {
-    return res.status(403).json({ success: false, message: 'Solo quien lo subió o dirección puede editarlo.' });
+  if (!canManageSharedFormat(req) && !isOwner) {
+    return res.status(403).json({ success: false, message: 'Solo quien lo subió o el equipo autorizado puede editarlo.' });
   }
 
   const name = String((req.body && req.body.name) || '').trim().slice(0, MAX_NAME);
@@ -124,8 +131,8 @@ const removeSharedFormat = asyncHandler(async (req, res) => {
   if (!item) return res.status(404).json({ success: false, message: 'Formato no encontrado.' });
 
   const isOwner = String(item.uploadedBy) === String(req.user._id);
-  if (!isBoss(req) && !isOwner) {
-    return res.status(403).json({ success: false, message: 'Solo quien lo subió o dirección puede eliminarlo.' });
+  if (!canManageSharedFormat(req) && !isOwner) {
+    return res.status(403).json({ success: false, message: 'Solo quien lo subió o el equipo autorizado puede eliminarlo.' });
   }
 
   const fileUrl = item.fileUrl;

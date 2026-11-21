@@ -105,7 +105,13 @@ window.Pages.appointments = {
       ],
       formData(values, record) {
         const { reminder, typeOther, ...rest } = values;
-        const type = values.type || 'visita_propiedad';
+        const rawType = values.type || 'visita_propiedad';
+        const isKnownType = APPOINTMENT_TYPES.some((t) => t.value === rawType);
+        // Si llega un valor que no está en el catálogo (datos antiguos o texto
+        // libre de un "Otro" genérico), se guarda como "otro" con el detalle en
+        // typeOther en vez de dejar que el backend rechace la cita.
+        const type = isKnownType ? rawType : 'otro';
+        const detail = isKnownType ? typeOther : (typeOther || rawType);
         // "Otro (especificar)" ya NO bloquea el guardado: si el usuario no
         // escribe el detalle, se conserva el texto opcional vacío y la cita
         // se crea con el tipo genérico "otro".
@@ -115,7 +121,7 @@ window.Pages.appointments = {
           // lo impone). Al editar se conserva el responsable original.
           ...(record ? {} : { user: currentUserId }),
           type,
-          typeOther: type === 'otro' ? String(typeOther).trim() : '',
+          typeOther: type === 'otro' ? String(detail || '').trim() : '',
           date: Format.fromLocalInput(values.date),
           reminder: reminder ? Format.fromLocalInput(reminder) : null,
         };

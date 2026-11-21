@@ -5,10 +5,94 @@ const {
   Client, Property, Business, Appointment, Task, Ticket, Expense, Goal, ProspectingActivity, Notification, User,
 } = require('../models');
 const { updateGoalsAuto } = require('../services/goal-auto.service');
+const { normalizeStage } = require('../constants/business-stages');
 const { isBoss, isCustomRole, hasPermission } = require('../utils/scope');
 
 function seesAllDashboard(req) {
   return isBoss(req) || (isCustomRole(req) && hasPermission(req, 'reports_gerencia'));
+}
+
+// Un solo vocabulario para el embudo, compartido por dashboard y reportes.
+const FUNNEL_STAGES = ['prospecto', 'contacto', 'cita', 'negociacion', 'promesa', 'cierre'];
+const FUNNEL_WEIGHT = { prospecto: 1, contacto: 2, cita: 3, negociacion: 4, promesa: 5, cierre: 6 };
+const NEGOTIATION_STAGES = ['negociacion', 'INTEGRACION', 'AVALUO', 'REVISION_AVALUO', 'NOTARIA', 'DICTAMEN_PRESUPUESTO'];
+const PROMESA_STAGES = ['promesa', 'PROMESA', 'FIRMA', 'PAGO', 'ENTREGA'];
+
+function emptyFunnel() {
+  return FUNNEL_STAGES.reduce((acc, stage) => ({ ...acc, [stage]: 0 }), {});
+}
+
+function clientFunnelStage(client) {
+  const funnel = String(client.funnelStage || '').toLowerCase().trim();
+  if (['cierre', 'postventa'].includes(funnel)) return 'cierre';
+  if (funnel === 'promesa') return 'promesa';
+  if (funnel === 'negociacion' || funnel === 'negociación') return 'negociacion';
+  if (funnel === 'cita') return 'cita';
+  if (['contacto', 'perfilado'].includes(funnel)) return 'contacto';
+  if (funnel === 'prospecto') return 'prospecto';
+
+  // Datos donde solo se guardó la etapa del módulo de clientes.
+  const etapa = String(client.etapaActual || '').toUpperCase();
+  if (['POSTVENTA'].includes(etapa)) return 'cierre';
+  if (etapa === 'NEGOCIACION_CIERRE') return 'negociacion';
+  if (etapa === 'CITA') return 'cita';
+  if (['PERFILADO', 'SEGUIMIENTO'].includes(etapa)) return 'contacto';
+  if (etapa === 'PROSPECTO') return 'prospecto';
+  return null;
+}
+
+function businessFunnelStage(business) {
+  const status = String(business.status || '').toLowerCase().trim();
+  if (status === 'cancelado') return null;
+
+  // Los alias antiguos del kanban se cuentan en su etapa visible del embudo,
+  // antes de normalizarlos a códigos de negocio (negociacion -> PROMESA).
+  const raw = String(business.currentStage || '').toLowerCase().trim();
+  if (['negociacion', 'negociación'].includes(raw)) return 'negociacion';
+  if (['postventa', 'concluido'].includes(raw)) return 'cierre';
+
+  const stage = normalizeStage(business.currentStage);
+  if (status === 'concluido' || stage === 'concluido') return 'cierre';
+  if (PROMESA_STAGES.includes(stage)) return 'promesa';
+  if (NEGOTIATION_STAGES.includes(stage)) return 'negociacion';
+  return null;
+}
+
+/**
+ * El embudo ya no depende solo de Client.funnelStage: toma la etapa más
+ * avanzada de tres fuentes (clientes, negocios y citas) para cada cliente.
+ * Así, mover un negocio a promesa/cierre o agendar una cita se refleja de
+ * inmediato sin duplicar contactos.
+ */
+async function buildFunnel({ clientMatch = {}, businessMatch = {}, appointmentMatch = {} } = {}) {
+  const [clients, businesses, appointments] = await Promise.all([
+    Client.find(clientMatch).select('funnelStage etapaActual').lean(),
+    Business.find(businessMatch).select('currentStage status cliente_id buyerClient').lean(),
+    Appointment.find(appointmentMatch).select('client status').lean(),
+  ]);
+
+  const stages = new Map();
+  const setStage = (key, stage) => {
+    if (!stage || !key) return;
+    const id = String(key);
+    const previous = stages.get(id);
+    if (!previous || FUNNEL_WEIGHT[stage] > FUNNEL_WEIGHT[previous]) stages.set(id, stage);
+  };
+
+  clients.forEach((client) => setStage(client._id, clientFunnelStage(client)));
+  businesses.forEach((business) => {
+    const stage = businessFunnelStage(business);
+    const clientId = business.cliente_id || business.buyerClient;
+    setStage(clientId || `negocio:${business._id}`, stage);
+  });
+  appointments.forEach((appointment) => {
+    if (['cancelada', 'no_asistio'].includes(appointment.status)) return;
+    setStage(appointment.client || `cita:${appointment._id}`, 'cita');
+  });
+
+  const funnel = emptyFunnel();
+  stages.forEach((stage) => { funnel[stage] += 1; });
+  return funnel;
 }
 
 // Rango inclusivo para los reportes por asesor ("Desde / Hasta").
@@ -51,8 +135,8 @@ const summary = asyncHandler(async (req, res) => {
       Business.countDocuments({ ...myFilter, status: 'activo' }),
       Business.countDocuments({ ...myFilter, status: 'concluido' }),
       Business.countDocuments({ ...myFilter, status: 'cancelado' }),
-      Business.countDocuments({ ...myFilter, currentStage: 'negociacion' }),
-      Business.countDocuments({ ...myFilter, currentStage: 'promesa' }),
+      Business.countDocuments({ ...myFilter, currentStage: { $in: NEGOTIATION_STAGES } }),
+      Business.countDocuments({ ...myFilter, currentStage: { $in: PROMESA_STAGES } }),
       Appointment.countDocuments({ user: user._id, status: { $in: ['pendiente', 'confirmada'] }, date: { $gte: new Date() } }),
       Task.countDocuments({ assignedTo: user._id, status: 'pendiente' }),
       Notification.countDocuments({ user: user._id, read: false }),
@@ -96,13 +180,12 @@ const summary = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const [funnel, prospectingAgg] = await Promise.all([
-    Client.aggregate([
-      {
-        $match: isAdminOrGerencia ? {} : { asesorAsignado: user._id },
-      },
-      { $group: { _id: '$funnelStage', count: { $sum: 1 } } },
-    ]),
+  const [funnelMap, prospectingAgg] = await Promise.all([
+    buildFunnel({
+      clientMatch: isAdminOrGerencia ? {} : { asesorAsignado: user._id },
+      businessMatch: myFilter,
+      appointmentMatch: isAdminOrGerencia ? {} : { user: user._id },
+    }),
     ProspectingActivity.aggregate([
       { $match: isAdminOrGerencia ? {} : { user: user._id } },
       {
@@ -114,11 +197,6 @@ const summary = asyncHandler(async (req, res) => {
       },
     ]),
   ]);
-
-  const funnelMap = { prospecto: 0, cita: 0, negociacion: 0, promesa: 0, cierre: 0 };
-  funnel.forEach((f) => {
-    funnelMap[f._id] = f.count;
-  });
 
   const recentAppointments = await Appointment.find({ user: user._id, date: { $gte: new Date() } })
     .sort({ date: 1 })
@@ -180,7 +258,7 @@ const userReport = asyncHandler(async (req, res) => {
   const generatedMatch = { user: target, status: { $ne: 'cancelado' }, ...ticketDateExpr('generatedAt', from, to) };
   const collectedMatch = { user: target, collectedAmount: { $gt: 0 }, ...ticketDateExpr('collectedAt', from, to) };
 
-  const [clients, activeBusinesses, concludedBusinesses, cancelledBusinesses, tasks, goals, tickets, expenses, funnelAgg] =
+  const [clients, activeBusinesses, concludedBusinesses, cancelledBusinesses, tasks, goals, tickets, expenses] =
     await Promise.all([
       Client.countDocuments({ ...period, asesorAsignado: target }),
       Business.countDocuments({ ...createdPeriod, mainAdvisor: target, status: 'activo' }),
@@ -212,16 +290,18 @@ const userReport = asyncHandler(async (req, res) => {
         { $match: { user: target, ...period } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
-      Client.aggregate([
-        { $match: { asesorAsignado: target, ...period } },
-        { $group: { _id: '$funnelStage', count: { $sum: 1 } } },
-      ]),
     ]);
+
+  const funnelMap = await buildFunnel({
+    clientMatch: { asesorAsignado: target, ...period },
+    businessMatch: { ...createdPeriod, $or: [{ mainAdvisor: target }, { partnerAdvisor: target }] },
+    appointmentMatch: { user: target, ...period },
+  });
 
   const [appointments, prospects, negotiations, closuresAgg] = await Promise.all([
     Appointment.countDocuments({ ...period, user: target }),
     Client.countDocuments({ ...period, asesorAsignado: target, status: 'activo' }),
-    Business.countDocuments({ ...createdPeriod, mainAdvisor: target, currentStage: { $in: ['negociacion', 'promesa'] } }),
+    Business.countDocuments({ ...createdPeriod, mainAdvisor: target, currentStage: { $in: [...NEGOTIATION_STAGES, ...PROMESA_STAGES] } }),
     Business.aggregate([
       { $match: { ...finishedPeriod, mainAdvisor: target, status: 'concluido' } },
       {
@@ -244,11 +324,6 @@ const userReport = asyncHandler(async (req, res) => {
       { $group: { _id: null, value: { $sum: '$valueOperation' }, commission: { $sum: '$closing.commission' } } },
     ]),
   ]);
-
-  const funnelMap = { prospecto: 0, cita: 0, negociacion: 0, promesa: 0, cierre: 0 };
-  funnelAgg.forEach((f) => {
-    funnelMap[f._id] = f.count;
-  });
 
   res.json({
     success: true,

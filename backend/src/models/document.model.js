@@ -54,23 +54,6 @@ const documentSchema = new mongoose.Schema(
     observations: { type: String, trim: true, default: '' },
     fileName: { type: String, trim: true, default: '' },
     fileUrl: { type: String, default: null },
-    
-    // Campos para plantillas y llenado digital
-    isTemplate: { type: Boolean, default: false },
-    templateFields: [{
-      name: { type: String, trim: true },
-      label: { type: String, trim: true },
-      type: { type: String, enum: ['text', 'number', 'date', 'select', 'textarea'], default: 'text' },
-      options: [{ type: String, trim: true }],
-      required: { type: Boolean, default: false },
-    }],
-    filledData: { type: mongoose.Schema.Types.Mixed, default: null },
-    filledBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-    },
-    filledAt: { type: Date, default: null },
   },
   {
     timestamps: true,

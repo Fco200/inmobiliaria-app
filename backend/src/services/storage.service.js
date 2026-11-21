@@ -86,9 +86,6 @@ function isConfigured() {
 
 // ── GridFS (MongoDB) ─────────────────────────────────────────────────────────
 const GRIDFS_BUCKET = 'uploads';
-// Prefijo de los PDFs compartidos (formatos). No los referencia ningún registro,
-// así que la limpieza de huérfanos debe ignorarlos.
-const SHARED_PREFIX = 'plantillas/';
 
 function gridfsBucket() {
   const db = mongoose.connection && mongoose.connection.db;
@@ -390,11 +387,23 @@ async function cleanupOrphans({ minAgeMs = 6 * 60 * 60 * 1000 } = {}) {
 
   try {
     const refs = await collectReferencedKeys();
+
+    // Los PDFs de la antigua carpeta plantillas/ quedaron huérfanos al eliminar
+    // ese módulo. Se purgan de inmediato (incluidos sus chunks) sin esperar 6 h.
+    const legacyTemplates = await db.collection('uploads.files')
+      .find({ filename: /^plantillas\// }).toArray();
+    for (const file of legacyTemplates) {
+      if (refs.has(file.filename)) continue;
+      await db.collection('uploads.files').deleteOne({ _id: file._id });
+      await db.collection('uploads.chunks').deleteMany({ files_id: file._id });
+      result.deleted += 1;
+      result.freed += file.length || 0;
+    }
+
     const cutoff = new Date(Date.now() - minAgeMs);
     const files = await db.collection('uploads.files').find({ uploadDate: { $lt: cutoff } }).toArray();
     for (const file of files) {
       if (refs.has(file.filename)) continue;
-      if (String(file.filename || '').startsWith(SHARED_PREFIX)) continue;
       await db.collection('uploads.files').deleteOne({ _id: file._id });
       await db.collection('uploads.chunks').deleteMany({ files_id: file._id });
       result.deleted += 1;
@@ -855,7 +864,6 @@ async function serveKey(req, res, key) {
 
 module.exports = {
   getMode,
-  SHARED_PREFIX,
   listByPrefix,
   listFilesByPrefix,
   readFileBuffer,

@@ -9,18 +9,15 @@ window.Pages.documents = {
     let clients = [];
     let properties = [];
     let businesses = [];
-    let plantillas = [];
     try {
-      const [c, p, b, pl] = await Promise.all([
+      const [c, p, b] = await Promise.all([
         API.clients.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.properties.list({ limit: 100 }).catch(() => ({ data: [] })),
         API.businesses.list({ limit: 100 }).catch(() => ({ data: [] })),
-        API.formatos.listarPlantillas().catch(() => ({ plantillas: [] })),
       ]);
       clients = c.data;
       properties = p.data;
       businesses = b.data;
-      plantillas = pl.plantillas || [];
     } catch (error) {
       // sin opciones
     }
@@ -50,9 +47,13 @@ window.Pages.documents = {
       const role = user && user.role;
       return (role && (role.code || role)) || '';
     })();
-    const boss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
-    const canUploadShared = ['admin', 'direccion', 'gerencia', 'asistencia', 'escrituracion', 'superadmin'].includes(roleCode);
-    const canUpload = boss || ['asesor', 'escrituracion'].includes(roleCode);
+    // Coincide con isBoss() del backend: dirección/gerencia/administración.
+    const boss = ['admin', 'direccion', 'gerencia', 'superadmin'].includes(roleCode);
+    // Los formatos compartidos los sube el mismo personal que puede gestionar documentos.
+    const canUploadShared = boss || ['asistencia', 'escrituracion'].includes(roleCode);
+    const canUpload = canUploadShared || roleCode === 'asesor';
+    // El backend permite editar/borrar documentos al autor o al personal de documentos.
+    const canManageDocs = boss || roleCode === 'asistencia' || roleCode === 'escrituracion';
     const typeLabel = (t) => {
       const found = TYPES.find((x) => x.value === t);
       return found ? found.label : (t || 'otros');
@@ -61,67 +62,7 @@ window.Pages.documents = {
     container.innerHTML = `
       <div class="page-header">
         <h2>Formatos</h2>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-primary" type="button" data-open-formatos>&#128196; Generar Formato PDF</button>
-          ${boss ? '<button class="btn btn-secondary" type="button" data-new-template>+ Crear plantilla</button>' : ''}
-        </div>
-      </div>
-      <div style="margin-bottom:20px;">
-        <h4 style="margin:0 0 12px;color:var(--text-muted);font-size:15px;">Formatos rápidos</h4>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px;">
-          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:26px;">&#128172;</span>
-              <div style="flex:1;min-width:0;">
-                <strong style="display:block;font-size:14px;">Hoja de Visita</strong>
-                <small class="text-muted">Registro de visitas con firma</small>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:12px;margin-top:auto;padding-top:12px;">
-              <button class="btn btn-secondary btn-sm" type="button" data-rapido="visita" data-action="open" style="flex:1;">Abrir</button>
-              <button class="btn btn-primary btn-sm" type="button" data-rapido="visita" data-action="fill" style="flex:1;">Descargar PDF</button>
-            </div>
-          </div>
-          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:26px;">&#128203;</span>
-              <div style="flex:1;min-width:0;">
-                <strong style="display:block;font-size:14px;">Carta de Intención de Compra</strong>
-                <small class="text-muted">Propuesta de compra del inmueble</small>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
-              <button class="btn btn-secondary btn-sm" type="button" data-rapido="oferta" data-action="open" style="flex:1;">Abrir</button>
-              <button class="btn btn-primary btn-sm" type="button" data-rapido="oferta" data-action="fill" style="flex:1;">Llenar</button>
-            </div>
-          </div>
-          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:26px;">&#128179;</span>
-              <div style="flex:1;min-width:0;">
-                <strong style="display:block;font-size:14px;">Contrato de Apartado</strong>
-                <small class="text-muted">Reservar la propiedad</small>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
-              <button class="btn btn-secondary btn-sm" type="button" data-rapido="apartado" data-action="open" style="flex:1;">Abrir</button>
-              <button class="btn btn-primary btn-sm" type="button" data-rapido="apartado" data-action="fill" style="flex:1;">Llenar</button>
-            </div>
-          </div>
-          <div class="card quick-action" style="padding:16px;display:flex;flex-direction:column;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span style="font-size:26px;">&#127968;</span>
-              <div style="flex:1;min-width:0;">
-                <strong style="display:block;font-size:14px;">Ficha de Captación</strong>
-                <small class="text-muted">Solicitud para captar inmuebles</small>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;margin-top:auto;padding-top:12px;">
-              <button class="btn btn-secondary btn-sm" type="button" data-rapido="captacion" data-action="open" style="flex:1;">Abrir</button>
-              <button class="btn btn-primary btn-sm" type="button" data-rapido="captacion" data-action="fill" style="flex:1;">Llenar</button>
-            </div>
-          </div>
-        </div>
+        <button class="btn btn-secondary" type="button" data-hoja-visita>&#128221; Hoja de Visita</button>
       </div>
       <div class="card" id="shared-formats" style="padding:16px;margin-bottom:20px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
@@ -233,7 +174,7 @@ window.Pages.documents = {
             <tbody>
               ${items.map((item) => {
                 const uploaderId = String((item.uploadedBy && (item.uploadedBy._id || item.uploadedBy)) || '');
-                const canDelete = boss || uploaderId === currentUserId;
+                const canDelete = canUploadShared || uploaderId === currentUserId;
                 return `
                   <tr>
                     <td><strong>${sharedIcon(item)} ${UI.escapeHtml(item.name)}</strong></td>
@@ -345,7 +286,7 @@ window.Pages.documents = {
       });
       sharedListEl.querySelectorAll('[data-shared-del]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          const ok = await UI.confirm('¿Eliminar este formato compartido? Dejará de estar disponible para el equipo.');
+          const ok = await UI.confirm('¿Eliminar este formato compartido? Se borrará del sistema y de la base de datos, y dejará de estar disponible para el equipo. Esta acción no se puede deshacer.');
           if (!ok) return;
           btn.disabled = true;
           try {
@@ -497,19 +438,15 @@ window.Pages.documents = {
                       <button type="button" class="btn btn-secondary btn-sm" data-doc-view="${d._id}">Ver</button>
                       <a href="${window.AppConfig.resolveUrl(d.fileUrl)}" download class="btn btn-secondary btn-sm">Descargar</a>
                     ` : '<span class="text-muted">—</span>'}
-                    ${d.isTemplate && d.templateFields && d.templateFields.length ? `
-                      <button class="btn btn-primary btn-sm" data-fill="${d._id}" style="margin-left:4px;">Llenar</button>
-                    ` : ''}
-                    ${d.filledData ? `<span class="badge badge-success" style="margin-left:4px;">Llenado</span>` : ''}
                   </td>
                   <td>${Format.date(d.date)}</td>
                   <td>
-                    ${boss && (d.status === 'pendiente' || d.status === 'recibido') ? `
+                    ${canManageDocs && (d.status === 'pendiente' || d.status === 'recibido') ? `
                       <button class="btn btn-success btn-sm" data-validate="${d._id}" title="Validar formato">✓</button>
                       <button class="btn btn-danger btn-sm" data-reject="${d._id}" title="Rechazar formato">✗</button>
                     ` : ''}
-                    ${boss ? `<button class="btn btn-secondary btn-sm" data-edit="${d._id}" style="margin-left:6px;">Editar</button>` : ''}
-                    ${boss ? `<button class="btn btn-danger btn-sm" data-remove="${d._id}" style="margin-left:6px;">Eliminar</button>` : ''}
+                    ${canManageDocs ? `<button class="btn btn-secondary btn-sm" data-edit="${d._id}" style="margin-left:6px;">Editar</button>` : ''}
+                    ${canManageDocs ? `<button class="btn btn-danger btn-sm" data-remove="${d._id}" style="margin-left:6px;">Eliminar</button>` : ''}
                   </td>
                 </tr>`).join('')}</tbody>
             </table>
@@ -548,7 +485,7 @@ window.Pages.documents = {
         listEl.querySelectorAll('[data-remove]').forEach((btn) => {
           btn.addEventListener('click', async () => {
             const record = records.find((r) => r._id === btn.dataset.remove);
-            const ok = await UI.confirm('¿Eliminar este formato?');
+            const ok = await UI.confirm('¿Eliminar este formato? Se borrará del sistema y de la base de datos. Esta acción no se puede deshacer.');
             if (!ok) return;
             try {
               await API.documents.remove(record._id);
@@ -557,12 +494,6 @@ window.Pages.documents = {
             } catch (error) {
               UI.toast(error.message, 'error');
             }
-          });
-        });
-        listEl.querySelectorAll('[data-fill]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const record = records.find((r) => r._id === btn.dataset.fill);
-            openFillForm(record);
           });
         });
         listEl.querySelectorAll('[data-doc-view]').forEach((btn) => {
@@ -584,8 +515,8 @@ window.Pages.documents = {
 
     async function openForm(record) {
       const isEdit = Boolean(record);
-      if (isEdit ? !boss : !canUpload) return;
-      const restricted = !boss;
+      if (isEdit ? !canManageDocs : !canUpload) return;
+      const restricted = !canManageDocs;
       const fields = restricted ? [
         { name: 'name', label: 'Nombre del formato', type: 'text', required: true, full: true, value: '' },
         { name: 'file', label: 'Adjuntar archivo', type: 'file', value: '' },
@@ -663,24 +594,15 @@ window.Pages.documents = {
     if (searchEl) searchEl.addEventListener('input', () => load());
     if (statusEl) statusEl.addEventListener('change', () => load());
     if (clientEl) clientEl.addEventListener('change', () => load());
-    const newTemplateBtn = container.querySelector('[data-new-template]');
-    if (newTemplateBtn) {
-      newTemplateBtn.addEventListener('click', () => openTemplateForm(null));
+
+    // Hoja de Visita: formulario propio (sin plantillas ni PDFs del repositorio).
+    const hojaVisitaBtn = container.querySelector('[data-hoja-visita]');
+    if (hojaVisitaBtn) {
+      hojaVisitaBtn.addEventListener('click', () => openHojaDeVisita());
     }
 
-    // Botón para abrir selector de formatos PDF
-    const openFormatosBtn = container.querySelector('[data-open-formatos]');
-    if (openFormatosBtn) {
-      openFormatosBtn.addEventListener('click', () => openPlantillasSelector());
-    }
+    load();
 
-    // ============ FORMATOS RÁPIDOS ============
-
-    const QUICK_KEYWORDS = {
-      oferta: ['oferta'],
-      apartado: ['apartado', 'renta'],
-      captacion: ['captación', 'captacion'],
-    };
     const VISITA_MOTIVOS = [
       'Solicitar información',
       'Realizar cotización',
@@ -690,12 +612,7 @@ window.Pages.documents = {
       'Otro',
     ];
 
-    // Normaliza textos para comparar sin acentos ni mayúsculas.
-    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const haystackOf = (p) => norm(`${p.nombre} ${p.id}`);
-    const findMatches = (keywords) => plantillas.filter((p) => keywords.some((k) => haystackOf(p).includes(norm(k))));
-
-    // Bloque de firma digital reutilizable (pajea el componente signature.js).
+    // Bloque de firma digital reutilizable (puente con el componente signature.js).
     function signatureSectionHTML() {
       return `
         <div class="formato-section" style="margin-bottom:8px;">
@@ -740,9 +657,8 @@ window.Pages.documents = {
     }
 
     // Abre el diálogo de impresión (Ctrl+P / Guardar como PDF) con la cabecera
-    // de INMOBLES, las secciones de datos y la firma. Se hace en un iframe
-    // oculto de la MISMA página: el móvil muestra el diálogo nativo sin sacar
-    // al usuario de la app (antes window.open dejaba atrapado en una pestaña).
+    // de INMOBLES, las secciones de datos y la firma, desde un iframe oculto de
+    // la MISMA página (en el móvil window.open dejaba atrapado al usuario).
     function openPrintPreview(titulo, secciones, values, firma) {
       const firmaData = firma || (values && values.firma) || '';
       const cells = (secciones || []).map((sec) => `
@@ -886,539 +802,6 @@ window.Pages.documents = {
         UI.closeModal();
         load();
       });
-    }
-
-    // Tarjetas de acceso rápido: Hoja de Visita abre su formulario;
-    // el resto busca la plantilla por keyword y la abre si hay una única
-    // coincidencia (botón "Llenar") o muestra el selector filtrado.
-    container.querySelectorAll('[data-rapido]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const rapido = btn.dataset.rapido;
-        const action = btn.dataset.action;
-        if (rapido === 'visita') {
-          openHojaDeVisita();
-          return;
-        }
-        const keywords = QUICK_KEYWORDS[rapido] || [rapido];
-        const matches = findMatches(keywords);
-        if (!matches.length) {
-          UI.toast('No hay plantilla configurada para este formato rápido.', 'warning');
-          openPlantillasSelector();
-          return;
-        }
-        if (action === 'fill' && matches.length === 1) {
-          openFormularioPlantilla(matches[0].id);
-          return;
-        }
-        openPlantillasSelector(keywords[0]);
-      });
-    });
-
-    load();
-
-    // ============ FUNCIONES PARA PLANTILLAS PDF ============
-
-    // Selector de plantillas PDF. Con `keyword` opcional filtra la vista a las
-    // plantillas que coinciden (los formatos rápidos lo usan para preseleccionar).
-    function openPlantillasSelector(keyword) {
-      let plantillasConFormulario = plantillas.filter(p => p.tieneFormulario);
-      let plantillasSinFormulario = plantillas.filter(p => !p.tieneFormulario);
-
-      let kwNote = '';
-      if (keyword) {
-        const kw = norm(keyword);
-        plantillasConFormulario = plantillasConFormulario.filter(p => haystackOf(p).includes(kw));
-        plantillasSinFormulario = plantillasSinFormulario.filter(p => haystackOf(p).includes(kw));
-        if (!plantillasConFormulario.length && !plantillasSinFormulario.length) {
-          UI.toast('No se encontró plantilla para "' + keyword + '".', 'warning');
-          return;
-        }
-        kwNote = `
-          <p class="text-muted" style="font-size:13px;margin:0 0 16px;">
-            &#128269; Plantillas para "<strong>${UI.escapeHtml(keyword)}</strong>":
-            ${plantillasConFormulario.length + plantillasSinFormulario.length} coincidencia(s).
-          </p>`;
-      }
-
-      const modal = UI.openModal({
-        title: 'Generar Formato PDF',
-        body: `
-          ${kwNote}
-          <div style="margin-bottom:20px;">
-            <h4 style="margin:0 0 12px;color:var(--primary);">&#128196; Plantillas con formulario</h4>
-            <p class="text-muted" style="margin:0 0 16px;font-size:13px;">Selecciona una plantilla para llenar sus datos y generar el PDF.</p>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
-              ${plantillasConFormulario.map(p => `
-                <div class="card plantilla-card" style="cursor:pointer;padding:16px;transition:transform 0.2s,border-color 0.2s;">
-                  <div style="display:flex;align-items:center;gap:12px;">
-                    <span style="font-size:28px;">&#128196;</span>
-                    <div style="flex:1;min-width:0;">
-                      <strong style="display:block;font-size:14px;">${UI.escapeHtml(p.nombre)}</strong>
-                      <small class="text-muted">${UI.escapeHtml(p.archivo)}</small>
-                    </div>
-                  </div>
-                  <div style="display:flex;gap:6px;margin-top:10px;">
-                    <button class="btn btn-primary btn-sm" data-plantilla="${UI.escapeHtml(p.id)}" style="flex:1;">Llenar y Descargar</button>
-                    <button class="btn btn-secondary btn-sm" data-download-blank="${UI.escapeHtml(p.id)}" style="flex:1;">Descargar en Blanco</button>
-                  </div>
-                  ${boss ? `<div style="display:flex;gap:6px;margin-top:6px;">
-                    <button class="btn btn-secondary btn-sm" data-plt-rename="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}" style="flex:1;">Renombrar</button>
-                    <button class="btn btn-danger btn-sm" data-plt-del="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}" style="flex:1;">Eliminar</button>
-                  </div>` : ''}
-                </div>
-              `).join('')}
-            </div>
-          </div>
-          ${plantillasSinFormulario.length ? `
-            <div>
-              <h4 style="margin:0 0 12px;color:var(--text-muted);">&#128196; Plantillas disponibles (solo descarga)</h4>
-              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
-                ${plantillasSinFormulario.map(p => `
-                  <div style="padding:10px 14px;background:var(--bg);border-radius:var(--radius);font-size:13px;display:flex;justify-content:space-between;align-items:center;">
-                    <span>${UI.escapeHtml(p.nombre)}</span>
-                    <span style="display:flex;gap:6px;">
-                      <button class="btn btn-secondary btn-sm" data-download-blank="${UI.escapeHtml(p.id)}">Descargar</button>
-                      ${boss ? `<button class="btn btn-secondary btn-sm" data-plt-rename="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}">Renombrar</button>
-                      <button class="btn btn-danger btn-sm" data-plt-del="${UI.escapeHtml(p.id)}" data-nombre="${UI.escapeHtml(p.archivo)}">Eliminar</button>` : ''}
-                    </span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-          ${sharedItems.length ? `
-            <div style="margin-top:20px;">
-              <h4 style="margin:0 0 12px;color:var(--text-muted);">&#128228; Formatos compartidos (solo descarga)</h4>
-              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
-                ${sharedItems.map(item => `
-                  <div style="padding:10px 14px;background:var(--bg);border-radius:var(--radius);font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${sharedIcon(item)} ${UI.escapeHtml(item.name)}</span>
-                    <button class="btn btn-secondary btn-sm" type="button" data-sel-shared="${item._id}">Descargar</button>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-        `,
-        footer: `
-          <button class="btn btn-secondary" type="button" data-cancel>Cerrar</button>
-        `,
-        size: 800,
-      });
-
-      const sharedDownloadBtns = modal.bodyEl ? modal.bodyEl.querySelectorAll('[data-sel-shared]') : [];
-      sharedDownloadBtns.forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const item = sharedItems.find((x) => String(x._id) === String(btn.dataset.selShared));
-          if (!item) return;
-          btn.disabled = true;
-          try {
-            const blob = await API.formatos.descargarCompartido(item._id);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = item.fileName || item.name || 'formato';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 10000);
-          } catch (error) {
-            UI.toast(error.message || 'No se pudo descargar el archivo.', 'error');
-          } finally {
-            btn.disabled = false;
-          }
-        });
-      });
-
-      const bodyEl = modal.bodyEl;
-      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
-      if (overlay) {
-        const cancelBtn = overlay.querySelector('[data-cancel]');
-        if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-      }
-
-      const recargarPlantillas = async () => {
-        const refreshed = await API.formatos.listarPlantillas().catch(() => null);
-        if (refreshed && Array.isArray(refreshed.plantillas)) plantillas = refreshed.plantillas;
-      };
-
-      if (bodyEl && boss) {
-        bodyEl.querySelectorAll('[data-plt-rename]').forEach((btn) => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const actual = btn.dataset.nombre.replace(/\.pdf$/i, '');
-            const nuevo = window.prompt('Nuevo nombre de la plantilla (sin .pdf):', actual);
-            if (!nuevo || !nuevo.trim() || nuevo.trim() === actual) return;
-            try {
-              await API.formatos.renombrarPlantilla(btn.dataset.pltRename, nuevo.trim());
-              UI.toast('Plantilla renombrada', 'success');
-              UI.closeModal();
-              await recargarPlantillas();
-              openPlantillasSelector(keyword);
-            } catch (error) {
-              UI.toast(error.message, 'error');
-            }
-          });
-        });
-        bodyEl.querySelectorAll('[data-plt-del]').forEach((btn) => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const ok = await UI.confirm(`¿Eliminar la plantilla "${btn.dataset.nombre}"? Dejará de estar disponible para el equipo.`);
-            if (!ok) return;
-            try {
-              await API.formatos.eliminarPlantilla(btn.dataset.pltDel);
-              UI.toast('Plantilla eliminada', 'success');
-              UI.closeModal();
-              await recargarPlantillas();
-              openPlantillasSelector(keyword);
-            } catch (error) {
-              UI.toast(error.message, 'error');
-            }
-          });
-        });
-      }
-
-      // Eventos para plantillas con formulario
-      if (bodyEl) {
-        bodyEl.querySelectorAll('[data-plantilla]').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const plantillaId = btn.dataset.plantilla;
-            UI.closeModal();
-            await openFormularioPlantilla(plantillaId);
-          });
-        });
-
-        // Hover decorativo sobre la tarjeta (sin duplicar eventos de click)
-        bodyEl.querySelectorAll('.plantilla-card').forEach(card => {
-          card.addEventListener('mouseenter', () => {
-            card.style.transform = 'translateY(-2px)';
-            card.style.borderColor = 'var(--primary)';
-          });
-          card.addEventListener('mouseleave', () => {
-            card.style.transform = '';
-            card.style.borderColor = '';
-          });
-        });
-
-        // Botones de descarga en blanco
-        bodyEl.querySelectorAll('[data-download-blank]').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const plantillaId = btn.dataset.downloadBlank;
-            try {
-              UI.toast('Descargando plantilla en blanco...', 'info');
-              const blob = await API.formatos.descargar(plantillaId);
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${plantillaId.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              // Revocar al liberarlo de inmediato puede cancelar la descarga;
-              // se difiere para que el navegador la tome.
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-              UI.toast('PDF descargado', 'success');
-              if (window.Sounds) window.Sounds.confirmation().catch(() => {});
-            } catch (error) {
-              UI.toast('Error al descargar: ' + error.message, 'error');
-            }
-          });
-        });
-      }
-    }
-
-    // Formulario dinámico para cualquier plantilla
-    async function openFormularioPlantilla(plantillaId) {
-      try {
-        UI.toast('Cargando formulario...', 'info');
-        const result = await API.formatos.obtenerCampos(plantillaId);
-        const plantilla = result.plantilla;
-
-        if (!plantilla || !plantilla.secciones || !plantilla.secciones.length) {
-          UI.toast('Esta plantilla no tiene formulario configurado', 'warning');
-          return;
-        }
-
-        // Construir formulario dinámico
-        const formId = 'form-' + String(plantillaId).replace(/[^a-zA-Z0-9_-]/g, '_');
-        let formHTML = `<form id="${formId}" novalidate>`;
-
-        for (const seccion of plantilla.secciones) {
-          formHTML += `
-            <div class="formato-section" style="margin-bottom:20px;">
-              <h4 style="margin:0 0 12px;color:var(--primary);">${seccion.icono} ${seccion.titulo}</h4>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-          `;
-
-          for (const campo of seccion.campos) {
-            const options = campo.options ? campo.options.map(o => 
-              typeof o === 'string' ? { value: o, label: o } : o
-            ) : undefined;
-
-            formHTML += UI.field(campo.name, campo.label, {
-              type: campo.type,
-              required: campo.required,
-              full: campo.full,
-              placeholder: campo.placeholder,
-              value: campo.value || '',
-              options: options,
-            });
-          }
-
-          formHTML += `</div></div>`;
-        }
-
-        // Firma digital al final de cualquier plantilla con formulario.
-        if (window.SignaturePad) {
-          formHTML += signatureSectionHTML();
-        }
-
-        formHTML += `</form>`;
-
-        const modal = UI.openModal({
-          title: `Generar: ${plantilla.nombre}`,
-          body: formHTML,
-          footer: `
-            <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-            <button class="btn btn-primary" type="submit" form="${formId}">&#128196; Generar PDF</button>
-          `,
-          size: 850,
-        });
-
-        const bodyEl = modal.bodyEl;
-        const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
-        if (overlay) {
-          const cancelBtn = overlay.querySelector('[data-cancel]');
-          if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-        }
-
-        const form = bodyEl ? bodyEl.querySelector(`[id="${formId}"]`) : null;
-        const pad = attachSignature(bodyEl);
-        if (form) {
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const values = UI.collectForm(e.target);
-
-            // Validar campos requeridos
-            const requiredFields = [];
-            for (const seccion of plantilla.secciones) {
-              for (const campo of seccion.campos) {
-                if (campo.required && !values[campo.name]) {
-                  requiredFields.push(campo.label);
-                }
-              }
-            }
-
-            if (requiredFields.length > 0) {
-              UI.toast(`Campos requeridos: ${requiredFields.join(', ')}`, 'warning');
-              return;
-            }
-
-            // Adjuntar la firma digital (si se dibujó) al lote de valores.
-            if (pad && !pad.isEmpty()) values.firma = pad.save();
-
-            try {
-              UI.toast('Generando PDF...', 'info');
-              const blob = await API.formatos.generar(plantillaId, values);
-              
-              // Descargar el PDF
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${plantilla.nombre.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              // Liberar el objeto al liberarlo de inmediato cancela la descarga
-              // en varios navegadores (queda en pantalla sin PDF ni error), así
-              // que se difiere la revocación hasta que el navegador la tome.
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-              UI.toast('PDF generado y descargado exitosamente', 'success');
-              if (window.Sounds) window.Sounds.confirmation().catch(() => {});
-              UI.closeModal();
-              load();
-            } catch (error) {
-              UI.toast('Error al generar PDF: ' + error.message, 'error');
-            }
-          });
-        }
-      } catch (error) {
-        UI.toast('Error al cargar formulario: ' + error.message, 'error');
-      }
-    }
-
-    // ============ FUNCIONES PARA PLANTILLAS DEL SISTEMA ============
-
-    async function openTemplateForm(record) {
-      if (!boss) return;
-      const isEdit = Boolean(record);
-      const modal = UI.openModal({
-        title: isEdit ? 'Editar plantilla' : 'Crear plantilla',
-        body: `
-          <form id="template-form" novalidate>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${UI.field('name', 'Nombre de la plantilla', { required: true, full: true, value: record ? record.name : '' })}
-              ${UI.field('type', 'Tipo', { type: 'select', options: TYPES, value: record ? record.type : 'formato' })}
-              ${UI.field('observations', 'Descripción', { type: 'textarea', full: true, value: record ? record.observations : '' })}
-            </div>
-            <div style="margin-top:16px;">
-              <h4 style="margin:0 0 10px;">Campos de la plantilla</h4>
-              <div id="template-fields-container">
-                ${(record && record.templateFields || [{ name: '', label: '', type: 'text', required: false }]).map((f, i) => `
-                  <div class="template-field-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:end;">
-                    ${UI.field(`field_name_${i}`, 'Nombre campo', { value: f.name })}
-                    ${UI.field(`field_label_${i}`, 'Etiqueta', { value: f.label })}
-                    ${UI.field(`field_type_${i}`, 'Tipo', { type: 'select', options: ['text', 'number', 'date', 'select', 'textarea'], value: f.type })}
-                    <button type="button" class="btn btn-danger btn-sm remove-field" data-index="${i}">X</button>
-                  </div>
-                `).join('')}
-              </div>
-              <button type="button" class="btn btn-secondary btn-sm" id="add-field">+ Agregar campo</button>
-            </div>
-          </form>
-        `,
-        footer: `
-          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="submit" form="template-form">${isEdit ? 'Guardar cambios' : 'Crear plantilla'}</button>
-        `,
-        size: 800,
-      });
-
-      const bodyEl = modal.bodyEl;
-      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
-      if (overlay) {
-        const cancelBtn = overlay.querySelector('[data-cancel]');
-        if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-      }
-      
-      let fieldCount = (record && record.templateFields) ? record.templateFields.length : 1;
-      
-      const addFieldBtn = bodyEl ? bodyEl.querySelector('#add-field') : null;
-      if (addFieldBtn) {
-        addFieldBtn.addEventListener('click', () => {
-          const fieldsContainer = bodyEl.querySelector('#template-fields-container');
-          if (!fieldsContainer) return;
-          const row = document.createElement('div');
-          row.className = 'template-field-row';
-          row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:end;';
-          row.innerHTML = `
-            ${UI.field(`field_name_${fieldCount}`, 'Nombre campo', { value: '' })}
-            ${UI.field(`field_label_${fieldCount}`, 'Etiqueta', { value: '' })}
-            ${UI.field(`field_type_${fieldCount}`, 'Tipo', { type: 'select', options: ['text', 'number', 'date', 'select', 'textarea'], value: 'text' })}
-            <button type="button" class="btn btn-danger btn-sm remove-field">X</button>
-          `;
-          fieldsContainer.appendChild(row);
-          fieldCount++;
-          const removeBtn = row.querySelector('.remove-field');
-          if (removeBtn) removeBtn.addEventListener('click', () => row.remove());
-        });
-      }
-
-      if (bodyEl) {
-        bodyEl.querySelectorAll('.remove-field').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const row = btn.closest('.template-field-row');
-            if (row) row.remove();
-          });
-        });
-      }
-
-      const templateForm = bodyEl ? bodyEl.querySelector('#template-form') : null;
-      if (templateForm) {
-        templateForm.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const values = UI.collectForm(e.target);
-          
-          const templateFields = [];
-          const rows = bodyEl.querySelectorAll('.template-field-row');
-          rows.forEach((row, i) => {
-            const name = values[`field_name_${i}`];
-            const label = values[`field_label_${i}`];
-            const type = values[`field_type_${i}`];
-            if (name && label) {
-              templateFields.push({ name, label, type, required: false });
-            }
-          });
-
-          const body = {
-            name: values.name,
-            type: values.type,
-            observations: values.observations,
-            isTemplate: true,
-            templateFields,
-          };
-
-          try {
-            if (isEdit) {
-              await API.documents.update(record._id, body);
-            } else {
-              await API.documents.create(body);
-            }
-            UI.toast(isEdit ? 'Plantilla actualizada' : 'Plantilla creada', 'success');
-            UI.closeModal();
-            load();
-          } catch (error) {
-            UI.toast(error.message, 'error');
-          }
-        });
-      }
-    }
-
-    function openFillForm(record) {
-      if (!record || !record.templateFields || !record.templateFields.length) {
-        UI.toast('Esta plantilla no tiene campos configurados', 'warning');
-        return;
-      }
-
-      const modal = UI.openModal({
-        title: `Llenar: ${record.name}`,
-        body: `
-          <form id="fill-form" novalidate>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px;">
-              ${record.templateFields.map(f => {
-                const val = (record.filledData && record.filledData[f.name]) || '';
-                return UI.field(f.name, f.label, { type: f.type, value: val, required: f.required });
-              }).join('')}
-            </div>
-          </form>
-        `,
-        footer: `
-          <button class="btn btn-secondary" type="button" data-cancel>Cancelar</button>
-          <button class="btn btn-primary" type="submit" form="fill-form">Guardar llenado</button>
-        `,
-        size: 700,
-      });
-
-      const bodyEl = modal.bodyEl;
-      const overlay = bodyEl ? bodyEl.closest('#modal-overlay') : null;
-      if (overlay) {
-        const cancelBtn = overlay.querySelector('[data-cancel]');
-        if (cancelBtn) cancelBtn.addEventListener('click', () => UI.closeModal());
-      }
-      
-      const fillForm = bodyEl ? bodyEl.querySelector('#fill-form') : null;
-      if (fillForm) {
-        fillForm.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const values = UI.collectForm(e.target);
-          try {
-            await API.documents.update(record._id, {
-              filledData: values,
-              filledBy: ApiClient.getStoredUser()._id,
-              filledAt: new Date().toISOString(),
-              status: 'recibido',
-            });
-            UI.toast('Formato llenado exitosamente', 'success');
-            UI.closeModal();
-            load();
-          } catch (error) {
-            UI.toast(error.message, 'error');
-          }
-        });
-      }
     }
   },
 };

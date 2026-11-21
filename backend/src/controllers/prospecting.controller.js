@@ -125,9 +125,17 @@ const summary = asyncHandler(async (req, res) => {
     { investment: 0, prospects: 0, contacts: 0, count: 0 }
   );
 
-  const funnelMap = { prospecto: 0, cita: 0, negociacion: 0, promesa: 0, cierre: 0 };
+  // Mismo vocabulario que el embudo del dashboard (contacto incluido).
+  const funnelMap = {
+    prospecto: 0, contacto: 0, cita: 0, negociacion: 0, promesa: 0, cierre: 0,
+  };
   funnel.forEach((f) => {
-    funnelMap[f._id] = f.count;
+    const raw = String(f._id || '').toLowerCase().trim();
+    const stage = raw === 'perfilado' ? 'contacto'
+      : raw === 'negociación' ? 'negociacion'
+        : raw === 'postventa' ? 'cierre'
+          : raw;
+    if (Object.prototype.hasOwnProperty.call(funnelMap, stage)) funnelMap[stage] += f.count;
   });
 
   res.json({

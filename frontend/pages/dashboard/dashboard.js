@@ -94,6 +94,7 @@ window.Pages.dashboard = {
 
       const FUNNEL_STAGES = [
         { key: 'prospecto', label: 'Prospectos' },
+        { key: 'contacto', label: 'Contacto / perfilado' },
         { key: 'cita', label: 'Citas' },
         { key: 'negociacion', label: 'Negociación' },
         { key: 'promesa', label: 'Promesa' },

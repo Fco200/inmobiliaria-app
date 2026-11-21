@@ -1,10 +1,8 @@
 'use strict';
 
-const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const mongoose = require('mongoose');
-const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('../middlewares/asyncHandler');
 const {
@@ -40,8 +38,6 @@ const maintenanceService = require('../services/maintenance.service');
 const mailConfig = require('../services/mailConfig.service');
 const { mailStatus, sendTestMail } = require('../services/mail.service');
 const { queueWelcome } = require('../services/welcome.service');
-
-const PLANTILLAS_DIR = path.join(__dirname, '../../..', 'plantillas');
 
 const signSoporteToken = (userId, expiresIn = jwtExpiresIn) =>
   jwt.sign({ id: userId }, jwtSecret, { expiresIn });
@@ -897,124 +893,6 @@ const generarRespaldo = asyncHandler(async (req, res) => {
   });
 });
 
-// ── Gestor de plantillas PDF (mismo almacenamiento que Formatos) ────────────
-const plantillas = require('../services/plantillas.service');
-
-const plantillaStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, plantillas.PLANTILLAS_DIR),
-  filename: (req, file, cb) => {
-    const base = path.basename(file.originalname || 'plantilla.pdf', path.extname(file.originalname || ''));
-    const safe = String(base).replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim();
-    cb(null, `${safe || 'plantilla'}${Date.now()}.pdf`);
-  },
-});
-
-const plantillaUpload = multer({
-  storage: plantillaStorage,
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '').slice(1).toLowerCase();
-    cb(null, ext === 'pdf');
-  },
-  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
-});
-
-const listarPlantillas = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: await plantillas.listAll() });
-});
-
-const subirPlantilla = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, message: 'Debes seleccionar un archivo PDF' });
-  }
-  let archivo;
-  try {
-    archivo = await plantillas.saveUpload(req.file);
-  } catch (error) {
-    if (error.statusCode === 409) return res.status(409).json({ success: false, message: error.message });
-    throw error;
-  }
-  await logActivity({
-    entityType: 'Plantilla',
-    entityId: req.user._id,
-    user: req.user._id,
-    action: 'subir_plantilla',
-    message: `Soporte subió la plantilla ${archivo}`,
-  });
-  res.json({ success: true, message: 'Plantilla subida', data: { archivo } });
-});
-
-const eliminarPlantilla = asyncHandler(async (req, res) => {
-  const safe = path.basename(req.params.archivo || '');
-  if (!safe.toLowerCase().endsWith('.pdf')) {
-    return res.status(400).json({ success: false, message: 'Solo se permiten archivos PDF' });
-  }
-  const found = await plantillas.findByArchivo(safe);
-  if (!found) {
-    return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
-  }
-  await plantillas.remove(found);
-  await logActivity({
-    entityType: 'Plantilla',
-    entityId: req.user._id,
-    user: req.user._id,
-    action: 'eliminar_plantilla',
-    message: `Soporte eliminó la plantilla ${safe}`,
-  });
-  res.json({ success: true, message: 'Plantilla eliminada' });
-});
-
-const descargarPlantillaSoporte = asyncHandler(async (req, res) => {
-  const safe = path.basename(req.params.archivo || '');
-  const found = await plantillas.findByArchivo(safe);
-  if (!found) {
-    return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
-  }
-  return plantillas.send(req, res, found, safe);
-});
-
-// Renombra una plantilla PDF desde la interfaz (disco y/o nube).
-// PATCH /soporte/plantillas/:archivo  body: { nuevoNombre }
-const renombrarPlantilla = asyncHandler(async (req, res) => {
-  const original = path.basename(String(req.params.archivo || ''));
-  if (!original.toLowerCase().endsWith('.pdf')) {
-    return res.status(400).json({ success: false, message: 'Solo se permiten archivos PDF' });
-  }
-
-  let nuevoNombre = String((req.body && req.body.nuevoNombre) || '').trim();
-  if (!nuevoNombre || !/\.pdf$/i.test(nuevoNombre)) {
-    return res.status(400).json({ success: false, message: 'El nuevo nombre debe terminar en .pdf' });
-  }
-
-  // Reemplaza caracteres inseguros para evitar modificaciones de ruta.
-  const base = nuevoNombre.replace(/\.pdf$/i, '').replace(/[^\w\u00C0-\u024F .\-()]/g, '_').trim();
-  nuevoNombre = `${base || 'plantilla'}.pdf`;
-
-  if (nuevoNombre.toLowerCase() === original.toLowerCase()) {
-    return res.status(400).json({ success: false, message: 'El nuevo nombre es igual al actual' });
-  }
-
-  const found = await plantillas.findByArchivo(original);
-  if (!found) {
-    return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
-  }
-  if (!(await plantillas.nameIsFree(nuevoNombre))) {
-    return res.status(409).json({ success: false, message: 'Ya existe una plantilla con ese nombre' });
-  }
-
-  await plantillas.rename(found, nuevoNombre);
-
-  await logActivity({
-    entityType: 'Plantilla',
-    entityId: req.user._id,
-    user: req.user._id,
-    action: 'renombrar_plantilla',
-    message: `Soporte renombró la plantilla ${original} → ${nuevoNombre}`,
-  });
-
-  res.json({ success: true, message: 'Plantilla renombrada', data: { anterior: original, archivo: nuevoNombre } });
-});
-
-
 // ── Chat interno (soporte ve y responde los mensajes del equipo) ────────────
 // El soporte es SUPERADMIN y puede ver TODOS los chats (grupales y 1 a 1) para
 // atender los mensajes que los asesores le envían, sin estar necesariamente en
@@ -1706,13 +1584,6 @@ module.exports = {
   estadoMantenimiento,
   cambiarMantenimiento,
   generarRespaldo,
-  listarPlantillas,
-  subirPlantilla,
-  renombrarPlantilla,
-  eliminarPlantilla,
-  descargarPlantillaSoporte,
-  plantillaUpload,
-  PLANTILLAS_DIR,
   listarChatsSoporte,
   generalSoporte,
   verChatSoporte,

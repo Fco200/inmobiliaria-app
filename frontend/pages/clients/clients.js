@@ -70,6 +70,7 @@ window.Pages.clients = {
         <input class="form-control" id="clients-search" type="search" placeholder="Buscar por nombre, teléfono o correo…">
         <button class="btn btn-primary" id="clients-add" type="button">+ Nuevo cliente</button>
         <button class="btn btn-secondary" id="clients-csv" type="button">&#11015;&nbsp; Exportar CSV</button>
+        <button class="btn btn-secondary" id="clients-whatsnew" type="button">&#127881;&nbsp; Novedades</button>
       </div>
       <details class="clients-filters" id="clients-filters-box">
         <summary>Filtros avanzados</summary>
@@ -326,6 +327,10 @@ window.Pages.clients = {
       } catch (error) {
         UI.toast(error.message, 'error');
       }
+    });
+    const whatsnewBtn = container.querySelector('#clients-whatsnew');
+    if (whatsnewBtn) whatsnewBtn.addEventListener('click', () => {
+      if (window.WhatsNew) window.WhatsNew.open();
     });
     function applyFilters() {
       state.servicio = fServicio ? fServicio.value : '';
@@ -831,5 +836,11 @@ window.Pages.clients = {
       await refresh()
     }
     load();
+    // Se difiere unos instantes para no apilar el aviso con la bienvenida
+    // que se carga al iniciar sesión. Si hay otro overlay, maybeShow() lo omite
+    // sin marcarlo como visto para que aparezca en la próxima apertura.
+    setTimeout(() => {
+      if (window.WhatsNew) window.WhatsNew.maybeShow();
+    }, 900);
   },
 };

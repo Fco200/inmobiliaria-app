@@ -389,10 +389,19 @@ window.Realtime = (() => {
       showNotification(item);
       refreshBadges();
     });
-    // Cambio de datos en el servidor: el shell refresca la vista actual.
-    // `data-changed` ya no redibuja la vista automáticamente: se conserva el
-    // evento del servidor para otros usos, pero el cliente no lo usa para
-    // recargar listas (evita que los datos "parpadeen" mientras se trabaja).
+    // Cambio de datos en el servidor: el shell NO redibuja las listas (evita
+    // parpadeos), excepto el embudo del dashboard, que debe reflejar al instante
+    // cambios de etapas en clientes, negocios y citas.
+    socket.on('data-changed', (payload) => {
+      const resource = String((payload && payload.resource) || '').toLowerCase();
+      if (!['clients', 'businesses', 'appointments'].includes(resource)) return;
+      const path = String(window.location.pathname || '').toLowerCase();
+      if (!path.endsWith('/dashboard.html')) return;
+      const page = window.Pages && window.Pages.dashboard;
+      const content = document.getElementById('app-content');
+      if (!page || typeof page.render !== 'function' || !content) return;
+      page.render(content).catch(() => {});
+    });
     // El servidor publicó una versión nueva: se consulta la versión y se
     // muestra el banner/modal de Actualizaciones sin recargar la página.
     socket.on('nueva-version', (payload) => {

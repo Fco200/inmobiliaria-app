@@ -68,8 +68,9 @@ window.AppShell = (() => {
     const user = window.ApiClient.getStoredUser();
     const role = user && user.role;
     if (!role || typeof role !== 'object') return null;
-    // Administración, dirección y superadmin ven todos los módulos.
-    if (['admin', 'direccion', 'superadmin'].includes(role.code)) return null;
+    // Administración, dirección, gerencia y superadmin ven todos los módulos,
+    // aunque la sesión guardada tenga una lista de permisos incompleta.
+    if (['admin', 'direccion', 'gerencia', 'superadmin'].includes(role.code)) return null;
     if (!Array.isArray(role.permissions)) return null;
     return role.permissions;
   }

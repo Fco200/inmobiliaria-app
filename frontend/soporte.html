@@ -162,14 +162,6 @@
     .log-badge-ERROR { background: rgba(224,83,61,0.18); color: var(--danger); }
     .log-row .log-msg.warn { color: var(--warning); }
 
-    .plantilla-row {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px;
-      background: var(--bg-2);
-    }
-    .plantilla-row span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .plantilla-meta { color: var(--text-muted); font-size: 11px; }
-
     .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 18px; }
     .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; text-align: center; }
     .stat-card b { display: block; font-size: 26px; color: var(--gold); margin-bottom: 4px; }
@@ -342,7 +334,6 @@
       <button class="sp-tab" data-tab="roles"><span class="ico">&#129518;</span> Roles y Permisos</button>
       <button class="sp-tab" data-tab="logs"><span class="ico">&#128220;</span> Logs y Errores</button>
       <button class="sp-tab" data-tab="respaldo"><span class="ico">&#128190;</span> Respaldos</button>
-      <button class="sp-tab" data-tab="plantillas"><span class="ico">&#128196;</span> Plantillas PDF</button>
     </nav>
 
     <main class="sp-main" id="sp-main">
@@ -805,19 +796,6 @@
         </div>
       </section>
 
-      <!-- --- Plantillas --- -->
-      <section class="sp-pane" id="pane-plantillas">
-        <h1 class="sp-pane-title">Gestor de Plantillas PDF</h1>
-        <p class="sp-pane-sub">Sube, reemplaza o elimina los formatos PDF en <b>./plantillas</b> directamente desde el navegador.</p>
-        <div class="sp-card">
-          <h3 style="margin-bottom:12px;">Subir / reemplazar plantilla</h3>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-            <input type="file" id="input-plantilla" accept="application/pdf,.pdf" style="color:var(--text);">
-            <button class="btn btn-gold btn-sm" id="btn-subir-plantilla" type="button">Subir PDF</button>
-          </div>
-        </div>
-        <div id="plantillas-container"></div>
-      </section>
     </main>
   </div>
 

@@ -1607,97 +1607,6 @@ window.SoportePanel = (() => {
     });
   }
 
-  // ── Pestaña Plantillas ────────────────────────────────────────────────────
-  function renderPlantillas(list) {
-    const box = document.getElementById('plantillas-container');
-    if (!list.length) {
-      box.innerHTML = '<div class="sp-empty">No hay plantillas PDF en ./plantillas.</div>';
-      return;
-    }
-    box.innerHTML = `
-      <div class="sp-card">
-        <h3 style="margin-bottom:12px;">Plantillas actuales</h3>
-        ${list.map((p) => `
-          <div class="plantilla-row">
-            <div style="min-width:0;">
-              <div>${escapeHtml(p.archivo)}</div>
-              <div class="plantilla-meta">${(p.tamaño / 1024).toFixed(1)} KB · ${fmtDate(p.modificado)}</div>
-            </div>
-            <div class="row-actions">
-              <button class="btn btn-ghost btn-sm" data-pl="rename" data-f="${encodeURIComponent(p.archivo)}">Renombrar</button>
-              <button class="btn btn-ghost btn-sm" data-pl="download" data-f="${encodeURIComponent(p.archivo)}">Descargar</button>
-              <button class="btn btn-danger btn-sm" data-pl="delete" data-f="${encodeURIComponent(p.archivo)}">Eliminar</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    box.querySelectorAll('[data-pl]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const archivo = decodeURIComponent(btn.dataset.f);
-        if (btn.dataset.pl === 'delete') {
-          if (!confirm(`¿Eliminar la plantilla "${archivo}"?`)) return;
-          try {
-            await window.API.soporte.eliminarPlantilla(archivo);
-            renderPlantillas(await window.API.soporte.plantillas());
-          } catch (error) { alert(error.message); }
-        } else if (btn.dataset.pl === 'rename') {
-          renamePlantilla(archivo);
-        } else {
-          try {
-            const blob = await window.API.soporte.descargarPlantilla(archivo);
-            downloadBlob(blob, archivo);
-          } catch (error) { alert(error.message); }
-        }
-      });
-    });
-  }
-
-  async function renamePlantilla(archivo) {
-    const name = await prompt('Nuevo nombre de la plantilla (debe terminar en .pdf):', archivo);
-    if (name === null || !name.trim()) return;
-    try {
-      await window.API.soporte.renombrarPlantilla(archivo, name.trim());
-      await loadPlantillas();
-      alert('Plantilla renombrada correctamente.');
-    } catch (error) {
-      alert(error.message);
-    }
-  }
-
-  async function loadPlantillas() {
-    const box = document.getElementById('plantillas-container');
-    box.innerHTML = '<div class="sp-loading"><span class="spinner"></span> Cargando plantillas…</div>';
-    try {
-      renderPlantillas(await window.API.soporte.plantillas());
-    } catch (error) {
-      box.innerHTML = `<div class="alert show alert-error">${escapeHtml(error.message)}</div>`;
-    }
-  }
-
-  function initPlantillas() {
-    document.getElementById('btn-subir-plantilla').addEventListener('click', async () => {
-      const input = document.getElementById('input-plantilla');
-      const file = input.files && input.files[0];
-      if (!file) { alert('Selecciona un archivo PDF primero.'); return; }
-      if (!/\.pdf$/i.test(file.name)) { alert('Solo se permiten archivos PDF.'); return; }
-      const btn = document.getElementById('btn-subir-plantilla');
-      btn.disabled = true;
-      btn.textContent = 'Subiendo…';
-      try {
-        await window.API.soporte.subirPlantilla(file);
-        input.value = '';
-        await loadPlantillas();
-        alert('Plantilla subida correctamente.');
-      } catch (error) {
-        alert(error.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Subir PDF';
-      }
-    });
-  }
-
   // ── Pestaña Chat Interno ──────────────────────────────────────────────────
   let chatListCache = [];
   let activeChatId = null;
@@ -2081,13 +1990,6 @@ window.SoportePanel = (() => {
       { title: 'Limpiar buffer', text: 'El botón «Limpiar Logs» vacía el visor en memoria. Los eventos persisten en ActivityLog/Historial de actividad para auditoría.' },
     ]);
 
-    const pdfs = guiaCard('&#128196;', 'Plantillas PDF', [
-      { title: 'Subir formato', text: 'Selecciona un archivo .pdf y pulsa «Subir PDF». Se guarda en ./plantillas sin tocar el servidor.' },
-      { title: 'Visible para todo el equipo', text: 'Los PDFs que subes aquí también aparecen en Formatos, dentro de «Plantillas disponibles (solo descarga)», para que cualquier asesor los descargue.' },
-      { title: 'Renombrar', text: 'Pulsa «Renombrar», escribe el nuevo nombre (debe terminar en .pdf) y confirma.' },
-      { title: 'Descargar / Eliminar', text: 'Descarga el PDF en blanco o elimínalo del gestor de plantillas directamente.' },
-    ]);
-
     const boletin = guiaCard('&#128231;', 'Suscriptores y campañas', [
       { title: 'Ver suscriptores', text: 'La pestaña Suscriptores muestra quién se dio de alta desde la página pública o desde Inicio, con búsqueda, filtro por estado y exportación a CSV.' },
       { title: 'Administrar la lista', text: 'Puedes dar de baja, reactivar o eliminar un registro. Las bajas dejan de recibir campañas del boletín.' },
@@ -2113,7 +2015,6 @@ window.SoportePanel = (() => {
         ${sesiones}
         ${actividad}
         ${logs}
-        ${pdfs}
         ${boletin}
         ${soporte}
         ${respaldo}
@@ -2809,7 +2710,6 @@ window.SoportePanel = (() => {
     initTabs();
     initLogs();
     initRespaldo();
-    initPlantillas();
     initSesiones();
     initAnuncios();
     initSolicitudes();
@@ -2825,7 +2725,6 @@ window.SoportePanel = (() => {
     renderConfig();
     renderRolesPermisos();
     loadLogs();
-    loadPlantillas();
   }
 
   return { init };

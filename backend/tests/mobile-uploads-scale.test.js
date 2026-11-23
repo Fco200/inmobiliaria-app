@@ -99,5 +99,5 @@ test('la versión y la caché del Service Worker se actualizan juntas', () => {
   assert.equal(version.version, '2.36');
   assert.ok(swVersion, 'el Service Worker no declara VERSION');
   assert.equal(swVersion[1], version.version, 'la versión del SW no coincide con la del backend');
-  assert.match(sw, /const CACHE_NAME = 'crm-inmob-v67'/, 'no se cambió el nombre de la caché');
+  assert.match(sw, /const CACHE_NAME = 'crm-inmob-v69'/, 'no se cambió el nombre de la caché');
 });

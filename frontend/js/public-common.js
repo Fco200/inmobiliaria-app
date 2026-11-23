@@ -307,9 +307,93 @@ window.PublicSite = (() => {
   }
 
   // ── Asistente virtual (chat públic, responde desde el backend) ───────────
+
+  // Tips que aparecen UNA SOLA VEZ al lado de la burbuja del asistente.
+  // Para "alimentar" el sistema con más mensajes, basta con agregar aquí otro
+  // objeto { id, text, icon }: cada id se muestra una sola vez por navegador y
+  // se van mostrando en orden en las siguientes visitas.
+  const ASSISTANT_TIPS = [
+    { id: 'bubble_help', text: '¡Da clic aquí en la burbuja para ayudarte!', icon: '&#128070;' },
+  ];
+  const ASSISTANT_TIPS_KEY = 'inmobles_assistant_tips_seen';
+
+  function assistantSeenTips() {
+    try {
+      const raw = localStorage.getItem(ASSISTANT_TIPS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function markAssistantTipSeen(id) {
+    try {
+      const seen = assistantSeenTips();
+      if (!seen.includes(id)) {
+        seen.push(id);
+        localStorage.setItem(ASSISTANT_TIPS_KEY, JSON.stringify(seen));
+      }
+    } catch (e) { /* almacenamiento bloqueado: el tip se sigue mostrando */ }
+  }
+
+  function showAssistantTip(widget, toggle) {
+    const seen = assistantSeenTips();
+    const tip = ASSISTANT_TIPS.find((t) => t && t.id && t.text && !seen.includes(t.id));
+    if (!tip || !widget || !toggle) return;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'landing-assistant-tip';
+    bubble.setAttribute('role', 'status');
+
+    const icon = document.createElement('span');
+    icon.className = 'landing-assistant-tip-icon';
+    icon.innerHTML = tip.icon || '&#128070;';
+    const text = document.createElement('span');
+    text.className = 'landing-assistant-tip-text';
+    text.textContent = tip.text;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'landing-assistant-tip-close';
+    close.setAttribute('aria-label', 'Cerrar mensaje');
+    close.innerHTML = '&times;';
+    bubble.append(icon, text, close);
+    widget.insertBefore(bubble, toggle);
+
+    let timer = null;
+    const dismiss = () => {
+      if (timer) clearTimeout(timer);
+      markAssistantTipSeen(tip.id);
+      if (!bubble.isConnected) return;
+      bubble.classList.add('is-leaving');
+      setTimeout(() => bubble.remove(), 320);
+    };
+    close.addEventListener('click', dismiss);
+    // Si abre el asistente, el tip ya cumplió su objetivo.
+    toggle.addEventListener('click', dismiss, { once: true });
+    timer = setTimeout(dismiss, 14000);
+  }
+
   function initAssistant() {
     const root = document.getElementById('assistant-root');
     if (!root) return;
+
+    // En celular el teclado virtual encoge el viewport visible. Sincronizamos
+    // dos variables CSS para que el panel se ajuste y el campo nunca quede
+    // tapado por el teclado (funciona aunque el navegador no soporte dvh).
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      const height = vv ? vv.height : window.innerHeight;
+      const keyboard = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+      root.style.setProperty('--ast-vh', `${Math.round(height)}px`);
+      root.style.setProperty('--ast-kb', `${Math.round(keyboard)}px`);
+    };
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncViewport);
+      window.visualViewport.addEventListener('scroll', syncViewport);
+    }
 
     root.innerHTML = `
       <div class="landing-assistant-widget">
@@ -319,7 +403,7 @@ window.PublicSite = (() => {
             <button type="button" class="landing-assistant-close" id="ast-close" aria-label="Cerrar">&times;</button>
           </div>
           <div class="landing-assistant-body" id="ast-body">
-            <div class="landing-assistant-msg bot">¡Hola! Soy el asistente de INMOBLES. ¿Qué buscas? Pregunta por propiedades, precios, financiamiento o cómo agendar una visita.</div>
+            <div class="landing-assistant-msg bot ast-enter">¡Hola! Soy el asistente de INMOBLES. ¿Qué buscas? Pregunta por propiedades, precios, financiamiento o cómo agendar una visita.</div>
           </div>
           <form class="landing-assistant-input" id="ast-form">
             <input class="form-control" id="ast-q" type="text" placeholder="Escribe tu pregunta..." autocomplete="off" />
@@ -339,10 +423,22 @@ window.PublicSite = (() => {
 
     const appendMsg = (text, who) => {
       const div = document.createElement('div');
-      div.className = `landing-assistant-msg ${who}`;
+      div.className = `landing-assistant-msg ${who} ast-enter`;
       div.textContent = text;
       body.appendChild(div);
       body.scrollTop = body.scrollHeight;
+      return div;
+    };
+
+    // Indicador de "escribiendo" mientras llega la respuesta del backend.
+    const appendTyping = () => {
+      const div = document.createElement('div');
+      div.className = 'landing-assistant-msg bot landing-assistant-typing';
+      div.setAttribute('aria-label', 'El asistente está escribiendo');
+      div.innerHTML = '<span></span><span></span><span></span>';
+      body.appendChild(div);
+      body.scrollTop = body.scrollHeight;
+      return div;
     };
 
     toggle.addEventListener('click', () => {
@@ -358,13 +454,19 @@ window.PublicSite = (() => {
       if (!q) return;
       appendMsg(q, 'user');
       input.value = '';
+      const typing = appendTyping();
       try {
         const res = await window.API.public.assistant({ question: q });
+        typing.remove();
         appendMsg((res && res.answer) || 'No pude responder en este momento.', 'bot');
       } catch (error) {
+        typing.remove();
         appendMsg('No pude conectar con el asistente. Intenta de nuevo.', 'bot');
       }
     });
+
+    // Tip de bienvenida: se muestra una sola vez, justo encima de la burbuja.
+    showAssistantTip(root.querySelector('.landing-assistant-widget'), toggle);
   }
 
   return {

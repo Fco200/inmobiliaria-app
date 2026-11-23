@@ -6,7 +6,6 @@ window.Pages.home = {
   async render(container) {
     const user = window.ApiClient.getStoredUser();
     const name = (user && (user.name || user.username)) || '';
-    const currentEmail = (user && user.email) || '';
     const role = user && user.role ? (user.role.name || user.role.code || user.role) : '';
     const roleCode = user && user.role ? (typeof user.role === 'object' ? (user.role.code || '') : String(user.role)) : '';
     const isBoss = ['admin', 'direccion', 'gerencia', 'asistencia', 'superadmin'].includes(roleCode);
@@ -16,47 +15,19 @@ window.Pages.home = {
     const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
     const todayLabel = now.toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    let data = {};
-    try {
-      const res = await window.API.dashboard.summary();
-      data = res || {};
-    } catch (error) { /* sin conexión: se omite la información */ }
-
-    const c = data.counters || {};
-    const fmt = (v) => Format.currency(v);
-
-    const KPIS = [
-      { icon: '&#128176;', label: 'Ventas del mes', value: c.thisMonthCount ? fmt(c.thisMonthValue) : '$0', sub: c.thisMonthCount ? `${c.thisMonthCount} negocio${c.thisMonthCount === 1 ? '' : 's'} concluido${c.thisMonthCount === 1 ? '' : 's'}` : 'Sin cierres este mes', tone: 'green' },
-      { icon: '&#128179;', label: 'Pipeline en curso', value: fmt(c.pipelineValue), sub: `${c.businessesActive || 0} negocio${c.businessesActive === 1 ? '' : 's'} activo${c.businessesActive === 1 ? '' : 's'}`, tone: 'blue' },
-      { icon: '&#128101;', label: 'Clientes', value: c.clients || 0, sub: `Cartera registrada`, tone: 'purple' },
-      { icon: '&#127968;', label: 'Inmuebles', value: c.properties || 0, sub: 'En el inventario', tone: 'amber' },
-      { icon: '&#128276;', label: 'Avisos sin leer', value: c.notificationsUnread || 0, sub: 'Mantente al día', tone: 'red' },
-      { icon: '&#127919;', label: 'Metas activas', value: c.activeGoals || 0, sub: 'Con avance automático', tone: 'teal' },
+    // Frase motivacional del día: rota con el día del año para que la portada
+    // se sienta viva sin cambiar en cada recarga.
+    const FRASES = [
+      'Cada gran cierre empieza con una buena conversación.',
+      'La constancia de hoy es la venta de mañana.',
+      'Tu cartera crece con cada seguimiento que haces.',
+      'Un cliente bien atendido regresa y te recomienda.',
+      'El éxito inmobiliario se construye cita a cita.',
+      'Hoy es un buen día para cerrar un negocio.',
+      'Las mejores oportunidades se trabajan, no se esperan.',
     ];
-
-    const appointments = (data.recentAppointments || []).map(
-      (a) => `
-        <li class="home-list-item">
-          <span class="home-list-dot" style="--dot: var(--primary)"></span>
-          <div class="home-list-body">
-            <strong>${UI.escapeHtml(a.title || 'Cita')}</strong>
-            <small>${UI.escapeHtml(a.client && a.client.name ? a.client.name : 'Sin cliente')}</small>
-          </div>
-          <span class="home-list-time">${Format.dateTime(a.date)}</span>
-        </li>`
-    ).join('');
-
-    const tasks = (data.recentTasks || []).map(
-      (t) => `
-        <li class="home-list-item">
-          <span class="home-list-dot" style="--dot: var(--warning)"></span>
-          <div class="home-list-body">
-            <strong>${UI.escapeHtml(t.title || 'Tarea')}</strong>
-            <small>${t.client && t.client.name ? UI.escapeHtml(t.client.name) : 'Sin cliente vinculado'}</small>
-          </div>
-          <span class="home-list-time">${Format.dateTime(t.date)}</span>
-        </li>`
-    ).join('');
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 864e5);
+    const frase = FRASES[dayOfYear % FRASES.length];
 
     const QUICK = [
       { href: 'clients.html', icon: '&#10133;', label: 'Nuevo cliente' },
@@ -92,17 +63,19 @@ window.Pages.home = {
       { key: 'guia', label: isBoss ? 'Guía del sistema' : 'Guía de uso', desc: isBoss ? 'Manual del administrador' : 'Cómo usar cada módulo', href: isBoss ? 'GUIA.HTML' : 'GUIAUSUARIO.HTML', icon: '&#128214;' },
     ];
 
-    const kpiCards = KPIS.map(
-      (k) => `
-        <div class="kpi-card tone-${k.tone}">
-          <span class="kpi-icon">${k.icon}</span>
-          <div class="kpi-body">
-            <small>${UI.escapeHtml(k.label)}</small>
-            <strong>${k.value}</strong>
-            <span class="kpi-sub">${UI.escapeHtml(k.sub)}</span>
-          </div>
-        </div>`
-    ).join('');
+    const FEATURES = [
+      { icon: '&#128101;', title: 'Clientes al día', desc: 'Registra prospectos, perfílalos y conserva su historial completo.' },
+      { icon: '&#127968;', title: 'Propiedades que se comparten', desc: 'Captura inmuebles con fotos y genera fichas PDF listas para WhatsApp.' },
+      { icon: '&#128197;', title: 'Agenda sin pendientes', desc: 'Citas, tareas y recordatorios conectados a cada cliente y negocio.' },
+      { icon: '&#128202;', title: 'Decisiones con datos', desc: 'Reportes y metas para medir tu avance y el de tu equipo.' },
+    ];
+
+    const STEPS = [
+      { num: '1', href: 'clients.html', title: 'Registra un cliente', desc: 'Nombre, teléfono y qué está buscando.' },
+      { num: '2', href: 'properties.html', title: 'Captura una propiedad', desc: 'Fotos, precio y características.' },
+      { num: '3', href: 'appointments.html', title: 'Agenda una cita', desc: 'Vincúlala al cliente y al inmueble.' },
+      { num: '4', href: 'businesses.html', title: 'Abre el negocio', desc: 'Da seguimiento hasta el cierre.' },
+    ];
 
     const quickActions = QUICK.map(
       (q) => `<a class="quick-action" href="${q.href}"><span>${q.icon}</span>${UI.escapeHtml(q.label)}</a>`
@@ -119,67 +92,94 @@ window.Pages.home = {
         </a>`
     ).join('');
 
+    const features = FEATURES.map(
+      (f) => `
+        <div class="home-feature">
+          <span class="home-feature-icon">${f.icon}</span>
+          <strong>${UI.escapeHtml(f.title)}</strong>
+          <small>${UI.escapeHtml(f.desc)}</small>
+        </div>`
+    ).join('');
+
+    const steps = STEPS.map(
+      (s) => `
+        <a class="home-step" href="${s.href}">
+          <span class="home-step-num">${s.num}</span>
+          <span class="home-step-body">
+            <strong>${UI.escapeHtml(s.title)}</strong>
+            <small>${UI.escapeHtml(s.desc)}</small>
+          </span>
+        </a>`
+    ).join('');
+
     container.innerHTML = `
       <section class="home-hero">
         <div class="home-hero-text">
           <h2>${greeting}${name ? `, ${UI.escapeHtml(name)}` : ''}.</h2>
-          <p>${todayLabel} · Así va tu cartera en este momento.</p>
-          <button class="btn btn-primary" type="button" data-download-app style="margin-top:12px;">&#128229;&nbsp; Descargar la app</button>
+          <p>${todayLabel} &middot; ${UI.escapeHtml(frase)}</p>
+          <div class="home-hero-actions">
+            <button class="btn btn-primary" type="button" data-download-app>&#128229;&nbsp; Descargar la app</button>
+            <span class="home-version-chip" id="home-version-chip" title="Versión de la aplicación">&#8987; Versión&hellip;</span>
+          </div>
         </div>
         ${role ? `<span class="home-role-badge">${UI.escapeHtml(role)}</span>` : ''}
       </section>
 
-      <section class="home-newsletter" id="home-newsletter">
-        <div class="home-newsletter-copy">
-          <span class="home-newsletter-kicker">&#128231; Boletín INMOBLES</span>
-          <h2>Recibe las mejores propiedades antes que nadie</h2>
-          <p>Nuevas publicaciones, preventas, cambios de precio y promociones exclusivas directamente en tu correo.</p>
-          <ul class="home-newsletter-benefits">
-            <li>&#10003; Avisos de propiedades recién publicadas</li>
-            <li>&#10003; Ofertas y preventas exclusivas</li>
-            <li>&#10003; Sin spam: solo novedades inmobiliarias</li>
-          </ul>
+      <section class="home-update-banner" aria-label="Novedades de la app">
+        <span class="home-update-spark home-update-spark-1" aria-hidden="true">&#10024;</span>
+        <span class="home-update-spark home-update-spark-2" aria-hidden="true">&#11088;</span>
+        <span class="home-update-spark home-update-spark-3" aria-hidden="true">&#10024;</span>
+        <span class="home-update-spark home-update-spark-4" aria-hidden="true">&#127881;</span>
+        <div class="home-update-copy">
+          <span class="home-update-badge">&#128640; RECIÉN ESTREADA</span>
+          <h3>Tu app está más que lista ahora</h3>
+          <p>Más lista que nunca para acompañarte en cada visita, cada negocio y cada cierre. Sigue siendo tu misma app de siempre, solo que con ganas nuevas de ayudarte.</p>
         </div>
-        <form class="home-newsletter-form" id="home-newsletter-form" novalidate>
-          <label for="home-newsletter-email">Suscríbete gratis</label>
-          <div class="home-newsletter-row">
-            <input
-              class="form-control"
-              id="home-newsletter-email"
-              name="email"
-              type="email"
-              placeholder="tu@correo.com"
-              value="${UI.escapeHtml(currentEmail)}"
-              autocomplete="email"
-              required
-            />
-            <button class="btn btn-primary" type="submit" id="home-newsletter-btn">&#128276;&nbsp; Suscribirme</button>
-          </div>
-          <p class="home-newsletter-msg" id="home-newsletter-msg" role="status"></p>
-          <small>Puedes darte de baja cuando quieras respondiendo a cualquiera de nuestros correos.</small>
-        </form>
+        <div class="home-update-orb" aria-hidden="true"></div>
+      </section>
+
+      <section class="card home-intro">
+        <div class="home-intro-copy">
+          <span class="home-intro-kicker">&#128075; Bienvenido a INMOBLES</span>
+          <h3>Tu trabajo inmobiliario, en un solo lugar</h3>
+          <p>
+            INMOBLES es el CRM de tu equipo: organiza tu cartera de clientes, captura y comparte
+            propiedades, agenda citas y acompaña cada operación hasta el cierre. Todo queda
+            conectado: el cliente, el inmueble, la cita y el negocio se hablan entre sí.
+          </p>
+          <p class="home-intro-tip">
+            &#128161; Entra a cualquier módulo desde los accesos de abajo. ¿Es tu primera vez?
+            Empieza por la <a href="${isBoss ? 'GUIA.HTML' : 'GUIAUSUARIO.HTML'}">${isBoss ? 'Guía del sistema' : 'Guía de uso'}</a>.
+          </p>
+        </div>
+        <div class="home-intro-features">${features}</div>
       </section>
 
       <section class="home-section">
-        <h3 class="home-section-title">Resumen ejecutivo</h3>
-        <div class="kpi-grid">${kpiCards}</div>
+        <h3 class="home-section-title">Empieza en 4 pasos</h3>
+        <div class="home-steps">${steps}</div>
       </section>
 
       <section class="home-section">
-        <div class="home-columns">
-          <div class="card home-list-card">
+        <div class="home-about-grid">
+          <div class="card home-version-card">
             <div class="home-list-head">
-              <h3>&#128197; Próximas citas</h3>
-              <a class="home-more" href="appointments.html">Ver todas &rarr;</a>
+              <h3>&#128230; Versión de la app</h3>
+              <a class="home-more" href="actualizaciones.html">Actualizaciones &rarr;</a>
             </div>
-            ${appointments ? `<ul class="home-list">${appointments}</ul>` : '<p class="empty-state">No hay citas próximas.</p>'}
+            <div class="home-version-row">
+              <span class="home-version-num" id="home-version-num">&mdash;</span>
+              <span class="home-version-meta" id="home-version-meta">Consultando&hellip;</span>
+            </div>
+            <ul class="home-version-notes" id="home-version-notes"></ul>
           </div>
-          <div class="card home-list-card">
-            <div class="home-list-head">
-              <h3>&#9745; Tareas por hacer</h3>
-              <a class="home-more" href="tasks.html">Ver todas &rarr;</a>
+          <div class="card home-help-card">
+            <h3>&#128172; ¿Necesitas ayuda?</h3>
+            <p>Consulta la guía paso a paso o contacta a soporte si algo no funciona como esperas.</p>
+            <div class="home-help-actions">
+              <a class="btn btn-secondary btn-sm" href="${isBoss ? 'GUIA.HTML' : 'GUIAUSUARIO.HTML'}">&#128214; ${isBoss ? 'Guía del sistema' : 'Guía de uso'}</a>
+              <a class="btn btn-secondary btn-sm" href="ayuda.html">&#128736; Ayuda y soporte</a>
             </div>
-            ${tasks ? `<ul class="home-list">${tasks}</ul>` : '<p class="empty-state">No hay tareas pendientes.</p>'}
           </div>
         </div>
       </section>
@@ -195,55 +195,35 @@ window.Pages.home = {
       </section>
     `;
 
-    // Alta al boletín desde el Inicio. Reutiliza el endpoint público y muestra
-    // el resultado en el mismo lugar, sin recargar la página.
-    const newsletterForm = container.querySelector('#home-newsletter-form');
-    if (newsletterForm) {
-      newsletterForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const input = newsletterForm.querySelector('#home-newsletter-email');
-        const button = newsletterForm.querySelector('#home-newsletter-btn');
-        const message = newsletterForm.querySelector('#home-newsletter-msg');
-        const email = String((input && input.value) || '').trim();
-
-        if (!email || !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) {
-          if (message) {
-            message.textContent = 'Escribe un correo electrónico válido.';
-            message.className = 'home-newsletter-msg is-error';
-          }
-          if (input) input.focus();
-          return;
+    // La versión se consulta DESPUÉS de pintar: la portada aparece al instante
+    // y el dato de versión se rellena en cuanto responde el servidor.
+    try {
+      const version = await window.API.config.version();
+      if (version && version.version) {
+        const chip = container.querySelector('#home-version-chip');
+        const num = container.querySelector('#home-version-num');
+        const meta = container.querySelector('#home-version-meta');
+        const notes = container.querySelector('#home-version-notes');
+        const channel = version.channel ? String(version.channel) : 'estable';
+        if (chip) chip.innerHTML = `&#128230; Versión ${UI.escapeHtml(version.version)}`;
+        if (num) num.textContent = `v${version.version}`;
+        if (meta) {
+          const fecha = version.date ? Format.date(version.date) : '';
+          meta.innerHTML = `<span class="home-version-channel">${UI.escapeHtml(channel)}</span>${fecha ? ` &middot; ${UI.escapeHtml(fecha)}` : ''}`;
         }
-
-        if (button) {
-          button.disabled = true;
-          button.textContent = 'Enviando…';
+        if (notes) {
+          const items = (version.notes || []).slice(0, 4);
+          notes.innerHTML = items.length
+            ? items.map((n) => `<li>${UI.escapeHtml(n)}</li>`).join('')
+            : '<li>Sin notas de versión publicadas.</li>';
         }
-        if (message) {
-          message.textContent = '';
-          message.className = 'home-newsletter-msg';
-        }
-
-        try {
-          const res = await window.API.public.newsletterSubscribe({ email, name });
-          if (message) {
-            message.textContent = (res && res.message) || '¡Suscripción exitosa! Revisa tu correo.';
-            message.className = 'home-newsletter-msg is-success';
-          }
-          if (input) input.value = '';
-          if (window.UI && typeof UI.toast === 'function') UI.toast('¡Ya estás suscrito al boletín!', 'success');
-        } catch (error) {
-          if (message) {
-            message.textContent = (error && error.message) || 'No se pudo completar la suscripción.';
-            message.className = 'home-newsletter-msg is-error';
-          }
-        } finally {
-          if (button) {
-            button.disabled = false;
-            button.innerHTML = '&#128276;&nbsp; Suscribirme';
-          }
-        }
-      });
+      }
+    } catch (error) {
+      // Sin conexión: la portada sigue funcionando, solo se oculta el dato.
+      const chip = container.querySelector('#home-version-chip');
+      const meta = container.querySelector('#home-version-meta');
+      if (chip) chip.style.display = 'none';
+      if (meta) meta.textContent = 'No disponible sin conexión';
     }
   },
 };

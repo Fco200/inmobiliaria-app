@@ -89,18 +89,18 @@ window.Pages.documents = {
             <button class="btn btn-primary" type="submit" id="shared-submit" style="height:42px;">Guardar formato</button>
           </form>
           <p id="shared-msg" class="text-muted" style="margin:0 0 12px;font-size:12.5px;"></p>` : ''}
-        <div style="margin:0 0 10px;max-width:340px;">
+        <div class="formats-shared-search" style="margin:0 0 10px;max-width:340px;">
           <input class="form-control" id="shared-search" type="search" placeholder="Buscar por nombre, archivo o quién lo subió…">
         </div>
         <div id="shared-list"><div class="loading">Cargando formatos compartidos...</div></div>
       </div>
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div class="formats-filters" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <input class="form-control" id="doc-search" placeholder="Buscar formato..." style="max-width:240px;">
         <select class="form-control" id="doc-status" style="max-width:180px;">
           <option value="">Todos los estados</option>
           ${STATUS.map((s) => `<option value="${s}">${s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
         </select>
-        <div style="max-width:280px;min-width:220px;" id="doc-client-wrap">
+        <div class="formats-client-filter" style="max-width:280px;min-width:220px;" id="doc-client-wrap">
           ${UI.searchSelect('doc-client', 'Cliente', {
             source: UI.remoteSources.client,
             placeholder: 'Escribe un nombre o teléfono…',
@@ -168,8 +168,8 @@ window.Pages.documents = {
       }
 
       sharedListEl.innerHTML = `
-        <div class="table-responsive">
-          <table class="table">
+        <div class="table-wrapper">
+          <table class="table formats-table">
             <thead><tr><th>Formato</th><th>Archivo</th><th>Subido por</th><th>Fecha</th><th></th></tr></thead>
             <tbody>
               ${items.map((item) => {
@@ -177,11 +177,11 @@ window.Pages.documents = {
                 const canDelete = canUploadShared || uploaderId === currentUserId;
                 return `
                   <tr>
-                    <td><strong>${sharedIcon(item)} ${UI.escapeHtml(item.name)}</strong></td>
-                    <td><small class="text-muted">${UI.escapeHtml(item.fileName || '')} · ${sharedSize(item.size)} · ${UI.escapeHtml(sharedExt(item).toUpperCase() || 'ARCHIVO')}</small></td>
-                    <td>${UI.escapeHtml((item.uploadedBy && (item.uploadedBy.name || item.uploadedBy.username)) || '—')}</td>
-                    <td>${new Date(item.createdAt).toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' })}</td>
-                    <td style="white-space:nowrap;text-align:right;">
+                    <td data-label="Formato"><strong>${sharedIcon(item)} ${UI.escapeHtml(item.name)}</strong></td>
+                    <td data-label="Archivo"><small class="text-muted">${UI.escapeHtml(item.fileName || '')} · ${sharedSize(item.size)} · ${UI.escapeHtml(sharedExt(item).toUpperCase() || 'ARCHIVO')}</small></td>
+                    <td data-label="Subido por">${UI.escapeHtml((item.uploadedBy && (item.uploadedBy.name || item.uploadedBy.username)) || '—')}</td>
+                    <td data-label="Fecha">${new Date(item.createdAt).toLocaleDateString('es-MX', { timeZone: 'America/Hermosillo' })}</td>
+                    <td data-label="Acciones" class="formats-actions">
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-view="${item._id}">Ver</button>
                       <button class="btn btn-secondary btn-sm" type="button" data-shared-download="${item._id}">Descargar</button>
                       ${canDelete ? `<button class="btn btn-secondary btn-sm" type="button" data-shared-edit="${item._id}">Editar</button>` : ''}
@@ -420,33 +420,33 @@ window.Pages.documents = {
         }
         listEl.innerHTML = `
           <div class="table-wrapper card">
-            <table class="table">
+            <table class="table formats-table">
               <thead><tr><th>Formato</th><th>Tipo</th><th>Vinculado a</th><th>Estado</th><th>Archivo</th><th>Fecha</th><th></th></tr></thead>
               <tbody>${records.map((d) => `
                 <tr>
-                  <td><strong>${UI.escapeHtml(d.name)}</strong>${d.observations ? `<br><small class="text-muted">${UI.escapeHtml(d.observations)}</small>` : ''}</td>
-                  <td>${UI.badge(typeLabel(d.type), 'info')}</td>
-                  <td>
+                  <td data-label="Formato"><strong>${UI.escapeHtml(d.name)}</strong>${d.observations ? `<br><small class="text-muted">${UI.escapeHtml(d.observations)}</small>` : ''}</td>
+                  <td data-label="Tipo">${UI.badge(typeLabel(d.type), 'info')}</td>
+                  <td data-label="Vinculado a">
                     ${d.client ? `Cliente: ${UI.escapeHtml(d.client.name)}<br>` : ''}
                     ${d.property ? `Propiedad: ${UI.escapeHtml(UI.propertyOptionLabel(d.property))}<br>` : ''}
                     ${d.business ? `Negocio: ${UI.escapeHtml(d.business.name)}` : ''}
                     ${!d.client && !d.property && !d.business ? '<span class="text-muted">—</span>' : ''}
                   </td>
-                  <td>${UI.statusBadge(d.status)}</td>
-                  <td>
+                  <td data-label="Estado">${UI.statusBadge(d.status)}</td>
+                  <td data-label="Archivo" class="formats-actions">
                     ${d.fileUrl ? `
                       <button type="button" class="btn btn-secondary btn-sm" data-doc-view="${d._id}">Ver</button>
                       <a href="${window.AppConfig.resolveUrl(d.fileUrl)}" download class="btn btn-secondary btn-sm">Descargar</a>
                     ` : '<span class="text-muted">—</span>'}
                   </td>
-                  <td>${Format.date(d.date)}</td>
-                  <td>
+                  <td data-label="Fecha">${Format.date(d.date)}</td>
+                  <td data-label="Acciones" class="formats-actions">
                     ${canManageDocs && (d.status === 'pendiente' || d.status === 'recibido') ? `
                       <button class="btn btn-success btn-sm" data-validate="${d._id}" title="Validar formato">✓</button>
                       <button class="btn btn-danger btn-sm" data-reject="${d._id}" title="Rechazar formato">✗</button>
                     ` : ''}
-                    ${canManageDocs ? `<button class="btn btn-secondary btn-sm" data-edit="${d._id}" style="margin-left:6px;">Editar</button>` : ''}
-                    ${canManageDocs ? `<button class="btn btn-danger btn-sm" data-remove="${d._id}" style="margin-left:6px;">Eliminar</button>` : ''}
+                    ${canManageDocs ? `<button class="btn btn-secondary btn-sm" data-edit="${d._id}">Editar</button>` : ''}
+                    ${canManageDocs ? `<button class="btn btn-danger btn-sm" data-remove="${d._id}">Eliminar</button>` : ''}
                   </td>
                 </tr>`).join('')}</tbody>
             </table>

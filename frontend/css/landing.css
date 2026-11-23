@@ -1057,9 +1057,12 @@
 /* ---- Asistente virtual ---- */
 .landing-assistant {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px) + var(--ast-kb, 0px));
   z-index: 95;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 .landing-assistant-toggle {
   border: none;
@@ -1140,3 +1143,209 @@
   background: var(--surface, #fff);
 }
 .landing-assistant-input .form-control { flex: 1; }
+
+/* ---- Animaciones del asistente virtual ---- */
+@keyframes astFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes astPulse {
+  0% { transform: scale(0.96); opacity: 0.7; }
+  70% { transform: scale(1.18); opacity: 0; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+@keyframes astPanelIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes astMsgInUser {
+  from { opacity: 0; transform: translateX(18px) scale(0.94); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes astMsgInBot {
+  from { opacity: 0; transform: translateX(-18px) scale(0.94); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes astDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+@keyframes astTipIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+  70% { opacity: 1; transform: translateY(-3px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes astTipOut {
+  to { opacity: 0; transform: translateY(8px) scale(0.92); }
+}
+
+.landing-assistant-toggle {
+  position: relative;
+  animation: astFloat 3.8s ease-in-out infinite;
+}
+.landing-assistant-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 2px solid rgba(138, 43, 226, 0.5);
+  border-radius: 999px;
+  animation: astPulse 2.8s ease-out infinite;
+  pointer-events: none;
+}
+.landing-assistant-toggle:hover { animation-play-state: paused; }
+.landing-assistant-panel:not([hidden]) {
+  transform-origin: bottom right;
+  animation: astPanelIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.landing-assistant-msg.ast-enter { animation: astMsgInBot 0.3s ease both; }
+.landing-assistant-msg.user.ast-enter { animation: astMsgInUser 0.3s ease both; }
+.landing-assistant-typing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 14px;
+}
+.landing-assistant-typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8a2be2;
+  animation: astDot 1.15s ease-in-out infinite;
+}
+.landing-assistant-typing span:nth-child(2) { animation-delay: 0.16s; }
+.landing-assistant-typing span:nth-child(3) { animation-delay: 0.32s; }
+
+/* Tip de un solo uso que apunta a la burbuja del asistente */
+.landing-assistant-tip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(270px, calc(100vw - 48px));
+  margin: 0 4px 14px 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(138, 43, 226, 0.35);
+  background: var(--surface, #fff);
+  color: var(--text, #2d1048);
+  box-shadow: 0 10px 26px rgba(45, 16, 72, 0.24);
+  font-size: 12.5px;
+  line-height: 1.4;
+  animation: astTipIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+.landing-assistant-tip::after {
+  content: "";
+  position: absolute;
+  right: 34px;
+  bottom: -8px;
+  width: 14px;
+  height: 14px;
+  background: var(--surface, #fff);
+  border-right: 1px solid rgba(138, 43, 226, 0.35);
+  border-bottom: 1px solid rgba(138, 43, 226, 0.35);
+  transform: rotate(45deg);
+}
+.landing-assistant-tip.is-leaving { animation: astTipOut 0.3s ease forwards; }
+.landing-assistant-tip-icon { font-size: 17px; flex-shrink: 0; }
+.landing-assistant-tip-text { flex: 1; min-width: 0; }
+.landing-assistant-tip-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8a7a9b);
+  font-size: 17px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.landing-assistant-tip-close:hover { color: #8a2be2; }
+
+/* ---- Celular: panel casi a ancho completo, teclado y zona segura ---- */
+@media (max-width: 600px) {
+  .landing-assistant {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--ast-kb, 0px));
+  }
+  .landing-assistant-panel {
+    width: 100%;
+    max-width: none;
+    margin-bottom: 10px;
+    max-height: calc(var(--ast-vh, 100vh) - 96px - env(safe-area-inset-bottom, 0px));
+    border-radius: 18px;
+  }
+  .landing-assistant-head { padding: 12px 14px; }
+  .landing-assistant-close {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 26px;
+  }
+  .landing-assistant-body {
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 150px;
+    max-height: calc(var(--ast-vh, 100vh) - 230px);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .landing-assistant-msg {
+    max-width: 88%;
+    font-size: 14px;
+  }
+  .landing-assistant-input {
+    padding: 10px;
+    gap: 8px;
+  }
+  /* 16px evita que iOS haga zoom automático al enfocar el campo. */
+  .landing-assistant-input .form-control {
+    min-height: 46px;
+    font-size: 16px;
+    border-radius: 12px;
+  }
+  .landing-assistant-input .btn {
+    min-width: 52px;
+    min-height: 46px;
+    font-size: 18px;
+    border-radius: 12px;
+  }
+  .landing-assistant-toggle {
+    min-height: 50px;
+    padding: 12px 22px;
+    font-size: 15px;
+  }
+  .landing-assistant-tip {
+    width: max-content;
+    max-width: 100%;
+    margin: 0 0 12px;
+    padding: 12px;
+    font-size: 13px;
+  }
+  .landing-assistant-tip::after { right: 28px; }
+  .landing-assistant-tip-close {
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 22px;
+  }
+}
+
+/* Pantallas bajas (celular en horizontal): el panel no tapa toda la pantalla. */
+@media (max-height: 520px) and (max-width: 900px) {
+  .landing-assistant-body {
+    min-height: 100px;
+    max-height: 130px;
+  }
+  .landing-assistant-panel {
+    max-height: calc(var(--ast-vh, 100vh) - 70px - env(safe-area-inset-bottom, 0px));
+  }
+  .landing-assistant-tip { font-size: 12px; padding: 9px 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-assistant-toggle,
+  .landing-assistant-toggle::after,
+  .landing-assistant-panel:not([hidden]),
+  .landing-assistant-msg.ast-enter,
+  .landing-assistant-typing span,
+  .landing-assistant-tip { animation: none !important; }
+}

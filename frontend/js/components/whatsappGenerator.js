@@ -27,6 +27,24 @@ window.WhatsAppGenerator = (() => {
     return String(value || '').replace(/\D/g, '');
   }
 
+  // Número listo para wa.me: dígitos + lada del país (52) una sola vez.
+  // Format es un const global de <script> clásico; se usa el global lexical
+  // con guarda typeof (window.Format también existe desde format.js).
+  function waDigits(value) {
+    if (typeof Format !== 'undefined' && Format.waNumber) return Format.waNumber(value);
+    return digits(value);
+  }
+
+  // Los clientes pueden llegar con campos canónicos (nombre/telefono) o con
+  // los virtuals name/phone del API; se aceptan ambos.
+  function clientPhone(c) {
+    return (c && (c.phone || c.telefono)) || '';
+  }
+
+  function clientName(c) {
+    return (c && (c.name || c.nombre)) || 'Cliente';
+  }
+
   function descripcion(prop) {
     if (!prop) return 'La propiedad';
     const type = TYPE_LABELS[prop.type] || prop.type || 'Propiedad';
@@ -58,7 +76,7 @@ window.WhatsAppGenerator = (() => {
       '',
       `${descripcion(prop)}`,
     ];
-    if (prop && prop.price) lines.push(`Precio: ${window.Format ? Format.currency(prop.price) : prop.price}`);
+    if (prop && prop.price) lines.push(`Precio: ${typeof Format !== 'undefined' && Format.currency ? Format.currency(prop.price) : prop.price}`);
     const chars = caracteristicas(prop);
     if (chars.length) lines.push(`Características: ${chars.join(', ')}`);
     const place = [prop.zone, prop.city, prop.state].filter(Boolean).join(', ');
@@ -109,11 +127,14 @@ window.WhatsAppGenerator = (() => {
     };
 
     const list = await loadClients(clients);
-    const conTelefono = (list || []).filter((c) => c && digits(c.phone));
+    const conTelefono = (list || []).filter((c) => c && digits(clientPhone(c)));
 
+    // El value ya va normalizado con lada (52 + 10 dígitos): así el enlace de
+    // WhatsApp nunca sale con el número local "desnudo", que era lo que hacía
+    // que WhatsApp marcara el número como inexistente.
     const clientOptions = conTelefono.length
       ? conTelefono
-        .map((c) => `<option value="${UI.escapeHtml(digits(c.phone))}">${UI.escapeHtml(c.name)} — ${UI.escapeHtml(c.phone)}</option>`)
+        .map((c) => `<option value="${UI.escapeHtml(waDigits(clientPhone(c)))}">${UI.escapeHtml(clientName(c))} — ${UI.escapeHtml(clientPhone(c))}</option>`)
         .join('')
       : '<option value="">No hay clientes con teléfono registrado</option>';
 
@@ -132,7 +153,8 @@ window.WhatsAppGenerator = (() => {
         </div>
         <div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Número de WhatsApp (opcional)</label>
-          <input class="form-control" data-wa-phone type="tel" placeholder="Ej. 555 123 4567" autocomplete="off">
+          <input class="form-control" data-wa-phone type="tel" placeholder="Ej. 662 123 4567 o +52 662 123 4567" autocomplete="off">
+          <small class="text-muted" style="display:block;margin-top:4px;font-size:12px;">Si capturas solo los 10 dígitos, se agrega automáticamente la lada +52.</small>
         </div>
         <div>
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Mensaje que acompaña al PDF</label>
@@ -183,8 +205,10 @@ window.WhatsAppGenerator = (() => {
     let previewUrl = null;
 
     const phoneNumber = () => {
-      const raw = (clientSel && clientSel.value) || (phoneInput && phoneInput.value) || '';
-      return (window.Format && Format.waNumber ? Format.waNumber(raw) : digits(raw)) || '';
+      // El campo manual manda: al elegir un cliente se autocompleta con su
+      // número normalizado, y si el asesor lo corrige, se usa esa corrección.
+      const raw = (phoneInput && phoneInput.value) || (clientSel && clientSel.value) || '';
+      return waDigits(raw);
     };
 
     const cleanup = () => {
@@ -263,13 +287,18 @@ window.WhatsAppGenerator = (() => {
       const msg = textoMensaje(prop, contact);
       try {
         downloadPdf();
-        window.open(`https://wa.me/${digits(num)}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+        window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
       } catch (e) {
         UI.toast('No se pudo abrir WhatsApp. Revisa si el navegador bloqueó la ventana.', 'error');
       }
     };
 
-    if (clientSel) clientSel.addEventListener('change', refresh);
+    if (clientSel) clientSel.addEventListener('change', () => {
+      // Refleja el número normalizado (con lada) en el campo manual para que
+      // el asesor vea exactamente qué número se usará al enviar.
+      if (phoneInput) phoneInput.value = clientSel.value ? `+${clientSel.value}` : '';
+      refresh();
+    });
     if (phoneInput) phoneInput.addEventListener('input', refresh);
     if (cancelBtn) cancelBtn.addEventListener('click', () => { cleanup(); UI.closeModal(); });
     if (shareBtn) shareBtn.addEventListener('click', sharePdf);

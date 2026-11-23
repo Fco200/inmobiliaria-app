@@ -127,10 +127,16 @@ const Format = {
     if (d.indexOf('00') === 0) d = d.slice(2);
     // Prefijo del país repetido (5252…).
     if (d.indexOf(cc + cc) === 0) d = d.slice(cc.length);
+    // Prefijos móviles antiguos de México: 044/045 + 10 dígitos.
+    if (d.length === 13 && (d.indexOf('044') === 0 || d.indexOf('045') === 0)) d = d.slice(3);
     // Lada local con cero inicial (0 + 10 dígitos).
     if (d.length > 10 && d.charAt(0) === '0') d = d.replace(/^0+/, '');
     // 52 + 1 + 10 dígitos (la "1" de la red móvil mexicana).
     if (d.length === cc.length + 11 && d.indexOf(`${cc}1`) === 0) d = cc + d.slice(cc.length + 1);
+    // "1" suelta + 10 dígitos (tronco marcación sin el +). Las ladas mexicanas
+    // empiezan con 2–9, así que un número de 11 dígitos que inicia con 1 trae
+    // ese prefijo de más.
+    if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
     // 10 dígitos locales → se agrega la lada.
     if (d.length === 10) d = cc + d;
     return d;
@@ -148,3 +154,9 @@ const Format = {
     return `tel:${digits}`;
   },
 };
+
+// Un const de nivel superior NO queda como propiedad de window. Otros módulos
+// (whatsappGenerator, propertyPdf, multipage) comprueban `window.Format` antes
+// de usarlo: sin esta asignación creían que no existía y se saltaban la
+// normalización de la lada (wa.me sin 52) y el formato de moneda/fechas.
+window.Format = Format;

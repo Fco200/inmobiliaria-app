@@ -169,8 +169,8 @@ window.WhatsAppGenerator = (() => {
             <button class="btn btn-success" type="button" data-wa-send>Enviar por WhatsApp</button>
           </div>
           <small class="text-muted" style="font-size:12px;">
-            En celular, "Compartir PDF" abre el menú del sistema y elige la app (WhatsApp, correo, etc.).
-            En computadora el PDF se descarga para que lo adjuntes donde quieras.
+            En celular, "Compartir PDF" o "Enviar por WhatsApp" abren el menú del sistema para elegir WhatsApp y <strong>adjuntar el PDF</strong>.
+            En computadora se descarga el PDF para adjuntarlo manualmente: los enlaces de WhatsApp solo envían texto.
           </small>
         </div>
       </div>
@@ -244,7 +244,7 @@ window.WhatsAppGenerator = (() => {
     };
 
     // Descarga directa (sin pasar por el menú del sistema).
-    const downloadPdf = () => {
+    const downloadPdf = (silent = false) => {
       if (!lastPdf || !lastPdf.blob) return;
       const url = URL.createObjectURL(lastPdf.blob);
       const link = document.createElement('a');
@@ -257,7 +257,7 @@ window.WhatsAppGenerator = (() => {
       setTimeout(() => {
         try { URL.revokeObjectURL(url); } catch (e) { /* noop */ }
       }, 4000);
-      UI.toast('PDF descargado. Adjúntalo en WhatsApp, correo u otra app.', 'success');
+      if (!silent) UI.toast('PDF descargado. Adjúntalo en WhatsApp, correo u otra app.', 'success');
     };
 
     // Comparte con el menú del sistema; si el navegador no puede, descarga.
@@ -278,18 +278,62 @@ window.WhatsAppGenerator = (() => {
       }
     };
 
-    const sendWhatsApp = () => {
+    // OJO: wa.me?text=... SOLO envía texto, nunca puede adjuntar un archivo.
+    // Por eso en celular se usa navigator.share({ files }), que abre la hoja
+    // de compartir del sistema: al elegir WhatsApp SÍ va el PDF adjunto.
+    const sendWhatsApp = async () => {
       const num = phoneNumber();
       if (!num) {
         UI.toast('Selecciona un cliente o captura un número de WhatsApp', 'warning');
         return;
       }
+      if (!lastPdf || !lastPdf.blob) {
+        UI.toast('Primero genera el PDF con el botón "Crear PDF".', 'warning');
+        return;
+      }
       const msg = textoMensaje(prop, contact);
+
+      let canAttach = false;
       try {
-        downloadPdf();
-        window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+        if (typeof File !== 'undefined' && navigator.share && navigator.canShare) {
+          const file = new File([lastPdf.blob], lastPdf.filename || 'propiedad.pdf', { type: 'application/pdf' });
+          canAttach = Boolean(navigator.canShare({ files: [file] }));
+        }
       } catch (e) {
-        UI.toast('No se pudo abrir WhatsApp. Revisa si el navegador bloqueó la ventana.', 'error');
+        canAttach = false;
+      }
+
+      if (canAttach) {
+        try {
+          const result = await PropertyPdf.share(lastPdf, num, msg);
+          if (result === 'shared') {
+            UI.toast('PDF y mensaje enviados por WhatsApp.', 'success');
+            cleanup();
+            UI.closeModal();
+            return;
+          }
+          if (result === 'cancelled') {
+            UI.toast('No se envió. Puedes intentarlo de nuevo.', 'info');
+            return;
+          }
+          if (result === 'downloaded') {
+            UI.toast('PDF descargado. Adjúntalo en WhatsApp para enviarlo.', 'success');
+            return;
+          }
+        } catch (e) {
+          // Si compartir falla, se cae al respaldo de abajo.
+        }
+      }
+
+      // Respaldo de escritorio / navegadores sin compartir archivos: se
+      // descarga el PDF y se abre el chat con el mensaje; el asesor adjunta el
+      // archivo descargado (WhatsApp Web no permite adjuntarlo desde un link).
+      downloadPdf(true);
+      try {
+        window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+        UI.toast('PDF descargado: adjúntalo en WhatsApp antes de enviar el mensaje.', 'info');
+      } catch (e) {
+        UI.toast('No se pudo abrir WhatsApp. El PDF quedó descargado para adjuntarlo.', 'error');
       }
     };
 
@@ -302,7 +346,7 @@ window.WhatsAppGenerator = (() => {
     if (phoneInput) phoneInput.addEventListener('input', refresh);
     if (cancelBtn) cancelBtn.addEventListener('click', () => { cleanup(); UI.closeModal(); });
     if (shareBtn) shareBtn.addEventListener('click', sharePdf);
-    if (downloadBtn) downloadBtn.addEventListener('click', downloadPdf);
+    if (downloadBtn) downloadBtn.addEventListener('click', () => downloadPdf());
     if (sendBtn) sendBtn.addEventListener('click', sendWhatsApp);
     refresh();
 

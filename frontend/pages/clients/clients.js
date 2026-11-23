@@ -48,6 +48,8 @@ window.Pages.clients = {
       page: 1,
       servicio: '',
       tipoPropiedad: '',
+      formaPago: '',
+      medio: '',
       zona: '',
       minCapacity: '',
       maxCapacity: '',
@@ -89,6 +91,21 @@ window.Pages.clients = {
               ${CLIENT_TIPOS_PROPIEDAD.map((t) => `<option value="${t}">${t}</option>`).join('')}
             </select>
           </label>
+          <label class="clients-filter" id="clients-f-pago-wrap" style="display: none;">
+            <span>Forma de pago</span>
+            <select class="form-control" id="clients-f-pago">
+              <option value="">Todas</option>
+              ${[...CLIENT_FORMAS_PAGO, ...FORMAS_PAGO_LEGADAS]
+                .map((f) => `<option value="${f}">${FORMA_PAGO_LABELS[f] || f}</option>`).join('')}
+            </select>
+          </label>
+          <label class="clients-filter">
+            <span>¿Cómo se enteró?</span>
+            <select class="form-control" id="clients-f-medio">
+              <option value="">Todos</option>
+              ${CLIENT_MEDIOS.map((m) => `<option value="${m}">${m}</option>`).join('')}
+            </select>
+          </label>
           <label class="clients-filter">
             <span>Zona</span>
             <input class="form-control" id="clients-f-zona" type="search" placeholder="Ej. zona norte">
@@ -117,6 +134,9 @@ window.Pages.clients = {
     const filtersBox = container.querySelector('#clients-filters-box');
     const fServicio = container.querySelector('#clients-f-servicio');
     const fTipo = container.querySelector('#clients-f-tipo');
+    const fPago = container.querySelector('#clients-f-pago');
+    const fPagoWrap = container.querySelector('#clients-f-pago-wrap');
+    const fMedio = container.querySelector('#clients-f-medio');
     const fZona = container.querySelector('#clients-f-zona');
     const fMin = container.querySelector('#clients-f-min');
     const fMax = container.querySelector('#clients-f-max');
@@ -282,6 +302,15 @@ window.Pages.clients = {
       }
     }
 
+    // En los filtros avanzados la forma de pago sólo aplica cuando la
+    // operación seleccionada es "Comprar". Al ocultarla se limpia su valor
+    // para que no quede un filtro fantasma al cambiar a "Vender" (u otra).
+    function syncFiltroPagoPorServicio() {
+      const visible = Boolean(fServicio && fServicio.value === 'Comprar');
+      if (fPagoWrap) fPagoWrap.style.display = visible ? '' : 'none';
+      if (!visible && fPago) fPago.value = '';
+    }
+
     // Texto del medio para presentar en tarjeta: "Otro" muestra lo escrito y
     // "Recomendación" lo anexa sólo si escribió algo.
     function medioLabel(c) {
@@ -293,7 +322,7 @@ window.Pages.clients = {
     }
 
     function hasAdvancedFilters() {
-      return Boolean(state.servicio || state.tipoPropiedad || state.zona || state.minCapacity || state.maxCapacity);
+      return Boolean(state.servicio || state.tipoPropiedad || state.formaPago || state.medio || state.zona || state.minCapacity || state.maxCapacity);
     }
 
     // Refleja en el encabezado cuántos filtros avanzados hay activos, para que
@@ -305,6 +334,8 @@ window.Pages.clients = {
       const activos = [
         state.servicio && `operación: ${state.servicio}`,
         state.tipoPropiedad && `propiedad: ${state.tipoPropiedad}`,
+        state.formaPago && `pago: ${state.formaPago}`,
+        state.medio && `medio: ${state.medio}`,
         state.zona && `zona: ${state.zona}`,
         state.minCapacity !== '' && `desde ${Format.currency(state.minCapacity)}`,
         state.maxCapacity !== '' && `hasta ${Format.currency(state.maxCapacity)}`,
@@ -318,11 +349,27 @@ window.Pages.clients = {
       searchTimer = setTimeout(() => { state.q = searchEl.value.trim(); state.page = 1; load(); }, 350);
     });
     if (addBtn) addBtn.addEventListener('click', () => openQuickCreate());
+
+    // Mismos parámetros para el listado y para el CSV: así el archivo
+    // exportado respeta exactamente lo que el asesor tiene en pantalla.
+    function filterParams() {
+      return {
+        q: state.q || undefined,
+        servicio: state.servicio || undefined,
+        tipoPropiedad: state.tipoPropiedad || undefined,
+        formaPago: state.servicio === 'Comprar' ? (state.formaPago || undefined) : undefined,
+        medio: state.medio || undefined,
+        zona: state.zona || undefined,
+        minCapacity: state.minCapacity === '' ? undefined : state.minCapacity,
+        maxCapacity: state.maxCapacity === '' ? undefined : state.maxCapacity,
+      };
+    }
+
     const csvBtn = container.querySelector('#clients-csv');
     if (csvBtn) csvBtn.addEventListener('click', async () => {
       try {
         UI.toast('Generando CSV de clientes...', 'info');
-        await API.clients.exportCsv();
+        await API.clients.exportCsv(filterParams());
         UI.toast('CSV de clientes exportado', 'success');
       } catch (error) {
         UI.toast(error.message, 'error');
@@ -333,8 +380,11 @@ window.Pages.clients = {
       if (window.WhatsNew) window.WhatsNew.open();
     });
     function applyFilters() {
+      syncFiltroPagoPorServicio();
       state.servicio = fServicio ? fServicio.value : '';
       state.tipoPropiedad = fTipo ? fTipo.value : '';
+      state.formaPago = fPago ? fPago.value : '';
+      state.medio = fMedio ? fMedio.value : '';
       state.zona = fZona ? fZona.value.trim() : '';
       state.minCapacity = fMin && fMin.value !== '' ? Number(fMin.value) : '';
       state.maxCapacity = fMax && fMax.value !== '' ? Number(fMax.value) : '';
@@ -342,7 +392,7 @@ window.Pages.clients = {
       paintFiltersSummary();
       load();
     }
-    [fServicio, fTipo].forEach((el) => { if (el) el.addEventListener('change', applyFilters); });
+    [fServicio, fTipo, fPago, fMedio].forEach((el) => { if (el) el.addEventListener('change', applyFilters); });
     let filterTimer = null;
     [fZona].forEach((el) => {
       if (!el) return;
@@ -362,11 +412,14 @@ window.Pages.clients = {
     if (fClear) fClear.addEventListener('click', () => {
       if (fServicio) fServicio.value = '';
       if (fTipo) fTipo.value = '';
+      if (fPago) fPago.value = '';
+      if (fMedio) fMedio.value = '';
       if (fZona) fZona.value = '';
       if (fMin) fMin.value = '';
       if (fMax) fMax.value = '';
       applyFilters();
     });
+    syncFiltroPagoPorServicio();
 
     async function load() {
       if (state.loading) return;
@@ -374,14 +427,9 @@ window.Pages.clients = {
       gridEl.innerHTML = '<div class="loading">Cargando clientes…</div>';
       try {
         const result = await API.clients.list({
-          q: state.q || undefined,
+          ...filterParams(),
           page: state.page,
           limit: 16,
-          servicio: state.servicio || undefined,
-          tipoPropiedad: state.tipoPropiedad || undefined,
-          zona: state.zona || undefined,
-          minCapacity: state.minCapacity === '' ? undefined : state.minCapacity,
-          maxCapacity: state.maxCapacity === '' ? undefined : state.maxCapacity,
         });
         const items = (result && result.data) || [];
         const meta = (result && result.meta) || {};

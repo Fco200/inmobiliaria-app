@@ -135,8 +135,13 @@ const clientCrud = buildCrud(Client, {
   //  - servicio / tipoPropiedad: tipo de operación y tipo de propiedad.
   //  - zona: coincidencia parcial (zona de interés).
   //  - minCapacity / maxCapacity: rango de presupuesto (capacidad de pago).
-  //  - paymentMethod: forma de pago/crédito (Infonavit, Fovissste, Banco…).
-  extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad', formaPago: 'formaPago' },
+  //  - formaPago: forma de pago/crédito (Infonavit, Fovissste, Banco…), sólo
+  //    se aplica cuando la operación es "Comprar".
+  //  - medio: cómo se enteró de nosotros (WhatsApp, Portal, Lona…).
+  extraFilters: { etapaActual: 'etapaActual', servicio: 'servicio', tipoPropiedad: 'tipoPropiedad', formaPago: 'formaPago', medio: 'medio' },
+  customFilter: (req, filter) => {
+    if (req.query.servicio !== 'Comprar') delete filter.formaPago;
+  },
   textFilters: { zona: 'zona' },
   rangeFilters: { minCapacity: 'capacidad', maxCapacity: 'capacidad' },
   widePermission: 'clients_manage',
@@ -667,14 +672,45 @@ const remove = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Cliente eliminado' });
 });
 
-// Exporta los clientes a CSV con el mismo alcance del listado y sus filtros
-// principales (etapa, operación y tipo de propiedad).
+// Exporta los clientes a CSV con el mismo alcance y los mismos filtros del
+// listado (búsqueda, etapa, operación, propiedad, forma de pago, medio, zona
+// y rango de presupuesto).
 const exportCsv = asyncHandler(async (req, res) => {
+  const escapeCsvRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const csvValues = (value) => String(value == null ? '' : value)
+    .split(',').map((v) => v.trim()).filter(Boolean);
+
   const filter = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.etapaActual) filter.etapaActual = req.query.etapaActual;
-  if (req.query.servicio) filter.servicio = req.query.servicio;
-  if (req.query.tipoPropiedad) filter.tipoPropiedad = req.query.tipoPropiedad;
+
+  const term = escapeCsvRegex(String(req.query.q || '').trim());
+  if (term) {
+    filter.$or = ['nombre', 'telefono', 'email']
+      .map((field) => ({ [field]: { $regex: term, $options: 'i' } }));
+  }
+
+  const statuses = csvValues(req.query.status);
+  if (statuses.length) filter.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
+
+  ['etapaActual', 'servicio', 'tipoPropiedad', 'formaPago', 'medio'].forEach((key) => {
+    const values = csvValues(req.query[key]);
+    if (!values.length) return;
+    filter[key] = values.length > 1 ? { $in: values } : values[0];
+  });
+  // Igual que en el listado: sin operación "Comprar" la forma de pago no aplica.
+  if (csvValues(req.query.servicio)[0] !== 'Comprar') delete filter.formaPago;
+
+  const zona = String(req.query.zona || '').trim();
+  if (zona) filter.zona = { $regex: escapeCsvRegex(zona), $options: 'i' };
+
+  const min = Number.parseFloat(req.query.minCapacity);
+  const max = Number.parseFloat(req.query.maxCapacity);
+  if (Number.isFinite(min) || Number.isFinite(max)) {
+    const range = {};
+    if (Number.isFinite(min)) range.$gte = min;
+    if (Number.isFinite(max)) range.$lte = max;
+    filter.capacidad = range;
+  }
+
   if (!isClientStaff(req)) {
     filter.asesorAsignado = req.user._id;
   } else if (req.query.asesor) {
@@ -691,6 +727,7 @@ const exportCsv = asyncHandler(async (req, res) => {
     telefono: c.telefono || '',
     email: c.email || '',
     medio: c.medio || '',
+    formaPago: c.formaPago || '',
     operacion: c.servicio || '',
     tipoPropiedad: c.tipoPropiedad || '',
     zona: c.zona || '',
@@ -706,6 +743,7 @@ const exportCsv = asyncHandler(async (req, res) => {
     { key: 'telefono', label: 'Teléfono' },
     { key: 'email', label: 'Correo' },
     { key: 'medio', label: 'Medio de contacto' },
+    { key: 'formaPago', label: 'Forma de pago' },
     { key: 'operacion', label: 'Operación' },
     { key: 'tipoPropiedad', label: 'Tipo de propiedad' },
     { key: 'zona', label: 'Zona' },

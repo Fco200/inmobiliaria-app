@@ -1,9 +1,12 @@
 {
-  "version": "2.36",
+  "version": "2.37",
   "channel": "estable",
-  "title": "Actualización 2.36",
-  "date": "2026-11-20",
+  "title": "Actualización 2.37",
+  "date": "2026-11-23",
   "notes": [
-    "ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD"
+    "Aviso de actualización más claro: ahora verás un recordatorio sin ventanas que interrumpan tu trabajo.",
+    "Al actualizar se muestra un resumen con las novedades de la versión instalada.",
+    "Nuevo botón de Ayuda en la barra superior con acceso directo a soporte.",
+    "Clientes: filtros avanzados de forma de pago (al comprar) y medio por el que se enteró, también en el CSV."
   ]
 }

@@ -691,8 +691,9 @@ window.AppShell = (() => {
   }
 
   // Carga el módulo de versiones/actualizaciones. Consulta el servidor y, si
-  // hay una versión nueva, muestra la notificación (banner + punto en el botón)
-  // que lleva al módulo de Actualizaciones. Disponible para todos los roles.
+  // hay una versión nueva, muestra el aviso NO modal (banner + toast + punto en
+  // el botón). El modal de novedades se reserva para cuando ya se actualizó.
+  // Disponible para todos los roles.
   function loadAppVersion() {
     if (document.getElementById('appversion-loaded')) return;
     const marker = document.createElement('span');
@@ -724,6 +725,22 @@ window.AppShell = (() => {
       }
     });
     right.insertBefore(btn, right.querySelector('#btn-theme'));
+  }
+
+  // Botón de Ayuda en la barra superior. Lleva directo al centro de ayuda y
+  // soporte (ayuda.html); distinto del (?) de guía rápida, que reabre el
+  // recorrido de bienvenida sin salir de la página.
+  function injectHelpButton() {
+    const right = document.querySelector('.topnav-right');
+    if (!right || right.querySelector('#btn-help')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-help';
+    btn.className = 'icon-btn help-toggle';
+    btn.title = 'Ayuda y soporte';
+    btn.setAttribute('aria-label', 'Ayuda y soporte');
+    btn.innerHTML = '&#128172;&nbsp;Ayuda';
+    btn.addEventListener('click', () => { window.location.href = 'ayuda.html'; });
+    right.insertBefore(btn, right.querySelector('#btn-guide') || right.querySelector('#btn-theme'));
   }
 
   // Se retira cualquier logotipo de colaboración (FV DIGITAL) del encabezado:
@@ -861,32 +878,19 @@ window.AppShell = (() => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
     if (!navigator.serviceWorker) return;
     // Cuando el service worker se activa con una versión nueva ya borró la
-    // caché anterior, pero la pestaña sigue ejecutando el JS viejo. Se avisa
-    // en vez de recargar solos: el asesor puede estar escribiendo la
-    // descripción de una propiedad y perder el texto sería peor.
-    let recargando = false;
+    // caché anterior, pero la pestaña sigue ejecutando el JS viejo. Sólo se
+    // avisa (banner + toast): ni modal de confirmación ni recarga automática,
+    // para no interrumpir al asesor que esté escribiendo en el módulo.
     navigator.serviceWorker.addEventListener('message', (event) => {
       const data = event.data || {};
-      if (data.type !== 'SW_UPDATED' || recargando) return;
-      // Con el sistema de versiones activo, el aviso lleva al módulo de
-      // Actualizaciones (desde ahí el usuario aplica la actualización). Si el
-      // módulo no está cargado, se ofrece recargar directamente.
+      if (data.type !== 'SW_UPDATED') return;
       if (window.AppVersion && typeof window.AppVersion.check === 'function') {
         window.AppVersion.check({ notify: true });
-        if (window.UI) UI.toast('Hay una nueva versión. Revísala en Actualizaciones.', 'info');
         return;
       }
-      const avisar = () => {
-        recargando = true;
-        window.location.reload();
-      };
-      if (window.UI && typeof window.UI.confirm === 'function') {
-        window.UI.confirm('Hay una versión nueva de la aplicación. ¿Recargar ahora para aplicarla?', { danger: false })
-          .then((ok) => { if (ok) avisar(); })
-          .catch(() => {});
-        return;
+      if (window.UI && typeof window.UI.toast === 'function') {
+        window.UI.toast('Actualiza tu app para tener la última versión.', 'info');
       }
-      avisar();
     });
     // El navegador puede activar el Service Worker nuevo en segundo plano. No
     // se recarga la página automáticamente: eso vaciaba y volvía a pintar los
@@ -1513,6 +1517,7 @@ window.AppShell = (() => {
       injectBrandCollab();
       injectThemeButton();
       injectGuideButton();
+      injectHelpButton();
       injectUpdateButton();
       injectDownloadButton();
       loadAppVersion();

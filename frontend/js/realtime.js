@@ -403,7 +403,7 @@ window.Realtime = (() => {
       page.render(content).catch(() => {});
     });
     // El servidor publicó una versión nueva: se consulta la versión y se
-    // muestra el banner/modal de Actualizaciones sin recargar la página.
+    // muestra el aviso (banner + toast) sin recargar ni abrir modales.
     socket.on('nueva-version', (payload) => {
       try {
         window.dispatchEvent(new CustomEvent('crm:new-version', { detail: payload || {} }));

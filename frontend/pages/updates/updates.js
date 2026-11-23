@@ -3,9 +3,9 @@
 window.Pages = window.Pages || {};
 
 // Módulo de Actualizaciones.
-// Sólo avisa de seguridad y aplica la actualización. Sin changelogs, listados
-// de mejoras ni commits: el usuario ve únicamente "ACTUALIZA TU APP POR
-// CUESTIONES DE SEGURIDAD" y el botón para aplicarla.
+// Avisa de forma no modal ("Actualiza tu app para tener la última versión") y
+// aplica la actualización. El resumen de novedades se muestra en un modal
+// posterior tras recargar con la versión nueva.
 window.Pages.actualizaciones = {
   title: 'Actualizaciones',
 
@@ -57,14 +57,14 @@ window.Pages.actualizaciones = {
 
       body.innerHTML = `
         <div class="updates-status ${hasUpdate ? 'is-new' : 'is-current'}">
-          <div class="updates-status-icon">${hasUpdate ? '&#128274;' : '&#9989;'}</div>
+          <div class="updates-status-icon">${hasUpdate ? '&#128226;' : '&#9989;'}</div>
           <div class="updates-status-body">
             <div class="updates-status-top">
-              <h3>${hasUpdate ? 'ACTUALIZA TU APP POR CUESTIONES DE SEGURIDAD' : 'Tu app está al día'}</h3>
+              <h3>${hasUpdate ? 'Actualiza tu app para tener la última versión' : 'Tu app está al día'}</h3>
               ${hasUpdate ? '' : `<span class="updates-pill is-ok">v${versionText}</span>`}
             </div>
             ${hasUpdate
-              ? `<p class="text-muted updates-status-sub">Aplica la actualización para continuar de forma segura.</p>
+              ? `<p class="text-muted updates-status-sub">Incluye las mejoras y correcciones más recientes. Al terminar verás las novedades.</p>
                  <div class="updates-actions">
                    <button class="btn btn-primary" type="button" data-apply>Actualizar ahora</button>
                  </div>`

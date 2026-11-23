@@ -100,7 +100,7 @@ window.API = {
     historialCompleto: (id) => ApiClient.get(`/clients/${id}/historial-completo`),
     addNota: (id, nota) => ApiClient.post(`/clients/${id}/notas`, { nota }),
     conteoEtapas: () => ApiClient.get('/clients/conteo-etapas'),
-    exportCsv: () => API.downloadCsv('/clients/export', 'clientes.csv'),
+    exportCsv: (params) => API.downloadCsv('/clients/export', 'clientes.csv', params),
   },
 
   properties: {

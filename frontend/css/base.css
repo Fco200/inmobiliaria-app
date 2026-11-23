@@ -3869,6 +3869,23 @@ body.page-chat .assistant-panel {
   box-shadow: var(--glow);
 }
 
+/* Botón "Ayuda" de la barra superior: lleva a ayuda.html (centro de soporte). */
+.help-toggle {
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: var(--primary);
+  border-radius: 8px;
+  background: var(--primary-light);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  white-space: nowrap;
+}
+.help-toggle:hover {
+  background: var(--grad-primary);
+  color: #fff;
+  box-shadow: var(--glow);
+}
+
 /* ══════════════════ PÁGINA DE AYUDA ══════════════════ */
 .ayuda-hero {
   position: relative;

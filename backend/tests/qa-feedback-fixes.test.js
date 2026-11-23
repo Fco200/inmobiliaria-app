@@ -196,3 +196,43 @@ test('gerencia y dirección ven el reporte de tickets con permisos coherentes', 
   assert.match(shell, /\['admin', 'direccion', 'gerencia', 'superadmin'\]\.includes\(role\.code\)/, 'gerencia no depende de permisos guardados');
   assert.match(shell, /\['admin', 'direccion', 'gerencia', 'superadmin'\]\.includes\(role\)/, 'isBoss del frontend incluye gerencia');
 });
+
+test('el aviso de actualización no abre modales y las novedades se ven al actualizar', () => {
+  const appVersion = read('frontend', 'js', 'appVersion.js');
+  const shell = read('frontend', 'js', 'multipage.js');
+  const updates = read('frontend', 'pages', 'updates', 'updates.js');
+
+  assert.match(appVersion, /Actualiza tu app para tener la última versión/, 'el aviso debe usar el texto nuevo');
+  assert.match(appVersion, /window\.UI\.toast\('Actualiza tu app para tener la última versión\.'/, 'el aviso incluye un toast');
+  assert.match(appVersion, /UPDATED_KEY/, 'debe registrar que SÍ se aplicó la actualización');
+  assert.match(appVersion, /markJustUpdated\(targetHash\)/, 'la bandera se escribe antes de recargar');
+  assert.match(appVersion, /¡Ya tienes la última versión!/, 'el modal de novedades se muestra después de actualizar');
+  assert.match(appVersion, /maybeShowUpdateSuccess/, 'el modal se dispara una sola vez tras la recarga');
+  assert.doesNotMatch(shell, /UI\.confirm\('Hay una versión nueva de la aplicación/, 'ya no se levanta modal de confirmación');
+  assert.match(updates, /Actualiza tu app para tener la última versión/, 'el módulo de Actualizaciones usa el mismo texto');
+});
+
+test('la barra superior lleva un botón de Ayuda a ayuda.html', () => {
+  const shell = read('frontend', 'js', 'multipage.js');
+  const css = read('frontend', 'css', 'base.css');
+
+  assert.match(shell, /function injectHelpButton/, 'el botón se inyecta desde el shell');
+  assert.match(shell, /btn\.id = 'btn-help'/);
+  assert.match(shell, /window\.location\.href = 'ayuda\.html'/, 'debe abrir el centro de ayuda');
+  assert.match(shell, /injectHelpButton\(\);/, 'debe registrarse al iniciar la app');
+  assert.match(css, /\.help-toggle/, 'debe tener estilo propio');
+});
+
+test('los filtros avanzados de Clientes incluyen forma de pago y medio, también en el CSV', () => {
+  const clients = read('frontend', 'pages', 'clients', 'clients.js');
+  const services = read('frontend', 'js', 'services', 'index.js');
+  const controller = read('backend', 'src', 'controllers', 'client.controller.js');
+
+  assert.match(clients, /id="clients-f-pago"/, 'filtro de forma de pago');
+  assert.match(clients, /id="clients-f-medio"/, 'filtro de medio');
+  assert.match(clients, /fServicio\.value === 'Comprar'/, 'sólo se habilita al comprar');
+  assert.match(clients, /API\.clients\.exportCsv\(filterParams\(\)\)/, 'el CSV usa los mismos filtros');
+  assert.match(services, /exportCsv: \(params\) => API\.downloadCsv\('\/clients\/export', 'clientes\.csv', params\)/);
+  assert.match(controller, /medio: 'medio'/, 'el backend filtra por medio');
+  assert.match(controller, /delete filter\.formaPago/, 'el backend ignora forma de pago si no es Comprar');
+});

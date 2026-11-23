@@ -313,7 +313,7 @@ window.PublicSite = (() => {
   // objeto { id, text, icon }: cada id se muestra una sola vez por navegador y
   // se van mostrando en orden en las siguientes visitas.
   const ASSISTANT_TIPS = [
-    { id: 'bubble_help', text: '¡Da clic aquí en la burbuja para ayudarte!', icon: '&#128070;' },
+    { id: 'bubble_help_once', text: 'Haz clic para ver cómo ayudarte', icon: '&#128070;' },
   ];
   const ASSISTANT_TIPS_KEY = 'inmobles_assistant_tips_seen';
 
@@ -360,10 +360,11 @@ window.PublicSite = (() => {
     bubble.append(icon, text, close);
     widget.insertBefore(bubble, toggle);
 
-    let timer = null;
+    // Se marca como visto EN CUANTO aparece: así se muestra una sola vez por
+    // navegador aunque la persona recargue la página sin llegar a hacer clic.
+    markAssistantTipSeen(tip.id);
+
     const dismiss = () => {
-      if (timer) clearTimeout(timer);
-      markAssistantTipSeen(tip.id);
       if (!bubble.isConnected) return;
       bubble.classList.add('is-leaving');
       setTimeout(() => bubble.remove(), 320);
@@ -371,7 +372,7 @@ window.PublicSite = (() => {
     close.addEventListener('click', dismiss);
     // Si abre el asistente, el tip ya cumplió su objetivo.
     toggle.addEventListener('click', dismiss, { once: true });
-    timer = setTimeout(dismiss, 14000);
+    // Sin cierre automático: permanece visible hasta que hagan clic o lo cierren.
   }
 
   function initAssistant() {
@@ -444,7 +445,9 @@ window.PublicSite = (() => {
     toggle.addEventListener('click', () => {
       const opening = panel.hidden;
       panel.hidden = !opening;
-      if (opening && input) input.focus();
+      // preventScroll evita que el celular desplace toda la página al enfocar
+      // el campo (el teclado debe aparecer sin mover el contenido de fondo).
+      if (opening && input) input.focus({ preventScroll: true });
     });
     close.addEventListener('click', () => { panel.hidden = true; });
 

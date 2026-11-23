@@ -1261,19 +1261,20 @@
 }
 .landing-assistant-tip-close:hover { color: #8a2be2; }
 
-/* ---- Celular: panel casi a ancho completo, teclado y zona segura ---- */
+/* ---- Celular: panel flotante, teclado y zona segura ---- */
 @media (max-width: 600px) {
   .landing-assistant {
-    right: calc(12px + env(safe-area-inset-right, 0px));
-    left: calc(12px + env(safe-area-inset-left, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--ast-kb, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    left: auto;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--ast-kb, 0px));
   }
   .landing-assistant-panel {
-    width: 100%;
-    max-width: none;
-    margin-bottom: 10px;
+    width: min(340px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    margin-bottom: 14px;
     max-height: calc(var(--ast-vh, 100vh) - 96px - env(safe-area-inset-bottom, 0px));
-    border-radius: 18px;
+    border-radius: 20px;
+    box-shadow: 0 18px 48px rgba(23, 9, 40, 0.42), 0 3px 12px rgba(23, 9, 40, 0.22);
   }
   .landing-assistant-head { padding: 12px 14px; }
   .landing-assistant-close {
@@ -1316,7 +1317,7 @@
   }
   .landing-assistant-tip {
     width: max-content;
-    max-width: 100%;
+    max-width: calc(100vw - 32px);
     margin: 0 0 12px;
     padding: 12px;
     font-size: 13px;

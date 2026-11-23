@@ -1,12 +1,13 @@
 {
-  "version": "2.37",
+  "version": "2.38",
   "channel": "estable",
-  "title": "Actualización 2.37",
+  "title": "Actualización 2.38",
   "date": "2026-11-23",
   "notes": [
-    "Aviso de actualización más claro: ahora verás un recordatorio sin ventanas que interrumpan tu trabajo.",
+    "Corregido: la pantalla quedaba en blanco al cerrar el modal de novedades después de actualizar.",
+    "Aviso de actualización sin ventanas: banner y recordatorio breve, sin interrumpir tu trabajo.",
     "Al actualizar se muestra un resumen con las novedades de la versión instalada.",
     "Nuevo botón de Ayuda en la barra superior con acceso directo a soporte.",
-    "Clientes: filtros avanzados de forma de pago (al comprar) y medio por el que se enteró, también en el CSV."
+    "Clientes: filtros de forma de pago (al comprar) y medio por el que se enteró, también en el CSV."
   ]
 }

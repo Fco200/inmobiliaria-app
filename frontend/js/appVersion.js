@@ -206,7 +206,8 @@ window.AppVersion = (() => {
     function close() {
       document.removeEventListener('keydown', onKeydown);
       overlay.classList.add('closing');
-      setTimeout(() => { if (overlay.parentNode) overlay.parentNode.remove(); }, 450);
+      // OJO: quitar el overlay, NO su padre (sería document.body → pantalla en blanco).
+      setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 450);
     }
     const closeBtn = overlay.querySelector('.whatsnew-close');
     const continueBtn = overlay.querySelector('#version-updated-continue');

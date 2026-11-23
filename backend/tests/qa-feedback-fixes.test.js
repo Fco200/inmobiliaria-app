@@ -208,6 +208,8 @@ test('el aviso de actualización no abre modales y las novedades se ven al actua
   assert.match(appVersion, /markJustUpdated\(targetHash\)/, 'la bandera se escribe antes de recargar');
   assert.match(appVersion, /¡Ya tienes la última versión!/, 'el modal de novedades se muestra después de actualizar');
   assert.match(appVersion, /maybeShowUpdateSuccess/, 'el modal se dispara una sola vez tras la recarga');
+  assert.match(appVersion, /overlay\.remove\(\)/, 'al cerrar se quita sólo el overlay');
+  assert.doesNotMatch(appVersion, /overlay\.parentNode\.remove\(\)/, 'nunca se debe borrar el body');
   assert.doesNotMatch(shell, /UI\.confirm\('Hay una versión nueva de la aplicación/, 'ya no se levanta modal de confirmación');
   assert.match(updates, /Actualiza tu app para tener la última versión/, 'el módulo de Actualizaciones usa el mismo texto');
 });

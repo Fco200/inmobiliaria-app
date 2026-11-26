@@ -259,6 +259,7 @@ window.API = {
 
   appointments: {
     list: (params) => ApiClient.get('/appointments', params),
+    get: (id) => ApiClient.get(`/appointments/${id}`),
     create: (body) => ApiClient.post('/appointments', body),
     update: (id, body) => ApiClient.put(`/appointments/${id}`, body),
     remove: (id) => ApiClient.remove(`/appointments/${id}`),

@@ -557,7 +557,7 @@ window.Pages.clients = {
       if (action === 'perfil') return openProfileModal(record);
       if (action === 'nota') return openNotaModal(record);
       if (action === 'historial') return openHistorialModal(record);
-      if (action === 'cita') { window.location.href = 'appointments.html'; return; }
+      if (action === 'cita') { window.location.href = 'calendar.html?new=appointment'; return; }
       if (action === 'negocio') { window.location.href = 'businesses.html'; return; }
       if (action === 'eliminar') {
         const ok = await UI.confirm(`¿Eliminar al cliente "${record.nombre}"?`);

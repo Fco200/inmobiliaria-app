@@ -32,7 +32,7 @@ window.Pages.home = {
     const QUICK = [
       { href: 'clients.html', icon: '&#10133;', label: 'Nuevo cliente' },
       { href: 'properties.html', icon: '&#127968;', label: 'Nueva propiedad' },
-      { href: 'appointments.html', icon: '&#128197;', label: 'Nueva cita' },
+      { href: 'calendar.html?new=appointment', icon: '&#128197;', label: 'Nueva cita' },
       { href: 'calendar.html', icon: '&#128467;', label: 'Calendario' },
       { href: 'tasks.html', icon: '&#9745;', label: 'Nueva tarea' },
       { href: 'businesses.html', icon: '&#128179;', label: 'Registrar negocio' },
@@ -44,7 +44,7 @@ window.Pages.home = {
       { key: 'clients', label: 'Clientes', desc: 'Gestiona tus prospectos', href: 'clients.html', icon: '&#128101;' },
       { key: 'properties', label: 'Captar Propiedades', desc: 'Captación: aquí decides si compartes al inventario', href: 'properties.html', icon: '&#127968;' },
       { key: 'businesses', label: 'Negocios', desc: 'Operaciones y pipeline', href: 'businesses.html', icon: '&#128179;' },
-      { key: 'appointments', label: 'Citas', desc: 'Agenda y visitas', href: 'appointments.html', icon: '&#128197;' },
+      { key: 'appointments', label: 'Citas', desc: 'Agenda y visitas', href: 'calendar.html', icon: '&#128197;' },
       { key: 'calendar', label: 'Calendario', desc: 'Vista mes, semana y día', href: 'calendar.html', icon: '&#128467;' },
       { key: 'tasks', label: 'Tareas', desc: 'Pendientes del día', href: 'tasks.html', icon: '&#9745;' },
       { key: 'goals', label: 'Metas', desc: 'Objetivos y avance', href: 'goals.html', icon: '&#127919;' },
@@ -73,7 +73,7 @@ window.Pages.home = {
     const STEPS = [
       { num: '1', href: 'clients.html', title: 'Registra un cliente', desc: 'Nombre, teléfono y qué está buscando.' },
       { num: '2', href: 'properties.html', title: 'Captura una propiedad', desc: 'Fotos, precio y características.' },
-      { num: '3', href: 'appointments.html', title: 'Agenda una cita', desc: 'Vincúlala al cliente y al inmueble.' },
+      { num: '3', href: 'calendar.html?new=appointment', title: 'Agenda una cita', desc: 'Vincúlala al cliente y al inmueble.' },
       { num: '4', href: 'businesses.html', title: 'Abre el negocio', desc: 'Da seguimiento hasta el cierre.' },
     ];
 

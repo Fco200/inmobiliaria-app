@@ -148,12 +148,104 @@ window.AppVersion = (() => {
     }
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Novedad destacada: reemplaza el resumen genérico por una mini guía
+  // animada ("Tus citas ahora desde Calendario").
+  function buildSpotlightMarkup(spotlight, versionText) {
+    const badge = spotlight.badge || 'NOVEDAD DESTACADA';
+    const title = spotlight.title || 'TUS CITAS AHORA DESDE CALENDARIO';
+    const lead = spotlight.lead || '¡Ya tienes la última versión! Todo en un solo lugar.';
+    const cta = spotlight.cta || 'IR AHÍ';
+    return `
+      <div class="whatsnew-particles" aria-hidden="true"></div>
+      <div class="whatsnew-card cal-spotlight-card">
+        <button class="whatsnew-close" type="button" aria-label="Cerrar novedades">&times;</button>
+        <div class="whatsnew-badge">&#128197;&nbsp; ${escapeHtml(badge)}</div>
+        <div class="whatsnew-icon" aria-hidden="true">&#128197;</div>
+        <h2 class="whatsnew-title cal-spotlight-title" id="version-updated-title">${escapeHtml(title)}</h2>
+        <p class="whatsnew-lead">${escapeHtml(lead)}</p>
+        <button class="btn btn-primary whatsnew-btn cal-spotlight-cta" type="button" data-goto-calendar>${escapeHtml(cta)} &rarr;</button>
+        <div class="cal-guide" id="cal-guide">
+          <div class="cal-guide-dots" id="cal-guide-dots" aria-hidden="true"></div>
+          <ul class="cal-guide-steps" id="cal-guide-steps"></ul>
+          <button class="btn btn-secondary cal-guide-next" type="button" id="cal-guide-next">Continuar &rarr;</button>
+        </div>
+        <p class="whatsnew-footer">INMOBLES &times; FV DIGITAL${versionText ? ` &middot; ${escapeHtml(versionText)}` : ''}</p>
+      </div>
+    `;
+  }
+
+  function setupSpotlightGuide(overlay, spotlight, close) {
+    const list = overlay.querySelector('#cal-guide-steps');
+    const dots = overlay.querySelector('#cal-guide-dots');
+    const next = overlay.querySelector('#cal-guide-next');
+    if (!list || !next) return;
+    const steps = Array.isArray(spotlight.steps) && spotlight.steps.length
+      ? spotlight.steps
+      : [
+          { text: 'Clic aquí para agendar tu cita', href: 'calendar.html?new=appointment' },
+          { text: 'Luego clic en el calendario y ver los detalles', href: 'calendar.html' },
+          { text: 'Luego clic aquí en Semanal y ve pintado de color lo que tienes', href: 'calendar.html' },
+        ];
+    let current = 0;
+
+    steps.forEach((step, i) => {
+      const li = document.createElement('li');
+      li.className = `whatsnew-item cal-guide-step${i === 0 ? ' active' : ''}`;
+      const num = document.createElement('span');
+      num.className = 'cal-guide-num';
+      num.textContent = String(i + 1);
+      const link = document.createElement('a');
+      link.className = 'cal-guide-link';
+      link.href = step && step.href ? String(step.href) : 'calendar.html';
+      link.textContent = step && step.text ? String(step.text) : 'Clic aquí en Calendario';
+      li.appendChild(num);
+      li.appendChild(link);
+      list.appendChild(li);
+      if (dots) {
+        const dot = document.createElement('span');
+        dot.className = `cal-guide-dot${i === 0 ? ' active' : ''}`;
+        dots.appendChild(dot);
+      }
+    });
+
+    const items = Array.from(list.querySelectorAll('.cal-guide-step'));
+    const dotEls = dots ? Array.from(dots.children) : [];
+    const paint = () => {
+      items.forEach((item, i) => item.classList.toggle('active', i === current));
+      dotEls.forEach((dot, i) => dot.classList.toggle('active', i === current));
+      next.textContent = current === items.length - 1 ? 'Entendido ✓' : 'Continuar →';
+    };
+    next.addEventListener('click', () => {
+      if (current < items.length - 1) {
+        current += 1;
+        paint();
+      } else {
+        close();
+      }
+    });
+    const goto = overlay.querySelector('[data-goto-calendar]');
+    if (goto) goto.addEventListener('click', () => { window.location.href = 'calendar.html'; });
+    paint();
+  }
+
   // Modal de novedades que se abre SOLAMENTE cuando ya se aplicó una
   // actualización. Reutiliza el diseño del aviso "Lo nuevo llegó" de base.css.
   function openUpdateSuccessModal() {
     if (document.getElementById(UPDATE_MODAL_ID)) return;
     const info = latest || readCachedLatest() || {};
     const versionText = info.version ? `v${info.version}` : '';
+    const spotlight = info.spotlight && info.spotlight.type === 'calendar-citas'
+      ? info.spotlight
+      : null;
     const notes = Array.isArray(info.notes) && info.notes.length
       ? info.notes.slice(0, 8)
       : [
@@ -169,7 +261,7 @@ window.AppVersion = (() => {
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', 'version-updated-title');
-    overlay.innerHTML = `
+    overlay.innerHTML = spotlight ? buildSpotlightMarkup(spotlight, versionText) : `
       <div class="whatsnew-particles" aria-hidden="true"></div>
       <div class="whatsnew-card">
         <button class="whatsnew-close" type="button" aria-label="Cerrar novedades">&times;</button>
@@ -215,6 +307,7 @@ window.AppVersion = (() => {
     if (continueBtn) continueBtn.addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.addEventListener('keydown', onKeydown);
+    if (spotlight) setupSpotlightGuide(overlay, spotlight, close);
     setTimeout(() => {
       overlay.classList.add('show');
       if (continueBtn && typeof continueBtn.focus === 'function') continueBtn.focus();

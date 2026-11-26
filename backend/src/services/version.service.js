@@ -131,6 +131,11 @@ async function build() {
     ? meta.notes.map((n) => String(n)).filter(Boolean)
     : commits;
 
+  // Novedades destacadas (por ejemplo la guía "Tus citas ahora desde
+  // Calendario"). Se reenvía tal cual al frontend para que abra un modal
+  // especial en lugar del resumen genérico.
+  const spotlight = meta.spotlight && typeof meta.spotlight === 'object' ? meta.spotlight : null;
+
   // Identificador de versión: el hash del commit manda (cambia en cada
   // commit). Si git no está disponible se usa la versión de version.json.
   const version = meta.version ? String(meta.version) : (buildId || 'dev');
@@ -152,6 +157,7 @@ async function build() {
     buildDate: commitDate || null,
     notes,
     commits,
+    spotlight,
   };
 }
 
@@ -170,6 +176,7 @@ async function getVersion() {
       buildDate: null,
       notes: [],
       commits: [],
+      spotlight: null,
     };
   }
   cachedAt = now;

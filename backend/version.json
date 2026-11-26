@@ -1,13 +1,25 @@
 {
-  "version": "2.38",
+  "version": "2.39",
   "channel": "estable",
-  "title": "Actualización 2.38",
-  "date": "2026-11-23",
+  "title": "Actualización 2.39",
+  "date": "2026-11-26",
   "notes": [
-    "Corregido: la pantalla quedaba en blanco al cerrar el modal de novedades después de actualizar.",
-    "Aviso de actualización sin ventanas: banner y recordatorio breve, sin interrumpir tu trabajo.",
-    "Al actualizar se muestra un resumen con las novedades de la versión instalada.",
-    "Nuevo botón de Ayuda en la barra superior con acceso directo a soporte.",
-    "Clientes: filtros de forma de pago (al comprar) y medio por el que se enteró, también en el CSV."
-  ]
+    "¡Tus citas ahora desde Calendario! Agenda, edita y elimina sin salir del módulo.",
+    "Las citas que ya tenías siguen ahí y se pintan en el calendario con su color actual.",
+    "Puntitos de color en mes, semana y día para ver de un vistazo lo que hay programado.",
+    "Las reuniones ahora se pintan de verde.",
+    "Nueva guía animada al actualizar para encontrar tus citas en el calendario."
+  ],
+  "spotlight": {
+    "type": "calendar-citas",
+    "badge": "NUEVO EN 2.39",
+    "title": "TUS CITAS AHORA DESDE CALENDARIO",
+    "lead": "¡Ya tienes la última versión! Agenda y revisa todo en un solo lugar. Sigue esta mini guía:",
+    "cta": "IR AHÍ",
+    "steps": [
+      { "text": "Clic aquí para agendar tu cita", "href": "calendar.html?new=appointment" },
+      { "text": "Luego clic en el calendario y ver los detalles", "href": "calendar.html" },
+      { "text": "Luego clic aquí en Semanal y ve pintado de color lo que tienes", "href": "calendar.html" }
+    ]
+  }
 }

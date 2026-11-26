@@ -3853,6 +3853,55 @@ body.page-chat .assistant-panel {
   border-color: rgba(123, 63, 160, 0.28);
 }
 
+/* ══════════════════ NOVEDADES: GUÍA CITAS → CALENDARIO ══════════════════ */
+.whatsnew-card.cal-spotlight-card { max-width: 560px; padding: 30px 28px 24px; }
+.cal-spotlight-title { font-size: 23px !important; line-height: 1.2; }
+.cal-spotlight-cta {
+  max-width: 280px; margin: 0 auto 18px; border: 0;
+  background: linear-gradient(135deg, #7B3FA0, #5B2D8E);
+  animation: calGuideCta 2.2s ease-in-out infinite;
+}
+@keyframes calGuideCta {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 6px 18px rgba(91, 45, 142, .35); }
+  50% { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 26px rgba(123, 63, 160, .55); }
+}
+.cal-guide { position: relative; text-align: left; }
+.cal-guide-dots { display: flex; justify-content: center; gap: 8px; margin: 0 0 12px; }
+.cal-guide-dot {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+  transition: width .3s ease, background .3s ease;
+}
+.cal-guide-dot.active { width: 22px; background: var(--primary); }
+.cal-guide-steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.cal-guide-step { display: none; align-items: center; gap: 12px; min-height: 64px; }
+.whatsnew-overlay.show .cal-guide-step.active {
+  display: flex;
+  animation: calGuideIn .5s cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes calGuideIn {
+  from { opacity: 0; transform: translateY(14px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cal-guide-num {
+  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #7B3FA0, #5B2D8E);
+  color: #fff; font-weight: 800; font-size: 14px;
+}
+.cal-guide-link {
+  color: var(--text); font-size: 14px; font-weight: 600; line-height: 1.4;
+  text-decoration: none; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;
+  animation: calGuideLink 1.8s ease-in-out infinite;
+}
+@keyframes calGuideLink {
+  0%, 100% { border-bottom-color: var(--primary); }
+  50% { border-bottom-color: #c084fc; }
+}
+.cal-guide-link:hover { color: var(--primary); }
+.cal-guide-next { margin-top: 14px; width: 100%; }
+@media (max-width: 720px) { .whatsnew-card.cal-spotlight-card { padding: 26px 18px 22px; } }
+
 /* ══════════════════ BOTÓN DE GUÍA (?) ══════════════════ */
 .guide-toggle {
   font-weight: 800;
@@ -4197,7 +4246,16 @@ body.page-chat .assistant-panel {
 .cal-detail-table { width:100%; border-collapse:collapse; font-size:14px; }
 .cal-detail-table th { text-align:left; color:var(--text-muted); font-weight:600; padding:7px 10px 7px 0; width:34%; vertical-align:top; font-size:13px; }
 .cal-detail-table td { padding:7px 0; vertical-align:top; word-break:break-word; }
+/* Puntitos de color: actividad programada en mes, semana y día. */
+.cal-cell-top { display:flex; align-items:center; gap:4px; min-height:24px; }
+.cal-dots { display:inline-flex; align-items:center; gap:3px; flex-wrap:wrap; }
+.cal-dot { width:7px; height:7px; border-radius:50%; background:var(--dot-color,#5B2D8E); box-shadow:0 0 0 1px rgba(0,0,0,.08); display:inline-block; }
+/* Panel de Citas integrado en Calendario. */
+.cal-appointments-panel { margin-top:16px; padding:16px; }
+.cal-appointments-panel .page-header { margin-top:0; }
 @media (max-width:720px) {
+  .cal-appointments-panel { padding:10px; }
+
   .cal-cell { min-height:64px; }
   .cal-event-sm { display:none; }
   .cal-grid-week .cal-weekrow, .cal-grid-week .cal-weekdayrow { min-width:840px; }

@@ -16,7 +16,7 @@ window.Pages.calendar = (() => {
     business: { label: 'Negocios', color: '#7c3aed' },
     goal: { label: 'Metas', color: '#059669' },
     prospecting: { label: 'Prospección', color: '#db2777' },
-    meeting: { label: 'Reuniones', color: '#d97706' },
+    meeting: { label: 'Reuniones', color: '#16a34a' },
   };
 
   let state = {
@@ -33,6 +33,8 @@ window.Pages.calendar = (() => {
   };
 
   let rootEl = null;
+  // Formulario de citas (montado por AppointmentsUI dentro del mismo módulo).
+  let appointmentOpenForm = null;
 
   function dateKey(d) {
     const dt = new Date(d);
@@ -143,6 +145,7 @@ window.Pages.calendar = (() => {
         <div class="cal-header">
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <h2 style="margin:0;font-size:20px;">&#128467;&nbsp; Calendario</h2>
+            <button class="btn btn-primary btn-sm" type="button" data-new-appointment>&#128197;&nbsp; Nueva cita</button>
             ${isBossUser() ? `<button class="btn btn-primary btn-sm" type="button" data-new-meeting>&#128197;&nbsp; Nueva reunión</button>` : ''}
           </div>
           <div class="cal-toolbar">
@@ -194,6 +197,14 @@ window.Pages.calendar = (() => {
         refreshView();
       });
     });
+
+    const newAppointmentBtn = rootEl.querySelector('[data-new-appointment]');
+    if (newAppointmentBtn) {
+      newAppointmentBtn.addEventListener('click', () => {
+        if (typeof appointmentOpenForm === 'function') appointmentOpenForm();
+        else UI.toast('El formulario de citas aún se está cargando.', 'info');
+      });
+    }
 
     const newMeetingBtn = rootEl.querySelector('[data-new-meeting]');
     if (newMeetingBtn) newMeetingBtn.addEventListener('click', openNewMeeting);
@@ -375,6 +386,23 @@ window.Pages.calendar = (() => {
       </button>`;
   }
 
+  // Puntitos de color por día: se ve de un vistazo si hay algo programado
+  // (cita, tarea, negocio, meta, prospección o reunión) y de qué tipo es,
+  // tanto en la vista mes como en la semana.
+  function dayDots(events) {
+    const items = [];
+    events.forEach((e) => {
+      const meta = state.typesMeta[e.type] || TYPES[e.type] || {};
+      const color = meta.color || (TYPES[e.type] && TYPES[e.type].color) || '#64748b';
+      if (!items.some((it) => it.color === color)) {
+        items.push({ color, label: meta.label || e.type });
+      }
+    });
+    if (!items.length) return '';
+    const labels = items.map((it) => it.label).join(', ');
+    return `<span class="cal-dots" title="${UI.escapeHtml(labels)}">${items.map((it) => `<span class="cal-dot" style="--dot-color:${it.color};"></span>`).join('')}</span>`;
+  }
+
   function eventsOnDay(date) {
     const key = dateKey(date);
     const day = startOfDay(date);
@@ -413,7 +441,10 @@ window.Pages.calendar = (() => {
         const more = events.length > 4 ? `<div class="cal-more">+${events.length - 4} más</div>` : '';
         return `
           <div class="cal-cell ${isOtherMonth ? 'cal-other-month' : ''}" data-date="${key}">
-            <div class="cal-cell-head ${isToday ? 'cal-today' : ''}">${d.getDate()}</div>
+            <div class="cal-cell-top">
+              <div class="cal-cell-head ${isToday ? 'cal-today' : ''}">${d.getDate()}</div>
+              ${dayDots(events)}
+            </div>
             <div class="cal-cell-events">${chips}</div>
             ${more}
           </div>
@@ -444,7 +475,13 @@ window.Pages.calendar = (() => {
     const weekHeader = days
       .map((d) => {
         const isToday = dateKey(d) === todayKey;
-        return `<div class="cal-weekcol-head" style="width:${colWidth}%"><span class="cal-weekday">${WEEK_NAMES[d.getDay()]}</span><span class="cal-daynum ${isToday ? 'cal-today' : ''}" data-date="${dateKey(d)}">${d.getDate()}</span></div>`;
+        const events = eventsOnDay(d);
+        return `
+          <div class="cal-weekcol-head" style="width:${colWidth}%">
+            <span class="cal-weekday">${WEEK_NAMES[d.getDay()]}</span>
+            <span class="cal-daynum ${isToday ? 'cal-today' : ''}" data-date="${dateKey(d)}">${d.getDate()}</span>
+            ${dayDots(events)}
+          </div>`;
       })
       .join('');
 
@@ -486,7 +523,7 @@ window.Pages.calendar = (() => {
 
     return `
       <div class="cal-grid cal-grid-day" data-view-body="day">
-        <div class="cal-day-head">${WEEK_NAMES_FULL[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}</div>
+        <div class="cal-day-head" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${WEEK_NAMES_FULL[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}${dayDots(events)}</div>
         <div class="cal-day-list">${list}</div>
       </div>
     `;
@@ -531,8 +568,10 @@ window.Pages.calendar = (() => {
     if (e.description) rows.push(`<tr><th>Detalles</th><td>${UI.escapeHtml(e.description)}</td></tr>`);
 
     const footer = `
-      <a class="btn btn-secondary" href="${sourceHref(e)}">Abrir módulo</a>
-      <button class="btn btn-primary" data-close-detail type="button">Cerrar</button>
+      ${e.type === 'appointment' && e.sourceId
+        ? `<button class="btn btn-primary" type="button" data-edit-appointment>Editar cita</button>`
+        : `<a class="btn btn-secondary" href="${sourceHref(e)}">Abrir módulo</a>`}
+      <button class="btn btn-secondary" data-close-detail type="button">Cerrar</button>
     `;
 
     UI.openModal({
@@ -545,11 +584,30 @@ window.Pages.calendar = (() => {
     if (overlay) {
       const close = overlay.querySelector('[data-close-detail]');
       if (close) close.addEventListener('click', () => UI.closeModal());
+      const editAppt = overlay.querySelector('[data-edit-appointment]');
+      if (editAppt) editAppt.addEventListener('click', () => editAppointment(e.sourceId));
+    }
+  }
+
+  // Las citas se editan dentro del propio Calendario, con el mismo formulario
+  // del antiguo módulo (window.AppointmentsUI), sin salir de la página.
+  async function editAppointment(id) {
+    UI.closeModal();
+    try {
+      const result = await window.API.appointments.get(id);
+      const record = result && typeof result === 'object' && result.data ? result.data : result;
+      if (typeof appointmentOpenForm !== 'function') {
+        UI.toast('El formulario de citas aún se está cargando.', 'info');
+        return;
+      }
+      appointmentOpenForm(record);
+    } catch (error) {
+      UI.toast(error && error.message ? error.message : 'No se pudo abrir la cita.', 'error');
     }
   }
 
   function sourceHref(e) {
-    if (e.type === 'appointment') return 'appointments.html';
+    if (e.type === 'appointment') return 'calendar.html';
     if (e.type === 'task') return 'tasks.html';
     if (e.type === 'business') return 'businesses.html';
     if (e.type === 'goal') return 'goals.html';
@@ -580,8 +638,22 @@ window.Pages.calendar = (() => {
   }
 
   async function render(container) {
-    rootEl = container;
+    container.innerHTML = '';
+    // El calendario y el panel de citas conviven en el mismo módulo. rootEl
+    // apunta sólo a la vista mes/semana/día para que los repintados no borren
+    // el listado de citas (ni el formulario abierto).
+    const main = document.createElement('div');
+    main.className = 'cal-main';
+    container.appendChild(main);
+    rootEl = main;
     rootEl.innerHTML = '<div class="loading">Cargando calendario...</div>';
+
+    const appointmentsPanel = document.createElement('section');
+    appointmentsPanel.className = 'card cal-appointments-panel';
+    appointmentsPanel.setAttribute('data-appointments-panel', '');
+    appointmentsPanel.innerHTML = '<div class="loading">Cargando citas...</div>';
+    container.appendChild(appointmentsPanel);
+
     // Carga inicial de usuarios (para el selector "ver calendario de" de los
     // jefes) y de eventos. Ninguna de las dos debe impedir la vista.
     if (isBossUser()) {
@@ -599,6 +671,28 @@ window.Pages.calendar = (() => {
     }
     renderToolbar();
     bindViewDelegation();
+
+    // Módulo Citas fusionado aquí: mismos campos, filtros y validaciones.
+    if (window.AppointmentsUI && typeof window.AppointmentsUI.mount === 'function') {
+      window.AppointmentsUI.mount(appointmentsPanel, {
+        onReady: (openForm) => {
+          appointmentOpenForm = openForm;
+          // Accesos rápidos "Nueva cita" abren el formulario directamente.
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('new') === 'appointment') {
+            params.delete('new');
+            const qs = params.toString();
+            window.history.replaceState(
+              null,
+              '',
+              `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+            );
+            openForm();
+          }
+        },
+        onChanged: () => { refreshView(); },
+      });
+    }
   }
 
   return { render };

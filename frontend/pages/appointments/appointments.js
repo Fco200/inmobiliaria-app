@@ -28,10 +28,11 @@ const appointmentTypeLabel = (r) => {
   return r.type === 'otro' && r.typeOther ? `${base}: ${r.typeOther}` : base;
 };
 
-window.Pages.appointments = {
-  title: 'Citas',
-
-  async render(container) {
+// El módulo Citas se integró en Calendario, pero se conserva toda su lógica
+// (campos, filtros, normalización y validación) para no perder ninguna cita.
+// Calendario monta este mismo panel y recibe onChanged para repintar los eventos.
+window.AppointmentsUI = {
+  async mount(container, options = {}) {
     let me = null;
     let clients = [];
     let properties = [];
@@ -62,14 +63,30 @@ window.Pages.appointments = {
       ? UI.sortByLabel(users, (x) => x.name).map((x) => ({ value: x._id, label: x.name }))
       : [{ value: currentUserId, label: currentUser ? currentUser.name : '' }];
 
-    crudPage(container, {
+    const notifyChanged = () => {
+      if (typeof options.onChanged === 'function') options.onChanged();
+    };
+
+    const ctrl = crudPage(container, {
       title: 'Citas',
       newLabel: 'Nueva cita',
       service: {
         list: (params) => API.appointments.list(params),
-        create: (body) => API.appointments.create(body),
-        update: (id, body) => API.appointments.update(id, body),
-        remove: (id) => API.appointments.remove(id),
+        create: async (body) => {
+          const created = await API.appointments.create(body);
+          notifyChanged();
+          return created;
+        },
+        update: async (id, body) => {
+          const updated = await API.appointments.update(id, body);
+          notifyChanged();
+          return updated;
+        },
+        remove: async (id) => {
+          const removed = await API.appointments.remove(id);
+          notifyChanged();
+          return removed;
+        },
       },
       statusOptions: ['pendiente', 'confirmada', 'realizada', 'cancelada', 'no_asistio'],
       // Filtros de la barra superior: cliente, propiedad, negocio y tipo, todos
@@ -158,6 +175,19 @@ window.Pages.appointments = {
       },
       onEdit: true,
       onRemove: true,
+      onReady(openForm) {
+        if (typeof options.onReady === 'function') options.onReady(openForm);
+      },
     });
+    return ctrl;
+  },
+  appointmentTypeLabel,
+};
+
+// Compatibilidad: si alguien abre directamente el antiguo módulo, usa el mismo panel.
+window.Pages.appointments = {
+  title: 'Citas',
+  render(container) {
+    return window.AppointmentsUI.mount(container);
   },
 };

@@ -36,7 +36,7 @@ const TYPE_META = {
   business: { label: 'Negocio', color: '#7c3aed' },
   goal: { label: 'Meta', color: '#059669' },
   prospecting: { label: 'Prospección', color: '#db2777' },
-  meeting: { label: 'Reunión', color: '#d97706' },
+  meeting: { label: 'Reunión', color: '#16a34a' },
 };
 
 // ---------------------------------------------------------------------------

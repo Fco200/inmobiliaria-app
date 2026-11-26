@@ -17,11 +17,11 @@ window.CalendarView = (() => {
     business: { label: 'Negocios', color: '#7c3aed' },
     goal: { label: 'Metas', color: '#059669' },
     prospecting: { label: 'Prospección', color: '#db2777' },
-    meeting: { label: 'Reuniones', color: '#d97706' },
+    meeting: { label: 'Reuniones', color: '#16a34a' },
   };
 
   const TYPE_TO_HREF = {
-    appointment: 'appointments.html',
+    appointment: 'calendar.html',
     task: 'tasks.html',
     business: 'businesses.html',
     goal: 'goals.html',

@@ -11,7 +11,8 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
 function loadFormat() {
   const source = read('frontend', 'js', 'utils', 'format.js');
-  const sandbox = { Intl, Date, console };
+  // format.js también publica en window.Format; el vm necesita ese objeto.
+  const sandbox = { Intl, Date, console, window: {} };
   vm.createContext(sandbox);
   vm.runInContext(`${source}\n;globalThis.__Format = Format;`, sandbox);
   return sandbox.__Format;

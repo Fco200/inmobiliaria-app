@@ -8,9 +8,9 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..', '..');
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
-test('la versión 2.39 trae la novedad destacada de citas en Calendario', () => {
+test('la versión 2.40 conserva la novedad destacada de citas en Calendario', () => {
   const meta = JSON.parse(read('backend', 'version.json'));
-  assert.equal(meta.version, '2.39');
+  assert.equal(meta.version, '2.40');
   assert.ok(meta.spotlight, 'debe existir una novedad destacada');
   assert.equal(meta.spotlight.type, 'calendar-citas');
   assert.match(meta.spotlight.title, /TUS CITAS AHORA DESDE CALENDARIO/);

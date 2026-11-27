@@ -18,12 +18,16 @@ window.Pages.properties = {
       venta: 'Venta',
       renta: 'Renta',
       compra_localizada: 'Compra Localizada',
+      avaluo: 'Avalúo',
+      gestion_infonavit: 'Gestión Infonavit',
     };
     const operationLabel = (value) => OPERATION_LABELS[value] || String(value || '').replace(/_/g, ' ');
     const operationOptions = [
       { value: 'venta', label: 'Venta' },
       { value: 'renta', label: 'Renta' },
       { value: 'compra_localizada', label: 'Compra Localizada' },
+      { value: 'avaluo', label: 'Avalúo' },
+      { value: 'gestion_infonavit', label: 'Gestión Infonavit' },
     ];
     const PROPERTY_STATUS = [
       { value: 'disponible', label: 'Disponible' },

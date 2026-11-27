@@ -265,17 +265,22 @@ async function sincronizarClientes(business, anteriores = []) {
   }
 }
 
-// Completa el vendedor con el PROPIETARIO de la propiedad elegida. El
-// propietario puede ser un cliente de la cartera (`owner`) o un nombre libre
-// (`ownerName`); solo se rellena cuando el formulario no trajo vendedor.
+// Completa el vendedor con el PROPIETARIO de la propiedad elegida y guarda en
+// el negocio la operación de esa propiedad. El propietario puede ser un cliente
+// de la cartera (`owner`) o un nombre libre (`ownerName`); solo se rellena
+// cuando el formulario no trajo vendedor. La operación se toma siempre de la
+// propiedad cuando el negocio aún no trae una.
 async function completarVendedorDesdePropiedad(body) {
   if (!body || !body.property) return body;
-  if (body.sellerClient || String(body.sellerExternalName || '').trim()) return body;
   const prop = await Property.findById(body.property)
-    .select('owner ownerName')
+    .select('owner ownerName operationType')
     .lean()
     .catch(() => null);
   if (!prop) return body;
+  if (prop.operationType && !body.operationType) {
+    body.operationType = prop.operationType;
+  }
+  if (body.sellerClient || String(body.sellerExternalName || '').trim()) return body;
   if (prop.owner) {
     body.sellerClient = prop.owner;
   } else if (prop.ownerName) {
@@ -556,6 +561,16 @@ const update = asyncHandler(async (req, res) => {
     body.partnerAdvisor = null;
   }
   syncBusinessAliases(body);
+
+  // Negocios antiguos: al editarlos se les completa la operación desde la
+  // propiedad si aún no la tenían guardada.
+  if (body.operationType === undefined && business.property) {
+    const prop = await Property.findById(business.property)
+      .select('operationType')
+      .lean()
+      .catch(() => null);
+    if (prop && prop.operationType) body.operationType = prop.operationType;
+  }
 
   if (body.currentStage !== undefined) {
     body.currentStage = normalizeStage(body.currentStage);

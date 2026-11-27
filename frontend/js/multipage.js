@@ -706,30 +706,9 @@ window.AppShell = (() => {
     document.head.appendChild(script);
   }
 
-  // Botón (?) de guía rápida en el encabezado, visible para todos. Reabre la
-  // guía de bienvenida on-demand sin importar si el usuario ya la completó.
-  function injectGuideButton() {
-    const right = document.querySelector('.topnav-right');
-    if (!right || right.querySelector('#btn-guide')) return;
-    const btn = document.createElement('button');
-    btn.id = 'btn-guide';
-    btn.className = 'icon-btn guide-toggle';
-    btn.title = 'Guía rápida';
-    btn.setAttribute('aria-label', 'Guía rápida');
-    btn.innerHTML = '&#63;';
-    btn.addEventListener('click', () => {
-      if (window.Onboarding) {
-        window.Onboarding.show();
-      } else {
-        loadOnboarding(true);
-      }
-    });
-    right.insertBefore(btn, right.querySelector('#btn-theme'));
-  }
-
   // Botón de Ayuda en la barra superior. Lleva directo al centro de ayuda y
-  // soporte (ayuda.html); distinto del (?) de guía rápida, que reabre el
-  // recorrido de bienvenida sin salir de la página.
+  // soporte (ayuda.html). El recorrido de bienvenida se puede reabrir desde
+  // Ayuda cuando el usuario lo necesita.
   function injectHelpButton() {
     const right = document.querySelector('.topnav-right');
     if (!right || right.querySelector('#btn-help')) return;
@@ -740,7 +719,7 @@ window.AppShell = (() => {
     btn.setAttribute('aria-label', 'Ayuda y soporte');
     btn.innerHTML = '&#128172;&nbsp;Ayuda';
     btn.addEventListener('click', () => { window.location.href = 'ayuda.html'; });
-    right.insertBefore(btn, right.querySelector('#btn-guide') || right.querySelector('#btn-theme'));
+    right.insertBefore(btn, right.querySelector('#btn-theme'));
   }
 
   // Se retira cualquier logotipo de colaboración (FV DIGITAL) del encabezado:
@@ -1516,7 +1495,6 @@ window.AppShell = (() => {
       });
       injectBrandCollab();
       injectThemeButton();
-      injectGuideButton();
       injectHelpButton();
       injectUpdateButton();
       injectDownloadButton();

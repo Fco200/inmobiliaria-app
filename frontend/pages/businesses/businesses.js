@@ -101,8 +101,23 @@ window.Pages.businesses = {
       'asesor_cliente_id', 'partnerAdvisorName', 'partnerAdvisorPhone', 'partnerAdvisorEmail',
     ];
     const canWriteNotes = true;
-    // Operaciones de propiedad que muestran el botón "Avalúo" en la lista de negocios.
-    const AVALUO_OPERATIONS = ['venta', 'compra_localizada'];
+    // Operaciones que puede tener un negocio de propiedad. Se toman de la
+    // propiedad al elegirla, pero se guardan en el negocio para que siempre
+    // se sepa qué operación representa (y siempre pueda iniciar avalúo).
+    const BUSINESS_OPERATION_LABELS = {
+      venta: 'VENTA',
+      renta: 'RENTA',
+      compra_localizada: 'COMPRA LOCALIZADA',
+      avaluo: 'AVALÚO',
+      gestion_infonavit: 'GESTIÓN INFONAVIT',
+    };
+    const BUSINESS_OPERATION_OPTIONS = [
+      { value: 'venta', label: 'Venta' },
+      { value: 'renta', label: 'Renta' },
+      { value: 'compra_localizada', label: 'Compra Localizada' },
+      { value: 'avaluo', label: 'Avalúo' },
+      { value: 'gestion_infonavit', label: 'Gestión Infonavit' },
+    ];
     const VER_TODOS_NEGOCIOS = ['admin', 'direccion', 'gerencia', 'superadmin', 'asistencia', 'escrituracion'];
 
     const allStages = stageMeta.order && stageMeta.order.length
@@ -174,11 +189,12 @@ window.Pages.businesses = {
     // (`asesor_captador_id`, `asesor_cliente_id`, `cliente_id`) y el backend
     // los sincroniza con mainAdvisor/partnerAdvisor/buyerClient. Aquí se arma
     // el cuerpo una sola vez para que crear y editar se comporten igual.
-    // Tipo de negocio = tipo de operación de la propiedad (se hereda al elegirla).
-    const BUSINESS_OPERATION_LABELS = { venta: 'VENTA', renta: 'RENTA', compra_localizada: 'COMPRA LOCALIZADA' };
+    // Tipo de negocio = operación guardada en el negocio (o, para registros
+    // antiguos, la heredada de la propiedad).
     const businessTypeLabel = (business) => {
-      const op = business && business.property && business.property.operationType;
-      return op ? (BUSINESS_OPERATION_LABELS[op] || String(op).toUpperCase()) : 'SIN PROPIEDAD';
+      const op = business && (business.operationType
+        || (business.property && business.property.operationType));
+      return op ? (BUSINESS_OPERATION_LABELS[op] || String(op).toUpperCase()) : 'SIN OPERACIÓN';
     };
 
     function ensureSelectOption(select, value, label) {
@@ -261,6 +277,18 @@ window.Pages.businesses = {
           return;
         }
         form.dataset.propertyOperation = prop.operationType || '';
+
+        // La operación de la propiedad se guarda en el negocio. Se sobrescribe
+        // al cambiar de propiedad y se completa si el campo venía vacío.
+        const opSel = form.querySelector('#fld-operationType');
+        if (opSel && prop.operationType && (byUser || !opSel.value)) {
+          ensureSelectOption(
+            opSel,
+            prop.operationType,
+            BUSINESS_OPERATION_LABELS[prop.operationType] || String(prop.operationType),
+          );
+          opSel.value = prop.operationType;
+        }
 
         // Nombre del negocio por defecto: dirección (o nombre) de la propiedad.
         // Si el usuario escribió un nombre propio, no se sobrescribe.
@@ -789,7 +817,8 @@ window.Pages.businesses = {
           { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', value: (r) => r.buyerExternalName || '', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
           { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, value: (r) => (r.sellerClient ? (r.sellerClient._id || r.sellerClient) : (r.sellerExternalName ? '__externo__' : '')), options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(sellers, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
           { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', value: (r) => r.sellerExternalName || '', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
-          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
+          { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor, el asesor captador y la operación.' },
+          { name: 'operationType', label: 'Tipo de negocio', type: 'select', options: [{ value: '', label: '— Se toma de la propiedad —' }, ...BUSINESS_OPERATION_OPTIONS], value: (r) => r.operationType || (r.property && r.property.operationType) || '', hint: 'Venta, renta, avalúo, compra localizada, gestión Infonavit, etc. Se completa desde la propiedad.' },
           { name: 'valueOperation', label: 'Valor de la operación', type: 'money' },
           { name: 'ticketValue', label: 'Valor ticket', type: 'money', value: (r) => (r.ticketValue || ''), hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
           { name: 'negotiation_offer', label: 'Propuesta inicial', type: 'money', value: (r) => (r.negotiation || {}).offer || 0 },
@@ -814,15 +843,16 @@ window.Pages.businesses = {
             <button class="btn btn-secondary btn-sm" data-extra data-checklist style="margin-left:6px;">Checklist</button>
             <button class="btn btn-secondary btn-sm" data-extra data-docs style="margin-left:6px;">Documentos</button>
             <button class="btn btn-secondary btn-sm" data-extra data-stages-info style="margin-left:6px;">Info Etapas</button>
-            ${AVALUO_OPERATIONS.includes(record.property && record.property.operationType) ? '<button class="btn btn-primary btn-sm" data-extra data-avaluo style="margin-left:6px;">Avalúo</button>' : ''}
+            ${(record.property || record.operationType) ? '<button class="btn btn-primary btn-sm" data-extra data-avaluo style="margin-left:6px;">Avalúo</button>' : ''}
           `;
         },
         onExtraAction(record, control, ctx) {
           if (control.dataset.avaluo !== undefined) {
             // Lleva la propiedad y el negocio al módulo Avalúo para iniciar la gestión.
             const prop = record.property || {};
+            const propertyId = prop._id || (typeof prop === 'string' ? prop : '');
             sessionStorage.setItem('avaluoPropiedad', JSON.stringify({
-              propertyId: prop._id || '',
+              propertyId,
               businessId: record._id,
               businessName: record.name || '',
             }));
@@ -1455,7 +1485,8 @@ window.Pages.businesses = {
         { name: 'buyerExternalName', label: 'Nombre del cliente externo', type: 'text', placeholder: 'Ej. Juan Pérez', hint: 'Solo si elegiste "Otro / Externo".' },
         { name: 'sellerClient', label: 'Vendedor (propietario)', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.client, options: [{ value: '', label: '— Se toma del propietario —' }, ...opcionesCliente(clients, 'sellerClient'), { value: '__externo__', label: 'Otro / Externo — escribir nombre' }] },
         { name: 'sellerExternalName', label: 'Nombre del vendedor externo', type: 'text', placeholder: 'Ej. María López', hint: 'Solo si elegiste "Otro / Externo".' },
-        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor y el asesor captador.' },
+        { name: 'property', label: 'Propiedad', type: 'select', sinOtros: true, search: true, searchSource: UI.remoteSources.property, options: [{ value: '', label: '— Sin propiedad —' }, ...propertyOptions], hint: 'Al elegirla se completan el propietario/vendedor, el asesor captador y la operación.' },
+        { name: 'operationType', label: 'Tipo de negocio', type: 'select', options: [{ value: '', label: '— Se toma de la propiedad —' }, ...BUSINESS_OPERATION_OPTIONS], hint: 'Venta, renta, avalúo, compra localizada, gestión Infonavit, etc.' },
         { name: 'valueOperation', label: 'Valor de operación', type: 'money' },
         { name: 'ticketValue', label: 'Valor ticket', type: 'money', hint: 'Es también la comisión. Se reparte entre los asesores internos: 50% / 50% si son dos; 100% al interno si participa un externo.' },
         { name: 'negotiation_offer', label: 'Propuesta inicial (oferta)', type: 'money' },

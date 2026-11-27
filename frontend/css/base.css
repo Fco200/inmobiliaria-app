@@ -2785,8 +2785,6 @@ body.lightbox-open {
   background: linear-gradient(135deg, #1e3a5f, #27496f);
 }
 
-[data-theme="dark"] .guide-toggle { background: var(--primary-light); color: var(--accent); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
-[data-theme="dark"] .guide-toggle:hover { color: #fff; }
 [data-theme="dark"] .ayuda-action-icon { background: #1f1535; color: var(--accent); }
 
 /* Botón flotante de tema en la pantalla de login */
@@ -3901,22 +3899,6 @@ body.page-chat .assistant-panel {
 .cal-guide-link:hover { color: var(--primary); }
 .cal-guide-next { margin-top: 14px; width: 100%; }
 @media (max-width: 720px) { .whatsnew-card.cal-spotlight-card { padding: 26px 18px 22px; } }
-
-/* ══════════════════ BOTÓN DE GUÍA (?) ══════════════════ */
-.guide-toggle {
-  font-weight: 800;
-  font-size: 15px;
-  padding: 5px 11px;
-  color: var(--primary);
-  border-radius: 50%;
-  background: var(--primary-light);
-  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-}
-.guide-toggle:hover {
-  background: var(--grad-primary);
-  color: #fff;
-  box-shadow: var(--glow);
-}
 
 /* Botón "Ayuda" de la barra superior: lleva a ayuda.html (centro de soporte). */
 .help-toggle {
@@ -5130,3 +5112,76 @@ table.crud-resizable thead th {
 }
 .login-whatsapp-btn:hover { background: rgba(37, 211, 102, 0.16); }
 [data-theme="dark"] .login-whatsapp-btn { color: #4ade80; background: rgba(37, 211, 102, 0.12); }
+
+/* ══════════════════ RESPONSIVIDAD GLOBAL / PWA ══════════════════ */
+/* Red de seguridad: ningún módulo debe obligar a desplazar la pantalla de lado. */
+@supports (overflow: clip) {
+  html, body { overflow-x: clip; }
+}
+@supports not (overflow: clip) {
+  html, body { overflow-x: hidden; }
+}
+html, body, .app { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .app, .main, .page-container, .content, .container, .card, .table-wrapper {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .table-wrapper {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .funnel-board, .cal-grid-week {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-body, [data-body], .card, .page-header { overflow-wrap: anywhere; }
+}
+
+/* La barra superior se parte en dos filas en celular: el logo y la
+   hamburguesa arriba; notificaciones, tema, ayuda y Salir siempre visibles
+   abajo. Antes el grupo era flex-shrink:0 y Salir quedaba fuera de la pantalla. */
+@media (max-width: 720px) {
+  .topnav-inner {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 6px 8px;
+    padding: 6px 10px;
+  }
+  .topnav-brand, .topnav-profile { min-width: 0; margin-right: 6px; }
+  .topnav-right {
+    flex: 1 1 100%;
+    min-width: 0;
+    margin-left: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .topnav-right > * { min-width: 0; }
+  .topnav-right .icon-btn,
+  .topnav-right .link-danger {
+    flex: 0 0 auto;
+    min-height: 34px;
+  }
+  /* Ayuda sigue llevando a ayuda.html; solo se compacta a icono para que
+     no empuje a Notificaciones/Salir fuera del ancho del celular. */
+  #btn-help {
+    width: 38px;
+    padding: 6px;
+    font-size: 0;
+    overflow: hidden;
+  }
+  #btn-help::before { content: '💬'; font-size: 16px; }
+  .topnav-credit { padding-left: 10px; padding-right: 10px; }
+}
+
+@media (max-width: 768px) {
+  .table th, .table td { white-space: normal; }
+}
+@media (max-width: 600px) {
+  .btn { white-space: normal; }
+}

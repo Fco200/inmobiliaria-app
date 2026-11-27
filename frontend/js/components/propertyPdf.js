@@ -26,7 +26,13 @@ window.PropertyPdf = (() => {
     otro: 'Otro',
   };
 
-  const OP_LABELS = { venta: 'Venta', renta: 'Renta', compra_localizada: 'Compra Localizada' };
+  const OP_LABELS = {
+    venta: 'Venta',
+    renta: 'Renta',
+    compra_localizada: 'Compra Localizada',
+    avaluo: 'Avalúo',
+    gestion_infonavit: 'Gestión Infonavit',
+  };
 
   const STATUS_LABELS = {
     disponible: 'Disponible',

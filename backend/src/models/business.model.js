@@ -28,6 +28,10 @@ const businessSchema = new mongoose.Schema(
       ref: 'Property',
       default: null,
     },
+    // Operación de la propiedad (venta, renta, avalúo, compra localizada,
+    // gestión Infonavit...). Se copia al crear el negocio para que cada negocio
+    // sepa qué operación representa aunque la propiedad cambie después.
+    operationType: { type: String, trim: true, default: '' },
     mainAdvisor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

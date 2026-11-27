@@ -27,11 +27,14 @@ window.Pages.inventory = {
       ['otro', 'Otro (especificar)'],
     ];
 
-    // Etiquetas visibles de la operación (incluye Compra Localizada).
+    // Etiquetas visibles de la operación. Toda operación de propiedad puede
+    // llevar avalúo (incluidas Avalúo y Gestión Infonavit).
     const OPERATION_LABELS = {
       venta: 'Venta',
       renta: 'Renta',
       compra_localizada: 'Compra Localizada',
+      avaluo: 'Avalúo',
+      gestion_infonavit: 'Gestión Infonavit',
     };
     const operationLabel = (value) => OPERATION_LABELS[value] || String(value || '').replace(/_/g, ' ');
 
@@ -127,6 +130,7 @@ window.Pages.inventory = {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn btn-primary" type="button" data-appointment>Agendar cita</button>
               <button class="btn btn-secondary" type="button" data-business>Crear negocio</button>
+              <button class="btn btn-secondary" type="button" data-appraisal>Avalúo</button>
               <button class="btn btn-success" type="button" data-whatsapp>Compartir (PDF)</button>
               ${puedeModificar ? '<button class="btn btn-secondary" type="button" data-obs>Observaciones</button>' : ''}
             </div>
@@ -142,6 +146,16 @@ window.Pages.inventory = {
         if (apptBtn) apptBtn.addEventListener('click', () => { UI.closeModal(); openAppointmentModal(item); });
         const bizBtn = overlay.querySelector('[data-business]');
         if (bizBtn) bizBtn.addEventListener('click', () => { UI.closeModal(); openBusinessModal(item); });
+        const appraisalBtn = overlay.querySelector('[data-appraisal]');
+        if (appraisalBtn) appraisalBtn.addEventListener('click', () => {
+          sessionStorage.setItem('avaluoPropiedad', JSON.stringify({
+            propertyId: prop._id || '',
+            businessId: '',
+            businessName: propertyLabel(prop),
+          }));
+          UI.closeModal();
+          window.location.href = 'avaluo.html';
+        });
         const obsBtn = overlay.querySelector('[data-obs]');
         if (obsBtn) obsBtn.addEventListener('click', () => { UI.closeModal(); openObservationsModal(item); });
         const waBtn = overlay.querySelector('[data-whatsapp]');
@@ -565,6 +579,7 @@ window.Pages.inventory = {
             name,
             buyerClient,
             property: prop._id,
+            operationType: prop.operationType || '',
             mainAdvisor: myId,
             valueOperation: Number(overlay.querySelector('[data-value]').value) || 0,
             negotiation: {
@@ -690,6 +705,8 @@ window.Pages.inventory = {
         ['venta', 'Venta'],
         ['renta', 'Renta'],
         ['compra_localizada', 'Compra Localizada'],
+        ['avaluo', 'Avalúo'],
+        ['gestion_infonavit', 'Gestión Infonavit'],
       ];
       const estadoOpciones = [
         ['', 'Todos los estados'],

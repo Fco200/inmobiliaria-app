@@ -19,9 +19,23 @@ window.PhotoGallery = (() => {
   // porque navigator.share exige activación transitoria del usuario.
   const preloaded = new Map();
 
-  function cacheKey(source) {
+  // Las fotos del servidor llegan como rutas relativas (/uploads/x.jpg) y el
+  // backend exige token. Resolver aquí la misma URL que usó la precarga evita
+  // un segundo fetch sin autenticación al guardar.
+  function resolveSource(source) {
     if (source instanceof Blob) return source;
-    try { return new URL(source, location.href).href; } catch (error) { return String(source); }
+    const url = typeof source === 'string' ? source : String(source);
+    if (typeof window !== 'undefined' && window.AppConfig
+      && typeof window.AppConfig.resolveUrl === 'function') {
+      return window.AppConfig.resolveUrl(url);
+    }
+    return url;
+  }
+
+  function cacheKey(source) {
+    const resolved = resolveSource(source);
+    if (resolved instanceof Blob) return resolved;
+    try { return new URL(resolved, location.href).href; } catch (error) { return String(resolved); }
   }
 
   function preload(source) {
@@ -47,8 +61,9 @@ window.PhotoGallery = (() => {
   }
 
   async function toBlob(source) {
-    if (source instanceof Blob) return source;
-    const response = await fetch(source, { mode: 'cors' });
+    const resolved = resolveSource(source);
+    if (resolved instanceof Blob) return resolved;
+    const response = await fetch(resolved, { mode: 'cors' });
     if (!response.ok) throw new Error(`No se pudo obtener la imagen (${response.status})`);
     return response.blob();
   }
@@ -68,20 +83,34 @@ window.PhotoGallery = (() => {
   }
 
   function toShareFile(blob, filename) {
-    if (typeof File === 'function') {
-      return new File([blob], filename || DEFAULT_NAME, {
-        type: blob.type || 'image/jpeg',
-        lastModified: Date.now(),
-      });
+    try {
+      if (typeof File === 'function') {
+        return new File([blob], filename || DEFAULT_NAME, {
+          type: blob.type || 'image/jpeg',
+          lastModified: Date.now(),
+        });
+      }
+    } catch (error) {
+      // WebView antiguo sin constructor File: se usa el Blob directamente.
     }
     return blob;
   }
 
-  function canShareFiles(file) {
-    return typeof navigator !== 'undefined'
-      && typeof navigator.share === 'function'
-      && typeof navigator.canShare === 'function'
-      && Boolean(navigator.canShare({ files: [file] }));
+  // Acepta UN archivo (save) o un ARRAY de archivos (saveMany). Antes siempre
+  // envolvía el argumento en otro array, así que guardar todas pasaba
+  // `files: [[File, File...]]` y iOS lanzaba TypeError en canShare().
+  function canShareFiles(files) {
+    const list = Array.isArray(files) ? files : [files];
+    if (!list.length || list.some((file) => !file)) return false;
+    if (typeof navigator === 'undefined'
+      || typeof navigator.share !== 'function'
+      || typeof navigator.canShare !== 'function') return false;
+    try {
+      return Boolean(navigator.canShare({ files: list }));
+    } catch (error) {
+      // iOS/WebView pueden lanzar TypeError al validar File/Blob.
+      return false;
+    }
   }
 
   /**
@@ -143,12 +172,16 @@ window.PhotoGallery = (() => {
     const names = Array.isArray(options.names) ? options.names : [];
     const baseName = options.baseName || 'fotos';
     const files = [];
+    const downloads = [];
     for (let i = 0; i < list.length; i += 1) {
       // eslint-disable-next-line no-await-in-loop
       const blob = list[i] instanceof Blob ? list[i] : await preload(list[i]);
       if (!blob) continue;
       const name = names[i] || `${baseName}-${i + 1}.jpg`;
       files.push(toShareFile(blob, name));
+      // Se guarda el blob original: si File no existe, toShareFile devuelve un
+      // Blob sin .name y el respaldo de descarga debe seguir usando el nombre.
+      downloads.push({ blob, name });
     }
     if (!files.length) return 'failed';
 
@@ -163,7 +196,10 @@ window.PhotoGallery = (() => {
     }
 
     try {
-      files.forEach((file) => downloadBlob(file, file.name));
+      downloads.forEach((entry, i) => {
+        const name = entry.name || `${baseName}-${i + 1}.jpg`;
+        downloadBlob(entry.blob, name);
+      });
       return 'downloaded';
     } catch (error) {
       return 'failed';

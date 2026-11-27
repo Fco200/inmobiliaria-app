@@ -1,14 +1,15 @@
 {
-  "version": "2.39",
+  "version": "2.40",
   "channel": "estable",
-  "title": "Actualización 2.39",
-  "date": "2026-11-26",
+  "title": "Actualización 2.40",
+  "date": "2026-11-27",
   "notes": [
-    "¡Tus citas ahora desde Calendario! Agenda, edita y elimina sin salir del módulo.",
-    "Las citas que ya tenías siguen ahí y se pintan en el calendario con su color actual.",
-    "Puntitos de color en mes, semana y día para ver de un vistazo lo que hay programado.",
-    "Las reuniones ahora se pintan de verde.",
-    "Nueva guía animada al actualizar para encontrar tus citas en el calendario."
+    "Corregido: Guardar todas las fotos ya no lanza TypeError en celular/PWA y guarda el jalón completo.",
+    "Negocios de propiedad: ya puedes usar venta, renta, avalúo, compra localizada y gestión Infonavit.",
+    "Todo negocio con propiedad guarda su operación y muestra el botón que inicia el proceso de Avalúo.",
+    "Diseño responsivo en toda la app: en celular ya no hay que mover la pantalla de lado; Notificaciones y Salir siempre visibles.",
+    "Se retiró el botón de guía rápida del encabezado para dejar más espacio en móvil.",
+    "Tus citas ahora desde Calendario, con sus colores y puntitos de actividad."
   ],
   "spotlight": {
     "type": "calendar-citas",
